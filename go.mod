@@ -1,4 +1,4 @@
-module github.com/napalu/go-opt
+module github.com/napalu/goopt
 
 go 1.17
 
