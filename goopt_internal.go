@@ -21,10 +21,7 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 		switch argument.TypeOf {
 		case Standalone:
 			if argument.Secure.IsSecure {
-				s.queueSecureArgument(secureArgumentConfig{
-					name:     currentArg,
-					argument: argument.Secure,
-				})
+				s.queueSecureArgument(currentArg, argument)
 			} else {
 				s.options[currentArg] = "true"
 				err := s.setBoundVariable("true", currentArg)
@@ -190,15 +187,15 @@ func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue
 		return
 	}
 
-	s.commandOptions[cmd.path] = path{value: value, isTerminal: len(cmd.Subcommands) == 0}
+	s.commandOptions[cmd.path] = path{value: value, isTerminating: len(cmd.Subcommands) == 0}
 }
 
-func (s *CmdLineOption) queueSecureArgument(argument secureArgumentConfig) {
+func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
 	if s.secureArguments == nil {
-		s.secureArguments = []secureArgumentConfig{}
+		s.secureArguments = map[string]Secure{}
 	}
 
-	s.secureArguments = append(s.secureArguments, argument)
+	s.secureArguments[name] = argument.Secure
 }
 
 func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *deque.Deque) {
@@ -234,10 +231,7 @@ func (s *CmdLineOption) processSingleOrChainedFlag(args []string, argument *Argu
 				state.skip = state.pos + 1
 			}
 		}
-		s.queueSecureArgument(secureArgumentConfig{
-			name:     currentArg,
-			argument: argument.Secure,
-		})
+		s.queueSecureArgument(currentArg, argument)
 	} else {
 		var next string
 		if state.pos < state.endOf-1 {
@@ -372,20 +366,20 @@ func (s *CmdLineOption) processValueFlag(currentArg string, next string, argumen
 	return s.setBoundVariable(processed, currentArg)
 }
 
-func (s *CmdLineOption) processSecureFlag(config secureArgumentConfig) {
+func (s *CmdLineOption) processSecureFlag(name string, config Secure) {
 	var prompt string
-	if !config.argument.IsSecure {
+	if !config.IsSecure {
 		return
 	}
-	if config.argument.Prompt == "" {
+	if config.Prompt == "" {
 		prompt = "password: "
 	} else {
-		prompt = config.argument.Prompt
+		prompt = config.Prompt
 	}
 	if pass, err := getSecureString(prompt); err == nil {
-		s.registerSecureValue(config.name, pass)
+		s.registerSecureValue(name, pass)
 	} else {
-		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", config.name, err))
+		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
 	}
 }
 
@@ -480,6 +474,12 @@ func (s *CmdLineOption) validateProcessedOptions() {
 func (s *CmdLineOption) walkFlags() {
 	for pair := s.acceptedFlags.Oldest(); pair != nil; pair = pair.Next() {
 		arg := pair.Value.(*Argument)
+		if arg.RequiredIf != nil {
+			if required, msg := arg.RequiredIf(s); required {
+				s.addError(msg)
+			}
+			continue
+		}
 		if !arg.Required {
 			continue
 		}
@@ -488,6 +488,7 @@ func (s *CmdLineOption) walkFlags() {
 		if _, found := s.options[mainKey]; found {
 			continue
 		} else if pair.Value.(*Argument).Secure.IsSecure {
+			s.queueSecureArgument(mainKey, arg)
 			continue
 		}
 

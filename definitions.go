@@ -19,6 +19,9 @@ type PrettyPrintConfig struct {
 	LevelBindPrefix string
 }
 
+// RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
+type RequiredIfFunc func(cmdLine *CmdLineOption) (bool, string)
+
 // ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimeters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
@@ -120,6 +123,7 @@ type Argument struct {
 	Description  string
 	TypeOf       OptionType
 	Required     bool
+	RequiredIf   RequiredIfFunc
 	DependsOn    []string
 	OfValue      []string
 	Secure       Secure
@@ -157,7 +161,7 @@ type CmdLineOption struct {
 	rawArgs            map[string]bool
 	callbackQueue      *deque.Deque
 	callbackResults    map[string]error
-	secureArguments    []secureArgumentConfig
+	secureArguments    map[string]Secure
 }
 
 type UnsupportedTypeConversionError struct {
@@ -169,16 +173,11 @@ type CommandNotFoundError struct {
 }
 
 type path struct {
-	value      string
-	isTerminal bool
+	value         string
+	isTerminating bool
 }
 
 type commandCallback struct {
 	callback  CommandFunc
 	arguments []interface{}
-}
-
-type secureArgumentConfig struct {
-	name     string
-	argument Secure
 }

@@ -18,7 +18,7 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 //   -vvvv
 // Instead of specifying a flag 4 times, the "goopt" way would be specifying `-v 4`.
 //
-// If POSIX/GNU compatibility is desired use the SetPosix or WithPosix functions on CmdLineOption.
+// If POSIX/GNU compatibility is desired use the SetPosix or WithPosix functions on CmdLineOption (not implemented yet).
 func WithShortFlag(shortFlag string) ConfigureArgumentFunc {
 	return func(argument *Argument) {
 		argument.Short = shortFlag
@@ -40,6 +40,12 @@ func WithType(typeof OptionType) ConfigureArgumentFunc {
 func SetRequired(required bool) ConfigureArgumentFunc {
 	return func(argument *Argument) {
 		argument.Required = required
+	}
+}
+
+func SetRequiredIf(requiredIf RequiredIfFunc) ConfigureArgumentFunc {
+	return func(argument *Argument) {
+		argument.RequiredIf = requiredIf
 	}
 }
 

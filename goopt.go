@@ -46,7 +46,7 @@ func NewCmdLineOption() *CmdLineOption {
 		listFunc:           matchChainedSeparators,
 		callbackQueue:      deque.New(),
 		callbackResults:    map[string]error{},
-		secureArguments:    []secureArgumentConfig{},
+		secureArguments:    map[string]Secure{},
 		prefixes:           []rune{'-', '/'},
 	}
 }
@@ -176,8 +176,8 @@ func (s *CmdLineOption) Parse(args []string) bool {
 
 	success := len(s.errors) == 0
 	if success {
-		for i := 0; i < len(s.secureArguments); i++ {
-			s.processSecureFlag(s.secureArguments[i])
+		for key, secure := range s.secureArguments {
+			s.processSecureFlag(key, secure)
 		}
 	}
 	s.secureArguments = nil
@@ -286,7 +286,7 @@ func (s *CmdLineOption) GetCommandValue(path string) (string, error) {
 func (s *CmdLineOption) GetCommandValues() []PathValue {
 	pathValues := make([]PathValue, 0, len(s.commandOptions))
 	for k, v := range s.commandOptions {
-		if v.isTerminal {
+		if v.isTerminating {
 			pathValues = append(pathValues, PathValue{
 				Path:  k,
 				Value: v.value,
