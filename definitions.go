@@ -20,7 +20,7 @@ type PrettyPrintConfig struct {
 }
 
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
-type RequiredIfFunc func(cmdLine *CmdLineOption) (bool, string)
+type RequiredIfFunc func(cmdLine *CmdLineOption, optionName string) (bool, string)
 
 // ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimeters.
 // Defaults to ',' || r == '|' || r == ' '.

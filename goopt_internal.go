@@ -475,7 +475,7 @@ func (s *CmdLineOption) walkFlags() {
 	for pair := s.acceptedFlags.Oldest(); pair != nil; pair = pair.Next() {
 		arg := pair.Value.(*Argument)
 		if arg.RequiredIf != nil {
-			if required, msg := arg.RequiredIf(s); required {
+			if required, msg := arg.RequiredIf(s, pair.Key.(string)); required {
 				s.addError(msg)
 			}
 			continue
