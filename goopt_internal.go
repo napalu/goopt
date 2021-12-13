@@ -307,7 +307,7 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 		if sub.Callback != nil {
 			s.callbackQueue.PushBack(commandCallback{
 				callback:  sub.Callback,
-				arguments: []interface{}{s, &sub, next},
+				arguments: []interface{}{&sub, next},
 			})
 		}
 	} else if cmdQueue.Len() > 0 {

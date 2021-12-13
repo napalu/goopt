@@ -2,7 +2,7 @@ package goopt_test
 
 import (
 	"fmt"
-	. "github.com/napalu/go-opt"
+	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"strings"

@@ -67,19 +67,22 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 }
 
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
-// Returns the count of errors encountered during callback.
+// Returns the count of errors encountered during execution.
 func (s *CmdLineOption) ExecuteCommands() int {
 	callbackErrors := 0
 	for s.callbackQueue.Len() > 0 {
 
 		ele, _ := s.callbackQueue.PopFront()
 		call := ele.(commandCallback)
-		if call.callback != nil && len(call.arguments) == 3 {
-			cmd := call.arguments[1].(*Command)
-			err := call.callback(call.arguments[0].(*CmdLineOption), cmd, call.arguments[2].(string))
-			s.callbackResults[cmd.Name] = err
-			if err != nil {
-				callbackErrors++
+		if call.callback != nil && len(call.arguments) == 2 {
+			cmd, cmdOk := call.arguments[0].(*Command)
+			arg, argOk := call.arguments[1].(string)
+			if cmdOk && argOk {
+				err := call.callback(s, cmd, arg)
+				s.callbackResults[cmd.Name] = err
+				if err != nil {
+					callbackErrors++
+				}
 			}
 		}
 	}
