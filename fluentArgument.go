@@ -79,3 +79,9 @@ func WithDefaultValue(defaultValue string) ConfigureArgumentFunc {
 		argument.DefaultValue = defaultValue
 	}
 }
+
+func WithFilter(filter FilterFunc) ConfigureArgumentFunc {
+	return func(argument *Argument) {
+		argument.Filter = filter
+	}
+}

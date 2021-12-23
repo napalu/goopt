@@ -35,8 +35,8 @@ type ConfigureArgumentFunc func(argument *Argument)
 // ConfigureCommandFunc is used to enable a fluent interface when defining commands
 type ConfigureCommandFunc func(command *Command)
 
-// StringFunc used to "filter" (change/evaluate) flag values - see AddFilter/GetFilter/HasFilter
-type StringFunc func(string) string
+// FilterFunc used to "filter" (change/evaluate) flag values - see AddFilter/GetFilter/HasFilter
+type FilterFunc func(string) string
 
 // CommandFunc callback - optionally specified as part of the Command structure gets called when matched on Parse()
 type CommandFunc func(cmdLine *CmdLineOption, command *Command, value string) error
@@ -56,13 +56,6 @@ const (
 	// Standalone denotes a boolean Flag (does not accept a value)
 	Standalone OptionType = 2
 )
-
-type parseState struct {
-	endOf int
-	skip  int
-	pos   int
-	args  []string
-}
 
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data
 type ClearConfig struct {
@@ -120,15 +113,17 @@ type Secure struct {
 
 // Argument defines a command-line Flag
 type Argument struct {
-	Description  string
-	TypeOf       OptionType
-	Required     bool
-	RequiredIf   RequiredIfFunc
-	DependsOn    []string
-	OfValue      []string
-	Secure       Secure
-	Short        string
-	DefaultValue string
+	Description    string
+	TypeOf         OptionType
+	Required       bool
+	RequiredIf     RequiredIfFunc
+	Filter         FilterFunc
+	AcceptedValues []LiterateRegex
+	DependsOn      []string
+	OfValue        []string
+	Secure         Secure
+	Short          string
+	DefaultValue   string
 }
 
 // Command defines commands and sub-commands
@@ -148,8 +143,6 @@ type CmdLineOption struct {
 	prefixes           []rune
 	listFunc           ListDelimiterFunc
 	acceptedFlags      *orderedmap.OrderedMap
-	acceptedValues     map[string][]LiterateRegex
-	filters            map[string]StringFunc
 	lookup             map[string]string
 	options            map[string]string
 	errors             []string
@@ -180,4 +173,11 @@ type path struct {
 type commandCallback struct {
 	callback  CommandFunc
 	arguments []interface{}
+}
+
+type parseState struct {
+	endOf int
+	skip  int
+	pos   int
+	args  []string
 }

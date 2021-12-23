@@ -79,9 +79,6 @@ func (s *CmdLineOption) ensureInit() {
 	if s.acceptedFlags == nil {
 		s.acceptedFlags = orderedmap.New()
 	}
-	if s.acceptedValues == nil {
-		s.acceptedValues = map[string][]LiterateRegex{}
-	}
 	if s.lookup == nil {
 		s.lookup = map[string]string{}
 	}
@@ -354,10 +351,9 @@ func pruneExecPathFromArgs(args *[]string) {
 }
 
 func (s *CmdLineOption) processValueFlag(currentArg string, next string, argument *Argument) error {
-	_, found := s.acceptedValues[currentArg]
 	var processed string
-	if found {
-		processed = s.processSingleValue(next, currentArg, argument.TypeOf)
+	if len(argument.AcceptedValues) > 0 {
+		processed = s.processSingleValue(next, currentArg, argument)
 	} else {
 		processed = s.applyFilter(currentArg, next)
 		s.registerFlagValue(currentArg, processed, next)
@@ -383,23 +379,23 @@ func (s *CmdLineOption) processSecureFlag(name string, config Secure) {
 	}
 }
 
-func (s *CmdLineOption) processSingleValue(next, key string, typeOf OptionType) string {
-	switch typeOf {
+func (s *CmdLineOption) processSingleValue(next, key string, argument *Argument) string {
+	switch argument.TypeOf {
 	case Single:
-		return s.checkSingle(next, key)
+		return s.checkSingle(next, key, argument)
 	case Chained:
-		return s.checkMultiple(next, key)
+		return s.checkMultiple(next, key, argument)
 	}
 
 	return ""
 }
 
-func (s *CmdLineOption) checkSingle(next, flag string) string {
+func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) string {
 	var errBuf = strings.Builder{}
 	var valid = false
 	inspect := s.applyFilter(flag, next)
-	lenValues := len(s.acceptedValues)
-	for i, v := range s.acceptedValues[flag] {
+	lenValues := len(argument.AcceptedValues)
+	for i, v := range argument.AcceptedValues {
 		if v.value.MatchString(inspect) {
 			valid = true
 		} else {
@@ -430,18 +426,18 @@ func (s *CmdLineOption) applyFilter(flag string, next string) string {
 	return inspect
 }
 
-func (s *CmdLineOption) checkMultiple(next, flag string) string {
+func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) string {
 	valid := 0
 	errBuf := strings.Builder{}
 	listDelimFunc := s.getListDelimiterFunc()
 	args := strings.FieldsFunc(next, listDelimFunc)
 
 	for _, arg := range args {
-		if s.HasFilter(arg) {
-			proc, _ := s.GetFilter(flag)
-			arg = proc(arg)
+		if argument.Filter != nil {
+			arg = argument.Filter(flag)
 		}
-		for _, v := range s.acceptedValues[flag] {
+
+		for _, v := range argument.AcceptedValues {
 			if v.value.MatchString(arg) {
 				valid++
 			}
@@ -452,8 +448,9 @@ func (s *CmdLineOption) checkMultiple(next, flag string) string {
 	if valid == len(args) {
 		s.registerFlagValue(flag, value, next)
 	} else {
-		lenValues := len(s.acceptedValues)
-		for i, v := range s.acceptedValues[flag] {
+		lenValues := len(argument.AcceptedValues)
+		for i := 0; i < lenValues; i++ {
+			v := argument.AcceptedValues[i]
 			errBuf.WriteString(v.Describe())
 			if i < lenValues {
 				errBuf.WriteString(", ")

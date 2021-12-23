@@ -33,8 +33,6 @@ import (
 func NewCmdLineOption() *CmdLineOption {
 	return &CmdLineOption{
 		acceptedFlags:      orderedmap.New(),
-		acceptedValues:     map[string][]LiterateRegex{},
-		filters:            map[string]StringFunc{},
 		lookup:             map[string]string{},
 		options:            map[string]string{},
 		errors:             []string{},
@@ -102,10 +100,10 @@ func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
 }
 
 // AddFlagFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
-func (s *CmdLineOption) AddFlagFilter(flag string, proc StringFunc) error {
+func (s *CmdLineOption) AddFlagFilter(flag string, proc FilterFunc) error {
 	mainKey := s.flagOrShortFlag(flag)
-	if _, found := s.acceptedFlags.Get(mainKey); found {
-		s.filters[mainKey] = proc
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		arg.(*Argument).Filter = proc
 
 		return nil
 	}
@@ -115,16 +113,21 @@ func (s *CmdLineOption) AddFlagFilter(flag string, proc StringFunc) error {
 
 // HasFilter returns true when an option has a transform/evaluate function which is called on Parse
 func (s *CmdLineOption) HasFilter(flag string) bool {
-	_, found := s.filters[flag]
+	mainKey := s.flagOrShortFlag(flag)
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		return arg.(*Argument).Filter != nil
+	}
 
-	return found
+	return false
 }
 
 // GetFilter retrieve Flag transform/evaluate function
-func (s *CmdLineOption) GetFilter(flag string) (StringFunc, error) {
+func (s *CmdLineOption) GetFilter(flag string) (FilterFunc, error) {
 	mainKey := s.flagOrShortFlag(flag)
-	if s.HasFilter(mainKey) {
-		return s.filters[mainKey], nil
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		if arg.(*Argument).Filter != nil {
+			return arg.(*Argument).Filter, nil
+		}
 	}
 
 	return nil, errors.New("no filters for flag " + flag)
@@ -132,7 +135,10 @@ func (s *CmdLineOption) GetFilter(flag string) (StringFunc, error) {
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
 func (s *CmdLineOption) HasAcceptedValues(flag string) bool {
-	_, found := s.acceptedValues[s.flagOrShortFlag(flag)]
+	arg, found := s.acceptedFlags.Get(s.flagOrShortFlag(flag))
+	if found {
+		return len(arg.(*Argument).AcceptedValues) > 0
+	}
 
 	return !found
 }
@@ -548,19 +554,19 @@ func (s *CmdLineOption) AcceptValue(flag string, pattern string, description str
 	if !found {
 		return fmt.Errorf("option with flag %s was not set", flag)
 	}
-	if accepted.(*Argument).TypeOf == Standalone {
+	arg := accepted.(*Argument)
+	if arg.TypeOf == Standalone {
 		return fmt.Errorf("option with flag %s does not accept a value (Standalone)", flag)
 	}
 
-	_, found = s.acceptedValues[mainKey]
-	if !found {
-		s.acceptedValues[mainKey] = make([]LiterateRegex, 1, 5)
-		s.acceptedValues[mainKey][0] = LiterateRegex{
+	if arg.AcceptedValues == nil {
+		arg.AcceptedValues = make([]LiterateRegex, 1, 5)
+		arg.AcceptedValues[0] = LiterateRegex{
 			value:   re,
 			explain: description,
 		}
 	} else {
-		s.acceptedValues[mainKey] = append(s.acceptedValues[mainKey], LiterateRegex{
+		arg.AcceptedValues = append(arg.AcceptedValues, LiterateRegex{
 			value:   re,
 			explain: description,
 		})
@@ -572,7 +578,7 @@ func (s *CmdLineOption) AcceptValue(flag string, pattern string, description str
 // AcceptValues same as AcceptValue but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptValues represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the AcceptValues, Parse returns false.
-func (s *CmdLineOption) AcceptValues(flag string, patterns []string, descriptions []string) error {
+func (s *CmdLineOption) AcceptValues(flag string, patterns, descriptions []string) error {
 	lenDesc := len(descriptions)
 	var desc = ""
 
@@ -628,12 +634,6 @@ func (s *CmdLineOption) ClearAll() {
 func (s *CmdLineOption) Clear(config ClearConfig) {
 	if !config.KeepOptions {
 		s.options = nil
-	}
-	if !config.KeepAcceptedValues {
-		s.acceptedValues = nil
-	}
-	if !config.KeepFilters {
-		s.filters = nil
 	}
 	if !config.KeepErrors {
 		s.errors = s.errors[:0]
