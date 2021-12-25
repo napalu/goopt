@@ -154,7 +154,7 @@ func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) 
 func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		return arg.(*Argument).PreFilter != nil
+		return arg.(*Argument).PostFilter != nil
 	}
 
 	return false

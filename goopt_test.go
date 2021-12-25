@@ -71,16 +71,25 @@ func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
 func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
 	opts := NewCmdLineOption()
 
-	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
-	err := opts.AddFlagPostValidationFilter("upper", strings.ToUpper)
+	_ = opts.AddFlag("status", NewArgument("t", "", Single, false, Secure{}, ""))
+	err := opts.AddFlagPostValidationFilter("status", func(s string) string {
+		if strings.EqualFold(s, "active") {
+			return "-1"
+		} else if strings.EqualFold(s, "inactive") {
+			return "0"
+		}
+
+		return s
+	})
+
 	assert.Nil(t, err, "should be able to add a filter to a valid flag")
 
-	_ = opts.AcceptValue("upper", "^[A-Z]+$", "upper case only")
-	assert.True(t, opts.HasPreValidationFilter("upper"), "flag should have a filter defined")
-	assert.True(t, opts.Parse([]string{"--upper", "lowercase"}), "parse should not fail and pass AcceptValue properly")
+	_ = opts.AcceptValue("status", "^(?:active|inactive)$", "please set the status to either 'active' or 'inactive'")
+	assert.True(t, opts.HasPostValidationFilter("status"), "flag should have a filter defined")
+	assert.True(t, opts.Parse([]string{"--status", "active"}), "parse should not fail and pass AcceptValue properly")
 
-	value, _ := opts.Get("upper")
-	assert.Equal(t, "LOWERCASE", value, "the value of flag upper should be transformed to uppercase")
+	value, _ := opts.Get("status")
+	assert.Equal(t, "-1", value, "the value of flag status should have been transformed after AcceptValue validation")
 }
 
 func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {

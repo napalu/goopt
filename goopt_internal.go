@@ -410,7 +410,7 @@ func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) strin
 			valid = true
 		} else {
 			errBuf.WriteString(v.Describe())
-			if i < lenValues {
+			if i+1 < lenValues {
 				errBuf.WriteString(", ")
 			}
 		}
@@ -459,7 +459,7 @@ func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) str
 		for i := 0; i < lenValues; i++ {
 			v := argument.AcceptedValues[i]
 			errBuf.WriteString(v.Describe())
-			if i < lenValues {
+			if i+1 < lenValues {
 				errBuf.WriteString(", ")
 			}
 		}
