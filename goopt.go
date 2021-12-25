@@ -99,11 +99,12 @@ func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
 	return &CommandNotFoundError{msg: fmt.Sprintf("%s was not found or has no associated callback", commandName)}
 }
 
-// AddFlagFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
-func (s *CmdLineOption) AddFlagFilter(flag string, proc FilterFunc) error {
+// AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
+// *before* AcceptedValues are checked
+func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc) error {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		arg.(*Argument).Filter = proc
+		arg.(*Argument).PreFilter = proc
 
 		return nil
 	}
@@ -111,26 +112,65 @@ func (s *CmdLineOption) AddFlagFilter(flag string, proc FilterFunc) error {
 	return fmt.Errorf("flag '%s' was not found", flag)
 }
 
-// HasFilter returns true when an option has a transform/evaluate function which is called on Parse
-func (s *CmdLineOption) HasFilter(flag string) bool {
+// AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
+// *after* AcceptedValues are checked
+func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc) error {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		return arg.(*Argument).Filter != nil
+		arg.(*Argument).PostFilter = proc
+
+		return nil
+	}
+
+	return fmt.Errorf("flag '%s' was not found", flag)
+}
+
+// HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
+// before checking for acceptable values
+func (s *CmdLineOption) HasPreValidationFilter(flag string) bool {
+	mainKey := s.flagOrShortFlag(flag)
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		return arg.(*Argument).PreFilter != nil
 	}
 
 	return false
 }
 
-// GetFilter retrieve Flag transform/evaluate function
-func (s *CmdLineOption) GetFilter(flag string) (FilterFunc, error) {
+// GetPreValidationFilter retrieve Flag transform/evaluate function which is called on Parse before checking for
+// acceptable values
+func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		if arg.(*Argument).Filter != nil {
-			return arg.(*Argument).Filter, nil
+		if arg.(*Argument).PreFilter != nil {
+			return arg.(*Argument).PreFilter, nil
 		}
 	}
 
-	return nil, errors.New("no filters for flag " + flag)
+	return nil, errors.New("no pre-validation filters for flag " + flag)
+}
+
+// HasPostValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
+// after checking for acceptable values
+func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
+	mainKey := s.flagOrShortFlag(flag)
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		return arg.(*Argument).PreFilter != nil
+	}
+
+	return false
+}
+
+// GetPostValidationFilter retrieve Flag transform/evaluate function which is called on Parse after checking for
+// acceptable values
+func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error) {
+	mainKey := s.flagOrShortFlag(flag)
+	if arg, found := s.acceptedFlags.Get(mainKey); found {
+		if arg.(*Argument).PostFilter != nil {
+			return arg.(*Argument).PostFilter, nil
+		}
+	}
+
+	return nil, errors.New("no post-validation filters for flag " + flag)
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept

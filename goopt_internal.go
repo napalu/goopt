@@ -355,7 +355,11 @@ func (s *CmdLineOption) processValueFlag(currentArg string, next string, argumen
 	if len(argument.AcceptedValues) > 0 {
 		processed = s.processSingleValue(next, currentArg, argument)
 	} else {
-		processed = s.applyFilter(currentArg, next)
+		if argument.PreFilter != nil {
+			processed = argument.PreFilter(next)
+		} else {
+			processed = next
+		}
 		s.registerFlagValue(currentArg, processed, next)
 	}
 
@@ -393,10 +397,16 @@ func (s *CmdLineOption) processSingleValue(next, key string, argument *Argument)
 func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) string {
 	var errBuf = strings.Builder{}
 	var valid = false
-	inspect := s.applyFilter(flag, next)
+	var value string
+	if argument.PreFilter != nil {
+		value = argument.PreFilter(next)
+	} else {
+		value = next
+	}
+
 	lenValues := len(argument.AcceptedValues)
 	for i, v := range argument.AcceptedValues {
-		if v.value.MatchString(inspect) {
+		if v.value.MatchString(value) {
 			valid = true
 		} else {
 			errBuf.WriteString(v.Describe())
@@ -406,24 +416,17 @@ func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) strin
 		}
 	}
 
+	if argument.PostFilter != nil {
+		value = argument.PostFilter(value)
+	}
 	if valid {
-		s.registerFlagValue(flag, inspect, next)
+		s.registerFlagValue(flag, value, next)
 	} else {
 		s.addError(fmt.Sprintf(
 			"Invalid argument '%s' for flag '%s'. Accepted values: %s", next, flag, errBuf.String()))
 	}
 
-	return inspect
-}
-
-func (s *CmdLineOption) applyFilter(flag string, next string) string {
-	var inspect = next
-	if s.HasFilter(flag) {
-		proc, _ := s.GetFilter(flag)
-		inspect = proc(inspect)
-	}
-
-	return inspect
+	return value
 }
 
 func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) string {
@@ -432,15 +435,19 @@ func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) str
 	listDelimFunc := s.getListDelimiterFunc()
 	args := strings.FieldsFunc(next, listDelimFunc)
 
-	for _, arg := range args {
-		if argument.Filter != nil {
-			arg = argument.Filter(flag)
+	for i := 0; i < len(args); i++ {
+		if argument.PreFilter != nil {
+			args[i] = argument.PreFilter(args[i])
 		}
 
 		for _, v := range argument.AcceptedValues {
-			if v.value.MatchString(arg) {
+			if v.value.MatchString(args[i]) {
 				valid++
 			}
+		}
+
+		if argument.PostFilter != nil {
+			args[i] = argument.PostFilter(args[i])
 		}
 	}
 

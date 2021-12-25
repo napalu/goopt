@@ -35,7 +35,7 @@ type ConfigureArgumentFunc func(argument *Argument)
 // ConfigureCommandFunc is used to enable a fluent interface when defining commands
 type ConfigureCommandFunc func(command *Command)
 
-// FilterFunc used to "filter" (change/evaluate) flag values - see AddFilter/GetFilter/HasFilter
+// FilterFunc used to "filter" (change/evaluate) flag values - see AddFilter/GetPreValidationFilter/HasPreValidationFilter
 type FilterFunc func(string) string
 
 // CommandFunc callback - optionally specified as part of the Command structure gets called when matched on Parse()
@@ -117,7 +117,8 @@ type Argument struct {
 	TypeOf         OptionType
 	Required       bool
 	RequiredIf     RequiredIfFunc
-	Filter         FilterFunc
+	PreFilter      FilterFunc
+	PostFilter     FilterFunc
 	AcceptedValues []LiterateRegex
 	DependsOn      []string
 	OfValue        []string

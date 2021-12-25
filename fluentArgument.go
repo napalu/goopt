@@ -80,8 +80,14 @@ func WithDefaultValue(defaultValue string) ConfigureArgumentFunc {
 	}
 }
 
-func WithFilter(filter FilterFunc) ConfigureArgumentFunc {
+func WithPreValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 	return func(argument *Argument) {
-		argument.Filter = filter
+		argument.PreFilter = filter
+	}
+}
+
+func WithPostValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
+	return func(argument *Argument) {
+		argument.PostFilter = filter
 	}
 }

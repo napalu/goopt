@@ -53,15 +53,30 @@ func TestCmdLineOption_AcceptValues(t *testing.T) {
 	}
 }
 
-func TestCmdLineOption_AddFilter(t *testing.T) {
+func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
-	err := opts.AddFlagFilter("upper", strings.ToUpper)
+	err := opts.AddFlagPreValidationFilter("upper", strings.ToUpper)
 	assert.Nil(t, err, "should be able to add a filter to a valid flag")
 
 	_ = opts.AcceptValue("upper", "^[A-Z]+$", "upper case only")
-	assert.True(t, opts.HasFilter("upper"), "flag should have a filter defined")
+	assert.True(t, opts.HasPreValidationFilter("upper"), "flag should have a filter defined")
+	assert.True(t, opts.Parse([]string{"--upper", "lowercase"}), "parse should not fail and pass AcceptValue properly")
+
+	value, _ := opts.Get("upper")
+	assert.Equal(t, "LOWERCASE", value, "the value of flag upper should be transformed to uppercase")
+}
+
+func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
+	err := opts.AddFlagPostValidationFilter("upper", strings.ToUpper)
+	assert.Nil(t, err, "should be able to add a filter to a valid flag")
+
+	_ = opts.AcceptValue("upper", "^[A-Z]+$", "upper case only")
+	assert.True(t, opts.HasPreValidationFilter("upper"), "flag should have a filter defined")
 	assert.True(t, opts.Parse([]string{"--upper", "lowercase"}), "parse should not fail and pass AcceptValue properly")
 
 	value, _ := opts.Get("upper")
