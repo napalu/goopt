@@ -23,7 +23,6 @@ import (
 	"io"
 	"os"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -360,7 +359,7 @@ func (s *CmdLineOption) Get(flag string) (string, bool) {
 	return value, found
 }
 
-// GetBool attempts to convert the string value of a Flag to a boolean.
+// GetBool attempts to convert the string value of a Flag to boolean.
 func (s *CmdLineOption) GetBool(flag string) (bool, error) {
 	value, success := s.Get(flag)
 	if !success {
@@ -399,14 +398,13 @@ func (s *CmdLineOption) GetFloat(flag string, bitSize int) (float64, error) {
 // GetList attempts to split the string value of a Chained Flag to a string slice
 // by default the value is split on '|', ',' or ' ' delimiters
 func (s *CmdLineOption) GetList(flag string) ([]string, error) {
-	arg, found := s.acceptedFlags.Get(flag)
-	notFound := fmt.Errorf("failed to retrieve value for flag '%s'", flag)
+	arg, err := s.GetArgument(flag)
 	listDelimFunc := s.getListDelimiterFunc()
-	if found {
-		if arg.(*Argument).TypeOf == Chained {
+	if err == nil {
+		if arg.TypeOf == Chained {
 			value, success := s.Get(flag)
 			if !success {
-				return []string{}, notFound
+				return []string{}, fmt.Errorf("failed to retrieve value for flag '%s'", flag)
 			}
 
 			return strings.FieldsFunc(value, listDelimFunc), nil
@@ -415,7 +413,7 @@ func (s *CmdLineOption) GetList(flag string) ([]string, error) {
 		return []string{}, fmt.Errorf("invalid Argument type for flag '%s' - use typeOf = Chained instead", flag)
 	}
 
-	return []string{}, notFound
+	return []string{}, err
 }
 
 // SetListDelimiterFunc TODO explain
@@ -578,74 +576,75 @@ func (s *CmdLineOption) CustomBindFlag(data interface{}, proc ValueSetFunc, flag
 	return nil
 }
 
-// AcceptValue is used to define an acceptable value for a Flag. The 'pattern' argument is compiled to a regular expression
+// AcceptPattern is used to define an acceptable value for a Flag. The 'pattern' argument is compiled to a regular expression
 // and the description argument is used to provide a human-readable description of the pattern.
 // Returns an error if the regular expression cannot be compiled or if the Flag does not support values (Standalone).
 // Example:
 //  	a Flag which accepts only whole numbers could be defined as:
-//   	AcceptValue("times", `^[\d]+`, "Please supply a whole number").
-func (s *CmdLineOption) AcceptValue(flag string, pattern string, description string) error {
-	re, err := regexp.Compile(pattern)
+//   	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
+func (s *CmdLineOption) AcceptPattern(flag string, val PatternValue) error {
+	return s.AcceptPatterns(flag, []PatternValue{val})
+}
+
+// AcceptPatterns same as PatternValue but acts on a list of patterns and descriptions. When specified, the patterns defined
+// in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
+// on Parse, if no command-line options match one of the PatternValue, Parse returns false.
+func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue) error {
+	arg, err := s.GetArgument(flag)
 	if err != nil {
 		return err
 	}
-	mainKey := s.flagOrShortFlag(flag)
-	accepted, found := s.acceptedFlags.Get(mainKey)
-	if !found {
-		return fmt.Errorf("option with flag %s was not set", flag)
+
+	lenValues := len(acceptVal)
+	if arg.AcceptedValues == nil {
+		arg.AcceptedValues = make([]LiterateRegex, 0, lenValues)
 	}
-	arg := accepted.(*Argument)
-	if arg.TypeOf == Standalone {
-		return fmt.Errorf("option with flag %s does not accept a value (Standalone)", flag)
+
+	for i := 0; i < lenValues; i++ {
+		if err := arg.accept(acceptVal[i]); err != nil {
+			return *err
+		}
+	}
+
+	return nil
+}
+
+// GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
+func (s *CmdLineOption) GetAcceptPatterns(flag string) ([]LiterateRegex, error) {
+	arg, err := s.GetArgument(flag)
+	if err != nil {
+		return []LiterateRegex{}, err
 	}
 
 	if arg.AcceptedValues == nil {
-		arg.AcceptedValues = make([]LiterateRegex, 1, 5)
-		arg.AcceptedValues[0] = LiterateRegex{
-			value:   re,
-			explain: description,
-		}
-	} else {
-		arg.AcceptedValues = append(arg.AcceptedValues, LiterateRegex{
-			value:   re,
-			explain: description,
-		})
+		return []LiterateRegex{}, nil
 	}
 
-	return nil
+	return arg.AcceptedValues, nil
 }
 
-// AcceptValues same as AcceptValue but acts on a list of patterns and descriptions. When specified, the patterns defined
-// in AcceptValues represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
-// on Parse, if no command-line options match one of the AcceptValues, Parse returns false.
-func (s *CmdLineOption) AcceptValues(flag string, patterns, descriptions []string) error {
-	lenDesc := len(descriptions)
-	var desc = ""
-
-	for i, pattern := range patterns {
-		if i < lenDesc {
-			desc = descriptions[i]
-		}
-		if err := s.AcceptValue(flag, pattern, desc); err != nil {
-			return err
-		}
+// GetArgument returns the Argument corresponding to the long or short flag or an error when not found
+func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
+	mainKey := s.flagOrShortFlag(flag)
+	v, found := s.acceptedFlags.Get(mainKey)
+	if !found {
+		return nil, fmt.Errorf("option with flag %s was not set", flag)
 	}
 
-	return nil
+	return v.(*Argument), nil
 }
 
 func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
-	mainKey := s.flagOrShortFlag(flag)
-	argument, found := s.acceptedFlags.Get(mainKey)
-	if found {
-		if argument.(*Argument).Short != "" {
-			return argument.(*Argument).Short, nil
+	argument, err := s.GetArgument(flag)
+	if err == nil {
+		if argument.Short != "" {
+			return argument.Short, nil
 		}
 
 		return "", fmt.Errorf("flag %s has no short flag defined", flag)
 	}
 
-	return "", fmt.Errorf("flag %s was not found", flag)
+	return "", err
 }
 
 // HasFlag returns true when the Flag has been seen on the command line.

@@ -8,6 +8,7 @@ import (
 	"golang.org/x/term"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -320,34 +321,30 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 	return true
 }
 
-func getSecureString(prompt string) (string, error) {
-	if term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Print(prompt)
-		bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-		if err != nil {
-			fmt.Println()
-			return "", err
-		}
-		pass := string(bytes)
-		if len(pass) == 0 {
-			fmt.Println()
-			return "", fmt.Errorf("empty password is invalid")
-		}
-		fmt.Println()
-
-		return pass, nil
+func (a *Argument) accept(val PatternValue) *error {
+	re, err := regexp.Compile(val.Pattern)
+	if err != nil {
+		return &err
+	}
+	if a.TypeOf == Standalone {
+		err = fmt.Errorf("argument %v does not accept a value (Standalone)", a)
+		return &err
 	}
 
-	return "", fmt.Errorf("not attached to a terminal. don't know how to get input from stdin")
-}
-
-func pruneExecPathFromArgs(args *[]string) {
-	if len(*args) > 0 {
-		osBase := os.Args[0]
-		if strings.EqualFold(osBase, (*args)[0]) {
-			*args = (*args)[1:]
+	if a.AcceptedValues == nil {
+		a.AcceptedValues = make([]LiterateRegex, 1, 5)
+		a.AcceptedValues[0] = LiterateRegex{
+			value:   re,
+			explain: val.Description,
 		}
+	} else {
+		a.AcceptedValues = append(a.AcceptedValues, LiterateRegex{
+			value:   re,
+			explain: val.Description,
+		})
 	}
+
+	return nil
 }
 
 func (s *CmdLineOption) processValueFlag(currentArg string, next string, argument *Argument) error {
@@ -882,4 +879,34 @@ func showDependencies(dependencies []string) string {
 
 func matchChainedSeparators(r rune) bool {
 	return r == ',' || r == '|' || r == ' '
+}
+
+func getSecureString(prompt string) (string, error) {
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		fmt.Print(prompt)
+		bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			fmt.Println()
+			return "", err
+		}
+		pass := string(bytes)
+		if len(pass) == 0 {
+			fmt.Println()
+			return "", fmt.Errorf("empty password is invalid")
+		}
+		fmt.Println()
+
+		return pass, nil
+	}
+
+	return "", fmt.Errorf("not attached to a terminal. don't know how to get input from stdin")
+}
+
+func pruneExecPathFromArgs(args *[]string) {
+	if len(*args) > 0 {
+		osBase := os.Args[0]
+		if strings.EqualFold(osBase, (*args)[0]) {
+			*args = (*args)[1:]
+		}
+	}
 }

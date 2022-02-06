@@ -13,7 +13,11 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
+	github.com/jordanlewis/gcassert v0.0.0-20210728132837-c29918f42407 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/mod v0.2.0 // indirect
 	golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1 // indirect
+	golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f // indirect
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )

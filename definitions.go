@@ -30,7 +30,7 @@ type ListDelimiterFunc func(matchOn rune) bool
 type ConfigureCmdLineFunc func(cmdLine *CmdLineOption, err *error)
 
 // ConfigureArgumentFunc is used to enable a fluent interface when defining arguments
-type ConfigureArgumentFunc func(argument *Argument)
+type ConfigureArgumentFunc func(argument *Argument, err *error)
 
 // ConfigureCommandFunc is used to enable a fluent interface when defining commands
 type ConfigureCommandFunc func(command *Command)
@@ -56,6 +56,11 @@ const (
 	// Standalone denotes a boolean Flag (does not accept a value)
 	Standalone OptionType = 2
 )
+
+type PatternValue struct {
+	Pattern     string
+	Description string
+}
 
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data
 type ClearConfig struct {

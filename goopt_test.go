@@ -29,11 +29,11 @@ func TestCmdLineOption_AcceptValue(t *testing.T) {
 	_ = opts.AddFlag("test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	_ = opts.AddFlag("test2", NewArgument("t2", "", Single, false, Secure{}, ""))
 
-	err := opts.AcceptValue("test", `^[0-9]+$`, "whole integers only")
-	assert.NotNil(t, err, "constraint violation - 'Standalone' flags don't take values and therefore should not AcceptValue")
+	err := opts.AcceptPattern("test", PatternValue{Pattern: `^[0-9]+$`, Description: "whole integers only"})
+	assert.NotNil(t, err, "constraint violation - 'Standalone' flags don't take values and therefore should not PatternValue")
 
-	err = opts.AcceptValue("test2", `^[0-9]+$`, "whole integers only")
-	assert.Nil(t, err, "constraint violation - 'Single' flags take values and therefore should AcceptValue")
+	err = opts.AcceptPattern("test2", PatternValue{Pattern: `^[0-9]+$`, Description: "whole integers only"})
+	assert.Nil(t, err, "constraint violation - 'Single' flags take values and therefore should PatternValue")
 	assert.True(t, opts.Parse([]string{"--test2", "12344"}), "test2 should accept values which match whole integer patterns")
 }
 
@@ -42,8 +42,11 @@ func TestCmdLineOption_AcceptValues(t *testing.T) {
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
 
-	err := opts.AcceptValues("test", []string{`^[0-9]+$`, `^[0-9]+\.[0-9]+`}, []string{"whole integers", "float numbers"})
-	assert.Nil(t, err, "should accept multiple AcceptValues")
+	err := opts.AcceptPatterns("test", []PatternValue{
+		{Pattern: `^[0-9]+$`, Description: "whole integers"},
+		{Pattern: `^[0-9]+\.[0-9]+`, Description: "float numbers"},
+	})
+	assert.Nil(t, err, "should accept multiple AcceptPatterns")
 	assert.True(t, opts.Parse([]string{"--test", "12344"}), "test should accept values which match whole integer patterns")
 	assert.True(t, opts.Parse([]string{"--test", "12344.123"}), "test should accept values which match float patterns")
 	assert.False(t, opts.Parse([]string{"--test", "alphabet"}), "test should not accept alphabetical values")
@@ -60,9 +63,9 @@ func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
 	err := opts.AddFlagPreValidationFilter("upper", strings.ToUpper)
 	assert.Nil(t, err, "should be able to add a filter to a valid flag")
 
-	_ = opts.AcceptValue("upper", "^[A-Z]+$", "upper case only")
+	_ = opts.AcceptPattern("upper", PatternValue{Pattern: "^[A-Z]+$", Description: "upper case only"})
 	assert.True(t, opts.HasPreValidationFilter("upper"), "flag should have a filter defined")
-	assert.True(t, opts.Parse([]string{"--upper", "lowercase"}), "parse should not fail and pass AcceptValue properly")
+	assert.True(t, opts.Parse([]string{"--upper", "lowercase"}), "parse should not fail and pass PatternValue properly")
 
 	value, _ := opts.Get("upper")
 	assert.Equal(t, "LOWERCASE", value, "the value of flag upper should be transformed to uppercase")
@@ -84,12 +87,14 @@ func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
 
 	assert.Nil(t, err, "should be able to add a filter to a valid flag")
 
-	_ = opts.AcceptValue("status", "^(?:active|inactive)$", "please set the status to either 'active' or 'inactive'")
+	_ = opts.AcceptPattern("status", PatternValue{Pattern: "^(?:active|inactive)$", Description: "set status to either 'active' or 'inactive'"})
 	assert.True(t, opts.HasPostValidationFilter("status"), "flag should have a filter defined")
-	assert.True(t, opts.Parse([]string{"--status", "active"}), "parse should not fail and pass AcceptValue properly")
+	assert.False(t, opts.Parse([]string{"--status", "invalid"}), "parse should fail on invalid input")
+	opts.ClearAll()
+	assert.True(t, opts.Parse([]string{"--status", "active"}), "parse should not fail and pass PatternValue properly")
 
 	value, _ := opts.Get("status")
-	assert.Equal(t, "-1", value, "the value of flag status should have been transformed after AcceptValue validation")
+	assert.Equal(t, "-1", value, "the value of flag status should have been transformed to -1 after PatternValue validation")
 }
 
 func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
