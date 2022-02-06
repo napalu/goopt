@@ -652,11 +652,9 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	_, found := s.options[mainKey]
 	if !found {
-		secure := s.secureArguments[mainKey]
-		if secure.IsSecure {
-			return true
-		}
+		_, found = s.secureArguments[mainKey]
 	}
+
 	return found
 }
 
