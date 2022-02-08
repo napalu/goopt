@@ -160,7 +160,7 @@ type CmdLineOption struct {
 	rawArgs            map[string]bool
 	callbackQueue      *deque.Deque
 	callbackResults    map[string]error
-	secureArguments    map[string]Secure
+	secureArguments    *orderedmap.OrderedMap
 }
 
 type UnsupportedTypeConversionError struct {

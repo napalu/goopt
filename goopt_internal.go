@@ -110,6 +110,9 @@ func (s *CmdLineOption) ensureInit() {
 	if s.callbackResults == nil {
 		s.callbackResults = map[string]error{}
 	}
+	if s.secureArguments == nil {
+		s.secureArguments = orderedmap.New()
+	}
 }
 
 func (a *Argument) ensureInit() {
@@ -190,10 +193,10 @@ func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue
 
 func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
 	if s.secureArguments == nil {
-		s.secureArguments = map[string]Secure{}
+		s.secureArguments = orderedmap.New()
 	}
 
-	s.secureArguments[name] = argument.Secure
+	s.secureArguments.Set(name, argument.Secure)
 }
 
 func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *deque.Deque) {

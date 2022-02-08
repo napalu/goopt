@@ -23,7 +23,7 @@ func (writer arrayWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestCmdLineOption_AcceptValue(t *testing.T) {
+func TestCmdLineOption_AcceptPattern(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Standalone, false, Secure{}, ""))
@@ -37,7 +37,7 @@ func TestCmdLineOption_AcceptValue(t *testing.T) {
 	assert.True(t, opts.Parse([]string{"--test2", "12344"}), "test2 should accept values which match whole integer patterns")
 }
 
-func TestCmdLineOption_AcceptValues(t *testing.T) {
+func TestCmdLineOption_AcceptPatterns(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))

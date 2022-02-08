@@ -43,7 +43,7 @@ func NewCmdLineOption() *CmdLineOption {
 		listFunc:           matchChainedSeparators,
 		callbackQueue:      deque.New(),
 		callbackResults:    map[string]error{},
-		secureArguments:    map[string]Secure{},
+		secureArguments:    orderedmap.New(),
 		prefixes:           []rune{'-', '/'},
 	}
 }
@@ -224,8 +224,8 @@ func (s *CmdLineOption) Parse(args []string) bool {
 
 	success := len(s.errors) == 0
 	if success {
-		for key, secure := range s.secureArguments {
-			s.processSecureFlag(key, secure)
+		for kv := s.secureArguments.Oldest(); kv != nil; kv = kv.Next() {
+			s.processSecureFlag(kv.Key.(string), kv.Value.(Secure))
 		}
 	}
 	s.secureArguments = nil
@@ -651,8 +651,10 @@ func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
 func (s *CmdLineOption) HasFlag(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	_, found := s.options[mainKey]
-	if !found {
-		_, found = s.secureArguments[mainKey]
+	if !found && s.secureArguments != nil {
+		// secure arguments are evaluated after all others - if a callback (ex. RequiredIf) relies
+		// on HasFlag during Parse then we need to check secureArguments
+		_, found = s.secureArguments.Get(mainKey)
 	}
 
 	return found
