@@ -801,24 +801,29 @@ func (s *CmdLineOption) GetErrorCount() int {
 func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s", []byte(os.Args[0]))))
 	s.PrintFlags(writer)
-	_, _ = writer.Write([]byte("\ncommands:\n"))
-	s.PrintCommands(writer)
+	if len(s.registeredCommands) > 0 {
+		_, _ = writer.Write([]byte("\ncommands:\n"))
+		s.PrintCommands(writer)
+	}
 }
 
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (s *CmdLineOption) PrintFlags(writer io.Writer) {
-	for pair, i := s.acceptedFlags.Oldest(), 0; pair != nil; pair = pair.Next() {
-		shortFlag, err := s.GetShortFlag(pair.Key.(string))
-		if err != nil {
-			shortFlag = "-" + shortFlag
+	var shortOption string
+	for pair, _ := s.acceptedFlags.Oldest(), 0; pair != nil; pair = pair.Next() {
+		key := pair.Key.(string)
+		shortFlag, err := s.GetShortFlag(key)
+		if err == nil {
+			shortOption = " or -" + shortFlag + " "
+		} else {
+			shortOption = " "
 		}
 		requiredOrOptional := "optional"
 		if pair.Value.(*Argument).Required {
 			requiredOrOptional = "required"
 		}
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s or -%s \"%s\" (%s)",
-			pair.Key, shortFlag, s.GetDescription(pair.Key.(string)), requiredOrOptional)))
-		i++
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s%s\"%s\" (%s)",
+			key, shortOption, s.GetDescription(key), requiredOrOptional)))
 	}
 }
 
