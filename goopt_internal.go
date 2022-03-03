@@ -687,118 +687,118 @@ func convertString(value string, data interface{}, arg string, delimiterFunc Lis
 		}
 		*(t) = temp
 	case *int64:
-		if val, err := strconv.ParseInt(value, 0, 64); err == nil {
+		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
 			*(t) = val
 		}
 	case *[]int64:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int64, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 0, 64); err == nil {
+			if val, err := strconv.ParseInt(v, 10, 64); err == nil {
 				temp[i] = val
 			}
 		}
 		*(t) = temp
 	case *int32:
-		if val, err := strconv.ParseInt(value, 0, 32); err == nil {
+		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			*(t) = int32(val)
 		}
 	case *[]int32:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int32, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 0, 32); err == nil {
+			if val, err := strconv.ParseInt(v, 10, 32); err == nil {
 				temp[i] = int32(val)
 			}
 		}
 		*(t) = temp
 	case *int16:
-		if val, err := strconv.ParseInt(value, 0, 16); err == nil {
+		if val, err := strconv.ParseInt(value, 10, 16); err == nil {
 			*(t) = int16(val)
 		}
 	case *[]int16:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int16, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 0, 16); err == nil {
+			if val, err := strconv.ParseInt(v, 10, 16); err == nil {
 				temp[i] = int16(val)
 			}
 		}
 		*(t) = temp
 	case *int8:
-		if val, err := strconv.ParseInt(value, 0, 8); err == nil {
+		if val, err := strconv.ParseInt(value, 10, 8); err == nil {
 			*(t) = int8(val)
 		}
 	case *[]int8:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int8, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 0, 8); err == nil {
+			if val, err := strconv.ParseInt(v, 10, 8); err == nil {
 				temp[i] = int8(val)
 			}
 		}
 		*(t) = temp
 	case *uint:
-		if val, err := strconv.ParseUint(value, 0, strconv.IntSize); err == nil {
+		if val, err := strconv.ParseUint(value, 10, strconv.IntSize); err == nil {
 			*(t) = uint(val)
 		}
 	case *[]uint:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]uint, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 0, strconv.IntSize); err == nil {
+			if val, err := strconv.ParseUint(v, 10, strconv.IntSize); err == nil {
 				temp[i] = uint(val)
 			}
 		}
 		*(t) = temp
 	case *uint64:
-		if val, err := strconv.ParseUint(value, 0, 64); err == nil {
+		if val, err := strconv.ParseUint(value, 10, 64); err == nil {
 			*(t) = val
 		}
 	case *[]uint64:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]uint64, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 0, 64); err == nil {
+			if val, err := strconv.ParseUint(v, 10, 64); err == nil {
 				temp[i] = val
 			}
 		}
 		*(t) = temp
 	case *uint32:
-		if val, err := strconv.ParseUint(value, 0, 32); err == nil {
+		if val, err := strconv.ParseUint(value, 10, 32); err == nil {
 			*(t) = uint32(val)
 		}
 	case *[]uint32:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]uint32, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 0, 32); err == nil {
+			if val, err := strconv.ParseUint(v, 10, 32); err == nil {
 				temp[i] = uint32(val)
 			}
 		}
 		*(t) = temp
 	case *uint16:
-		if val, err := strconv.ParseUint(value, 0, 16); err == nil {
+		if val, err := strconv.ParseUint(value, 10, 16); err == nil {
 			*(t) = uint16(val)
 		}
 	case *[]uint16:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]uint16, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 0, 16); err == nil {
+			if val, err := strconv.ParseUint(v, 10, 16); err == nil {
 				temp[i] = uint16(val)
 			}
 		}
 		*(t) = temp
 	case *uint8:
-		if val, err := strconv.ParseUint(value, 0, 8); err == nil {
+		if val, err := strconv.ParseUint(value, 10, 8); err == nil {
 			*(t) = uint8(val)
 		}
 	case *[]uint8:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]uint8, len(values))
 		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 0, 8); err == nil {
+			if val, err := strconv.ParseUint(v, 10, 8); err == nil {
 				temp[i] = uint8(val)
 			}
 		}

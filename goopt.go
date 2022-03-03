@@ -378,7 +378,7 @@ func (s *CmdLineOption) GetInt(flag string, bitSize int) (int64, error) {
 		return 0, fmt.Errorf("no option with flag '%s' exists", flag)
 	}
 
-	val, err := strconv.ParseInt(value, 0, bitSize)
+	val, err := strconv.ParseInt(value, 10, bitSize)
 
 	return val, err
 }
