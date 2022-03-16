@@ -25,7 +25,7 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 				s.queueSecureArgument(currentArg, argument)
 			} else {
 				boolVal := "true"
-				if state.pos < state.endOf {
+				if state.pos+1 < state.endOf {
 					_, found := s.registeredCommands[args[state.pos+1]]
 					if !found && !s.isFlag(args[state.pos+1]) {
 						boolVal = args[state.pos+1]
