@@ -26,13 +26,9 @@ func (writer arrayWriter) Write(p []byte) (int, error) {
 func TestCmdLineOption_AcceptPattern(t *testing.T) {
 	opts := NewCmdLineOption()
 
-	_ = opts.AddFlag("test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	_ = opts.AddFlag("test2", NewArgument("t2", "", Single, false, Secure{}, ""))
 
-	err := opts.AcceptPattern("test", PatternValue{Pattern: `^[0-9]+$`, Description: "whole integers only"})
-	assert.NotNil(t, err, "constraint violation - 'Standalone' flags don't take values and therefore should not PatternValue")
-
-	err = opts.AcceptPattern("test2", PatternValue{Pattern: `^[0-9]+$`, Description: "whole integers only"})
+	err := opts.AcceptPattern("test2", PatternValue{Pattern: `^[0-9]+$`, Description: "whole integers only"})
 	assert.Nil(t, err, "constraint violation - 'Single' flags take values and therefore should PatternValue")
 	assert.True(t, opts.Parse([]string{"--test2", "12344"}), "test2 should accept values which match whole integer patterns")
 }
@@ -613,6 +609,31 @@ func TestCmdLineOption_ParseWithDefaults(t *testing.T) {
 	assert.True(t, cmdLine.ParseStringWithDefaults(defaults, "-fa -fb"), "required value should be set by default")
 	assert.Equal(t, cmdLine.GetOrDefault("flagWithValue", ""), "valueA", "value should be supplied by default")
 
+}
+
+func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
+	cmdLine, _ := NewCmdLine(
+		WithFlag("flagA",
+			NewArg(
+				WithShortFlag("fa"),
+				WithType(Standalone))),
+		WithFlag("flagB",
+			NewArg(
+				WithShortFlag("fb"),
+				WithType(Single))))
+
+	assert.True(t, cmdLine.ParseString("-fa false -fb hello"), "should properly parse a command-line with explicitly "+
+		"set boolean flag value among other values")
+	boolValue, err := cmdLine.GetBool("fa")
+	assert.Nil(t, err, "boolean conversion of 'false' string value should not result in error")
+	assert.False(t, boolValue, "the user-supplied false value of a boolean flag should be respected")
+	assert.Equal(t, cmdLine.GetOrDefault("fb", ""), "hello", "Single flag in command-line "+
+		"with explicitly set boolean flag should have the correct value")
+	cmdLine.ClearAll()
+	assert.False(t, cmdLine.ParseString("-fa ouch -fb hello"), "should not properly parse a command-line with explicitly "+
+		"set invalid boolean flag value among other values")
+	boolValue, err = cmdLine.GetBool("fa")
+	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
 }
 
 func TestMain(m *testing.M) {

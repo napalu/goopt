@@ -24,8 +24,16 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 			if argument.Secure.IsSecure {
 				s.queueSecureArgument(currentArg, argument)
 			} else {
-				s.options[currentArg] = "true"
-				err := s.setBoundVariable("true", currentArg)
+				boolVal := "true"
+				if state.pos < state.endOf {
+					_, found := s.registeredCommands[args[state.pos+1]]
+					if !found && !s.isFlag(args[state.pos+1]) {
+						boolVal = args[state.pos+1]
+						state.skip = state.pos + 1
+					}
+				}
+				s.options[currentArg] = boolVal
+				err := s.setBoundVariable(boolVal, currentArg)
 				if err != nil {
 					s.addError(fmt.Sprintf(
 						"Could not process input argument '%s' - the following error occurred: %s", currentArg, err))
@@ -329,10 +337,6 @@ func (a *Argument) accept(val PatternValue) *error {
 	if err != nil {
 		return &err
 	}
-	if a.TypeOf == Standalone {
-		err = fmt.Errorf("argument %v does not accept a value (Standalone)", a)
-		return &err
-	}
 
 	if a.AcceptedValues == nil {
 		a.AcceptedValues = make([]LiterateRegex, 1, 5)
@@ -484,12 +488,19 @@ func (s *CmdLineOption) walkFlags() {
 			}
 			continue
 		}
+		key := fmt.Sprintf("%s", pair.Key)
 		if !arg.Required {
+			if s.HasFlag(key) && arg.TypeOf == Standalone {
+				s.validateStandaloneFlag(fmt.Sprintf("%s", key))
+			}
 			continue
 		}
 
-		mainKey := s.flagOrShortFlag(fmt.Sprintf("%s", pair.Key))
+		mainKey := s.flagOrShortFlag(key)
 		if _, found := s.options[mainKey]; found {
+			if arg.TypeOf == Standalone {
+				s.validateStandaloneFlag(mainKey)
+			}
 			continue
 		} else if pair.Value.(*Argument).Secure.IsSecure {
 			s.queueSecureArgument(mainKey, arg)
@@ -502,6 +513,13 @@ func (s *CmdLineOption) walkFlags() {
 		} else {
 			s.validateDependencies(arg, mainKey)
 		}
+	}
+}
+
+func (s *CmdLineOption) validateStandaloneFlag(key string) {
+	_, err := s.GetBool(key)
+	if err != nil {
+		s.addError(err.Error())
 	}
 }
 

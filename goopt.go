@@ -7,7 +7,7 @@
 // It supports 3 types of flags:
 //   Single - a flag which expects a value
 //   Chained - flag which expects a delimited value representing elements in a list (and is evaluated as a list)
-//   Standalone - a boolean switch which takes no value
+//   Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
 //
 // Additionally, commands and sub-commands (Command) are supported. Commands can be nested to represent sub-commands. Unlike
 // the official go.Flag package commands and sub-commands may be placed before, after or mixed in with flags.
