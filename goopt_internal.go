@@ -491,7 +491,7 @@ func (s *CmdLineOption) walkFlags() {
 		key := fmt.Sprintf("%s", pair.Key)
 		if !arg.Required {
 			if s.HasFlag(key) && arg.TypeOf == Standalone {
-				s.validateStandaloneFlag(fmt.Sprintf("%s", key))
+				s.validateStandaloneFlag(key)
 			}
 			continue
 		}
