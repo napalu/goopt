@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"github.com/ef-ds/deque"
 	"github.com/google/shlex"
-	"github.com/wk8/go-ordered-map"
+	"github.com/napalu/goopt/types/orderedmap"
 	"io"
 	"os"
 	"reflect"
@@ -31,7 +31,7 @@ import (
 // configure CmdLineOption fluently.
 func NewCmdLineOption() *CmdLineOption {
 	return &CmdLineOption{
-		acceptedFlags:      orderedmap.New(),
+		acceptedFlags:      orderedmap.NewOrderedMap[string, *Argument](),
 		lookup:             map[string]string{},
 		options:            map[string]string{},
 		errors:             []string{},
@@ -43,7 +43,7 @@ func NewCmdLineOption() *CmdLineOption {
 		listFunc:           matchChainedSeparators,
 		callbackQueue:      deque.New(),
 		callbackResults:    map[string]error{},
-		secureArguments:    orderedmap.New(),
+		secureArguments:    orderedmap.NewOrderedMap[string, *Secure](),
 		prefixes:           []rune{'-', '/'},
 	}
 }
@@ -103,7 +103,7 @@ func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
 func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc) error {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		arg.(*Argument).PreFilter = proc
+		arg.PreFilter = proc
 
 		return nil
 	}
@@ -116,7 +116,7 @@ func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc)
 func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc) error {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		arg.(*Argument).PostFilter = proc
+		arg.PostFilter = proc
 
 		return nil
 	}
@@ -129,7 +129,7 @@ func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc
 func (s *CmdLineOption) HasPreValidationFilter(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		return arg.(*Argument).PreFilter != nil
+		return arg.PreFilter != nil
 	}
 
 	return false
@@ -140,8 +140,8 @@ func (s *CmdLineOption) HasPreValidationFilter(flag string) bool {
 func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		if arg.(*Argument).PreFilter != nil {
-			return arg.(*Argument).PreFilter, nil
+		if arg.PreFilter != nil {
+			return arg.PreFilter, nil
 		}
 	}
 
@@ -153,7 +153,7 @@ func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) 
 func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		return arg.(*Argument).PostFilter != nil
+		return arg.PostFilter != nil
 	}
 
 	return false
@@ -164,8 +164,8 @@ func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
 func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error) {
 	mainKey := s.flagOrShortFlag(flag)
 	if arg, found := s.acceptedFlags.Get(mainKey); found {
-		if arg.(*Argument).PostFilter != nil {
-			return arg.(*Argument).PostFilter, nil
+		if arg.PostFilter != nil {
+			return arg.PostFilter, nil
 		}
 	}
 
@@ -176,7 +176,7 @@ func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error)
 func (s *CmdLineOption) HasAcceptedValues(flag string) bool {
 	arg, found := s.acceptedFlags.Get(s.flagOrShortFlag(flag))
 	if found {
-		return len(arg.(*Argument).AcceptedValues) > 0
+		return len(arg.AcceptedValues) > 0
 	}
 
 	return !found
@@ -224,8 +224,9 @@ func (s *CmdLineOption) Parse(args []string) bool {
 
 	success := len(s.errors) == 0
 	if success {
-		for kv := s.secureArguments.Oldest(); kv != nil; kv = kv.Next() {
-			s.processSecureFlag(kv.Key.(string), kv.Value.(Secure))
+		for f := s.secureArguments.Front(); f != nil; f = f.Next() {
+			key, value := f.Current()()
+			s.processSecureFlag(*key, value)
 		}
 	}
 	s.secureArguments = nil
@@ -252,7 +253,7 @@ func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []str
 		if s.isFlag(args[i]) {
 			arg := strings.TrimLeftFunc(args[i], s.prefixFunc)
 			if flag, found := s.acceptedFlags.Get(arg); found &&
-				(flag.(*Argument).TypeOf != Standalone || !flag.(*Argument).Secure.IsSecure) {
+				(flag.TypeOf != Standalone || !flag.Secure.IsSecure) {
 				if i < argLen-1 {
 					argMap[arg] = args[i+1]
 				}
@@ -351,7 +352,7 @@ func (s *CmdLineOption) Get(flag string) (string, bool) {
 	value, found := s.options[mainKey]
 	if found {
 		accepted, _ := s.acceptedFlags.Get(mainKey)
-		if accepted.(*Argument).Secure.IsSecure {
+		if accepted.Secure.IsSecure {
 			s.options[mainKey] = ""
 		}
 	}
@@ -444,11 +445,10 @@ func (s *CmdLineOption) GetConsistencyWarnings() []string {
 	var configWarnings []string
 	for opt := range s.options {
 		mainKey := s.flagOrShortFlag(opt)
-		arg, found := s.acceptedFlags.Get(mainKey)
+		argument, found := s.acceptedFlags.Get(mainKey)
 		if !found {
 			continue
 		}
-		argument := arg.(*Argument)
 		if argument.TypeOf == Standalone && argument.DefaultValue != "" {
 			configWarnings = append(configWarnings,
 				fmt.Sprintf("Flag '%s' is a Standalone (boolean) flag and has a default value specified. "+
@@ -465,11 +465,10 @@ func (s *CmdLineOption) GetWarnings() []string {
 	var warnings []string
 	for opt := range s.options {
 		mainKey := s.flagOrShortFlag(opt)
-		arg, found := s.acceptedFlags.Get(mainKey)
+		argument, found := s.acceptedFlags.Get(mainKey)
 		if !found {
 			continue
 		}
-		argument := arg.(*Argument)
 		if len(argument.DependsOn) == 0 {
 			continue
 		}
@@ -631,7 +630,7 @@ func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
 		return nil, fmt.Errorf("option with flag %s was not set", flag)
 	}
 
-	return v.(*Argument), nil
+	return v, nil
 }
 
 func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
@@ -695,7 +694,7 @@ func (s *CmdLineOption) DescribeFlag(flag, description string) error {
 	mainKey := s.flagOrShortFlag(flag)
 	accepted, found := s.acceptedFlags.Get(mainKey)
 	if found {
-		accepted.(*Argument).Description = description
+		accepted.Description = description
 
 		return nil
 	}
@@ -708,7 +707,7 @@ func (s *CmdLineOption) GetDescription(flag string) string {
 	mainKey := s.flagOrShortFlag(flag)
 	accepted, found := s.acceptedFlags.Get(mainKey)
 	if found {
-		return accepted.(*Argument).Description
+		return accepted.Description
 	}
 
 	return ""
@@ -750,7 +749,7 @@ func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
 	mainKey := s.flagOrShortFlag(flag)
 	accepted, found := s.acceptedFlags.Get(mainKey)
 	if found {
-		accepted.(*Argument).DependsOn = append(accepted.(*Argument).DependsOn, dependsOn)
+		accepted.DependsOn = append(accepted.DependsOn, dependsOn)
 
 		return nil
 	}
@@ -773,12 +772,12 @@ func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) erro
 	mainKey := s.flagOrShortFlag(flag)
 	accepted, found := s.acceptedFlags.Get(mainKey)
 	if found {
-		accepted.(*Argument).DependsOn = append(accepted.(*Argument).DependsOn, dependsOn)
-		if len(accepted.(*Argument).OfValue) == 0 {
-			accepted.(*Argument).OfValue = make([]string, 1, 5)
-			accepted.(*Argument).OfValue[0] = ofValue
+		accepted.DependsOn = append(accepted.DependsOn, dependsOn)
+		if len(accepted.OfValue) == 0 {
+			accepted.OfValue = make([]string, 1, 5)
+			accepted.OfValue[0] = ofValue
 		} else {
-			accepted.(*Argument).OfValue = append(accepted.(*Argument).OfValue, ofValue)
+			accepted.OfValue = append(accepted.OfValue, ofValue)
 		}
 
 		return nil
@@ -810,20 +809,24 @@ func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 	var shortOption string
-	for pair, _ := s.acceptedFlags.Oldest(), 0; pair != nil; pair = pair.Next() {
-		key := pair.Key.(string)
-		shortFlag, err := s.GetShortFlag(key)
+	iterator := s.acceptedFlags.Iterator()
+	for {
+		i, key, value := iterator()
+		if i == nil {
+			break
+		}
+		shortFlag, err := s.GetShortFlag(*key)
 		if err == nil {
 			shortOption = " or -" + shortFlag + " "
 		} else {
 			shortOption = " "
 		}
 		requiredOrOptional := "optional"
-		if pair.Value.(*Argument).Required {
+		if value.Required {
 			requiredOrOptional = "required"
 		}
 		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s%s\"%s\" (%s)",
-			key, shortOption, s.GetDescription(key), requiredOrOptional)))
+			*key, shortOption, s.GetDescription(*key), requiredOrOptional)))
 	}
 }
 
