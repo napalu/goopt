@@ -17,6 +17,8 @@ type Iterator[K comparable, V any] struct {
 	forward bool
 	ll      *list.Element
 	curr    *list.Element
+	Key     *K
+	Value   V
 }
 
 // OrderedMap definition data is stored in insertion order
@@ -49,6 +51,14 @@ func newIterator[K comparable, V any](o *OrderedMap[K, V], forward bool) *Iterat
 		iter.ll = o.keys.Back()
 	}
 
+	if iter.ll == nil {
+		return nil
+	}
+
+	keyVal := iter.ll.Value.(keyValue[K, V])
+	iter.Key = &keyVal.key
+	iter.Value = keyVal.value
+
 	return iter
 }
 
@@ -67,6 +77,10 @@ func (n *Iterator[K, V]) Next() *Iterator[K, V] {
 	if n.ll == nil {
 		return nil
 	}
+
+	keyVal := n.ll.Value.(keyValue[K, V])
+	n.Key = &keyVal.key
+	n.Value = keyVal.value
 
 	return n
 }
@@ -87,19 +101,11 @@ func (n *Iterator[K, V]) Prev() *Iterator[K, V] {
 		return nil
 	}
 
-	return n
-}
-
-// Current returns an anonymous function returning a key, value pair. If Iterator has no current item, returns nil
-func (n *Iterator[K, V]) Current() func() (*K, V) {
-	if n.ll == nil {
-		return nil
-	}
-
 	keyVal := n.ll.Value.(keyValue[K, V])
-	return func() (*K, V) {
-		return &keyVal.key, keyVal.value
-	}
+	n.Key = &keyVal.key
+	n.Value = keyVal.value
+
+	return n
 }
 
 // NewOrderedMap creates a new OrderedMap of type K

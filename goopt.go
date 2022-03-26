@@ -225,8 +225,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 	success := len(s.errors) == 0
 	if success {
 		for f := s.secureArguments.Front(); f != nil; f = f.Next() {
-			key, value := f.Current()()
-			s.processSecureFlag(*key, value)
+			s.processSecureFlag(*f.Key, f.Value)
 		}
 	}
 	s.secureArguments = nil
@@ -810,19 +809,18 @@ func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 	var shortOption string
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
-		key, value := f.Current()()
-		shortFlag, err := s.GetShortFlag(*key)
+		shortFlag, err := s.GetShortFlag(*f.Key)
 		if err == nil {
 			shortOption = " or -" + shortFlag + " "
 		} else {
 			shortOption = " "
 		}
 		requiredOrOptional := "optional"
-		if value.Required {
+		if f.Value.Required {
 			requiredOrOptional = "required"
 		}
 		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s%s\"%s\" (%s)",
-			*key, shortOption, s.GetDescription(*key), requiredOrOptional)))
+			*f.Key, shortOption, s.GetDescription(*f.Key), requiredOrOptional)))
 	}
 }
 

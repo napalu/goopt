@@ -480,36 +480,35 @@ func (s *CmdLineOption) validateProcessedOptions() {
 
 func (s *CmdLineOption) walkFlags() {
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
-		key, arg := f.Current()()
-		if arg.RequiredIf != nil {
-			if required, msg := arg.RequiredIf(s, *key); required {
+		if f.Value.RequiredIf != nil {
+			if required, msg := f.Value.RequiredIf(s, *f.Key); required {
 				s.addError(msg)
 			}
 			continue
 		}
-		if !arg.Required {
-			if s.HasFlag(*key) && arg.TypeOf == Standalone {
-				s.validateStandaloneFlag(*key)
+		if !f.Value.Required {
+			if s.HasFlag(*f.Key) && f.Value.TypeOf == Standalone {
+				s.validateStandaloneFlag(*f.Key)
 			}
 			continue
 		}
 
-		mainKey := s.flagOrShortFlag(*key)
+		mainKey := s.flagOrShortFlag(*f.Key)
 		if _, found := s.options[mainKey]; found {
-			if arg.TypeOf == Standalone {
+			if f.Value.TypeOf == Standalone {
 				s.validateStandaloneFlag(mainKey)
 			}
 			continue
-		} else if arg.Secure.IsSecure {
-			s.queueSecureArgument(mainKey, arg)
+		} else if f.Value.Secure.IsSecure {
+			s.queueSecureArgument(mainKey, f.Value)
 			continue
 		}
 
-		dependsLen := len(arg.DependsOn)
+		dependsLen := len(f.Value.DependsOn)
 		if dependsLen == 0 {
-			s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", *key))
+			s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", *f.Key))
 		} else {
-			s.validateDependencies(arg, mainKey)
+			s.validateDependencies(f.Value, mainKey)
 		}
 	}
 }
