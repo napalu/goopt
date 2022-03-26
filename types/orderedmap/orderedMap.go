@@ -90,14 +90,13 @@ func (n *Iterator[K, V]) Prev() *Iterator[K, V] {
 	return n
 }
 
-// Current returns the current keyValue. If Iterator has no current item, returns an empty keyValue struct
+// Current returns an anonymous function returning a key, value pair. If Iterator has no current item, returns nil
 func (n *Iterator[K, V]) Current() func() (*K, V) {
 	if n.ll == nil {
 		return nil
 	}
 
 	keyVal := n.ll.Value.(keyValue[K, V])
-
 	return func() (*K, V) {
 		return &keyVal.key, keyVal.value
 	}

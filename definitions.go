@@ -87,7 +87,7 @@ type PositionalArgument struct {
 	Value    string
 }
 
-// KeyValue denotes Key/value option pairs (used in GetOptions)
+// KeyValue denotes Key Value option pairs (used in GetOptions)
 type KeyValue struct {
 	Key   string
 	Value string
