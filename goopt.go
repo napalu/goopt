@@ -809,12 +809,8 @@ func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 	var shortOption string
-	iterator := s.acceptedFlags.Iterator()
-	for {
-		i, key, value := iterator()
-		if i == nil {
-			break
-		}
+	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
+		key, value := f.Current()()
 		shortFlag, err := s.GetShortFlag(*key)
 		if err == nil {
 			shortOption = " or -" + shortFlag + " "
