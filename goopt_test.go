@@ -218,20 +218,14 @@ func TestCmdLineOption_ValueCallback(t *testing.T) {
 func TestCmdLineOption_WithBindFlag(t *testing.T) {
 	var s string
 	var i int
+	var ts []string
 
 	_, err := NewCmdLine(
-		WithBindFlag("test", s,
+		WithBindFlag("test", &ts,
 			NewArg(
 				WithShortFlag("t"),
 				WithType(Single))))
-	assert.NotNil(t, err, "should fail to bind non-pointer variable to flag when using fluent interface")
-
-	_, err = NewCmdLine(
-		WithBindFlag("test", &s,
-			NewArg(
-				WithShortFlag("t"),
-				WithType(Single))))
-	assert.Nil(t, err, "should not fail to bind pointer variable to flag when using fluent interface")
+	assert.Nil(t, err, "should not fail to bind pointer to supported slice variable to flag when using fluent interface")
 
 	cmdLine, err := NewCmdLine(
 		WithBindFlag("test", &s,
@@ -261,7 +255,8 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 	err = opts.BindFlag(&i, "test1", NewArgument("t1", "", Single, false, Secure{}, ""))
 	assert.Nil(t, err, "should accept int pointer type in BindFlag")
 
-	assert.True(t, opts.ParseString("--test \"hello world\" --test1 12334"), "should parse a command line argument when given a bound variable")
+	assert.True(t, opts.ParseString("--test \"hello world\" --test1 12334"),
+		"should parse a command line argument when given a bound variable")
 	assert.Equal(t, s, "hello world", "should set value of bound variable when parsing")
 	assert.Equal(t, 12334, i, "should not fail to assign command line integer argument to variable")
 

@@ -536,9 +536,29 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument) error {
 	return nil
 }
 
-// BindFlag is used to bind a *pointer* to a string, int, uint, bool, float or time.Time variable with a Flag
+// BindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.BindFlag method
+func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argument *Argument) error {
+	if s == nil {
+		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
+	}
+
+	return s.BindFlag(data, flag, argument)
+}
+
+// CustomBindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.CustomBindFlag method
+func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc, flag string, argument *Argument) error {
+	if s == nil {
+		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
+	}
+
+	return s.CustomBindFlag(data, proc, flag, argument)
+}
+
+// BindFlag is used to bind a *pointer* to string, int, uint, bool, float or time.Time scalar or slice variable with a Flag
 // which is set when Parse is invoked.
-func (s *CmdLineOption) BindFlag(data interface{}, flag string, argument *Argument) error {
+// An error is returned if data cannot be bound - for compile-time safety use BindFlagToCmdLine instead
+func (s *CmdLineOption) BindFlag(data any, flag string, argument *Argument) error {
+
 	if ok, err := canConvert(data, argument.TypeOf); !ok {
 		return err
 	}
@@ -555,7 +575,7 @@ func (s *CmdLineOption) BindFlag(data interface{}, flag string, argument *Argume
 // CustomBindFlag works like BindFlag but expects a ValueSetFunc callback which is called when a Flag is evaluated on Parse.
 // When the Flag is seen on the command like the ValueSetFunc is called with the user-supplied value. Allows binding
 // complex structures not supported by BindFlag
-func (s *CmdLineOption) CustomBindFlag(data interface{}, proc ValueSetFunc, flag string, argument *Argument) error {
+func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string, argument *Argument) error {
 	if reflect.TypeOf(data).Kind() != reflect.Ptr {
 		return fmt.Errorf("we expect a pointer to a variable")
 	}

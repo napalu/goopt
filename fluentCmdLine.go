@@ -60,10 +60,11 @@ func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
 //  - *uint, *uint8, *uint16, *uint32, *uint64
 //  - *float32, *float64
 //  - *time.Time
+//  - *bool
 //  For other types use WithCustomBindFlag (fluent wrapper around CustomBindFlag) or CustomBindFlag
-func WithBindFlag(flag string, bindVar interface{}, argument *Argument) ConfigureCmdLineFunc {
+func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
-		*err = cmdLine.BindFlag(bindVar, flag, argument)
+		*err = BindFlagToCmdLine(cmdLine, bindVar, flag, argument)
 	}
 }
 
@@ -72,9 +73,9 @@ func WithBindFlag(flag string, bindVar interface{}, argument *Argument) Configur
 //  - the bound flag name as string
 //  - the command-line value as string
 //  - the custom struct or variable which was bound. The bound structure is passed as reflect.Value
-func WithCustomBindFlag(flag string, bindVar interface{}, proc ValueSetFunc, argument *Argument) ConfigureCmdLineFunc {
+func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argument *Argument) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
-		*err = cmdLine.CustomBindFlag(bindVar, proc, flag, argument)
+		*err = CustomBindFlagToCmdLine(cmdLine, bindVar, proc, flag, argument)
 	}
 }
 

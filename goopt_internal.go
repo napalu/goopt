@@ -629,6 +629,7 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	if optionType == Standalone {
 		switch data.(type) {
 		case *bool:
+			return true, nil
 		default:
 			return false, &UnsupportedTypeConversionError{"Standalone fields can only be bound to a boolean variable"}
 		}
@@ -674,10 +675,9 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	return supported, err
 }
 
-func convertString(value string, data interface{}, arg string, delimiterFunc ListDelimiterFunc) error {
+func convertString(value string, data any, arg string, delimiterFunc ListDelimiterFunc) error {
 	var err error
 
-	// TODO refactor when support for generics is released
 	switch t := data.(type) {
 	case *string:
 		*(t) = value

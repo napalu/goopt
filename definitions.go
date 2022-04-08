@@ -4,7 +4,14 @@ import (
 	"github.com/ef-ds/deque"
 	"github.com/napalu/goopt/types/orderedmap"
 	"regexp"
+	"time"
 )
+
+type Bindable interface {
+	~string | int8 | int16 | int32 | int64 | ~int | uint8 | uint16 | uint32 | uint64 | ~uint | float32 | float64 |
+		bool | time.Time | []string | []int8 | []int16 | []int32 | []int64 | ~[]int | []uint8 | []uint16 | []uint32 |
+		[]uint64 | ~[]uint | []float32 | []float64 | []bool | []time.Time
+}
 
 // PrettyPrintConfig is used to print the list of accepted commands as a tree in PrintCommandsUsing and PrintCommands
 type PrettyPrintConfig struct {
@@ -22,7 +29,7 @@ type PrettyPrintConfig struct {
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
 type RequiredIfFunc func(cmdLine *CmdLineOption, optionName string) (bool, string)
 
-// ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimeters.
+// ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
 
@@ -152,7 +159,7 @@ type CmdLineOption struct {
 	lookup             map[string]string
 	options            map[string]string
 	errors             []string
-	bind               map[string]interface{}
+	bind               map[string]any
 	customBind         map[string]ValueSetFunc
 	registeredCommands map[string]Command
 	commandOptions     map[string]path
@@ -178,7 +185,7 @@ type path struct {
 
 type commandCallback struct {
 	callback  CommandFunc
-	arguments []interface{}
+	arguments []any
 }
 
 type parseState struct {
