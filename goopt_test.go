@@ -418,6 +418,9 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	list, err := cmdLine.GetList("flagC")
 	assert.Nil(t, err, "chained flag should return a list")
 	assert.Len(t, list, 3, "list should contain the three values passed on command line")
+	assert.Equal(t, "1", list[0], "list should contain the values in the order passed on command line")
+	assert.Equal(t, "2", list[1], "list should contain the values in the order passed on command line")
+	assert.Equal(t, "3", list[2], "list should contain the values in the order passed on command line")
 
 	val, found := cmdLine.Get("flagB")
 	assert.True(t, found, "flagB was supplied on command line we expect it to be err")
