@@ -218,20 +218,14 @@ func TestCmdLineOption_ValueCallback(t *testing.T) {
 func TestCmdLineOption_WithBindFlag(t *testing.T) {
 	var s string
 	var i int
+	var ts []string
 
 	_, err := NewCmdLine(
-		WithBindFlag("test", s,
+		WithBindFlag("test", &ts,
 			NewArg(
 				WithShortFlag("t"),
 				WithType(Single))))
-	assert.NotNil(t, err, "should fail to bind non-pointer variable to flag when using fluent interface")
-
-	_, err = NewCmdLine(
-		WithBindFlag("test", &s,
-			NewArg(
-				WithShortFlag("t"),
-				WithType(Single))))
-	assert.Nil(t, err, "should not fail to bind pointer variable to flag when using fluent interface")
+	assert.Nil(t, err, "should not fail to bind pointer to supported slice variable to flag when using fluent interface")
 
 	cmdLine, err := NewCmdLine(
 		WithBindFlag("test", &s,
@@ -261,7 +255,8 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 	err = opts.BindFlag(&i, "test1", NewArgument("t1", "", Single, false, Secure{}, ""))
 	assert.Nil(t, err, "should accept int pointer type in BindFlag")
 
-	assert.True(t, opts.ParseString("--test \"hello world\" --test1 12334"), "should parse a command line argument when given a bound variable")
+	assert.True(t, opts.ParseString("--test \"hello world\" --test1 12334"),
+		"should parse a command line argument when given a bound variable")
 	assert.Equal(t, s, "hello world", "should set value of bound variable when parsing")
 	assert.Equal(t, 12334, i, "should not fail to assign command line integer argument to variable")
 
@@ -423,6 +418,9 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	list, err := cmdLine.GetList("flagC")
 	assert.Nil(t, err, "chained flag should return a list")
 	assert.Len(t, list, 3, "list should contain the three values passed on command line")
+	assert.Equal(t, "1", list[0], "list should contain the values in the order passed on command line")
+	assert.Equal(t, "2", list[1], "list should contain the values in the order passed on command line")
+	assert.Equal(t, "3", list[2], "list should contain the values in the order passed on command line")
 
 	val, found := cmdLine.Get("flagB")
 	assert.True(t, found, "flagB was supplied on command line we expect it to be err")
@@ -632,7 +630,7 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 	cmdLine.ClearAll()
 	assert.False(t, cmdLine.ParseString("-fa ouch -fb hello"), "should not properly parse a command-line with explicitly "+
 		"set invalid boolean flag value among other values")
-	boolValue, err = cmdLine.GetBool("fa")
+	_, err = cmdLine.GetBool("fa")
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
 }
 

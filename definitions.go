@@ -2,9 +2,16 @@ package goopt
 
 import (
 	"github.com/ef-ds/deque"
-	orderedmap "github.com/wk8/go-ordered-map"
+	"github.com/napalu/goopt/types/orderedmap"
 	"regexp"
+	"time"
 )
+
+type Bindable interface {
+	~string | int8 | int16 | int32 | int64 | ~int | uint8 | uint16 | uint32 | uint64 | ~uint | float32 | float64 |
+		bool | time.Time | []string | []int8 | []int16 | []int32 | []int64 | ~[]int | []uint8 | []uint16 | []uint32 |
+		[]uint64 | ~[]uint | []float32 | []float64 | []bool | []time.Time
+}
 
 // PrettyPrintConfig is used to print the list of accepted commands as a tree in PrintCommandsUsing and PrintCommands
 type PrettyPrintConfig struct {
@@ -22,7 +29,7 @@ type PrettyPrintConfig struct {
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
 type RequiredIfFunc func(cmdLine *CmdLineOption, optionName string) (bool, string)
 
-// ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimeters.
+// ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
 
@@ -64,7 +71,7 @@ type PatternValue struct {
 
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data
 type ClearConfig struct {
-	// KeepOptions: keep Key/value options seen on command line
+	// KeepOptions: keep key/value options seen on command line
 	KeepOptions bool
 	// KeepErrors: keep errors generated during previous Parse
 	KeepErrors bool
@@ -72,7 +79,7 @@ type ClearConfig struct {
 	KeepAcceptedValues bool
 	// KeepFilters: Keep filters set during previous configuration
 	KeepFilters bool
-	// KeepCommands: keep Key/value commands seen on command line
+	// KeepCommands: keep key/value commands seen on command line
 	KeepCommands bool
 	// KeepPositional: keep positional arguments seen on command line
 	// a positional argument is defined as anything passed on the command-line
@@ -87,13 +94,13 @@ type PositionalArgument struct {
 	Value    string
 }
 
-// KeyValue denotes Key/Value option pairs (used in GetOptions)
+// KeyValue denotes Key Value option pairs (used in GetOptions)
 type KeyValue struct {
 	Key   string
 	Value string
 }
 
-// PathValue denotes Path/Value Command pairs where the Path represents the keys of all Command / sub-command
+// PathValue denotes Path/value Command pairs where the Path represents the keys of all Command / sub-command
 // at which a value is stored
 // Example:
 //   in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
@@ -148,11 +155,11 @@ type CmdLineOption struct {
 	posixCompatible    bool
 	prefixes           []rune
 	listFunc           ListDelimiterFunc
-	acceptedFlags      *orderedmap.OrderedMap
+	acceptedFlags      *orderedmap.OrderedMap[string, *Argument]
 	lookup             map[string]string
 	options            map[string]string
 	errors             []string
-	bind               map[string]interface{}
+	bind               map[string]any
 	customBind         map[string]ValueSetFunc
 	registeredCommands map[string]Command
 	commandOptions     map[string]path
@@ -160,7 +167,7 @@ type CmdLineOption struct {
 	rawArgs            map[string]bool
 	callbackQueue      *deque.Deque
 	callbackResults    map[string]error
-	secureArguments    *orderedmap.OrderedMap
+	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 }
 
 type UnsupportedTypeConversionError struct {
@@ -178,7 +185,7 @@ type path struct {
 
 type commandCallback struct {
 	callback  CommandFunc
-	arguments []interface{}
+	arguments []any
 }
 
 type parseState struct {

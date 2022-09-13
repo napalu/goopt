@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/araddon/dateparse"
 	"github.com/ef-ds/deque"
-	orderedmap "github.com/wk8/go-ordered-map"
+	"github.com/napalu/goopt/types/orderedmap"
 	"golang.org/x/term"
 	"os"
 	"reflect"
@@ -16,9 +16,8 @@ import (
 
 func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-	key, found := s.acceptedFlags.Get(currentArg)
+	argument, found := s.acceptedFlags.Get(currentArg)
 	if found {
-		argument := key.(*Argument)
 		switch argument.TypeOf {
 		case Standalone:
 			if argument.Secure.IsSecure {
@@ -86,7 +85,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.options = map[string]string{}
 	}
 	if s.acceptedFlags == nil {
-		s.acceptedFlags = orderedmap.New()
+		s.acceptedFlags = orderedmap.NewOrderedMap[string, *Argument]()
 	}
 	if s.lookup == nil {
 		s.lookup = map[string]string{}
@@ -119,7 +118,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.callbackResults = map[string]error{}
 	}
 	if s.secureArguments == nil {
-		s.secureArguments = orderedmap.New()
+		s.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
 	}
 }
 
@@ -201,10 +200,10 @@ func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue
 
 func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
 	if s.secureArguments == nil {
-		s.secureArguments = orderedmap.New()
+		s.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
 	}
 
-	s.secureArguments.Set(name, argument.Secure)
+	s.secureArguments.Set(name, &argument.Secure)
 }
 
 func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *deque.Deque) {
@@ -370,7 +369,7 @@ func (s *CmdLineOption) processValueFlag(currentArg string, next string, argumen
 	return s.setBoundVariable(processed, currentArg)
 }
 
-func (s *CmdLineOption) processSecureFlag(name string, config Secure) {
+func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 	var prompt string
 	if !config.IsSecure {
 		return
@@ -480,38 +479,36 @@ func (s *CmdLineOption) validateProcessedOptions() {
 }
 
 func (s *CmdLineOption) walkFlags() {
-	for pair := s.acceptedFlags.Oldest(); pair != nil; pair = pair.Next() {
-		arg := pair.Value.(*Argument)
-		if arg.RequiredIf != nil {
-			if required, msg := arg.RequiredIf(s, pair.Key.(string)); required {
+	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.RequiredIf != nil {
+			if required, msg := f.Value.RequiredIf(s, *f.Key); required {
 				s.addError(msg)
 			}
 			continue
 		}
-		key := fmt.Sprintf("%s", pair.Key)
-		if !arg.Required {
-			if s.HasFlag(key) && arg.TypeOf == Standalone {
-				s.validateStandaloneFlag(key)
+		if !f.Value.Required {
+			if s.HasFlag(*f.Key) && f.Value.TypeOf == Standalone {
+				s.validateStandaloneFlag(*f.Key)
 			}
 			continue
 		}
 
-		mainKey := s.flagOrShortFlag(key)
+		mainKey := s.flagOrShortFlag(*f.Key)
 		if _, found := s.options[mainKey]; found {
-			if arg.TypeOf == Standalone {
+			if f.Value.TypeOf == Standalone {
 				s.validateStandaloneFlag(mainKey)
 			}
 			continue
-		} else if pair.Value.(*Argument).Secure.IsSecure {
-			s.queueSecureArgument(mainKey, arg)
+		} else if f.Value.Secure.IsSecure {
+			s.queueSecureArgument(mainKey, f.Value)
 			continue
 		}
 
-		dependsLen := len(arg.DependsOn)
+		dependsLen := len(f.Value.DependsOn)
 		if dependsLen == 0 {
-			s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", pair.Key))
+			s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", *f.Key))
 		} else {
-			s.validateDependencies(arg, mainKey)
+			s.validateDependencies(f.Value, mainKey)
 		}
 	}
 }
@@ -570,12 +567,12 @@ func (s *CmdLineOption) validateDependencies(arg *Argument, mainKey string) {
 			continue
 		}
 
-		values, found := s.acceptedFlags.Get(mainKey)
+		argument, found := s.acceptedFlags.Get(mainKey)
 		if !found {
 			continue
 		}
 
-		for _, k := range values.(*Argument).OfValue {
+		for _, k := range argument.OfValue {
 			if strings.EqualFold(dependKey, k) {
 				s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", k))
 			}
@@ -591,7 +588,7 @@ func (s *CmdLineOption) setBoundVariable(value string, currentArg string) error 
 
 	accepted, _ := s.acceptedFlags.Get(currentArg)
 	if value == "" {
-		value = accepted.(*Argument).DefaultValue
+		value = accepted.DefaultValue
 	}
 	if len(s.customBind) > 0 {
 		customProc, found := s.customBind[currentArg]
@@ -632,6 +629,7 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	if optionType == Standalone {
 		switch data.(type) {
 		case *bool:
+			return true, nil
 		default:
 			return false, &UnsupportedTypeConversionError{"Standalone fields can only be bound to a boolean variable"}
 		}
@@ -677,10 +675,9 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	return supported, err
 }
 
-func convertString(value string, data interface{}, arg string, delimiterFunc ListDelimiterFunc) error {
+func convertString(value string, data any, arg string, delimiterFunc ListDelimiterFunc) error {
 	var err error
 
-	// TODO refactor when support for generics is released
 	switch t := data.(type) {
 	case *string:
 		*(t) = value
