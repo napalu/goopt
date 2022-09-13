@@ -630,7 +630,7 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 	cmdLine.ClearAll()
 	assert.False(t, cmdLine.ParseString("-fa ouch -fb hello"), "should not properly parse a command-line with explicitly "+
 		"set invalid boolean flag value among other values")
-	boolValue, err = cmdLine.GetBool("fa")
+	_, err = cmdLine.GetBool("fa")
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
 }
 
