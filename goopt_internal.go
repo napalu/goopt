@@ -5,7 +5,7 @@ import (
 	"github.com/araddon/dateparse"
 	"github.com/ef-ds/deque"
 	"github.com/napalu/goopt/types/orderedmap"
-	"golang.org/x/term"
+	"github.com/napalu/goopt/util"
 	"os"
 	"reflect"
 	"regexp"
@@ -379,7 +379,7 @@ func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 	} else {
 		prompt = config.Prompt
 	}
-	if pass, err := getSecureString(prompt); err == nil {
+	if pass, err := util.GetSecureString(prompt); err == nil {
 		s.registerSecureValue(name, pass)
 	} else {
 		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
@@ -897,27 +897,6 @@ func showDependencies(dependencies []string) string {
 
 func matchChainedSeparators(r rune) bool {
 	return r == ',' || r == '|' || r == ' '
-}
-
-func getSecureString(prompt string) (string, error) {
-	if term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Print(prompt)
-		bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-		if err != nil {
-			fmt.Println()
-			return "", err
-		}
-		pass := string(bytes)
-		if len(pass) == 0 {
-			fmt.Println()
-			return "", fmt.Errorf("empty password is invalid")
-		}
-		fmt.Println()
-
-		return pass, nil
-	}
-
-	return "", fmt.Errorf("not attached to a terminal. don't know how to get input from stdin")
 }
 
 func pruneExecPathFromArgs(args *[]string) {
