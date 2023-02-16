@@ -379,7 +379,7 @@ func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 	} else {
 		prompt = config.Prompt
 	}
-	if pass, err := util.GetSecureString(prompt); err == nil {
+	if pass, err := util.GetSecureString(prompt, os.Stderr); err == nil {
 		s.registerSecureValue(name, pass)
 	} else {
 		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
