@@ -900,7 +900,7 @@ func matchChainedSeparators(r rune) bool {
 }
 
 func getSecureString(prompt string) (string, error) {
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
 		fmt.Print(prompt)
 		bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
