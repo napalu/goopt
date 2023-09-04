@@ -170,11 +170,15 @@ func (s *CmdLineOption) getCommand(name string) (Command, bool) {
 	return cmd, found
 }
 
-func (s *CmdLineOption) registerSecureValue(flag, value string) {
+func (s *CmdLineOption) registerSecureValue(flag, value string) error {
+	var err error
 	s.rawArgs[flag] = true
 	if value != "" {
 		s.options[flag] = value
+		err = s.setBoundVariable(value, flag)
 	}
+
+	return err
 }
 
 func (s *CmdLineOption) registerFlagValue(flag, value, rawValue string) {
@@ -380,7 +384,10 @@ func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 		prompt = config.Prompt
 	}
 	if pass, err := util.GetSecureString(prompt, os.Stderr); err == nil {
-		s.registerSecureValue(name, pass)
+		err := s.registerSecureValue(name, pass)
+		if err != nil {
+			s.addError(fmt.Sprintf("failed to process flag '%s' secure value: %s", name, err))
+		}
 	} else {
 		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
 	}
