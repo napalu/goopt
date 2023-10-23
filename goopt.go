@@ -250,7 +250,7 @@ func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []str
 
 	for i := 0; i < argLen; i++ {
 		if s.isFlag(args[i]) {
-			arg := strings.TrimLeftFunc(args[i], s.prefixFunc)
+			arg := s.flagOrShortFlag(strings.TrimLeftFunc(args[i], s.prefixFunc))
 			if flag, found := s.acceptedFlags.Get(arg); found &&
 				(flag.TypeOf != Standalone || !flag.Secure.IsSecure) {
 				if i < argLen-1 {
