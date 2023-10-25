@@ -5,30 +5,29 @@ package goopt
 //
 // Examples of fluent configuration:
 //
-//  cmdLine, err := NewCmdLine(
-//		WithFlag("flagWithValue",
-//			NewArg(
-//				WithShortFlag("fw"),
-//				WithType(Single),
-//				WithDescription("this flag requires a value"),
-//				WithDependentFlags([]string{"flagA", "flagB"}),
-//				SetRequired(true))),
-//		WithFlag("flagA",
-//			NewArg(
-//				WithShortFlag("fa"),
-//				WithType(Standalone))),
-//		WithFlag("flagB",
-//			NewArg(
-//				WithShortFlag("fb"),
-//				WithDescription("This is flag B - flagWithValue depends on it"),
-//				WithDefaultValue("db"),
-//				WithType(Single))),
-//		WithFlag("flagC",
-//			NewArg(
-//				WithShortFlag("fc"),
-//				WithDescription("this is flag C - it's a chained flag which can return a list"),
-//				WithType(Chained))))
-//
+//	 cmdLine, err := NewCmdLine(
+//			WithFlag("flagWithValue",
+//				NewArg(
+//					WithShortFlag("fw"),
+//					WithType(Single),
+//					WithDescription("this flag requires a value"),
+//					WithDependentFlags([]string{"flagA", "flagB"}),
+//					SetRequired(true))),
+//			WithFlag("flagA",
+//				NewArg(
+//					WithShortFlag("fa"),
+//					WithType(Standalone))),
+//			WithFlag("flagB",
+//				NewArg(
+//					WithShortFlag("fb"),
+//					WithDescription("This is flag B - flagWithValue depends on it"),
+//					WithDefaultValue("db"),
+//					WithType(Single))),
+//			WithFlag("flagC",
+//				NewArg(
+//					WithShortFlag("fc"),
+//					WithDescription("this is flag C - it's a chained flag which can return a list"),
+//					WithType(Chained))))
 func NewCmdLine(configs ...ConfigureCmdLineFunc) (*CmdLineOption, error) {
 	cmdLine := NewCmdLineOption()
 
@@ -55,13 +54,13 @@ func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
 // WithBindFlag is a fluent wrapper to BindFlag which is used to bind a pointer to a variable with a flag.
 // If `bindVar` is not a pointer, an error is returned
 // The following variable types are supported:
-//  - *string
-//  - *int, *int8, *int16, *int32, *int64
-//  - *uint, *uint8, *uint16, *uint32, *uint64
-//  - *float32, *float64
-//  - *time.Time
-//  - *bool
-//  For other types use WithCustomBindFlag (fluent wrapper around CustomBindFlag) or CustomBindFlag
+//   - *string
+//   - *int, *int8, *int16, *int32, *int64
+//   - *uint, *uint8, *uint16, *uint32, *uint64
+//   - *float32, *float64
+//   - *time.Time
+//   - *bool
+//     For other types use WithCustomBindFlag (fluent wrapper around CustomBindFlag) or CustomBindFlag
 func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
 		*err = BindFlagToCmdLine(cmdLine, bindVar, flag, argument)
@@ -70,9 +69,9 @@ func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument) Confi
 
 // WithCustomBindFlag is a fluent wrapper for CustomBindFlag which receives parsed value via the ValueSetFunc callback
 // On Parse the callback is called with the following arguments:
-//  - the bound flag name as string
-//  - the command-line value as string
-//  - the custom struct or variable which was bound. The bound structure is passed as reflect.Value
+//   - the bound flag name as string
+//   - the command-line value as string
+//   - the custom struct or variable which was bound. The bound structure is passed as reflect.Value
 func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argument *Argument) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
 		*err = CustomBindFlagToCmdLine(cmdLine, bindVar, proc, flag, argument)

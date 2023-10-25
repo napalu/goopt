@@ -103,8 +103,9 @@ type KeyValue struct {
 // PathValue denotes Path/value Command pairs where the Path represents the keys of all Command / sub-command
 // at which a value is stored
 // Example:
-//   in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
-//   the Path to User would consist of "Test User"
+//
+//	in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
+//	the Path to User would consist of "Test User"
 type PathValue struct {
 	Path  string
 	Value string

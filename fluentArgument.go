@@ -14,7 +14,9 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 // the "short" flag can be looked at as an alternative to using the long name. I use it as a moniker. The short flag
 // can be used in all methods which take a flag argument. By default, there is no support for "POSIX/GNU-like" chaining
 // of boolean flags such as :
-//   -vvvv
+//
+//	-vvvv
+//
 // Instead of specifying a flag 4 times, the "goopt" way would be specifying `-v 4`.
 //
 // If POSIX/GNU compatibility is desired use the SetPosix or WithPosix functions on CmdLineOption (not implemented yet).
@@ -66,7 +68,8 @@ func WithDependentFlags(dependencies []string) ConfigureArgumentFunc {
 // WithDependentValueFlags accepts an array of string denoting flags and flag values  on which an argument depends.
 // Results in a warning being emitted in GetWarnings() when the dependent flags are not specified on the command-line.
 // For example - to specify a dependency on flagA with values 'b' or 'c':
-//   WithDependentValueFlags([]string{"flagA", "flagA"}, []string{"b", "c"})
+//
+//	WithDependentValueFlags([]string{"flagA", "flagA"}, []string{"b", "c"})
 func WithDependentValueFlags(dependencies, values []string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.DependsOn = dependencies

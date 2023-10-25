@@ -5,13 +5,13 @@
 // Package goopt provides support for command-line processing.
 //
 // It supports 3 types of flags:
-//   Single - a flag which expects a value
-//   Chained - flag which expects a delimited value representing elements in a list (and is evaluated as a list)
-//   Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
+//
+//	Single - a flag which expects a value
+//	Chained - flag which expects a delimited value representing elements in a list (and is evaluated as a list)
+//	Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
 //
 // Additionally, commands and sub-commands (Command) are supported. Commands can be nested to represent sub-commands. Unlike
 // the official go.Flag package commands and sub-commands may be placed before, after or mixed in with flags.
-//
 package goopt
 
 import (
@@ -315,8 +315,9 @@ func (s *CmdLineOption) HasPositionalArgs() bool {
 
 // GetCommandValue returns the value of a command path if found.
 // Example:
-//   in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
-//   the path to User would be expressed as "Test User"
+//
+//	in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
+//	the path to User would be expressed as "Test User"
 func (s *CmdLineOption) GetCommandValue(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("paths is empty")
@@ -598,8 +599,9 @@ func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string,
 // and the description argument is used to provide a human-readable description of the pattern.
 // Returns an error if the regular expression cannot be compiled or if the Flag does not support values (Standalone).
 // Example:
-//  	a Flag which accepts only whole numbers could be defined as:
-//   	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
+//
+//		a Flag which accepts only whole numbers could be defined as:
+//	 	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
 func (s *CmdLineOption) AcceptPattern(flag string, val PatternValue) error {
 	return s.AcceptPatterns(flag, []PatternValue{val})
 }
@@ -859,7 +861,8 @@ func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 // PrettyPrintConfig.DefaultPrefix precedes sub-commands by default
 // PrettyPrintConfig.TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
 // PrettyPrintConfig.LevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
-//  command root. The Command root is at Level 0.
+//
+//	command root. The Command root is at Level 0.
 func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
 	for _, cmd := range s.registeredCommands {
 		cmd.Visit(func(cmd *Command, level int) bool {
