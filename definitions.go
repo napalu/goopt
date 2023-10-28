@@ -160,7 +160,7 @@ type CmdLineOption struct {
 	acceptedFlags      *orderedmap.OrderedMap[string, *Argument]
 	lookup             map[string]string
 	options            map[string]string
-	errors             []string
+	errors             []error
 	bind               map[string]any
 	customBind         map[string]ValueSetFunc
 	registeredCommands map[string]Command

@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"errors"
 	"fmt"
 	"github.com/araddon/dateparse"
 	"github.com/ef-ds/deque"
@@ -21,7 +22,7 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 		s.processFlagArg(args, state, argument, currentArg)
 
 	} else {
-		s.addError(fmt.Sprintf("Unknown argument '%s'", currentArg))
+		s.addError(fmt.Errorf("Unknown argument '%s'", currentArg))
 	}
 }
 
@@ -38,7 +39,7 @@ func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState) {
 		if found {
 			s.processFlagArg(args, state, argument, cf)
 		} else {
-			s.addError(fmt.Sprintf("Unknown argument '%s'", cf))
+			s.addError(fmt.Errorf("Unknown argument '%s'", cf))
 		}
 	}
 }
@@ -60,7 +61,7 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 			s.options[currentArg] = boolVal
 			err := s.setBoundVariable(boolVal, currentArg)
 			if err != nil {
-				s.addError(fmt.Sprintf(
+				s.addError(fmt.Errorf(
 					"Could not process input argument '%s' - the following error occurred: %s", currentArg, err))
 			}
 		}
@@ -113,7 +114,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.lookup = map[string]string{}
 	}
 	if s.errors == nil {
-		s.errors = []string{}
+		s.errors = []error{}
 	}
 	if s.bind == nil {
 		s.bind = make(map[string]interface{}, 1)
@@ -182,8 +183,8 @@ func (s *CmdLineOption) isFlag(flag string) bool {
 	return strings.HasPrefix(flag, "/") || strings.HasPrefix(flag, "-")
 }
 
-func (s *CmdLineOption) addError(error string) {
-	s.errors = append(s.errors, error)
+func (s *CmdLineOption) addError(err error) {
+	s.errors = append(s.errors, err)
 }
 
 func (s *CmdLineOption) getCommand(name string) (Command, bool) {
@@ -254,7 +255,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 			cmdQueue.PushBack(cmd)
 		}
 	} else if state.pos == 0 && !s.isFlag(currentArg) {
-		s.addError("Options should be prefixed by either '-' or '/'")
+		s.addError(fmt.Errorf("Options should be prefixed by either '-' or '/'"))
 	}
 }
 
@@ -277,10 +278,10 @@ func (s *CmdLineOption) processSingleOrChainedFlag(args []string, argument *Argu
 			state.skip = state.pos + 1
 		}
 		if state.pos >= state.endOf-1 && len(next) == 0 {
-			s.addError(fmt.Sprintf("Flag '%s' expects a value", currentArg))
+			s.addError(fmt.Errorf("Flag '%s' expects a value", currentArg))
 		} else {
 			if err := s.processValueFlag(currentArg, next, argument); err != nil {
-				s.addError(fmt.Sprintf("Failed to process your input for Flag '%s': %s", currentArg, err))
+				s.addError(fmt.Errorf("Failed to process your input for Flag '%s': %s", currentArg, err))
 			}
 		}
 	}
@@ -297,7 +298,7 @@ func (s *CmdLineOption) checkCommandValue(cmd Command, currentArg string, args [
 		state.skip = state.pos + 1
 	}
 	if state.pos >= state.endOf-1 && len(next) == 0 {
-		s.addError(fmt.Sprintf("Command '%s' expects a value", currentArg))
+		s.addError(fmt.Errorf("Command '%s' expects a value", currentArg))
 	}
 	if cmd.Callback != nil {
 		s.callbackQueue.PushBack(commandCallback{
@@ -328,10 +329,10 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 				state.skip = state.pos + 1
 			}
 			if state.pos >= state.endOf-1 && len(next) == 0 {
-				s.addError(fmt.Sprintf("Command '%s' expects a value", currentArg))
+				s.addError(fmt.Errorf("Command '%s' expects a value", currentArg))
 				return false
 			} else if s.isFlag(next) {
-				s.addError(fmt.Sprintf("Command '%s' expects a value but we received a flag '%s'", currentArg, next))
+				s.addError(fmt.Errorf("Command '%s' expects a value but we received a flag '%s'", currentArg, next))
 				return false
 			}
 		}
@@ -347,7 +348,7 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 	} else if cmdQueue.Len() > 0 {
 		test, _ := cmdQueue.PopFront()
 		if len(test.(Command).Subcommands) > 0 {
-			s.addError(fmt.Sprintf("Command %s expects one of the following commands %v",
+			s.addError(fmt.Errorf("Command %s expects one of the following commands %v",
 				test.(Command).Name, test.(Command).Subcommands))
 		} else {
 			cmdQueue.PushFront(test)
@@ -408,10 +409,10 @@ func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 	if pass, err := util.GetSecureString(prompt, os.Stderr); err == nil {
 		err = s.registerSecureValue(name, pass)
 		if err != nil {
-			s.addError(fmt.Sprintf("failed to process flag '%s' secure value: %s", name, err))
+			s.addError(fmt.Errorf("failed to process flag '%s' secure value: %s", name, err))
 		}
 	} else {
-		s.addError(fmt.Sprintf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
+		s.addError(fmt.Errorf("IsSecure flag '%s' expects a value but we failed to obtain one: %s", name, err))
 	}
 }
 
@@ -454,7 +455,7 @@ func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) strin
 	if valid {
 		s.registerFlagValue(flag, value, next)
 	} else {
-		s.addError(fmt.Sprintf(
+		s.addError(fmt.Errorf(
 			"Invalid argument '%s' for flag '%s'. Accepted values: %s", next, flag, errBuf.String()))
 	}
 
@@ -495,7 +496,7 @@ func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) str
 				errBuf.WriteString(", ")
 			}
 		}
-		s.addError(fmt.Sprintf(
+		s.addError(fmt.Errorf(
 			"Invalid argument '%s' for flag '%s'. Accepted values: %s", next, flag, errBuf.String()))
 	}
 
@@ -511,7 +512,7 @@ func (s *CmdLineOption) walkFlags() {
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.RequiredIf != nil {
 			if required, msg := f.Value.RequiredIf(s, *f.Key); required {
-				s.addError(msg)
+				s.addError(errors.New(msg))
 			}
 			continue
 		}
@@ -535,7 +536,7 @@ func (s *CmdLineOption) walkFlags() {
 
 		dependsLen := len(f.Value.DependsOn)
 		if dependsLen == 0 {
-			s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", *f.Key))
+			s.addError(fmt.Errorf("Flag '%s' is mandatory but missing from the command line", *f.Key))
 		} else {
 			s.validateDependencies(f.Value, mainKey)
 		}
@@ -545,7 +546,7 @@ func (s *CmdLineOption) walkFlags() {
 func (s *CmdLineOption) validateStandaloneFlag(key string) {
 	_, err := s.GetBool(key)
 	if err != nil {
-		s.addError(err.Error())
+		s.addError(err)
 	}
 }
 
@@ -577,7 +578,7 @@ func (s *CmdLineOption) walkCommands() {
 		}
 
 		if matches == 0 && cmd.Required {
-			s.addError(fmt.Sprintf("Command '%s' was not given but is expected with one of commands [%s] to be specified",
+			s.addError(fmt.Errorf("Command '%s' was not given but is expected with one of commands [%s] to be specified",
 				cmd.Name, match.String()))
 		}
 
@@ -603,7 +604,7 @@ func (s *CmdLineOption) validateDependencies(arg *Argument, mainKey string) {
 
 		for _, k := range argument.OfValue {
 			if strings.EqualFold(dependKey, k) {
-				s.addError(fmt.Sprintf("Flag '%s' is mandatory but missing from the command line", k))
+				s.addError(fmt.Errorf("Flag '%s' is mandatory but missing from the command line", k))
 			}
 		}
 	}

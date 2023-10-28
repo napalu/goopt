@@ -33,7 +33,7 @@ func NewCmdLineOption() *CmdLineOption {
 		acceptedFlags:      orderedmap.NewOrderedMap[string, *Argument](),
 		lookup:             map[string]string{},
 		options:            map[string]string{},
-		errors:             []string{},
+		errors:             []error{},
 		bind:               make(map[string]interface{}, 1),
 		customBind:         map[string]ValueSetFunc{},
 		registeredCommands: map[string]Command{},
@@ -814,7 +814,7 @@ func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) erro
 }
 
 // GetErrors returns a list of the errors encountered during Parse
-func (s *CmdLineOption) GetErrors() []string {
+func (s *CmdLineOption) GetErrors() []error {
 	return s.errors
 }
 

@@ -49,7 +49,7 @@ func TestCmdLineOption_AcceptPatterns(t *testing.T) {
 	assert.False(t, opts.Parse([]string{"--test", "alphabet"}), "test should not accept alphabetical values")
 
 	for _, err := range opts.GetErrors() {
-		assert.Contains(t, err, "whole integers, float numbers", "the errors should include the accepted value pattern descriptions")
+		assert.Contains(t, err.Error(), "whole integers, float numbers", "the errors should include the accepted value pattern descriptions")
 	}
 }
 
