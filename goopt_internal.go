@@ -18,32 +18,54 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
 	argument, found := s.acceptedFlags.Get(currentArg)
 	if found {
-		switch argument.TypeOf {
-		case Standalone:
-			if argument.Secure.IsSecure {
-				s.queueSecureArgument(currentArg, argument)
-			} else {
-				boolVal := "true"
-				if state.pos+1 < state.endOf {
-					_, found := s.registeredCommands[args[state.pos+1]]
-					if !found && !s.isFlag(args[state.pos+1]) {
-						boolVal = args[state.pos+1]
-						state.skip = state.pos + 1
-					}
-				}
-				s.options[currentArg] = boolVal
-				err := s.setBoundVariable(boolVal, currentArg)
-				if err != nil {
-					s.addError(fmt.Sprintf(
-						"Could not process input argument '%s' - the following error occurred: %s", currentArg, err))
-				}
-			}
-		case Single, Chained:
-			s.processSingleOrChainedFlag(args, argument, state, currentArg)
-		}
+		s.processFlagArg(args, state, argument, currentArg)
 
 	} else {
 		s.addError(fmt.Sprintf("Unknown argument '%s'", currentArg))
+	}
+}
+
+func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState) {
+	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
+	argument, found := s.acceptedFlags.Get(currentArg)
+	if found {
+		s.processFlagArg(args, state, argument, currentArg)
+		return
+	}
+	for startPos := 0; startPos < len(currentArg); startPos++ {
+		cf := s.flagOrShortFlag(currentArg[startPos : startPos+1])
+		argument, found := s.acceptedFlags.Get(cf)
+		if found {
+			s.processFlagArg(args, state, argument, cf)
+		} else {
+			s.addError(fmt.Sprintf("Unknown argument '%s'", cf))
+		}
+	}
+}
+
+func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argument *Argument, currentArg string) {
+	switch argument.TypeOf {
+	case Standalone:
+		if argument.Secure.IsSecure {
+			s.queueSecureArgument(currentArg, argument)
+		} else {
+			boolVal := "true"
+			if state.pos+1 < state.endOf {
+				_, found := s.registeredCommands[args[state.pos+1]]
+				if !found && !s.isFlag(args[state.pos+1]) {
+					boolVal = args[state.pos+1]
+					state.skip = state.pos + 1
+				}
+			}
+			s.options[currentArg] = boolVal
+			err := s.setBoundVariable(boolVal, currentArg)
+			if err != nil {
+				s.addError(fmt.Sprintf(
+					"Could not process input argument '%s' - the following error occurred: %s", currentArg, err))
+			}
+		}
+	case Single, Chained:
+		s.processSingleOrChainedFlag(args, argument, state, currentArg)
 	}
 }
 
@@ -628,7 +650,7 @@ func (s *CmdLineOption) getListDelimiterFunc() ListDelimiterFunc {
 
 func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	if reflect.TypeOf(data).Kind() != reflect.Ptr {
-		return false, &UnsupportedTypeConversionError{"we expect a pointer to a variable"}
+		return false, fmt.Errorf("%w: we expect a pointer to a variable", ErrUnsupportedTypeConversion)
 	}
 
 	supported := true
@@ -638,7 +660,7 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 		case *bool:
 			return true, nil
 		default:
-			return false, &UnsupportedTypeConversionError{"Standalone fields can only be bound to a boolean variable"}
+			return false, fmt.Errorf("%w: Standalone fields can only be bound to a boolean variable", ErrUnsupportedTypeConversion)
 		}
 	}
 
@@ -676,7 +698,7 @@ func canConvert(data interface{}, optionType OptionType) (bool, error) {
 	case *[]time.Time:
 	default:
 		supported = false
-		err = &UnsupportedTypeConversionError{fmt.Sprintf("unsupported data type %v", t)}
+		err = fmt.Errorf("%w: unsupported data type %v", ErrUnsupportedTypeConversion, t)
 	}
 
 	return supported, err
@@ -878,7 +900,7 @@ func convertString(value string, data any, arg string, delimiterFunc ListDelimit
 		}
 		*(t) = temp
 	default:
-		err = &UnsupportedTypeConversionError{fmt.Sprintf("unsupported data type %v for argument %s", t, arg)}
+		err = fmt.Errorf("%w: unsupported data type %v for argument %s", ErrUnsupportedTypeConversion, t, arg)
 	}
 
 	return err

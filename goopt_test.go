@@ -1,6 +1,7 @@
 package goopt_test
 
 import (
+	"errors"
 	"fmt"
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
@@ -537,6 +538,43 @@ func TestCmdLineOption_PrintUsage(t *testing.T) {
 	assert.Contains(t, *writer.data, " │───── wacky9 \"\"\n")
 	assert.Contains(t, *writer.data, " └────── wacky10 \"\"\n")
 
+}
+
+func TestPosixCompatibleFlags(t *testing.T) {
+	opts := NewCmdLineOption()
+	opts.SetPosix(true)
+	err := opts.AddFlag("alongflag", &Argument{
+		Short:       "a",
+		Description: "short flag a",
+		TypeOf:      Single,
+	})
+	assert.Nil(t, err)
+	err = opts.AddFlag("alsolong", &Argument{
+		Short:       "b",
+		Description: "short flag b",
+		TypeOf:      Single,
+	})
+	err = opts.AddFlag("boolFlag", &Argument{
+		Short:       "c",
+		Description: "short flag c",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err)
+	err = opts.AddFlag("badoption", &Argument{
+		Short:       "ab",
+		Description: "posix incompatible flag",
+		TypeOf:      Single,
+	})
+	assert.True(t, errors.Is(err, ErrPosixIncompatible))
+
+	assert.True(t, opts.ParseString("-acb 1"))
+	valA := opts.GetOrDefault("a", "")
+	valB := opts.GetOrDefault("b", "")
+	valC, _ := opts.GetBool("c")
+	assert.Len(t, opts.GetErrors(), 0)
+	assert.Equal(t, "1", opts.GetOrDefault("a", valA))
+	assert.Equal(t, "1", opts.GetOrDefault("b", valB))
+	assert.Equal(t, true, valC)
 }
 
 func TestCmdLineOption_FluentCommands(t *testing.T) {

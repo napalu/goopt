@@ -15,7 +15,6 @@
 package goopt
 
 import (
-	"errors"
 	"fmt"
 	"github.com/ef-ds/deque"
 	"github.com/google/shlex"
@@ -95,7 +94,7 @@ func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
 		return err
 	}
 
-	return &CommandNotFoundError{msg: fmt.Sprintf("%s was not found or has no associated callback", commandName)}
+	return fmt.Errorf("%w: %s was not found or has no associated callback", ErrCommandNotFound, commandName)
 }
 
 // AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -108,7 +107,7 @@ func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc)
 		return nil
 	}
 
-	return fmt.Errorf("flag '%s' was not found", flag)
+	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -121,7 +120,7 @@ func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc
 		return nil
 	}
 
-	return fmt.Errorf("flag '%s' was not found", flag)
+	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
 // HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -145,7 +144,7 @@ func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) 
 		}
 	}
 
-	return nil, errors.New("no pre-validation filters for flag " + flag)
+	return nil, fmt.Errorf("%w: no pre-validation filters for flag %s", ErrValidationFailed, flag)
 }
 
 // HasPostValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -169,7 +168,7 @@ func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error)
 		}
 	}
 
-	return nil, errors.New("no post-validation filters for flag " + flag)
+	return nil, fmt.Errorf("%w: no post-validation filters for flag %s", ErrValidationFailed, flag)
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
@@ -213,7 +212,11 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		}
 
 		if s.isFlag(args[state.pos]) {
-			s.parseFlag(args, state)
+			if s.posixCompatible {
+				s.parsePosixFlag(args, state)
+			} else {
+				s.parseFlag(args, state)
+			}
 		} else {
 			s.parseCommand(args, state, &cmdQueue)
 		}
@@ -528,8 +531,11 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument) error {
 	if flag == "" {
 		return fmt.Errorf("can't set empty flag")
 	}
-
-	if len(argument.Short) > 0 {
+	lenS := len(argument.Short)
+	if lenS > 0 {
+		if s.posixCompatible && lenS > 1 {
+			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", ErrPosixIncompatible, flag, argument.Short)
+		}
 		s.lookup[argument.Short] = flag
 	}
 	s.acceptedFlags.Set(flag, argument)
@@ -720,7 +726,7 @@ func (s *CmdLineOption) DescribeFlag(flag, description string) error {
 		return nil
 	}
 
-	return fmt.Errorf("flag '%s' was not found", flag)
+	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
 // GetDescription retrieves a Flag's description as set by DescribeFlag
@@ -775,7 +781,7 @@ func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
 		return nil
 	}
 
-	return fmt.Errorf("flag '%s' was not found", flag)
+	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
 // DependsOnFlagValue is used to describe flag dependencies. For example, a '--modify' flag could be specified to
@@ -804,7 +810,7 @@ func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) erro
 		return nil
 	}
 
-	return fmt.Errorf("flag '%s' was not found", flag)
+	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
 // GetErrors returns a list of the errors encountered during Parse
@@ -904,12 +910,4 @@ func (r *LiterateRegex) Describe() string {
 	}
 
 	return r.value.String()
-}
-
-func (e *UnsupportedTypeConversionError) Error() string {
-	return e.msg
-}
-
-func (e *CommandNotFoundError) Error() string {
-	return e.msg
 }

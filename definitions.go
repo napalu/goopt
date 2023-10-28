@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"errors"
 	"github.com/ef-ds/deque"
 	"github.com/napalu/goopt/types/orderedmap"
 	"regexp"
@@ -171,13 +172,13 @@ type CmdLineOption struct {
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 }
 
-type UnsupportedTypeConversionError struct {
-	msg string
-}
-
-type CommandNotFoundError struct {
-	msg string
-}
+var (
+	ErrUnsupportedTypeConversion = errors.New("unsupported type conversion")
+	ErrCommandNotFound           = errors.New("command not found")
+	ErrFlagNotFound              = errors.New("flag not found")
+	ErrPosixIncompatible         = errors.New("posix incompatible")
+	ErrValidationFailed          = errors.New("validation failed")
+)
 
 type path struct {
 	value         string
