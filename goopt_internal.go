@@ -31,27 +31,41 @@ func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState) []strin
 	argument, found := s.acceptedFlags.Get(currentArg)
 	if found {
 		s.processFlagArg(args, state, argument, currentArg)
-		return args
+	} else {
+		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
+		// 1. we first normalize each flag or value encountered by extending the args array
+		args = s.normalizePosixArgs(args, state, currentArg)
+		// 2. process as usual
+		currentArg = s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
+		argument, found = s.acceptedFlags.Get(currentArg)
+		if found {
+			s.processFlagArg(args, state, argument, currentArg)
+		}
 	}
 
-	// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-	// 1. we first scan for any value which is not a flag and extend args if any are found
+	return args
+}
+
+func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, currentArg string) []string {
+	insertPos := 0
 	for startPos := 0; startPos < len(currentArg); startPos++ {
 		cf := s.flagOrShortFlag(currentArg[startPos : startPos+1])
 		_, found := s.acceptedFlags.Get(cf)
-		if !found {
-			args = insert(args, cf, state.pos+1)
-			state.endOf++
+		if found {
+			args = insert(args, "-"+cf, state.pos+insertPos)
+		} else {
+			args = insert(args, cf, state.pos+insertPos)
 		}
+		insertPos++
+		state.endOf++
 	}
 
-	// 2. process as usual
-	for startPos := 0; startPos < len(currentArg); startPos++ {
-		cf := s.flagOrShortFlag(currentArg[startPos : startPos+1])
-		argument, found := s.acceptedFlags.Get(cf)
-		if found {
-			s.processFlagArg(args, state, argument, cf)
-		}
+	if insertPos > 0 {
+		state.endOf--
+		ret := make([]string, 0)
+		ret = append(ret, args[:insertPos+state.pos]...)
+		args = append(ret, args[insertPos+state.pos+1:]...)
+
 	}
 
 	return args

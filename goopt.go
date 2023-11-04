@@ -203,7 +203,6 @@ func (s *CmdLineOption) Parse(args []string) bool {
 	state := &parseState{
 		endOf: len(args),
 		skip:  -1,
-		args:  args,
 	}
 	var cmdQueue deque.Deque
 	for state.pos = 0; state.pos < state.endOf; state.pos++ {

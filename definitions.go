@@ -194,5 +194,4 @@ type parseState struct {
 	endOf int
 	skip  int
 	pos   int
-	args  []string
 }
