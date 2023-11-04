@@ -213,7 +213,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 
 		if s.isFlag(args[state.pos]) {
 			if s.posixCompatible {
-				s.parsePosixFlag(args, state)
+				args = s.parsePosixFlag(args, state)
 			} else {
 				s.parseFlag(args, state)
 			}

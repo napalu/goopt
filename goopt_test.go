@@ -418,10 +418,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 
 	list, err := cmdLine.GetList("flagC")
 	assert.Nil(t, err, "chained flag should return a list")
-	assert.Len(t, list, 3, "list should contain the three values passed on command line")
-	assert.Equal(t, "1", list[0], "list should contain the values in the order passed on command line")
-	assert.Equal(t, "2", list[1], "list should contain the values in the order passed on command line")
-	assert.Equal(t, "3", list[2], "list should contain the values in the order passed on command line")
+	assert.Equal(t, []string{"1", "2", "3"}, list)
 
 	val, found := cmdLine.Get("flagB")
 	assert.True(t, found, "flagB was supplied on command line we expect it to be err")
@@ -554,10 +551,23 @@ func TestPosixCompatibleFlags(t *testing.T) {
 		Description: "short flag b",
 		TypeOf:      Single,
 	})
+	assert.Nil(t, err)
 	err = opts.AddFlag("boolFlag", &Argument{
 		Short:       "c",
 		Description: "short flag c",
 		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err)
+	err = opts.AddFlag("anotherlong", &Argument{
+		Short:       "d",
+		Description: "short flag d",
+		TypeOf:      Single,
+	})
+	assert.Nil(t, err)
+	err = opts.AddFlag("yetanotherlong", &Argument{
+		Short:       "e",
+		Description: "short flag e",
+		TypeOf:      Single,
 	})
 	assert.Nil(t, err)
 	err = opts.AddFlag("badoption", &Argument{
@@ -567,14 +577,18 @@ func TestPosixCompatibleFlags(t *testing.T) {
 	})
 	assert.True(t, errors.Is(err, ErrPosixIncompatible))
 
-	assert.True(t, opts.ParseString("-acb 1"))
+	assert.True(t, opts.ParseString("-acb1 -d 3 -e2"))
 	valA := opts.GetOrDefault("a", "")
 	valB := opts.GetOrDefault("b", "")
 	valC, _ := opts.GetBool("c")
+	valD := opts.GetOrDefault("d", "")
+	valE := opts.GetOrDefault("e", "")
 	assert.Len(t, opts.GetErrors(), 0)
 	assert.Equal(t, "1", opts.GetOrDefault("a", valA))
 	assert.Equal(t, "1", opts.GetOrDefault("b", valB))
 	assert.Equal(t, true, valC)
+	assert.Equal(t, "3", valD)
+	assert.Equal(t, "2", valE)
 }
 
 func TestCmdLineOption_FluentCommands(t *testing.T) {
