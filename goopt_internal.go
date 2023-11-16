@@ -29,46 +29,64 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
 func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState) []string {
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
 	argument, found := s.acceptedFlags.Get(currentArg)
-	if found {
-		s.processFlagArg(args, state, argument, currentArg)
-	} else {
+	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
 		// 1. we first normalize each flag or value encountered by extending the args array
 		args = s.normalizePosixArgs(args, state, currentArg)
 		// 2. process as usual
 		currentArg = s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
 		argument, found = s.acceptedFlags.Get(currentArg)
-		if found {
-			s.processFlagArg(args, state, argument, currentArg)
-		}
+	}
+	if found {
+		s.processFlagArg(args, state, argument, currentArg)
 	}
 
 	return args
 }
 
 func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, currentArg string) []string {
-	insertPos := 0
-	for startPos := 0; startPos < len(currentArg); startPos++ {
+	sb := strings.Builder{}
+	lenS := len(currentArg)
+	newArgs := make([]string, 0, len(args))
+	if state.pos > 0 {
+		newArgs = append(newArgs, args[:state.pos]...)
+	}
+
+	startPos := 0
+	for startPos < lenS {
 		cf := s.flagOrShortFlag(currentArg[startPos : startPos+1])
 		_, found := s.acceptedFlags.Get(cf)
 		if found {
-			args = insert(args, "-"+cf, state.pos+insertPos)
+			newArgs = append(newArgs, fmt.Sprintf("-%s", cf))
+			startPos++
 		} else {
-			args = insert(args, cf, state.pos+insertPos)
+			sb.WriteString(cf)
+			startPos++
+			for startPos < lenS {
+				cf = s.flagOrShortFlag(currentArg[startPos : startPos+1])
+				_, found = s.acceptedFlags.Get(cf)
+				if found {
+					break
+				} else {
+					sb.WriteString(cf)
+					startPos++
+				}
+			}
+			newArgs = append(newArgs, sb.String())
+			sb.Reset()
 		}
-		insertPos++
 		state.endOf++
 	}
 
-	if insertPos > 0 {
+	if startPos > 0 {
 		state.endOf--
-		ret := make([]string, 0)
-		ret = append(ret, args[:insertPos+state.pos]...)
-		args = append(ret, args[insertPos+state.pos+1:]...)
-
 	}
 
-	return args
+	if len(args) > state.pos+1 {
+		newArgs = append(newArgs, args[state.pos+1:]...)
+	}
+
+	return newArgs
 }
 
 func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argument *Argument, currentArg string) {
@@ -963,10 +981,4 @@ func pruneExecPathFromArgs(args *[]string) {
 			*args = (*args)[1:]
 		}
 	}
-}
-
-func insert[T any](a []T, c T, i int) []T {
-	var v T
-	a = append(a, v)
-	return append(a[:i], append([]T{c}, a[i:len(a)-1]...)...)
 }

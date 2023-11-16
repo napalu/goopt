@@ -576,19 +576,37 @@ func TestPosixCompatibleFlags(t *testing.T) {
 		TypeOf:      Single,
 	})
 	assert.True(t, errors.Is(err, ErrPosixIncompatible))
+	err = opts.AddFlag("listFlag", &Argument{
+		Short:       "f",
+		Description: "list",
+		TypeOf:      Chained,
+	})
+	assert.Nil(t, err)
+	err = opts.AddFlag("tee", &Argument{
+		Short:       "t",
+		Description: "tee for 2",
+		TypeOf:      Single,
+	})
+	assert.Nil(t, err)
 
-	assert.True(t, opts.ParseString("-a2cb1 -d 3 -e2"))
+	assert.True(t, opts.ParseString("-t23 -a23cb1233 -d 3 -e2 -f\"1,2,3,on\""))
+	assert.Len(t, opts.GetErrors(), 0)
+
 	valA := opts.GetOrDefault("a", "")
 	valB := opts.GetOrDefault("b", "")
 	valC, _ := opts.GetBool("c")
 	valD := opts.GetOrDefault("d", "")
 	valE := opts.GetOrDefault("e", "")
-	assert.Len(t, opts.GetErrors(), 0)
-	assert.Equal(t, "2", opts.GetOrDefault("a", valA))
-	assert.Equal(t, "1", opts.GetOrDefault("b", valB))
+	valF, _ := opts.GetList("f")
+	valT := opts.GetOrDefault("t", "")
+
+	assert.Equal(t, "23", opts.GetOrDefault("a", valA))
+	assert.Equal(t, "1233", opts.GetOrDefault("b", valB))
 	assert.Equal(t, true, valC)
 	assert.Equal(t, "3", valD)
 	assert.Equal(t, "2", valE)
+	assert.Equal(t, []string{"1", "2", "3", "on"}, valF)
+	assert.Equal(t, "23", valT)
 }
 
 func TestCmdLineOption_FluentCommands(t *testing.T) {
