@@ -659,6 +659,18 @@ func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
 	return v, nil
 }
 
+// GetShortFlag maps a long flag to its equivalent short flag. Short flags are concise alternatives to
+// their verbose counterparts.
+//
+// The function returns the corresponding short flag if it exists. If not, it returns an error
+// indicating that no short flag is defined for the provided long flag.
+//
+// Params:
+// flag (string): The long flag for which the function should retrieve the corresponding short flag.
+//
+// Returns:
+// string: The short flag variant if it exists.
+// error: An error if no short flag is defined for the provided long flag, or if any other error occurs.
 func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
 	argument, err := s.GetArgument(flag)
 	if err == nil {
