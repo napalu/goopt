@@ -368,7 +368,7 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 	}
 	if found {
 		if len(sub.Subcommands) == 0 {
-			if (len(next) == 0 || s.isFlag(next)) && len(sub.DefaultValue) > 0 {
+			if (len(next) == 0 || s.isFlag(next)) || len(sub.DefaultValue) > 0 {
 				next = sub.DefaultValue
 			} else {
 				state.skip = state.pos + 1
