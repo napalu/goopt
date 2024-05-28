@@ -170,7 +170,8 @@ func TestCmdLineOption_GetCommandValue(t *testing.T) {
 			Subcommands: []Command{{
 				Name: "type",
 			}},
-		}},
+		},
+		},
 	}
 
 	err := opts.AddCommand(cmd)
@@ -183,6 +184,54 @@ func TestCmdLineOption_GetCommandValue(t *testing.T) {
 	value, err := opts.GetCommandValue("create user type")
 	assert.Nil(t, err, "should find value of sub-command")
 	assert.Equal(t, "author", value, "value of nested sub-command should be that supplied via command line")
+}
+
+func TestCmdLineOption_GetCommandValues(t *testing.T) {
+	opts, _ := NewCmdLine(
+		WithCommand(
+			NewCommand(
+				WithName("test"),
+				WithCommandDescription("management commands"),
+				WithSubcommands(
+					NewCommand(
+						WithName("blobs"),
+						WithCommandDescription("blob commands"),
+						WithSubcommands(
+							NewCommand(
+								WithName("copy"),
+								WithCommandDescription("test blob"),
+								WithCommandDefault("all"),
+							),
+						),
+					),
+					NewCommand(
+						WithName("repos"),
+						WithCommandDescription("repo commands"),
+						WithSubcommands(
+							NewCommand(
+								WithName("copy"),
+								WithCommandDescription("copy repo"),
+								WithCommandDefault("all"),
+							),
+						),
+					),
+					NewCommand(
+						WithName("roles"),
+						WithCommandDescription("role commands"),
+						WithSubcommands(
+							NewCommand(
+								WithName("copy"),
+								WithCommandDescription("copy role"),
+								WithCommandDefault("all"),
+							),
+						),
+					),
+				),
+			)))
+
+	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy"), "should parse well-formed commands")
+	paths := opts.GetCommandValues()
+	assert.Len(t, paths, 3, "should have parsed 3 commands")
 }
 
 func TestCmdLineOption_ValueCallback(t *testing.T) {
