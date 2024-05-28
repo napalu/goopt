@@ -97,7 +97,7 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 		} else {
 			boolVal := "true"
 			if state.pos+1 < state.endOf {
-				_, found := s.registeredCommands[args[state.pos+1]]
+				_, found := s.registeredCommands.Get(args[state.pos+1])
 				if !found && !s.isFlag(args[state.pos+1]) {
 					boolVal = args[state.pos+1]
 					state.skip = state.pos + 1
@@ -134,7 +134,7 @@ func (s *CmdLineOption) validateCommand(cmdArg *Command, level, maxDepth int) (b
 		cmdArg.path = cmdArg.Name
 	}
 
-	if _, found := s.registeredCommands[cmdArg.path]; found {
+	if _, found := s.registeredCommands.Get(cmdArg.path); found {
 		return false, fmt.Errorf("duplicate command '%s' already exists", cmdArg.Name)
 	}
 
@@ -168,10 +168,10 @@ func (s *CmdLineOption) ensureInit() {
 		s.customBind = map[string]ValueSetFunc{}
 	}
 	if s.registeredCommands == nil {
-		s.registeredCommands = map[string]Command{}
+		s.registeredCommands = orderedmap.NewOrderedMap[string, Command]()
 	}
 	if s.commandOptions == nil {
-		s.commandOptions = map[string]path{}
+		s.commandOptions = orderedmap.NewOrderedMap[string, path]()
 	}
 	if s.positionalArgs == nil {
 		s.positionalArgs = []PositionalArgument{}
@@ -233,7 +233,7 @@ func (s *CmdLineOption) addError(err error) {
 }
 
 func (s *CmdLineOption) getCommand(name string) (Command, bool) {
-	cmd, found := s.registeredCommands[name]
+	cmd, found := s.registeredCommands.Get(name)
 
 	return cmd, found
 }
@@ -267,7 +267,7 @@ func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue
 		return
 	}
 
-	s.commandOptions[cmd.path] = path{value: value, isTerminating: len(cmd.Subcommands) == 0}
+	s.commandOptions.Set(cmd.path, path{value: value, isTerminating: len(cmd.Subcommands) == 0})
 }
 
 func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
@@ -597,8 +597,8 @@ func (s *CmdLineOption) validateStandaloneFlag(key string) {
 
 func (s *CmdLineOption) walkCommands() {
 	stack := deque.New()
-	for _, cmd := range s.registeredCommands {
-		stack.PushBack(cmd)
+	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		stack.PushBack(kv.Value)
 	}
 	for stack.Len() > 0 {
 		current, _ := stack.PopBack()
@@ -616,7 +616,7 @@ func (s *CmdLineOption) walkCommands() {
 			if i < subCmdLen-1 {
 				match.WriteString(", ")
 			}
-			if _, found := s.commandOptions[sub.path]; found {
+			if _, found := s.commandOptions.Get(sub.path); found {
 				matchedCommands = append(matchedCommands, sub)
 				matches++
 			}

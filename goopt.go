@@ -36,8 +36,8 @@ func NewCmdLineOption() *CmdLineOption {
 		errors:             []error{},
 		bind:               make(map[string]interface{}, 1),
 		customBind:         map[string]ValueSetFunc{},
-		registeredCommands: map[string]Command{},
-		commandOptions:     map[string]path{},
+		registeredCommands: orderedmap.NewOrderedMap[string, Command](),
+		commandOptions:     orderedmap.NewOrderedMap[string, path](),
 		positionalArgs:     []PositionalArgument{},
 		listFunc:           matchChainedSeparators,
 		callbackQueue:      deque.New(),
@@ -189,8 +189,7 @@ func (s *CmdLineOption) AddCommand(cmdArg *Command) error {
 		return err
 	}
 
-	s.registeredCommands[cmdArg.Name] = *cmdArg
-
+	s.registeredCommands.Set(cmdArg.Name, *cmdArg)
 	return nil
 }
 
@@ -325,7 +324,7 @@ func (s *CmdLineOption) GetCommandValue(path string) (string, error) {
 		return "", fmt.Errorf("paths is empty")
 	}
 
-	entry, found := s.commandOptions[path]
+	entry, found := s.commandOptions.Get(path)
 	if !found {
 		return "", fmt.Errorf("not found. no commands stored under path")
 	}
@@ -335,12 +334,12 @@ func (s *CmdLineOption) GetCommandValue(path string) (string, error) {
 
 // GetCommandValues returns the list of all commands seen on command-line
 func (s *CmdLineOption) GetCommandValues() []PathValue {
-	pathValues := make([]PathValue, 0, len(s.commandOptions))
-	for k, v := range s.commandOptions {
-		if v.isTerminating {
+	pathValues := make([]PathValue, 0, s.commandOptions.Count())
+	for kv := s.commandOptions.Front(); kv != nil; kv = kv.Next() {
+		if kv.Value.isTerminating {
 			pathValues = append(pathValues, PathValue{
-				Path:  k,
-				Value: v.value,
+				Path:  *kv.Key,
+				Value: kv.Value.value,
 			})
 		}
 	}
@@ -699,7 +698,7 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 
 // HasCommand return true when the name has been seen on the command line.
 func (s *CmdLineOption) HasCommand(path string) bool {
-	_, found := s.commandOptions[path]
+	_, found := s.commandOptions.Get(path)
 
 	return found
 }
@@ -838,7 +837,7 @@ func (s *CmdLineOption) GetErrorCount() int {
 func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s", []byte(os.Args[0]))))
 	s.PrintFlags(writer)
-	if len(s.registeredCommands) > 0 {
+	if s.registeredCommands.Count() > 0 {
 		_, _ = writer.Write([]byte("\ncommands:\n"))
 		s.PrintCommands(writer)
 	}
@@ -881,8 +880,8 @@ func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 //
 //	command root. The Command root is at Level 0.
 func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
-	for _, cmd := range s.registeredCommands {
-		cmd.Visit(func(cmd *Command, level int) bool {
+	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		kv.Value.Visit(func(cmd *Command, level int) bool {
 			var start = config.DefaultPrefix
 			switch {
 			case level == 0:

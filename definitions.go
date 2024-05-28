@@ -154,17 +154,18 @@ type Command struct {
 
 // CmdLineOption opaque struct used in all Flag/Command manipulation
 type CmdLineOption struct {
-	posixCompatible    bool
-	prefixes           []rune
-	listFunc           ListDelimiterFunc
-	acceptedFlags      *orderedmap.OrderedMap[string, *Argument]
-	lookup             map[string]string
-	options            map[string]string
-	errors             []error
-	bind               map[string]any
-	customBind         map[string]ValueSetFunc
-	registeredCommands map[string]Command
-	commandOptions     map[string]path
+	posixCompatible bool
+	prefixes        []rune
+	listFunc        ListDelimiterFunc
+	acceptedFlags   *orderedmap.OrderedMap[string, *Argument]
+	lookup          map[string]string
+	options         map[string]string
+	errors          []error
+	bind            map[string]any
+	customBind      map[string]ValueSetFunc
+	//registeredCommands map[string]Command
+	registeredCommands *orderedmap.OrderedMap[string, Command]
+	commandOptions     *orderedmap.OrderedMap[string, path]
 	positionalArgs     []PositionalArgument
 	rawArgs            map[string]bool
 	callbackQueue      *deque.Deque
