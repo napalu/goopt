@@ -232,6 +232,17 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy"), "should parse well-formed commands")
 	paths := opts.GetCommandValues()
 	assert.Len(t, paths, 3, "should have parsed 3 commands")
+	for i, path := range paths {
+		switch i {
+		case 0:
+			assert.Equal(t, path.Path, "test blobs copy")
+		case 1:
+			assert.Equal(t, path.Path, "test repos copy")
+		case 20:
+			assert.Equal(t, path.Path, "test roles copy")
+		}
+
+	}
 }
 
 func TestCmdLineOption_ValueCallback(t *testing.T) {
