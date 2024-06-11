@@ -229,16 +229,18 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 				),
 			)))
 
-	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy"), "should parse well-formed commands")
+	// current behavior: last command overwrites a previous one with the same path - TODO check if this is the desired behaviour
+	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy test blobs copy blob_name"), "should parse well-formed commands")
 	paths := opts.GetCommandValues()
 	assert.Len(t, paths, 3, "should have parsed 3 commands")
 	for i, path := range paths {
 		switch i {
 		case 0:
 			assert.Equal(t, path.Path, "test blobs copy")
+			assert.Equal(t, path.Value, "blob_name")
 		case 1:
 			assert.Equal(t, path.Path, "test repos copy")
-		case 20:
+		case 2:
 			assert.Equal(t, path.Path, "test roles copy")
 		}
 
