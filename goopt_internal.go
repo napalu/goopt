@@ -225,7 +225,7 @@ func (s *CmdLineOption) flagOrShortFlag(flag string) string {
 }
 
 func (s *CmdLineOption) isFlag(flag string) bool {
-	return strings.HasPrefix(flag, "/") || strings.HasPrefix(flag, "-")
+	return strings.HasPrefix(flag, "-")
 }
 
 func (s *CmdLineOption) addError(err error) {
@@ -300,7 +300,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 			cmdQueue.PushBack(cmd)
 		}
 	} else if state.pos == 0 && !s.isFlag(currentArg) {
-		s.addError(fmt.Errorf("options should be prefixed by either '-' or '/'"))
+		s.addError(fmt.Errorf("options should be prefixed by '-'"))
 	}
 }
 
