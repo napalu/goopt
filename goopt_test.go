@@ -6,7 +6,6 @@ import (
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -365,18 +364,10 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	err = temp.Close()
 	assert.Nil(t, err)
 	assert.NotEmpty(t, name)
-	localArg := fmt.Sprintf(`--test "%s"`, testPath(name))
+	localArg := fmt.Sprintf(`--test "%s"`, name)
 	result := cmdLine.ParseString(localArg)
 	assert.True(t, result, "should be able to parse a fluent File argument")
 	assert.Equal(t, "test_value_123", s)
-}
-
-func testPath(path string) string {
-	if runtime.GOOS == "windows" {
-		return strings.Replace(path, "\\", "\\\\", -1)
-	}
-
-	return path
 }
 
 func TestNewCmdLineOption_BindNil(t *testing.T) {

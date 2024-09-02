@@ -17,7 +17,7 @@ package goopt
 import (
 	"fmt"
 	"github.com/ef-ds/deque"
-	"github.com/google/shlex"
+	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"io"
 	"os"
@@ -236,9 +236,8 @@ func (s *CmdLineOption) Parse(args []string) bool {
 
 // ParseString calls Parse
 func (s *CmdLineOption) ParseString(argString string) bool {
-	args, err := shlex.Split(argString)
+	args, err := parse.Split(argString)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing arguments: %s\n", err)
 		return false
 	}
 
@@ -274,7 +273,7 @@ func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []str
 
 // ParseStringWithDefaults calls Parse supplementing missing arguments in argString with default values from defaults
 func (s *CmdLineOption) ParseStringWithDefaults(defaults map[string]string, argString string) bool {
-	args, err := shlex.Split(argString)
+	args, err := parse.Split(argString)
 	if err != nil {
 		return false
 	}
