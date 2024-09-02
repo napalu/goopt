@@ -37,6 +37,7 @@ func WithDescription(description string) ConfigureArgumentFunc {
 //  1. Single - a flag which expects a value
 //  2. Chained - a flag which expects a delimited value representing elements in a list (and is evaluated as a list)
 //  3. Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
+//  4. File - a flag which expects a valid file path whose content is the value
 func WithType(typeof OptionType) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.TypeOf = typeof

@@ -238,6 +238,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 func (s *CmdLineOption) ParseString(argString string) bool {
 	args, err := shlex.Split(argString)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing arguments: %s\n", err)
 		return false
 	}
 

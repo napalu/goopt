@@ -110,8 +110,8 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 					"could not process input argument '%s' - the following error occurred: %s", currentArg, err))
 			}
 		}
-	case Single, Chained:
-		s.processSingleOrChainedFlag(args, argument, state, currentArg)
+	case Single, Chained, File:
+		s.processFlag(args, argument, state, currentArg)
 	}
 }
 
@@ -304,7 +304,8 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 	}
 }
 
-func (s *CmdLineOption) processSingleOrChainedFlag(args []string, argument *Argument, state *parseState, currentArg string) {
+func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *parseState, currentArg string) {
+	var err error
 	if argument.Secure.IsSecure {
 		if state.pos < state.endOf-1 {
 			if !s.isFlag(args[state.pos+1]) {
@@ -325,10 +326,32 @@ func (s *CmdLineOption) processSingleOrChainedFlag(args []string, argument *Argu
 		if state.pos >= state.endOf-1 && len(next) == 0 {
 			s.addError(fmt.Errorf("flag '%s' expects a value", currentArg))
 		} else {
-			if err := s.processValueFlag(currentArg, next, argument); err != nil {
-				s.addError(fmt.Errorf("failed to process your input for Flag '%s': %s", currentArg, err))
+			next, err = s.flagValue(argument, next, currentArg)
+			if err != nil {
+				s.addError(err)
+			} else {
+				if err := s.processValueFlag(currentArg, next, argument); err != nil {
+					s.addError(fmt.Errorf("failed to process your input for Flag '%s': %s", currentArg, err))
+				}
 			}
 		}
+	}
+}
+
+func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (string, error) {
+	if argument.TypeOf == File {
+		if st, err := os.Stat(next); err != nil {
+			return "", fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, err.Error())
+		} else if st.IsDir() {
+			return "", fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+		}
+		val, err := os.ReadFile(next)
+		if err != nil {
+			return "", fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, err.Error())
+		}
+		return string(val), nil
+	} else {
+		return next, nil
 	}
 }
 

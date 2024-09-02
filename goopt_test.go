@@ -6,6 +6,7 @@ import (
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -342,6 +343,40 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 
 	err = opts.BindFlag(&i, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	assert.NotNil(t, err, "should not accept Standalone flags in BindFlag if the data type is not boolean")
+}
+
+func TestCmdLineOption_FileFlag(t *testing.T) {
+	var s string
+	cmdLine, err := NewCmdLine(
+		WithBindFlag("test", &s,
+			NewArg(WithShortFlag("t"),
+				WithType(File))))
+	assert.Nil(t, err, "should not fail to bind pointer to file flag")
+	tempDir, err := os.MkdirTemp("", "*")
+	assert.Nil(t, err)
+	defer os.RemoveAll(tempDir)
+	temp, err := os.CreateTemp(tempDir, "*")
+	assert.Nil(t, err)
+	_, err = temp.WriteString("test_value_123")
+	assert.Nil(t, err)
+	name := temp.Name()
+	err = temp.Sync()
+	assert.Nil(t, err)
+	err = temp.Close()
+	assert.Nil(t, err)
+	assert.NotEmpty(t, name)
+	localArg := fmt.Sprintf(`--test "%s"`, testPath(name))
+	result := cmdLine.ParseString(localArg)
+	assert.True(t, result, "should be able to parse a fluent File argument")
+	assert.Equal(t, "test_value_123", s)
+}
+
+func testPath(path string) string {
+	if runtime.GOOS == "windows" {
+		return strings.Replace(path, "\\", "\\\\", -1)
+	}
+
+	return path
 }
 
 func TestNewCmdLineOption_BindNil(t *testing.T) {
