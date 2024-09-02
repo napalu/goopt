@@ -1,160 +1,146 @@
 package parse
 
 import (
-	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
 )
 
-func Split(s string) ([]string, error) {
-	var tokens []string
-	var argBuilder strings.Builder
-	inQuotes := false
-	escaped := false
-
-	// Define special operators, ordered by length to match multi-char operators first
+func Split(commandString string) ([]string, error) {
+	tokens := make([]string, 0)
+	argBuilder := strings.Builder{}
+	inQuotes, escaped := false, false
 	operators := []string{"&&", "||", ">>", "<<", "|", "&", ">", "<", "(", ")"}
-
+	length := len(commandString)
+	runes := []rune(commandString)
 	i := 0
-	length := len(s)
 
-	for i < length {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError {
-			return nil, fmt.Errorf("invalid UTF-8 encoding at position %d", i)
-		}
-		char := string(r)
+	for i < len(runes) {
+		char := runes[i]
 
-		if char == "\n" || char == "\r" {
-			char = " "
+		if char == '\n' || char == '\r' {
+			char = ' '
 		}
 
-		// Handle escape character ^
-		if !inQuotes && char == "^" && !escaped {
+		if char == '\'' {
+			char = '"'
+		}
+
+		if !inQuotes && char == '^' && !escaped {
 			escaped = true
-			i += size
+			i++
 			continue
 		}
 
-		// Handle escaping if previous was ^
 		if escaped {
-			// Treat current character as literal
-			argBuilder.WriteRune(r)
+			argBuilder.WriteRune(char)
 			escaped = false
-			i += size
+			i++
 			continue
 		}
 
-		// Handle quotes
-		if char == `"` {
+		if char == '"' {
 			inQuotes = !inQuotes
-			i += size
+			i++
 			continue
 		}
 
-		// Handle environment variable expansion: %VAR%
-		if char == "%" && !inQuotes {
-			// Look for the next %
-			end := i + size
-			varNameBuilder := strings.Builder{}
-			for end < length {
-				rVar, sizeVar := utf8.DecodeRuneInString(s[end:])
-				if string(rVar) == "%" {
-					break
-				}
-				varNameBuilder.WriteRune(rVar)
-				end += sizeVar
+		if char == '%' && !inQuotes {
+			newIndex, err := handleEnvVar(commandString, &argBuilder, i)
+			if err != nil {
+				return nil, err
 			}
-			if end < length && string(s[end]) == "%" {
-				varName := varNameBuilder.String()
-				varValue := os.Getenv(varName)
-				argBuilder.WriteString(varValue)
-				i = end + 1
-				continue
-			} else {
-				// No closing %, treat as literal %
-				argBuilder.WriteByte('%')
-				i += size
-				continue
-			}
-		}
-
-		// Handle backslashes
-		if char == "\\" {
-			// Count the number of consecutive backslashes
-			numBackslashes := 0
-			for i < length && string(s[i]) == "\\" {
-				numBackslashes++
-				i++
-			}
-
-			// Check if backslashes are followed by a quote
-			if i < length && string(s[i]) == `"` {
-				// Each pair of backslashes translates to one backslash
-				// If the number of backslashes is even, the quote is a quote delimiter
-				// If odd, the quote is escaped
-				backslashesToAdd := numBackslashes / 2
-				argBuilder.WriteString(strings.Repeat("\\", backslashesToAdd))
-				if numBackslashes%2 == 0 {
-					// Quote is a delimiter
-					inQuotes = !inQuotes
-				} else {
-					// Quote is escaped
-					argBuilder.WriteRune('"')
-				}
-				// Skip the quote
-				i += 1
-			} else {
-				// All backslashes are literals
-				argBuilder.WriteString(strings.Repeat("\\", numBackslashes))
-			}
+			i = newIndex
 			continue
 		}
 
-		// Handle operators outside quotes
-		if !inQuotes {
-			// Check for operators (longest first)
-			matched := false
-			for _, op := range operators {
-				opLen := len(op)
-				if i+opLen <= length && s[i:i+opLen] == op {
-					// If building an argument, append it
-					if argBuilder.Len() > 0 {
-						tokens = append(tokens, argBuilder.String())
-						argBuilder.Reset()
-					}
-					// Append the operator as a separate token
-					tokens = append(tokens, op)
-					i += opLen
-					matched = true
-					break
-				}
-			}
-			if matched {
-				continue
-			}
+		if char == '\\' {
+			newIndex := handleBackslashes(runes, &argBuilder, &inQuotes, i)
+			i = newIndex
+			continue
 		}
 
-		// Handle spaces outside quotes
-		if !inQuotes && (char == " " || char == "\t") {
+		if !inQuotes && handleOperators(commandString, &tokens, &argBuilder, operators, length, &i) {
+			continue
+		}
+
+		if !inQuotes && (char == ' ' || char == '\t') {
 			if argBuilder.Len() > 0 {
 				tokens = append(tokens, argBuilder.String())
 				argBuilder.Reset()
 			}
-			i += size
+			i++
 			continue
 		}
 
-		// Add the current character to the argument
-		argBuilder.WriteRune(r)
-		i += size
+		argBuilder.WriteRune(char)
+		i++
 	}
 
-	// Append any remaining argument
 	if argBuilder.Len() > 0 {
 		tokens = append(tokens, argBuilder.String())
 	}
 
 	return tokens, nil
+}
+
+func handleEnvVar(commandString string, argBuilder *strings.Builder, i int) (int, error) {
+	end := i + 1
+	varNameBuilder := strings.Builder{}
+
+	for end < len(commandString) {
+		rVar := rune(commandString[end])
+		if rVar == '%' {
+			break
+		}
+		varNameBuilder.WriteRune(rVar)
+		end++
+	}
+
+	if end < len(commandString) && commandString[end] == '%' {
+		varName := varNameBuilder.String()
+		varValue := os.Getenv(varName)
+		argBuilder.WriteString(varValue)
+		return end + 1, nil
+	}
+
+	argBuilder.WriteRune('%')
+	return i + 1, nil
+}
+
+func handleBackslashes(runes []rune, argBuilder *strings.Builder, inQuotes *bool, i int) int {
+	numBackslashes := 0
+	for i < len(runes) && runes[i] == '\\' {
+		numBackslashes++
+		i++
+	}
+
+	if i < len(runes) && runes[i] == '"' {
+		backslashesToAdd := numBackslashes / 2
+		argBuilder.WriteString(strings.Repeat("\\", backslashesToAdd))
+		if numBackslashes%2 == 0 {
+			*inQuotes = !*inQuotes
+		} else {
+			argBuilder.WriteRune('"')
+		}
+		i++
+	} else {
+		argBuilder.WriteString(strings.Repeat("\\", numBackslashes))
+	}
+	return i
+}
+
+func handleOperators(commandString string, tokens *[]string, argBuilder *strings.Builder, operators []string, length int, index *int) bool {
+	for _, op := range operators {
+		opLen := len(op)
+		if *index+opLen <= length && commandString[*index:*index+opLen] == op {
+			if argBuilder.Len() > 0 {
+				*tokens = append(*tokens, argBuilder.String())
+				argBuilder.Reset()
+			}
+			*tokens = append(*tokens, op)
+			*index += opLen
+			return true
+		}
+	}
+	return false
 }
