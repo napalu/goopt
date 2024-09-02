@@ -359,6 +359,8 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	_, err = temp.WriteString("test_value_123")
 	assert.Nil(t, err)
 	name := temp.Name()
+	err = temp.Sync()
+	assert.Nil(t, err)
 	err = temp.Close()
 	assert.Nil(t, err, "should not fail to close temporary file")
 	assert.NotEmpty(t, name)
