@@ -341,13 +341,13 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (string, error) {
 	if argument.TypeOf == File {
 		if st, err := os.Stat(next); err != nil {
-			return "", fmt.Errorf("flag '%s' should be a valid file", currentArg)
+			return "", fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, err.Error())
 		} else if st.IsDir() {
-			return "", fmt.Errorf("flag '%s' should be a file", currentArg)
+			return "", fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
 		}
 		val, err := os.ReadFile(next)
 		if err != nil {
-			return "", fmt.Errorf("flag '%s' should be a valid file", currentArg)
+			return "", fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, err.Error())
 		}
 		return string(val), nil
 	} else {
