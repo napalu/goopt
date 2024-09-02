@@ -363,28 +363,20 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	err = temp.Sync()
 	assert.Nil(t, err)
 	err = temp.Close()
-	assert.Nil(t, err, "should not fail to close temporary file")
+	assert.Nil(t, err)
 	assert.NotEmpty(t, name)
-	fmt.Printf("temp dir: %s\n", tempDir)
-	fmt.Printf("temp name: %s\n", name)
-	stat, err := os.Stat(name)
-	if err != nil {
-		fmt.Printf("os.Stat error: %s\n", err)
-	}
-	fmt.Printf("stat: %v\n", stat)
-	localArg := fmt.Sprintf(`--test "%s"`, name)
-	if runtime.GOOS == "windows" {
-		localArg = strings.Replace(localArg, "\\", "\\\\", -1)
-	}
-	fmt.Println(localArg)
+	localArg := fmt.Sprintf(`--test "%s"`, testPath(name))
 	result := cmdLine.ParseString(localArg)
-	if !result {
-		for _, e := range cmdLine.GetErrors() {
-			fmt.Println(e)
-		}
-	}
 	assert.True(t, result, "should be able to parse a fluent File argument")
 	assert.Equal(t, "test_value_123", s)
+}
+
+func testPath(path string) string {
+	if runtime.GOOS == "windows" {
+		return strings.Replace(path, "\\", "\\\\", -1)
+	}
+
+	return path
 }
 
 func TestNewCmdLineOption_BindNil(t *testing.T) {
