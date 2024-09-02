@@ -364,7 +364,13 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	err = temp.Close()
 	assert.Nil(t, err, "should not fail to close temporary file")
 	assert.NotEmpty(t, name)
-	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test %s", name)), "should be able to parse a fluent File argument")
+	result := cmdLine.ParseString(fmt.Sprintf("--test %s", name))
+	if !result {
+		for _, e := range cmdLine.GetErrors() {
+			fmt.Println(e)
+		}
+	}
+	assert.True(t, result, "should be able to parse a fluent File argument")
 	assert.Equal(t, "test_value_123", s)
 }
 
