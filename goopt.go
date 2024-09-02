@@ -241,9 +241,7 @@ func (s *CmdLineOption) ParseString(argString string) bool {
 		fmt.Fprintf(os.Stderr, "Error parsing arguments: %s\n", err)
 		return false
 	}
-	for _, arg := range args {
-		fmt.Printf("%s\n", arg)
-	}
+
 	return s.Parse(args)
 }
 

@@ -340,7 +340,6 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (string, error) {
 	if argument.TypeOf == File {
-		fmt.Printf("evaluating path %s", next)
 		if st, err := os.Stat(next); err != nil {
 			return "", fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, err.Error())
 		} else if st.IsDir() {
