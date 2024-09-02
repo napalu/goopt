@@ -240,7 +240,9 @@ func (s *CmdLineOption) ParseString(argString string) bool {
 	if err != nil {
 		return false
 	}
-
+	for _, arg := range args {
+		fmt.Printf("%s\n", arg)
+	}
 	return s.Parse(args)
 }
 
