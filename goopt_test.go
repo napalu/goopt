@@ -6,6 +6,7 @@ import (
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -371,7 +372,10 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 		fmt.Printf("os.Stat error: %s\n", err)
 	}
 	fmt.Printf("stat: %v\n", stat)
-	localArg := fmt.Sprintf("--test \"%s\"", name)
+	localArg := fmt.Sprintf(`--test "%s"`, name)
+	if runtime.GOOS == "windows" {
+
+	}
 	fmt.Println(localArg)
 	result := cmdLine.ParseString(localArg)
 	if !result {
