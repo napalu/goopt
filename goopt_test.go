@@ -351,7 +351,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 			NewArg(WithShortFlag("t"),
 				WithType(File))))
 	assert.Nil(t, err, "should not fail to bind pointer to file flag")
-	tempDir, err := os.MkdirTemp(".", "*")
+	tempDir, err := os.MkdirTemp("", "*")
 	assert.Nil(t, err)
 	defer os.RemoveAll(tempDir)
 	temp, err := os.CreateTemp(tempDir, "*")
@@ -364,6 +364,13 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	err = temp.Close()
 	assert.Nil(t, err, "should not fail to close temporary file")
 	assert.NotEmpty(t, name)
+	fmt.Printf("temp dir: %s\n", tempDir)
+	fmt.Printf("temp name: %s\n", name)
+	stat, err := os.Stat(name)
+	if err != nil {
+		fmt.Printf("os.Stat error: %s\n", err)
+	}
+	fmt.Printf("stat: %v\n", stat)
 	result := cmdLine.ParseString(fmt.Sprintf("--test %s", name))
 	if !result {
 		for _, e := range cmdLine.GetErrors() {
