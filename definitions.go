@@ -63,6 +63,8 @@ const (
 	Chained OptionType = 1
 	// Standalone denotes a boolean Flag (does not accept a value)
 	Standalone OptionType = 2
+	// File denotes a Flag which is evaluated as a path (the content of the file is treated as the value)
+	File OptionType = 3
 )
 
 type PatternValue struct {

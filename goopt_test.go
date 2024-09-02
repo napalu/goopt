@@ -344,6 +344,28 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 	assert.NotNil(t, err, "should not accept Standalone flags in BindFlag if the data type is not boolean")
 }
 
+func TestCmdLineOption_FileFlag(t *testing.T) {
+	var s string
+	cmdLine, err := NewCmdLine(
+		WithBindFlag("test", &s,
+			NewArg(WithShortFlag("t"),
+				WithType(File))))
+	assert.Nil(t, err, "should not fail to bind pointer to file flag")
+	tempDir, err := os.MkdirTemp(".", "*")
+	assert.Nil(t, err)
+	defer os.RemoveAll(tempDir)
+	temp, err := os.CreateTemp(tempDir, "*")
+	assert.Nil(t, err)
+	_, err = temp.WriteString("test_value_123")
+	assert.Nil(t, err)
+	name := temp.Name()
+	err = temp.Close()
+	assert.Nil(t, err, "should not fail to close temporary file")
+	assert.NotEmpty(t, name)
+	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test %s", name)), "should be able to parse a fluent File argument")
+	assert.Equal(t, "test_value_123", s)
+}
+
 func TestNewCmdLineOption_BindNil(t *testing.T) {
 	opts := NewCmdLineOption()
 
