@@ -371,7 +371,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 		fmt.Printf("os.Stat error: %s\n", err)
 	}
 	fmt.Printf("stat: %v\n", stat)
-	result := cmdLine.ParseString(fmt.Sprintf("--test %s", name))
+	result := cmdLine.ParseString(fmt.Sprintf("--test \"%s\"", name))
 	if !result {
 		for _, e := range cmdLine.GetErrors() {
 			fmt.Println(e)
