@@ -374,7 +374,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	fmt.Printf("stat: %v\n", stat)
 	localArg := fmt.Sprintf(`--test "%s"`, name)
 	if runtime.GOOS == "windows" {
-
+		localArg = strings.Replace(localArg, "\\", "/", -1)
 	}
 	fmt.Println(localArg)
 	result := cmdLine.ParseString(localArg)
