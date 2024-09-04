@@ -341,6 +341,8 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
 	if argument.TypeOf == File {
+		var varInFlag = regexp.MustCompile(`(\$\{.+\})`)
+		next = varInFlag.ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
 			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
@@ -1014,5 +1016,22 @@ func pruneExecPathFromArgs(args *[]string) {
 		if strings.EqualFold(osBase, (*args)[0]) {
 			*args = (*args)[1:]
 		}
+	}
+}
+
+const (
+	ExecDir = "${EXEC_DIR}"
+)
+
+func varFunc(s string) string {
+	switch strings.ToUpper(s) {
+	case ExecDir:
+		p, e := os.Executable()
+		if e != nil {
+			return s
+		}
+		return filepath.Dir(p)
+	default:
+		return s
 	}
 }
