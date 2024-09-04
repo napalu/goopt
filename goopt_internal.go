@@ -8,6 +8,7 @@ import (
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/util"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -338,21 +339,27 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 	}
 }
 
-func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (string, error) {
+func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
 	if argument.TypeOf == File {
-		if st, err := os.Stat(next); err != nil {
-			return "", fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, err.Error())
+		next, err = filepath.Abs(next)
+		if st, e := os.Stat(next); e != nil {
+			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
+			return
 		} else if st.IsDir() {
-			return "", fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+			err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+			return
 		}
-		val, err := os.ReadFile(next)
-		if err != nil {
-			return "", fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, err.Error())
+		if val, e := os.ReadFile(next); e != nil {
+			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
+		} else {
+			arg = string(val)
 		}
-		return string(val), nil
+
 	} else {
-		return next, nil
+		arg = next
 	}
+
+	return arg, err
 }
 
 func (s *CmdLineOption) checkCommandValue(cmd Command, currentArg string, args []string, state *parseState) {
