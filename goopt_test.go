@@ -1,13 +1,16 @@
 package goopt_test
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type arrayWriter struct {
@@ -368,6 +371,32 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	result := cmdLine.ParseString(localArg)
 	assert.True(t, result, "should be able to parse a fluent File argument")
 	assert.Equal(t, "test_value_123", s)
+}
+
+func TestCmdLineOption_VarInFileFlag(t *testing.T) {
+	uname := fmt.Sprintf("%x", md5.Sum([]byte(time.Now().Format(time.RFC3339Nano))))
+	var s string
+	cmdLine, err := NewCmdLine(
+		WithBindFlag("test", &s,
+			NewArg(WithShortFlag("t"),
+				WithType(File),
+				WithDefaultValue(filepath.Join("${EXEC_DIR}", uname, "test")))))
+	assert.Nil(t, err, "should not fail to bind pointer to file flag")
+	execPath, err := os.Executable()
+	assert.Nil(t, err)
+	execDir := filepath.Dir(execPath)
+
+	fp := filepath.Join("${EXEC_DIR}", uname, "test")
+	err = os.Mkdir(filepath.Join(execDir, uname), 0755)
+	assert.Nil(t, err)
+	err = os.WriteFile(filepath.Join(execDir, uname, "test"), []byte("test123"), 0755)
+	assert.Nil(t, err)
+	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test %s", fp)), "should parse file flag with var")
+	assert.Equal(t, "test123", s)
+	s = ""
+	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test")), "should parse file flag with var with default value ")
+	assert.Equal(t, "test123", s)
+	os.RemoveAll(filepath.Join(execDir, uname))
 }
 
 func TestNewCmdLineOption_BindNil(t *testing.T) {
