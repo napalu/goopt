@@ -371,6 +371,11 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	result := cmdLine.ParseString(localArg)
 	assert.True(t, result, "should be able to parse a fluent File argument")
 	assert.Equal(t, "test_value_123", s)
+	assert.Nil(t, cmdLine.SetFlag("test", "one234"), "should be able to set the value of a File flag")
+	assert.Equal(t, "one234", cmdLine.GetOrDefault("test", ""))
+	fileVal, err := os.ReadFile(name)
+	assert.Nil(t, err)
+	assert.Equal(t, "one234", string(fileVal), "should correctly set the underlying value")
 }
 
 func TestCmdLineOption_VarInFileFlag(t *testing.T) {
