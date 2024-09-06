@@ -169,7 +169,7 @@ type CmdLineOption struct {
 	registeredCommands *orderedmap.OrderedMap[string, Command]
 	commandOptions     *orderedmap.OrderedMap[string, path]
 	positionalArgs     []PositionalArgument
-	rawArgs            map[string]bool
+	rawArgs            map[string]string
 	callbackQueue      *deque.Deque
 	callbackResults    map[string]error
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]

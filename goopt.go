@@ -21,6 +21,7 @@ import (
 	"github.com/napalu/goopt/types/orderedmap"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -752,15 +753,43 @@ func (s *CmdLineOption) GetDescription(flag string) string {
 
 // SetFlag is used to re-define a Flag or define a new Flag at runtime. This can be sometimes useful for dynamic
 // evaluation of combinations of options and values which can't be expressed statically. For instance, when the user
-// should supply these during a program's execution but after command-line options have been parsed.
-func (s *CmdLineOption) SetFlag(flag, value string) {
+// should supply these during a program's execution but after command-line options have been parsed. If the Flag is of type
+// File the value is stored in the file.
+func (s *CmdLineOption) SetFlag(flag, value string) error {
 	mainKey := s.flagOrShortFlag(flag)
+	key := ""
 	_, found := s.options[flag]
 	if found {
 		s.options[mainKey] = value
+		key = mainKey
 	} else {
 		s.options[flag] = value
+		key = flag
 	}
+	arg, err := s.GetArgument(key)
+	if err != nil {
+		return err
+	}
+
+	if arg.TypeOf == File {
+		path := s.rawArgs[key]
+		if path == "" {
+			path = arg.DefaultValue
+		}
+
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+
+		err = os.WriteFile(abs, []byte(value), 0600)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 }
 
 // Remove used to remove a defined-flag at runtime - returns false if the Flag was not found and true on removal.

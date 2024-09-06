@@ -178,7 +178,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.positionalArgs = []PositionalArgument{}
 	}
 	if s.rawArgs == nil {
-		s.rawArgs = map[string]bool{}
+		s.rawArgs = map[string]string{}
 	}
 	if s.callbackQueue == nil {
 		s.callbackQueue = deque.New()
@@ -209,7 +209,6 @@ func (s *CmdLineOption) setPositionalArguments(args []string) {
 		}
 	}
 
-	s.rawArgs = map[string]bool{}
 	s.positionalArgs = positional
 }
 
@@ -241,7 +240,7 @@ func (s *CmdLineOption) getCommand(name string) (Command, bool) {
 
 func (s *CmdLineOption) registerSecureValue(flag, value string) error {
 	var err error
-	s.rawArgs[flag] = true
+	s.rawArgs[flag] = value
 	if value != "" {
 		s.options[flag] = value
 		err = s.setBoundVariable(value, flag)
@@ -251,18 +250,13 @@ func (s *CmdLineOption) registerSecureValue(flag, value string) error {
 }
 
 func (s *CmdLineOption) registerFlagValue(flag, value, rawValue string) {
-	s.rawArgs[flag] = true
-	if rawValue != "" {
-		s.rawArgs[rawValue] = true
-	}
+	s.rawArgs[flag] = rawValue
+
 	s.options[flag] = value
 }
 
 func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue string) {
-	s.rawArgs[name] = true
-	if rawValue != "" {
-		s.rawArgs[rawValue] = true
-	}
+	s.rawArgs[name] = rawValue
 
 	if cmd.path == "" {
 		return
@@ -341,8 +335,7 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
 	if argument.TypeOf == File {
-		var varInFlag = regexp.MustCompile(`(\$\{.+\})`)
-		next = varInFlag.ReplaceAllStringFunc(next, varFunc)
+		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
 			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
@@ -356,9 +349,10 @@ func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg st
 		} else {
 			arg = string(val)
 		}
-
+		s.registerFlagValue(currentArg, arg, next)
 	} else {
 		arg = next
+		s.registerFlagValue(currentArg, next, next)
 	}
 
 	return arg, err
@@ -468,10 +462,10 @@ func (s *CmdLineOption) processValueFlag(currentArg string, next string, argumen
 	} else {
 		if argument.PreFilter != nil {
 			processed = argument.PreFilter(next)
+			s.registerFlagValue(currentArg, processed, next)
 		} else {
 			processed = next
 		}
-		s.registerFlagValue(currentArg, processed, next)
 	}
 
 	return s.setBoundVariable(processed, currentArg)
@@ -1034,4 +1028,8 @@ func varFunc(s string) string {
 	default:
 		return s
 	}
+}
+
+func expandVarExpr() *regexp.Regexp {
+	return regexp.MustCompile(`(\$\{.+\})`)
 }
