@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/iancoleman/strcase"
 	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
@@ -376,6 +377,28 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	fileVal, err := os.ReadFile(name)
 	assert.Nil(t, err)
 	assert.Equal(t, "one234", string(fileVal), "should correctly set the underlying value")
+}
+
+func TestCmdLineOption_EnvironmentVar(t *testing.T) {
+	var s string
+	cmdLine, err := NewCmdLine(
+		WithBindFlag("testMe", &s,
+			NewArg(WithShortFlag("t"),
+				WithType(Single))))
+	assert.Nil(t, err)
+	assert.True(t, cmdLine.ParseString("--testMe 123"))
+	assert.Equal(t, "123", s)
+	envFunc := cmdLine.SetEnvFunc(func(value string) string {
+		return camelCaseToEnvVar(value)
+	})
+	assert.Nil(t, envFunc, "envFunc should be nil when none is set")
+	os.Setenv("TEST_ME", "test")
+	assert.True(t, cmdLine.ParseString("--testMe 123"))
+	assert.Equal(t, "test", s)
+}
+
+func camelCaseToEnvVar(s string) string {
+	return strcase.ToScreamingSnake(s)
 }
 
 func TestCmdLineOption_VarInFileFlag(t *testing.T) {

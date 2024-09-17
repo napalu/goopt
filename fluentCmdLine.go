@@ -51,6 +51,14 @@ func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
 	}
 }
 
+// WithEnvFilter accepts a func(flag string) string callback - if a non-empty strong is returned
+// and a matching environment variable is found its value will supersede a value set on the command-line
+func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *CmdLineOption, err *error) {
+		cmdLine.envFilter = filter
+	}
+}
+
 // WithBindFlag is a fluent wrapper to BindFlag which is used to bind a pointer to a variable with a flag.
 // If `bindVar` is not a pointer, an error is returned
 // The following variable types are supported:

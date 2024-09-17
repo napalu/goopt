@@ -63,6 +63,15 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 	}
 }
 
+// SetEnvFunc allows setting an environment name lookup function
+// If set and the environment variable exists, the flag's value will be superseded by the environment variable
+func (s *CmdLineOption) SetEnvFunc(env EnvFunc) EnvFunc {
+	oldFilter := s.envFilter
+	s.envFilter = env
+
+	return oldFilter
+}
+
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
 // Returns the count of errors encountered during execution.
 func (s *CmdLineOption) ExecuteCommands() int {

@@ -104,6 +104,9 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 					state.skip = state.pos + 1
 				}
 			}
+			if envVal, ok := s.fromEnv(currentArg, boolVal); ok {
+				boolVal = envVal
+			}
 			s.options[currentArg] = boolVal
 			err := s.setBoundVariable(boolVal, currentArg)
 			if err != nil {
@@ -334,25 +337,30 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 }
 
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
-	if argument.TypeOf == File {
-		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
-		next, err = filepath.Abs(next)
-		if st, e := os.Stat(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
-			return
-		} else if st.IsDir() {
-			err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
-			return
-		}
-		if val, e := os.ReadFile(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
-		} else {
-			arg = string(val)
-		}
+	arg, ok := s.fromEnv(currentArg, next)
+	if ok {
 		s.registerFlagValue(currentArg, arg, next)
 	} else {
-		arg = next
-		s.registerFlagValue(currentArg, next, next)
+		if argument.TypeOf == File {
+			next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
+			next, err = filepath.Abs(next)
+			if st, e := os.Stat(next); e != nil {
+				err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
+				return
+			} else if st.IsDir() {
+				err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+				return
+			}
+			if val, e := os.ReadFile(next); e != nil {
+				err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
+			} else {
+				arg = string(val)
+			}
+			s.registerFlagValue(currentArg, arg, next)
+		} else {
+			arg = next
+			s.registerFlagValue(currentArg, next, next)
+		}
 	}
 
 	return arg, err
@@ -537,6 +545,20 @@ func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) strin
 	return value
 }
 
+func (s *CmdLineOption) fromEnv(currentArg string, value string) (string, bool) {
+	if s.envFilter != nil {
+		arg := s.envFilter(currentArg)
+		if arg != "" {
+			env, ok := os.LookupEnv(arg)
+			if ok {
+				return env, true
+			}
+		}
+	}
+
+	return "", false
+}
+
 func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) string {
 	valid := 0
 	errBuf := strings.Builder{}
@@ -695,6 +717,7 @@ func (s *CmdLineOption) setBoundVariable(value string, currentArg string) error 
 	if value == "" {
 		value = accepted.DefaultValue
 	}
+
 	if len(s.customBind) > 0 {
 		customProc, found := s.customBind[currentArg]
 		if found {
