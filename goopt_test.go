@@ -388,7 +388,7 @@ func TestCmdLineOption_EnvironmentVar(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, cmdLine.ParseString("--testMe 123"))
 	assert.Equal(t, "123", s)
-	envFunc := cmdLine.SetEnvFunc(func(value string) string {
+	envFunc := cmdLine.SetEnvFilter(func(value string) string {
 		return camelCaseToEnvVar(value)
 	})
 	assert.Nil(t, envFunc, "envFunc should be nil when none is set")

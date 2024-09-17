@@ -63,9 +63,9 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 	}
 }
 
-// SetEnvFunc allows setting an environment name lookup function
+// SetEnvFilter allows setting an environment name lookup function
 // If set and the environment variable exists, the flag's value will be superseded by the environment variable
-func (s *CmdLineOption) SetEnvFunc(env EnvFunc) EnvFunc {
+func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
 	oldFilter := s.envFilter
 	s.envFilter = env
 
