@@ -72,6 +72,15 @@ func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
 	return oldFilter
 }
 
+// SetFlagFilter allows setting an environment name lookup function
+// If set and the environment variable exists, the environment variable and itss value will be passed as an argument flag
+func (s *CmdLineOption) SetFlagFilter(env ReverseEnvFunc) ReverseEnvFunc {
+	oldFilter := s.reverseEnvFilter
+	s.reverseEnvFilter = env
+
+	return oldFilter
+}
+
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
 // Returns the count of errors encountered during execution.
 func (s *CmdLineOption) ExecuteCommands() int {
@@ -208,7 +217,9 @@ func (s *CmdLineOption) AddCommand(cmdArg *Command) error {
 func (s *CmdLineOption) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
-
+	if s.reverseEnvFilter != nil {
+		args = s.envToFlags(args)
+	}
 	state := &parseState{
 		endOf: len(args),
 		skip:  -1,
