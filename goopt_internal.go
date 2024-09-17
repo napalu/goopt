@@ -749,12 +749,12 @@ func (s *CmdLineOption) getListDelimiterFunc() ListDelimiterFunc {
 
 func (s *CmdLineOption) envToFlags(args []string) []string {
 	for _, env := range os.Environ() {
-		ele := strings.Split(env, "=")
-		v := s.reverseEnvFilter(ele[0])
+		kv := strings.Split(env, "=")
+		v := s.reverseEnvFilter(kv[0])
 		mainKey := s.flagOrShortFlag(v)
-		if _, found := s.acceptedFlags.Get(mainKey); found && len(ele) > 1 && ele[1] != "" {
+		if _, found := s.acceptedFlags.Get(mainKey); found && len(kv) > 1 {
 			args = append(args, fmt.Sprintf("--%s", mainKey))
-			args = append(args, ele[1])
+			args = append(args, kv[1])
 		}
 	}
 	return args
