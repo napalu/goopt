@@ -51,11 +51,19 @@ func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
 	}
 }
 
-// WithEnvFilter accepts a func(flag string) string callback - if a non-empty strong is returned
-// and a matching environment variable is found its value will supersede a value set on the command-line
+// WithEnvFilter accepts a func(flag string) string callback - if a non-empty string is returned
+// and a matching environment variable is found, its value will supersede a value set on the command-line
 func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
 		cmdLine.envFilter = filter
+	}
+}
+
+// WithFlagFilter accepts a func(flag string) string callback - if a non-empty string is returned
+// and a matching flag is defined, its value will supersede a value set on the command-line
+func WithFlagFilter(filter ReverseEnvFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *CmdLineOption, err *error) {
+		cmdLine.reverseEnvFilter = filter
 	}
 }
 

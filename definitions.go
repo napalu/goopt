@@ -54,8 +54,13 @@ type CommandFunc func(cmdLine *CmdLineOption, command *Command, value string) er
 type ValueSetFunc func(flag, value string, customStruct interface{})
 
 // EnvFunc callback - Allows mapping environment variables to flags. If EnvFunc is set, the callback will be called
-// on every flag - if a value is returned it will be used to check for an environment variable with the sane name.
+// on every flag - if a value is returned it will be used to check for an environment variable with the same name.
 type EnvFunc func(flag string) string
+
+// ReverseEnvFunc callback - Allows mapping environment variables to flags. If ReverseEnvFunc is set, the environment
+// will be evaluated on application startup and any environment variables which can be mapped to a flag will set
+// the flag to the value of the environment variable
+type ReverseEnvFunc func(string) string
 
 // OptionType used to define Flag types (such as Standalone, Single, Chained)
 type OptionType int
@@ -178,6 +183,7 @@ type CmdLineOption struct {
 	callbackResults    map[string]error
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 	envFilter          EnvFunc
+	reverseEnvFilter   ReverseEnvFunc
 }
 
 var (
