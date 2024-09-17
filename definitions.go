@@ -53,6 +53,11 @@ type CommandFunc func(cmdLine *CmdLineOption, command *Command, value string) er
 // Used to set the value of a Flag to a custom structure.
 type ValueSetFunc func(flag, value string, customStruct interface{})
 
+// EnvFunc callback - optionally specified as part of the Argument structure to allow mapping environment variables to
+// flags. If EnvFunc is set, the callback will be called on every flag - if a value is returned it will be used to
+// check for an environment variable with the sane name.
+type EnvFunc func(flag string) string
+
 // OptionType used to define Flag types (such as Standalone, Single, Chained)
 type OptionType int
 
@@ -173,6 +178,7 @@ type CmdLineOption struct {
 	callbackQueue      *deque.Deque
 	callbackResults    map[string]error
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
+	envFilter          EnvFunc
 }
 
 var (

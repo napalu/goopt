@@ -6,6 +6,7 @@ require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/ef-ds/deque v1.0.4
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/iancoleman/strcase v0.3.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 )
