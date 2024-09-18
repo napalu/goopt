@@ -731,8 +731,7 @@ func (s *CmdLineOption) envToFlags(args []string) []string {
 		v := s.envFilter(kv[0])
 		mainKey := s.flagOrShortFlag(v)
 		if _, found := s.acceptedFlags.Get(mainKey); found && len(kv) > 1 {
-			args = util.InsertSlice(args, fmt.Sprintf("--%s", mainKey), 0)
-			args = util.InsertSlice(args, kv[1], 1)
+			args = util.InsertSlice(args, 0, fmt.Sprintf("--%s", mainKey), kv[1])
 		}
 	}
 	return args
