@@ -64,19 +64,10 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 }
 
 // SetEnvFilter allows setting an environment name lookup function
-// If set and the environment variable exists, the flag's value will be superseded by the environment variable
+// If set and the environment variable exists, it will be prepended to the args array
 func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
 	oldFilter := s.envFilter
 	s.envFilter = env
-
-	return oldFilter
-}
-
-// SetFlagFilter allows setting an environment name lookup function
-// If set and the environment variable exists, the environment variable and itss value will be passed as an argument flag
-func (s *CmdLineOption) SetFlagFilter(env ReverseEnvFunc) ReverseEnvFunc {
-	oldFilter := s.reverseEnvFilter
-	s.reverseEnvFilter = env
 
 	return oldFilter
 }
@@ -217,7 +208,7 @@ func (s *CmdLineOption) AddCommand(cmdArg *Command) error {
 func (s *CmdLineOption) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
-	if s.reverseEnvFilter != nil {
+	if s.envFilter != nil {
 		args = s.envToFlags(args)
 	}
 	state := &parseState{

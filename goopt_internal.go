@@ -104,9 +104,6 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 					state.skip = state.pos + 1
 				}
 			}
-			if envVal, ok := s.fromEnv(currentArg, boolVal); ok {
-				boolVal = envVal
-			}
 			s.options[currentArg] = boolVal
 			err := s.setBoundVariable(boolVal, currentArg)
 			if err != nil {
@@ -337,30 +334,25 @@ func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *pa
 }
 
 func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
-	arg, ok := s.fromEnv(currentArg, next)
-	if ok {
+	if argument.TypeOf == File {
+		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
+		next, err = filepath.Abs(next)
+		if st, e := os.Stat(next); e != nil {
+			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
+			return
+		} else if st.IsDir() {
+			err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+			return
+		}
+		if val, e := os.ReadFile(next); e != nil {
+			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
+		} else {
+			arg = string(val)
+		}
 		s.registerFlagValue(currentArg, arg, next)
 	} else {
-		if argument.TypeOf == File {
-			next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
-			next, err = filepath.Abs(next)
-			if st, e := os.Stat(next); e != nil {
-				err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
-				return
-			} else if st.IsDir() {
-				err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
-				return
-			}
-			if val, e := os.ReadFile(next); e != nil {
-				err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
-			} else {
-				arg = string(val)
-			}
-			s.registerFlagValue(currentArg, arg, next)
-		} else {
-			arg = next
-			s.registerFlagValue(currentArg, next, next)
-		}
+		arg = next
+		s.registerFlagValue(currentArg, next, next)
 	}
 
 	return arg, err
@@ -543,20 +535,6 @@ func (s *CmdLineOption) checkSingle(next, flag string, argument *Argument) strin
 	}
 
 	return value
-}
-
-func (s *CmdLineOption) fromEnv(currentArg string, value string) (string, bool) {
-	if s.envFilter != nil {
-		arg := s.envFilter(currentArg)
-		if arg != "" {
-			env, ok := os.LookupEnv(arg)
-			if ok {
-				return env, true
-			}
-		}
-	}
-
-	return "", false
 }
 
 func (s *CmdLineOption) checkMultiple(next, flag string, argument *Argument) string {
@@ -750,11 +728,10 @@ func (s *CmdLineOption) getListDelimiterFunc() ListDelimiterFunc {
 func (s *CmdLineOption) envToFlags(args []string) []string {
 	for _, env := range os.Environ() {
 		kv := strings.Split(env, "=")
-		v := s.reverseEnvFilter(kv[0])
+		v := s.envFilter(kv[0])
 		mainKey := s.flagOrShortFlag(v)
 		if _, found := s.acceptedFlags.Get(mainKey); found && len(kv) > 1 {
-			args = append(args, fmt.Sprintf("--%s", mainKey))
-			args = append(args, kv[1])
+			args = util.InsertSlice(args, 0, fmt.Sprintf("--%s", mainKey), kv[1])
 		}
 	}
 	return args
