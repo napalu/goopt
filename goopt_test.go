@@ -379,45 +379,26 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	assert.Equal(t, "one234", string(fileVal), "should correctly set the underlying value")
 }
 
-func TestCmdLineOption_EnvironmentOverride(t *testing.T) {
-	var s string
-	cmdLine, err := NewCmdLine(
-		WithBindFlag("testMe", &s,
-			NewArg(WithShortFlag("t"),
-				WithType(Single))))
-	assert.Nil(t, err)
-	assert.True(t, cmdLine.ParseString("--testMe 123"))
-	assert.Equal(t, "123", s)
-	envFunc := cmdLine.SetEnvFilter(func(value string) string {
-		return camelCaseToEnvVar(value)
-	})
-	assert.Nil(t, envFunc, "envFunc should be nil when none is set")
-	os.Setenv("TEST_ME", "test")
-	assert.True(t, cmdLine.ParseString("--testMe 123"))
-	assert.Equal(t, "test", s)
-}
-
 func TestCmdLineOption_EnvToFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewCmdLine(
+		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"), WithCommandDefault("all"))))),
 		WithBindFlag("testMe", &s,
 			NewArg(WithShortFlag("t"),
 				WithType(Single))))
 	assert.Nil(t, err)
-	flagFunc := cmdLine.SetFlagFilter(func(s string) string {
+	flagFunc := cmdLine.SetEnvFilter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	os.Setenv("TEST_ME", "test")
-	assert.True(t, cmdLine.ParseString(""))
-	assert.Equal(t, "test", s)
 
-	envFunc := cmdLine.SetEnvFilter(func(value string) string {
-		return camelCaseToEnvVar(value)
-	})
-	assert.Nil(t, envFunc, "envFunc should be nil when none is set")
-	assert.True(t, cmdLine.ParseString("--testMe 123"))
+	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
+	assert.Equal(t, "123", s)
+	assert.True(t, cmdLine.HasCommand("command test"))
+	assert.True(t, cmdLine.ParseString("command test"))
 	assert.Equal(t, "test", s)
+	assert.True(t, cmdLine.HasCommand("command test"))
 }
 
 func camelCaseToEnvVar(s string) string {
