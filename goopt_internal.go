@@ -1068,6 +1068,9 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
 	for k, v := range nestedCmdLine.customBind {
 		s.customBind[k] = v
 	}
+	for it := nestedCmdLine.acceptedFlags.Front(); it != nil; it = it.Next() {
+		s.acceptedFlags.Set(*it.Key, it.Value)
+	}
 }
 
 // unmarshalTagsToArgument populates the Argument struct based on struct tags
@@ -1117,54 +1120,54 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 	return nil
 }
 
-// Helper function to handle recursive parsing of structs
-func newCmdLineFromStructHelper[T any](structWithTags *T, prefix string, maxDepth, currentDepth int) (*CmdLineOption, error) {
+// Non-generic helper that works with reflect.Value for recursion
+func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDepth, currentDepth int) (*CmdLineOption, error) {
 	if currentDepth > maxDepth {
 		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
 	}
 
 	c := NewCmdLineOption()
-	st := reflect.TypeOf(structWithTags)
+	st := structValue.Type()
 	if st.Kind() == reflect.Ptr {
 		st = st.Elem()
+		structValue = structValue.Elem()
 	}
 	if st.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
-	val := reflect.ValueOf(structWithTags).Elem()
 	countZeroTags := 0
 
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
-		fieldValue := val.Field(i)
+		fieldValue := structValue.Field(i)
 
-		// Create a new prefix for nested fields
-		fieldPath := field.Name
-		if prefix != "" {
-			fieldPath = fmt.Sprintf("%s.%s", prefix, field.Name)
+		// Get the 'long' tag for the flag name
+		longName, ok := field.Tag.Lookup("long")
+		if !ok {
+			// If no 'long' tag is provided, use the field name in lower camel case
+			longName = strcase.ToLowerCamel(field.Name)
 		}
 
-		// Handle slice of structs with flattened indices
+		// Create a new prefix for nested fields
+		fieldPath := longName
+		if prefix != "" {
+			fieldPath = fmt.Sprintf("%s.%s", prefix, longName)
+		}
+
+		// Handle slice of structs
 		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
-			for idx := 0; idx < fieldValue.Len(); idx++ {
-				elem := fieldValue.Index(idx).Addr().Interface()
-				nestedCmdLine, err := newCmdLineFromStructHelper(elem.(*T), fmt.Sprintf("%s.%d", fieldPath, idx), maxDepth, currentDepth+1)
-				if err != nil {
-					return nil, fmt.Errorf("error processing slice element %s[%d]: %w", fieldPath, idx, err)
-				}
-				c.mergeCmdLine(nestedCmdLine)
+			if err := processSliceField(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
+				return nil, fmt.Errorf("error processing slice field %s: %w", fieldPath, err)
 			}
 			continue
 		}
 
-		// Check for nested structs
+		// Handle nested structs
 		if field.Type.Kind() == reflect.Struct {
-			nestedCmdLine, err := newCmdLineFromStructHelper(fieldValue.Addr().Interface().(*T), fieldPath, maxDepth, currentDepth+1)
-			if err != nil {
+			if err := processNestedStruct(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
 				return nil, fmt.Errorf("error processing nested struct %s: %w", fieldPath, err)
 			}
-			c.mergeCmdLine(nestedCmdLine)
 			continue
 		}
 
@@ -1180,20 +1183,13 @@ func newCmdLineFromStructHelper[T any](structWithTags *T, prefix string, maxDept
 			continue
 		}
 
-		// Get the 'long' tag for the flag name
-		longName, ok := field.Tag.Lookup("long")
-		if !ok {
-			// If no 'long' tag is provided, use the field name in lower camel case
-			longName = strcase.ToLowerCamel(field.Name)
-		}
-
 		// Avoid leading dot if prefix is empty
 		fullFlagName := longName
 		if prefix != "" {
 			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
 		}
 
-		// Bind the flag using the full flag name
+		// Now that the full path is known, bind the flag
 		err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
 		if err != nil {
 			return nil, err
@@ -1201,8 +1197,39 @@ func newCmdLineFromStructHelper[T any](structWithTags *T, prefix string, maxDept
 	}
 
 	if countZeroTags == st.NumField() {
-		return nil, fmt.Errorf("struct %s is not properly tagged - you'll need to set options manually", prefix)
+		return nil, fmt.Errorf("struct %s is not properly tagged", prefix)
 	}
 
 	return c, nil
+}
+
+// Adjusted function to process slices of structs
+func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {
+	for idx := 0; idx < fieldValue.Len(); idx++ {
+		elem := fieldValue.Index(idx).Addr()
+
+		// Create full path with the slice index
+		elemPrefix := fmt.Sprintf("%s.%d", prefix, idx)
+
+		// Recursively process the element with the new non-generic helper
+		nestedCmdLine, err := newCmdLineFromReflectValue(elem, elemPrefix, maxDepth, currentDepth+1)
+		if err != nil {
+			return fmt.Errorf("error processing slice element %s[%d]: %w", prefix, idx, err)
+		}
+		c.mergeCmdLine(nestedCmdLine)
+	}
+
+	return nil
+}
+
+// Adjusted function to process nested structs
+func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {
+	// Recursively process the nested struct with the new non-generic helper
+	nestedCmdLine, err := newCmdLineFromReflectValue(fieldValue.Addr(), prefix, maxDepth, currentDepth+1)
+	if err != nil {
+		return fmt.Errorf("error processing nested struct %s: %w", prefix, err)
+	}
+	c.mergeCmdLine(nestedCmdLine)
+
+	return nil
 }

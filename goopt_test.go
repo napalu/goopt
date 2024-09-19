@@ -1,11 +1,10 @@
-package goopt_test
+package goopt
 
 import (
 	"crypto/md5"
 	"errors"
 	"fmt"
 	"github.com/iancoleman/strcase"
-	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -410,6 +409,29 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, cmd.ParseString("-t --stringOption"))
 	assert.Equal(t, "1", testOpt.StringOption, "should use default value if defined and not set on command line")
+}
+
+type Address struct {
+	City    string `long:"city" description:"City name" typeOf:"Single"`
+	ZipCode string `long:"zipcode" description:"ZIP code" typeOf:"Single"`
+}
+
+type UserProfile struct {
+	Name      string    `long:"name" short:"n" description:"Full name" typeOf:"Single"`
+	Age       int       `long:"age" short:"a" description:"Age of user" typeOf:"Single"`
+	Addresses []Address `long:"address"`
+}
+
+func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
+	profile := &UserProfile{
+		Addresses: make([]Address, 1),
+	}
+	cmd, err := NewCmdLineFromStruct(profile)
+	assert.Nil(t, err, "should handle nested structs")
+	assert.True(t, cmd.ParseString("--name Jack -a 10 --address.0.city 'New York'"), "should parse nested arguments")
+	assert.Equal(t, "Jack", cmd.GetOrDefault("name", ""))
+	assert.Equal(t, "New York", cmd.GetOrDefault("address.0.city", ""))
+	assert.Equal(t, "10", cmd.GetOrDefault("age", ""))
 }
 
 func TestCmdLineOption_EnvToFlag(t *testing.T) {
