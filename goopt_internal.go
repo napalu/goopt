@@ -1129,6 +1129,9 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	c := NewCmdLineOption()
 	st := structValue.Type()
 	if st.Kind() == reflect.Ptr {
+		if structValue.IsNil() {
+			return nil, errors.New("nil pointer encountered")
+		}
 		st = st.Elem()
 		structValue = structValue.Elem()
 	}
@@ -1141,7 +1144,9 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		fieldValue := structValue.Field(i)
-
+		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
+			continue // Skip unexported fields
+		}
 		// Get the 'long' tag for the flag name
 		longName, ok := field.Tag.Lookup("long")
 		if !ok {

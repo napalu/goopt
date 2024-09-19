@@ -585,23 +585,6 @@ func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc
 // which is set when Parse is invoked.
 // An error is returned if data cannot be bound - for compile-time safety use BindFlagToCmdLine instead
 func (s *CmdLineOption) BindFlag(data any, flag string, argument *Argument) error {
-	dataValue := reflect.ValueOf(data)
-	if dataValue.Kind() == reflect.Ptr {
-		elem := dataValue.Elem()
-		switch elem.Kind() {
-		case reflect.Slice:
-			if elem.IsNil() {
-				// Initialize the slice
-				elem.Set(reflect.MakeSlice(elem.Type(), 0, 1))
-			}
-		case reflect.Map:
-			if elem.IsNil() {
-				// Initialize the map
-				elem.Set(reflect.MakeMap(elem.Type()))
-			}
-		}
-	}
-
 	if ok, err := canConvert(data, argument.TypeOf); !ok {
 		return err
 	}
