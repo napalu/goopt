@@ -1046,3 +1046,16 @@ func varFunc(s string) string {
 func expandVarExpr() *regexp.Regexp {
 	return regexp.MustCompile(`(\$\{.+\})`)
 }
+
+func typeOfFromString(s string) OptionType {
+	switch strings.ToUpper(s) {
+	case "STANDALONE":
+		return Standalone
+	case "CHAINED":
+		return Chained
+	case "SINGLE":
+		fallthrough
+	default:
+		return Single
+	}
+}

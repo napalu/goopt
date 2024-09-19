@@ -379,6 +379,39 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	assert.Equal(t, "one234", string(fileVal), "should correctly set the underlying value")
 }
 
+type TestOptOk struct {
+	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" typeOf:"standalone"`
+	StringOption string `short:"so" description:"test string option" typeOf:"single" default:"1"`
+}
+
+type TestOptNok struct {
+	IsTest bool
+}
+
+func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
+	testOpt := TestOptOk{}
+	cmd, err := NewCmdLineFromStruct(&testOpt)
+	assert.Nil(t, err)
+	if err == nil {
+		assert.True(t, cmd.ParseString("-t --stringOption one"))
+		assert.Equal(t, true, testOpt.IsTest, "test bool option should be true")
+		assert.Equal(t, "one", testOpt.StringOption, "should set value of StringOption")
+		arg, err := cmd.GetArgument("isTest")
+		assert.Nil(t, err, "should not fail to retrieve argument")
+		assert.Equal(t, Standalone, arg.TypeOf)
+		assert.True(t, arg.Required)
+		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
+			"should be able to reference by long name when long name is not explicitly set")
+	}
+	cmd, err = NewCmdLineFromStruct(&TestOptNok{})
+	assert.NotNil(t, err, "should error out on invalid struct")
+
+	cmd, err = NewCmdLineFromStruct(&testOpt)
+	assert.Nil(t, err)
+	assert.True(t, cmd.ParseString("-t --stringOption"))
+	assert.Equal(t, "1", testOpt.StringOption, "should use default value if defined and not set on command line")
+}
+
 func TestCmdLineOption_EnvToFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewCmdLine(
