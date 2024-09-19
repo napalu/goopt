@@ -17,7 +17,6 @@ package goopt
 import (
 	"fmt"
 	"github.com/ef-ds/deque"
-	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"io"
@@ -49,60 +48,14 @@ func NewCmdLineOption() *CmdLineOption {
 	}
 }
 
-var tagNames = []string{"long", "short", "description", "required", "typeOf", "default"}
-
+// NewCmdLineFromStruct parses a struct and binds its fields to command-line flags
 func NewCmdLineFromStruct[T any](structWithTags *T) (*CmdLineOption, error) {
-	c := NewCmdLineOption()
-	st := reflect.TypeOf(structWithTags)
-	if st.Kind() == reflect.Ptr {
-		st = st.Elem()
-	}
-	if st.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("only structs can be tagged")
-	}
-	countZeroTags := 0
-	val := reflect.ValueOf(structWithTags).Elem()
-	for i := 0; i < st.NumField(); i++ {
-		field := st.Field(i)
-		tagMap := make(map[string]string)
-		for _, n := range tagNames {
-			if v, ok := field.Tag.Lookup(n); ok {
-				tagMap[n] = v
-			}
-		}
-		if len(tagMap) == 0 {
-			countZeroTags++
-		}
-		if tagMap["long"] == "" {
-			tagMap["long"] = strcase.ToLowerCamel(field.Name)
-		}
-		arg := &Argument{}
-		arg.TypeOf = typeOfFromString(tagMap["typeOf"])
-		arg.Description = tagMap["description"]
-		if boolVal, err := strconv.ParseBool(tagMap["required"]); err == nil {
-			arg.Required = boolVal
-		}
-		if boolVal, err := strconv.ParseBool(tagMap["secure"]); err == nil && boolVal {
-			arg.Secure = Secure{
-				IsSecure: boolVal,
-				Prompt:   tagMap["prompt"],
-			}
-		}
-		arg.Short = tagMap["short"]
-		if v, ok := tagMap["default"]; ok {
-			arg.DefaultValue = v
-		}
-		err := c.BindFlag(val.Field(i).Addr().Interface(), tagMap["long"], arg)
-		if err != nil {
-			return nil, err
-		}
-	}
+	return NewCmdLineFromStructWithLevel(structWithTags, 5)
+}
 
-	if countZeroTags == st.NumField() {
-		return nil, fmt.Errorf("struct is not tagged - you'll need to set options manually")
-	}
-
-	return c, nil
+// NewCmdLineFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
+func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*CmdLineOption, error) {
+	return newCmdLineFromStructHelper(structWithTags, "", maxDepth, 0)
 }
 
 // NewArgument convenience initialization method to describe Flags. Does not support fluent configuration. Use NewArg to

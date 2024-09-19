@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/araddon/dateparse"
 	"github.com/ef-ds/deque"
+	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/util"
 	"os"
@@ -1058,4 +1059,150 @@ func typeOfFromString(s string) OptionType {
 	default:
 		return Single
 	}
+}
+
+func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
+	for k, v := range nestedCmdLine.bind {
+		s.bind[k] = v
+	}
+	for k, v := range nestedCmdLine.customBind {
+		s.customBind[k] = v
+	}
+}
+
+// unmarshalTagsToArgument populates the Argument struct based on struct tags
+func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
+	tagNames := []string{"long", "short", "description", "required", "typeOf", "default", "secure", "prompt"}
+
+	for _, tag := range tagNames {
+		value, ok := field.Tag.Lookup(tag)
+		if !ok {
+			continue
+		}
+
+		switch tag {
+		case "long":
+			// handled separately
+		case "short":
+			arg.Short = value
+		case "description":
+			arg.Description = value
+		case "typeOf":
+			arg.TypeOf = typeOfFromString(value)
+		case "default":
+			arg.DefaultValue = value
+		case "required":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+			}
+			arg.Required = boolVal
+		case "secure":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+			}
+			if boolVal {
+				arg.Secure = Secure{IsSecure: boolVal}
+			}
+		case "prompt":
+			if arg.Secure.IsSecure {
+				arg.Secure.Prompt = value
+			}
+		default:
+			return fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+		}
+	}
+
+	return nil
+}
+
+// Helper function to handle recursive parsing of structs
+func newCmdLineFromStructHelper[T any](structWithTags *T, prefix string, maxDepth, currentDepth int) (*CmdLineOption, error) {
+	if currentDepth > maxDepth {
+		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
+	}
+
+	c := NewCmdLineOption()
+	st := reflect.TypeOf(structWithTags)
+	if st.Kind() == reflect.Ptr {
+		st = st.Elem()
+	}
+	if st.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("only structs can be tagged")
+	}
+
+	val := reflect.ValueOf(structWithTags).Elem()
+	countZeroTags := 0
+
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		fieldValue := val.Field(i)
+
+		// Create a new prefix for nested fields
+		fieldPath := field.Name
+		if prefix != "" {
+			fieldPath = fmt.Sprintf("%s.%s", prefix, field.Name)
+		}
+
+		// Handle slice of structs with flattened indices
+		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
+			for idx := 0; idx < fieldValue.Len(); idx++ {
+				elem := fieldValue.Index(idx).Addr().Interface()
+				nestedCmdLine, err := newCmdLineFromStructHelper(elem.(*T), fmt.Sprintf("%s.%d", fieldPath, idx), maxDepth, currentDepth+1)
+				if err != nil {
+					return nil, fmt.Errorf("error processing slice element %s[%d]: %w", fieldPath, idx, err)
+				}
+				c.mergeCmdLine(nestedCmdLine)
+			}
+			continue
+		}
+
+		// Check for nested structs
+		if field.Type.Kind() == reflect.Struct {
+			nestedCmdLine, err := newCmdLineFromStructHelper(fieldValue.Addr().Interface().(*T), fieldPath, maxDepth, currentDepth+1)
+			if err != nil {
+				return nil, fmt.Errorf("error processing nested struct %s: %w", fieldPath, err)
+			}
+			c.mergeCmdLine(nestedCmdLine)
+			continue
+		}
+
+		// Regular field handling
+		arg := &Argument{}
+		err := unmarshalTagsToArgument(field, arg)
+		if err != nil {
+			return nil, fmt.Errorf("error processing field %s: %w", fieldPath, err)
+		}
+
+		if reflect.DeepEqual(*arg, Argument{}) {
+			countZeroTags++
+			continue
+		}
+
+		// Get the 'long' tag for the flag name
+		longName, ok := field.Tag.Lookup("long")
+		if !ok {
+			// If no 'long' tag is provided, use the field name in lower camel case
+			longName = strcase.ToLowerCamel(field.Name)
+		}
+
+		// Avoid leading dot if prefix is empty
+		fullFlagName := longName
+		if prefix != "" {
+			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
+		}
+
+		// Bind the flag using the full flag name
+		err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if countZeroTags == st.NumField() {
+		return nil, fmt.Errorf("struct %s is not properly tagged - you'll need to set options manually", prefix)
+	}
+
+	return c, nil
 }
