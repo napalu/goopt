@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/araddon/dateparse"
 	"github.com/ef-ds/deque"
+	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/util"
 	"os"
@@ -1045,4 +1046,195 @@ func varFunc(s string) string {
 
 func expandVarExpr() *regexp.Regexp {
 	return regexp.MustCompile(`(\$\{.+\})`)
+}
+
+func typeOfFromString(s string) OptionType {
+	switch strings.ToUpper(s) {
+	case "STANDALONE":
+		return Standalone
+	case "CHAINED":
+		return Chained
+	case "SINGLE":
+		fallthrough
+	default:
+		return Single
+	}
+}
+
+func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
+	for k, v := range nestedCmdLine.bind {
+		s.bind[k] = v
+	}
+	for k, v := range nestedCmdLine.customBind {
+		s.customBind[k] = v
+	}
+	for it := nestedCmdLine.acceptedFlags.Front(); it != nil; it = it.Next() {
+		s.acceptedFlags.Set(*it.Key, it.Value)
+	}
+}
+
+// unmarshalTagsToArgument populates the Argument struct based on struct tags
+func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
+	tagNames := []string{"long", "short", "description", "required", "typeOf", "default", "secure", "prompt"}
+
+	for _, tag := range tagNames {
+		value, ok := field.Tag.Lookup(tag)
+		if !ok {
+			continue
+		}
+
+		switch tag {
+		case "long":
+			// handled separately
+		case "short":
+			arg.Short = value
+		case "description":
+			arg.Description = value
+		case "typeOf":
+			arg.TypeOf = typeOfFromString(value)
+		case "default":
+			arg.DefaultValue = value
+		case "required":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+			}
+			arg.Required = boolVal
+		case "secure":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+			}
+			if boolVal {
+				arg.Secure = Secure{IsSecure: boolVal}
+			}
+		case "prompt":
+			if arg.Secure.IsSecure {
+				arg.Secure.Prompt = value
+			}
+		default:
+			return fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+		}
+	}
+
+	return nil
+}
+
+// Non-generic helper that works with reflect.Value for recursion
+func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDepth, currentDepth int) (*CmdLineOption, error) {
+	if currentDepth > maxDepth {
+		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
+	}
+
+	c := NewCmdLineOption()
+	st := structValue.Type()
+	if st.Kind() == reflect.Ptr {
+		if structValue.IsNil() {
+			return nil, errors.New("nil pointer encountered")
+		}
+		st = st.Elem()
+		structValue = structValue.Elem()
+	}
+	if st.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("only structs can be tagged")
+	}
+
+	countZeroTags := 0
+
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		fieldValue := structValue.Field(i)
+		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
+			continue // Skip unexported fields
+		}
+		// Get the 'long' tag for the flag name
+		longName, ok := field.Tag.Lookup("long")
+		if !ok {
+			// If no 'long' tag is provided, use the field name in lower camel case
+			longName = strcase.ToLowerCamel(field.Name)
+		}
+
+		// Create a new prefix for nested fields
+		fieldPath := longName
+		if prefix != "" {
+			fieldPath = fmt.Sprintf("%s.%s", prefix, longName)
+		}
+
+		// Handle slice of structs
+		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
+			if err := processSliceField(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
+				return nil, fmt.Errorf("error processing slice field %s: %w", fieldPath, err)
+			}
+			continue
+		}
+
+		// Handle nested structs
+		if field.Type.Kind() == reflect.Struct {
+			if err := processNestedStruct(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
+				return nil, fmt.Errorf("error processing nested struct %s: %w", fieldPath, err)
+			}
+			continue
+		}
+
+		// Regular field handling
+		arg := &Argument{}
+		err := unmarshalTagsToArgument(field, arg)
+		if err != nil {
+			return nil, fmt.Errorf("error processing field %s: %w", fieldPath, err)
+		}
+
+		if reflect.DeepEqual(*arg, Argument{}) {
+			countZeroTags++
+			continue
+		}
+
+		// Avoid leading dot if prefix is empty
+		fullFlagName := longName
+		if prefix != "" {
+			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
+		}
+
+		// Now that the full path is known, bind the flag
+		err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if countZeroTags == st.NumField() {
+		return nil, fmt.Errorf("struct %s is not properly tagged", prefix)
+	}
+
+	return c, nil
+}
+
+// Adjusted function to process slices of structs
+func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {
+	for idx := 0; idx < fieldValue.Len(); idx++ {
+		elem := fieldValue.Index(idx).Addr()
+
+		// Create full path with the slice index
+		elemPrefix := fmt.Sprintf("%s.%d", prefix, idx)
+
+		// Recursively process the element with the new non-generic helper
+		nestedCmdLine, err := newCmdLineFromReflectValue(elem, elemPrefix, maxDepth, currentDepth+1)
+		if err != nil {
+			return fmt.Errorf("error processing slice element %s[%d]: %w", prefix, idx, err)
+		}
+		c.mergeCmdLine(nestedCmdLine)
+	}
+
+	return nil
+}
+
+// Adjusted function to process nested structs
+func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {
+	// Recursively process the nested struct with the new non-generic helper
+	nestedCmdLine, err := newCmdLineFromReflectValue(fieldValue.Addr(), prefix, maxDepth, currentDepth+1)
+	if err != nil {
+		return fmt.Errorf("error processing nested struct %s: %w", prefix, err)
+	}
+	c.mergeCmdLine(nestedCmdLine)
+
+	return nil
 }

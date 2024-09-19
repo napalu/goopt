@@ -48,6 +48,16 @@ func NewCmdLineOption() *CmdLineOption {
 	}
 }
 
+// NewCmdLineFromStruct parses a struct and binds its fields to command-line flags
+func NewCmdLineFromStruct[T any](structWithTags *T) (*CmdLineOption, error) {
+	return NewCmdLineFromStructWithLevel(structWithTags, 5)
+}
+
+// NewCmdLineFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
+func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*CmdLineOption, error) {
+	return newCmdLineFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
+}
+
 // NewArgument convenience initialization method to describe Flags. Does not support fluent configuration. Use NewArg to
 // configure Argument fluently.
 func NewArgument(shortFlag string, description string, typeOf OptionType, required bool, secure Secure, defaultValue string) *Argument {
@@ -575,7 +585,6 @@ func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc
 // which is set when Parse is invoked.
 // An error is returned if data cannot be bound - for compile-time safety use BindFlagToCmdLine instead
 func (s *CmdLineOption) BindFlag(data any, flag string, argument *Argument) error {
-
 	if ok, err := canConvert(data, argument.TypeOf); !ok {
 		return err
 	}

@@ -1,11 +1,10 @@
-package goopt_test
+package goopt
 
 import (
 	"crypto/md5"
 	"errors"
 	"fmt"
 	"github.com/iancoleman/strcase"
-	. "github.com/napalu/goopt"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -377,6 +376,62 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	fileVal, err := os.ReadFile(name)
 	assert.Nil(t, err)
 	assert.Equal(t, "one234", string(fileVal), "should correctly set the underlying value")
+}
+
+type TestOptOk struct {
+	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" typeOf:"standalone"`
+	StringOption string `short:"so" description:"test string option" typeOf:"single" default:"1"`
+}
+
+type TestOptNok struct {
+	IsTest bool
+}
+
+func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
+	testOpt := TestOptOk{}
+	cmd, err := NewCmdLineFromStruct(&testOpt)
+	assert.Nil(t, err)
+	if err == nil {
+		assert.True(t, cmd.ParseString("-t --stringOption one"))
+		assert.Equal(t, true, testOpt.IsTest, "test bool option should be true")
+		assert.Equal(t, "one", testOpt.StringOption, "should set value of StringOption")
+		arg, err := cmd.GetArgument("isTest")
+		assert.Nil(t, err, "should not fail to retrieve argument")
+		assert.Equal(t, Standalone, arg.TypeOf)
+		assert.True(t, arg.Required)
+		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
+			"should be able to reference by long name when long name is not explicitly set")
+	}
+	cmd, err = NewCmdLineFromStruct(&TestOptNok{})
+	assert.NotNil(t, err, "should error out on invalid struct")
+
+	cmd, err = NewCmdLineFromStruct(&testOpt)
+	assert.Nil(t, err)
+	assert.True(t, cmd.ParseString("-t --stringOption"))
+	assert.Equal(t, "1", testOpt.StringOption, "should use default value if defined and not set on command line")
+}
+
+type Address struct {
+	City    string `long:"city" description:"City name" typeOf:"Single"`
+	ZipCode string `long:"zipcode" description:"ZIP code" typeOf:"Single"`
+}
+
+type UserProfile struct {
+	Name      string    `long:"name" short:"n" description:"Full name" typeOf:"Single"`
+	Age       int       `long:"age" short:"a" description:"Age of user" typeOf:"Single"`
+	Addresses []Address `long:"address"`
+}
+
+func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
+	profile := &UserProfile{
+		Addresses: make([]Address, 1),
+	}
+	cmd, err := NewCmdLineFromStruct(profile)
+	assert.Nil(t, err, "should handle nested structs")
+	assert.True(t, cmd.ParseString("--name Jack -a 10 --address.0.city 'New York'"), "should parse nested arguments")
+	assert.Equal(t, "Jack", cmd.GetOrDefault("name", ""))
+	assert.Equal(t, "New York", cmd.GetOrDefault("address.0.city", ""))
+	assert.Equal(t, "10", cmd.GetOrDefault("age", ""))
 }
 
 func TestCmdLineOption_EnvToFlag(t *testing.T) {
