@@ -687,6 +687,17 @@ func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
 	return v, nil
 }
 
+// SetArgument sets an Argument configuration. Returns an error if the Argument is not found or the
+// configuration results in an error
+func (s *CmdLineOption) SetArgument(flag string, configs ...ConfigureArgumentFunc) error {
+	arg, err := s.GetArgument(flag)
+	if err != nil {
+		return err
+	}
+
+	return arg.Set(configs...)
+}
+
 // GetShortFlag maps a long flag to its equivalent short flag. Short flags are concise alternatives to
 // their verbose counterparts.
 //
