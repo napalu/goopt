@@ -1145,6 +1145,9 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
+		if _, ok := field.Tag.Lookup("ignore"); ok {
+			continue
+		}
 		fieldValue := structValue.Field(i)
 		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
 			continue // Skip unexported fields
