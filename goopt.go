@@ -556,7 +556,15 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument) error {
 		if s.posixCompatible && lenS > 1 {
 			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", ErrPosixIncompatible, flag, argument.Short)
 		}
+
+		if arg, exists := s.lookup[argument.Short]; exists {
+			return fmt.Errorf("short flag '%s' on flag %s already exists as %v", argument.Short, flag, arg)
+		}
 		s.lookup[argument.Short] = flag
+	}
+
+	if arg, exists := s.acceptedFlags.Get(flag); exists {
+		return fmt.Errorf("flag '%s' already exists as %v", flag, arg)
 	}
 	s.acceptedFlags.Set(flag, argument)
 
