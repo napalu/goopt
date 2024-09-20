@@ -1054,6 +1054,8 @@ func typeOfFromString(s string) OptionType {
 		return Standalone
 	case "CHAINED":
 		return Chained
+	case "FILE":
+		return File
 	case "SINGLE":
 		fallthrough
 	default:
@@ -1090,7 +1092,7 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 			arg.Short = value
 		case "description":
 			arg.Description = value
-		case "typeOf":
+		case "type":
 			arg.TypeOf = typeOfFromString(value)
 		case "default":
 			arg.DefaultValue = value
