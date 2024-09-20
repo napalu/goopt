@@ -10,6 +10,18 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	return argument
 }
 
+func (a *Argument) Set(configs ...ConfigureArgumentFunc) error {
+	a.ensureInit()
+	var err error
+	for _, config := range configs {
+		config(a, &err)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // WithShortFlag represents the short form of a flag. Since by default and design, no max length is enforced,
 // the "short" flag can be looked at as an alternative to using the long name. I use it as a moniker. The short flag
 // can be used in all methods which take a flag argument. By default, there is no support for "POSIX/GNU-like" chaining

@@ -339,12 +339,18 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 
 	assert.True(t, opts.ParseString("--test1 2"), "should parse a command line argument when given a bound variable")
 
+	opts = NewCmdLineOption()
 	var boolBind bool
 	err = opts.BindFlag(&boolBind, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	assert.Nil(t, err, "should accept Standalone flags in BindFlag if the data type is boolean")
 
+	opts = NewCmdLineOption()
 	err = opts.BindFlag(&i, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	assert.NotNil(t, err, "should not accept Standalone flags in BindFlag if the data type is not boolean")
+	err = opts.BindFlag(&boolBind, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
+	assert.Nil(t, err, "should allow adding field if not yet specified")
+	err = opts.BindFlag(&boolBind, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
+	assert.NotNil(t, err, "should error when adding duplicate field")
 }
 
 func TestCmdLineOption_FileFlag(t *testing.T) {
@@ -379,8 +385,8 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 }
 
 type TestOptOk struct {
-	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" typeOf:"standalone"`
-	StringOption string `short:"so" description:"test string option" typeOf:"single" default:"1"`
+	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" type:"standalone"`
+	StringOption string `short:"so" description:"test string option" type:"single" default:"1"`
 }
 
 type TestOptNok struct {

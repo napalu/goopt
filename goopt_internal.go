@@ -1054,6 +1054,8 @@ func typeOfFromString(s string) OptionType {
 		return Standalone
 	case "CHAINED":
 		return Chained
+	case "FILE":
+		return File
 	case "SINGLE":
 		fallthrough
 	default:
@@ -1075,7 +1077,7 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
 
 // unmarshalTagsToArgument populates the Argument struct based on struct tags
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
-	tagNames := []string{"long", "short", "description", "required", "typeOf", "default", "secure", "prompt"}
+	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt"}
 
 	for _, tag := range tagNames {
 		value, ok := field.Tag.Lookup(tag)
@@ -1090,7 +1092,7 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 			arg.Short = value
 		case "description":
 			arg.Description = value
-		case "typeOf":
+		case "type":
 			arg.TypeOf = typeOfFromString(value)
 		case "default":
 			arg.DefaultValue = value
