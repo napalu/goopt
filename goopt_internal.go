@@ -1077,7 +1077,7 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
 
 // unmarshalTagsToArgument populates the Argument struct based on struct tags
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
-	tagNames := []string{"long", "short", "description", "required", "typeOf", "default", "secure", "prompt"}
+	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt"}
 
 	for _, tag := range tagNames {
 		value, ok := field.Tag.Lookup(tag)
