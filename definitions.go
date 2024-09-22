@@ -22,9 +22,12 @@ type PrettyPrintConfig struct {
 	DefaultPrefix string
 	// TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
 	TerminalPrefix string
-	// LevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
+	// InnerLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
 	//  command root. The Command root is at Level 0. Each sub-command increases root Level by 1.
-	LevelBindPrefix string
+	InnerLevelBindPrefix string
+	// OuterLevelBindPrefix is used for indentation after InnerLevelBindPrefix has been rendered. The indentation is repeated for each Level under the
+	//  command root. The Command root is at Level 0. Each sub-command increases root Level by 1.
+	OuterLevelBindPrefix string
 }
 
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
@@ -47,7 +50,7 @@ type ConfigureCommandFunc func(command *Command)
 type FilterFunc func(string) string
 
 // CommandFunc callback - optionally specified as part of the Command structure gets called when matched on Parse()
-type CommandFunc func(cmdLine *CmdLineOption, command *Command, value string) error
+type CommandFunc func(cmdLine *CmdLineOption, command *Command) error
 
 // ValueSetFunc callback - optionally specified as part of the Argument structure to 'bind' variables to a Flag
 // Used to set the value of a Flag to a custom structure.
@@ -107,17 +110,6 @@ type KeyValue struct {
 	Value string
 }
 
-// PathValue denotes Path/value Command pairs where the Path represents the keys of all Command / sub-command
-// at which a value is stored
-// Example:
-//
-//	in the structure Command{Name : "Test", Subcommands: []Command{{Name: "User"}}}
-//	the Path to User would consist of "Test User"
-type PathValue struct {
-	Path  string
-	Value string
-}
-
 // LiterateRegex used to provide human descriptions of regular expression
 type LiterateRegex struct {
 	value   *regexp.Regexp
@@ -149,29 +141,33 @@ type Argument struct {
 
 // Command defines commands and sub-commands
 type Command struct {
-	Name         string
-	Subcommands  []Command
-	Callback     CommandFunc
-	Description  string
-	DefaultValue string
-	Required     bool
-	path         string
+	Name        string
+	Subcommands []Command
+	Callback    CommandFunc
+	Description string
+	Required    bool
+	TopLevel    bool
+	Path        string
+}
+
+type FlagInfo struct {
+	Argument    *Argument
+	CommandPath string // The path of the command that owns this flag
 }
 
 // CmdLineOption opaque struct used in all Flag/Command manipulation
 type CmdLineOption struct {
-	posixCompatible bool
-	prefixes        []rune
-	listFunc        ListDelimiterFunc
-	acceptedFlags   *orderedmap.OrderedMap[string, *Argument]
-	lookup          map[string]string
-	options         map[string]string
-	errors          []error
-	bind            map[string]any
-	customBind      map[string]ValueSetFunc
-	//registeredCommands map[string]Command
+	posixCompatible    bool
+	prefixes           []rune
+	listFunc           ListDelimiterFunc
+	acceptedFlags      *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup             map[string]string
+	options            map[string]string
+	errors             []error
+	bind               map[string]any
+	customBind         map[string]ValueSetFunc
 	registeredCommands *orderedmap.OrderedMap[string, Command]
-	commandOptions     *orderedmap.OrderedMap[string, path]
+	commandOptions     *orderedmap.OrderedMap[string, bool]
 	positionalArgs     []PositionalArgument
 	rawArgs            map[string]string
 	callbackQueue      *deque.Deque
@@ -187,11 +183,6 @@ var (
 	ErrPosixIncompatible         = errors.New("posix incompatible")
 	ErrValidationFailed          = errors.New("validation failed")
 )
-
-type path struct {
-	value         string
-	isTerminating bool
-}
 
 type commandCallback struct {
 	callback  CommandFunc

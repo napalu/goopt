@@ -17,30 +17,41 @@ import (
 	"time"
 )
 
-func (s *CmdLineOption) parseFlag(args []string, state *parseState) {
+func (s *CmdLineOption) parseFlag(args []string, state *parseState, currentCommandPath string) {
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-	argument, found := s.acceptedFlags.Get(currentArg)
-	if found {
-		s.processFlagArg(args, state, argument, currentArg)
 
+	// Use the helper function to build the lookup flag
+	lookupFlag := buildLookupFlag(currentArg, currentCommandPath)
+
+	// Try finding the flag in the current command path
+	flagInfo, found := s.acceptedFlags.Get(lookupFlag)
+
+	// If not found in the current command path, check for global flags
+	if !found {
+		flagInfo, found = s.acceptedFlags.Get(currentArg)
+	}
+
+	if found {
+		s.processFlagArg(args, state, flagInfo.Argument, currentArg)
 	} else {
-		s.addError(fmt.Errorf("unknown argument '%s'", currentArg))
+		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", currentArg, currentCommandPath))
 	}
 }
 
-func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState) []string {
+func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState, currentCommandPath string) []string {
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-	argument, found := s.acceptedFlags.Get(currentArg)
+	flagInfo, found := s.getFlagInCommandPath(currentArg, currentCommandPath)
 	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-		// 1. we first normalize each flag or value encountered by extending the args array
 		args = s.normalizePosixArgs(args, state, currentArg)
-		// 2. process as usual
 		currentArg = s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-		argument, found = s.acceptedFlags.Get(currentArg)
+		flagInfo, found = s.getFlagInCommandPath(currentArg, currentCommandPath)
 	}
+
 	if found {
-		s.processFlagArg(args, state, argument, currentArg)
+		s.processFlagArg(args, state, flagInfo.Argument, currentArg)
+	} else {
+		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", currentArg, currentCommandPath))
 	}
 
 	return args
@@ -117,6 +128,19 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 	}
 }
 
+func (s *CmdLineOption) registerCommandRecursive(cmd *Command) {
+	// Add the current command to the map
+	cmd.TopLevel = strings.Count(cmd.Path, " ") == 0
+	s.registeredCommands.Set(cmd.Path, *cmd)
+
+	// Recursively register all subcommands
+	for i := range cmd.Subcommands {
+		subCmd := &cmd.Subcommands[i]
+		s.registerCommandRecursive(subCmd)
+	}
+
+}
+
 func (s *CmdLineOption) validateCommand(cmdArg *Command, level, maxDepth int) (bool, error) {
 	if level > maxDepth {
 		return false, fmt.Errorf("max command depth of %d exceeded", maxDepth)
@@ -133,15 +157,15 @@ func (s *CmdLineOption) validateCommand(cmdArg *Command, level, maxDepth int) (b
 	}
 
 	if level == 0 {
-		cmdArg.path = cmdArg.Name
+		cmdArg.Path = cmdArg.Name
 	}
 
-	if _, found := s.registeredCommands.Get(cmdArg.path); found {
+	if _, found := s.registeredCommands.Get(cmdArg.Path); found {
 		return false, fmt.Errorf("duplicate command '%s' already exists", cmdArg.Name)
 	}
 
 	for i := 0; i < len(cmdArg.Subcommands); i++ {
-		cmdArg.Subcommands[i].path = cmdArg.path + " " + cmdArg.Subcommands[i].Name
+		cmdArg.Subcommands[i].Path = cmdArg.Path + " " + cmdArg.Subcommands[i].Name
 		if ok, err := s.validateCommand(&cmdArg.Subcommands[i], level+1, maxDepth); err != nil {
 			return ok, err
 		}
@@ -155,7 +179,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.options = map[string]string{}
 	}
 	if s.acceptedFlags == nil {
-		s.acceptedFlags = orderedmap.NewOrderedMap[string, *Argument]()
+		s.acceptedFlags = orderedmap.NewOrderedMap[string, *FlagInfo]()
 	}
 	if s.lookup == nil {
 		s.lookup = map[string]string{}
@@ -173,7 +197,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.registeredCommands = orderedmap.NewOrderedMap[string, Command]()
 	}
 	if s.commandOptions == nil {
-		s.commandOptions = orderedmap.NewOrderedMap[string, path]()
+		s.commandOptions = orderedmap.NewOrderedMap[string, bool]()
 	}
 	if s.positionalArgs == nil {
 		s.positionalArgs = []PositionalArgument{}
@@ -201,10 +225,10 @@ func (a *Argument) ensureInit() {
 	}
 }
 
-func (s *CmdLineOption) setPositionalArguments(args []string) {
+func (s *CmdLineOption) setPositionalArguments(args []string, commandPath ...string) {
 	var positional []PositionalArgument
 	for i, seen := range args {
-		seen = s.flagOrShortFlag(strings.TrimLeftFunc(seen, s.prefixFunc))
+		seen = s.flagOrShortFlag(strings.TrimLeftFunc(seen, s.prefixFunc), commandPath...)
 		if _, found := s.rawArgs[seen]; !found {
 			positional = append(positional, PositionalArgument{i, seen})
 		}
@@ -213,10 +237,12 @@ func (s *CmdLineOption) setPositionalArguments(args []string) {
 	s.positionalArgs = positional
 }
 
-func (s *CmdLineOption) flagOrShortFlag(flag string) string {
-	_, found := s.acceptedFlags.Get(flag)
+func (s *CmdLineOption) flagOrShortFlag(flag string, commandPath ...string) string {
+	lookupFlag := buildLookupFlag(flag, commandPath...)
+
+	_, found := s.acceptedFlags.Get(lookupFlag)
 	if !found {
-		item, found := s.lookup[flag]
+		item, found := s.lookup[lookupFlag]
 		if found {
 			return item
 		}
@@ -256,14 +282,14 @@ func (s *CmdLineOption) registerFlagValue(flag, value, rawValue string) {
 	s.options[flag] = value
 }
 
-func (s *CmdLineOption) registerCommandValue(cmd *Command, name, value, rawValue string) {
-	s.rawArgs[name] = rawValue
-
-	if cmd.path == "" {
+func (s *CmdLineOption) registerCommand(cmd *Command, name string) {
+	if cmd.Path == "" {
 		return
 	}
 
-	s.commandOptions.Set(cmd.path, path{value: value, isTerminating: len(cmd.Subcommands) == 0})
+	s.rawArgs[name] = name
+
+	s.commandOptions.Set(cmd.Path, len(cmd.Subcommands) == 0)
 }
 
 func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
@@ -274,29 +300,58 @@ func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
 	s.secureArguments.Set(name, &argument.Secure)
 }
 
-func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *deque.Deque) {
+func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *deque.Deque, commandPathSlice *[]string) {
 	currentArg := args[state.pos]
-	var next string
 
-	if state.pos < state.endOf-1 {
-		next = args[state.pos+1]
-	}
-
+	// Check if we're dealing with a subcommand
+	var (
+		curSub *Command
+		ok     bool
+	)
 	if cmdQueue.Len() > 0 {
-		if !s.checkSubCommands(cmdQueue, currentArg, next, state) {
+		ok, curSub = s.checkSubCommands(cmdQueue, currentArg)
+		if !ok {
 			return
 		}
 	}
 
-	if cmd, found := s.getCommand(currentArg); found {
-		s.registerCommandValue(&cmd, currentArg, next, next)
-		if len(cmd.Subcommands) == 0 {
-			s.checkCommandValue(cmd, currentArg, args, state)
-		} else {
-			cmdQueue.PushBack(cmd)
+	var cmd *Command
+	if curSub != nil {
+		cmd = curSub
+	} else {
+		if registered, found := s.getCommand(currentArg); found {
+			cmd = &registered
+			s.registerCommand(cmd, currentArg)
 		}
+	}
+
+	// Register the command if found
+	if cmd != nil {
+		*commandPathSlice = append(*commandPathSlice, currentArg) // Append command to path slice
+		if len(cmd.Subcommands) == 0 {
+			for cmdQueue.Len() > 0 {
+				cmdQueue.PopFront()
+			}
+		} else {
+			cmdQueue.PushBack(*cmd) // Add subcommands to queue
+		}
+
+		// Queue the command callback (if any) after the command is fully recognized
+		if cmd.Callback != nil {
+			s.queueCommandCallback(cmd)
+		}
+
 	} else if state.pos == 0 && !s.isFlag(currentArg) {
 		s.addError(fmt.Errorf("options should be prefixed by '-'"))
+	}
+}
+
+func (s *CmdLineOption) queueCommandCallback(cmd *Command) {
+	if cmd.Callback != nil {
+		s.callbackQueue.PushBack(commandCallback{
+			callback:  cmd.Callback,
+			arguments: []interface{}{s, cmd},
+		})
 	}
 }
 
@@ -339,12 +394,13 @@ func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg st
 		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid path but could not find %s - error %s", currentArg, next, e.Error())
+			err = fmt.Errorf("flag '%s' should be a valid Path but could not find %s - error %s", currentArg, next, e.Error())
 			return
 		} else if st.IsDir() {
 			err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
 			return
 		}
+		next = filepath.Clean(next)
 		if val, e := os.ReadFile(next); e != nil {
 			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
 		} else {
@@ -359,33 +415,14 @@ func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg st
 	return arg, err
 }
 
-func (s *CmdLineOption) checkCommandValue(cmd Command, currentArg string, args []string, state *parseState) {
-	var next string
-	if state.pos < state.endOf-1 {
-		next = args[state.pos+1]
-	}
-	if (len(next) == 0 || s.isFlag(next)) && len(cmd.DefaultValue) > 0 {
-		next = cmd.DefaultValue
-	} else {
-		state.skip = state.pos + 1
-	}
-	if state.pos >= state.endOf-1 && len(next) == 0 {
-		s.addError(fmt.Errorf("command '%s' expects a value", currentArg))
-	}
-	if cmd.Callback != nil {
-		s.callbackQueue.PushBack(commandCallback{
-			callback:  cmd.Callback,
-			arguments: []interface{}{s, &cmd, next},
-		})
-	}
-}
-
-func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg string, next string, state *parseState) bool {
+func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg string) (bool, *Command) {
 	found := false
 	var sub Command
+
 	if cmdQueue.Len() == 0 {
-		return false
+		return false, nil
 	}
+
 	currentCmd, _ := cmdQueue.PopFront()
 	for _, sub = range currentCmd.(Command).Subcommands {
 		if strings.EqualFold(sub.Name, currentArg) {
@@ -393,45 +430,17 @@ func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg strin
 			break
 		}
 	}
-	if found {
-		if len(sub.Subcommands) == 0 {
-			if len(next) == 0 || s.isFlag(next) {
-				next = sub.DefaultValue
-			} else if len(next) == 0 && len(sub.DefaultValue) > 0 {
-				next = sub.DefaultValue
-			} else if len(next) > 0 {
-				// intentionally empty
-			} else {
-				state.skip = state.pos + 1
-			}
-			if state.pos >= state.endOf-1 && len(next) == 0 {
-				s.addError(fmt.Errorf("command '%s' expects a value", currentArg))
-				return false
-			} else if s.isFlag(next) {
-				s.addError(fmt.Errorf("command '%s' expects a value but we received a flag '%s'", currentArg, next))
-				return false
-			}
-		}
 
-		s.registerCommandValue(&sub, currentArg, next, next)
-		cmdQueue.PushBack(sub)
-		if sub.Callback != nil {
-			s.callbackQueue.PushBack(commandCallback{
-				callback:  sub.Callback,
-				arguments: []interface{}{&sub, next},
-			})
-		}
-	} else if cmdQueue.Len() > 0 {
-		test, _ := cmdQueue.PopFront()
-		if len(test.(Command).Subcommands) > 0 {
-			s.addError(fmt.Errorf("command %s expects one of the following commands %v",
-				test.(Command).Name, test.(Command).Subcommands))
-		} else {
-			cmdQueue.PushFront(test)
-		}
+	if found {
+		s.registerCommand(&sub, currentArg)
+		cmdQueue.PushBack(sub) // Keep subcommands in the queue
+		return true, &sub
+	} else if len(currentCmd.(Command).Subcommands) > 0 {
+		s.addError(fmt.Errorf("command %s expects one of the following: %v",
+			currentCmd.(Command).Name, currentCmd.(Command).Subcommands))
 	}
 
-	return true
+	return false, nil
 }
 
 func (a *Argument) accept(val PatternValue) *error {
@@ -586,14 +595,17 @@ func (s *CmdLineOption) validateProcessedOptions() {
 
 func (s *CmdLineOption) walkFlags() {
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.RequiredIf != nil {
-			if required, msg := f.Value.RequiredIf(s, *f.Key); required {
+		flagInfo := f.Value
+		visited := make(map[string]bool)
+		if flagInfo.Argument.RequiredIf != nil {
+			if required, msg := flagInfo.Argument.RequiredIf(s, *f.Key); required {
 				s.addError(errors.New(msg))
 			}
 			continue
 		}
-		if !f.Value.Required {
-			if s.HasFlag(*f.Key) && f.Value.TypeOf == Standalone {
+
+		if !flagInfo.Argument.Required {
+			if s.HasFlag(*f.Key) && flagInfo.Argument.TypeOf == Standalone {
 				s.validateStandaloneFlag(*f.Key)
 			}
 			continue
@@ -601,20 +613,19 @@ func (s *CmdLineOption) walkFlags() {
 
 		mainKey := s.flagOrShortFlag(*f.Key)
 		if _, found := s.options[mainKey]; found {
-			if f.Value.TypeOf == Standalone {
+			if flagInfo.Argument.TypeOf == Standalone {
 				s.validateStandaloneFlag(mainKey)
 			}
 			continue
-		} else if f.Value.Secure.IsSecure {
-			s.queueSecureArgument(mainKey, f.Value)
+		} else if flagInfo.Argument.Secure.IsSecure {
+			s.queueSecureArgument(mainKey, flagInfo.Argument)
 			continue
 		}
 
-		dependsLen := len(f.Value.DependsOn)
-		if dependsLen == 0 {
+		if len(flagInfo.Argument.DependsOn) == 0 {
 			s.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))
 		} else {
-			s.validateDependencies(f.Value, mainKey)
+			s.validateDependencies(flagInfo, mainKey, visited, 0)
 		}
 	}
 }
@@ -647,7 +658,7 @@ func (s *CmdLineOption) walkCommands() {
 			if i < subCmdLen-1 {
 				match.WriteString(", ")
 			}
-			if _, found := s.commandOptions.Get(sub.path); found {
+			if _, found := s.commandOptions.Get(sub.Path); found {
 				matchedCommands = append(matchedCommands, sub)
 				matches++
 			}
@@ -666,24 +677,63 @@ func (s *CmdLineOption) walkCommands() {
 	}
 }
 
-func (s *CmdLineOption) validateDependencies(arg *Argument, mainKey string) {
-	for _, depends := range arg.DependsOn {
-		dependKey, found := s.options[depends]
-		if found {
-			continue
-		}
+func (s *CmdLineOption) validateDependencies(flagInfo *FlagInfo, mainKey string, visited map[string]bool, depth int) {
+	// Set a max depth to avoid too deep recursion
+	const maxDepth = 10
+	if depth > maxDepth {
+		s.addError(fmt.Errorf("maximum dependency depth exceeded for flag '%s'", mainKey))
+		return
+	}
 
-		argument, found := s.acceptedFlags.Get(mainKey)
+	// Circular dependency check
+	if visited[mainKey] {
+		s.addError(fmt.Errorf("circular dependency detected: flag '%s' is involved in a circular chain of dependencies", mainKey))
+		return
+	}
+
+	// Mark the current flag as visited
+	visited[mainKey] = true
+
+	// Process the dependencies of the current flag
+	for _, depends := range flagInfo.Argument.DependsOn {
+		// First, check if the dependent flag exists in the same command path
+		dependentFlag, found := s.getFlagInCommandPath(depends, flagInfo.CommandPath)
 		if !found {
+			s.addError(fmt.Errorf("flag '%s' depends on '%s', but it is missing from command group '%s' or global flags", mainKey, depends, flagInfo.CommandPath))
 			continue
 		}
 
-		for _, k := range argument.OfValue {
+		// Check specific flag values (OfValue)
+		dependKey := s.options[depends]
+		for _, k := range dependentFlag.Argument.OfValue {
 			if strings.EqualFold(dependKey, k) {
-				s.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", k))
+				s.addError(fmt.Errorf("flag '%s' requires flag '%s' to be present with value '%s'", mainKey, depends, k))
 			}
 		}
+
+		// Recursively validate the dependencies of the dependent flag, while tracking visited flags and depth
+		s.validateDependencies(dependentFlag, depends, visited, depth+1)
 	}
+
+	// Unmark the flag as visited to allow other validation chains to proceed
+	visited[mainKey] = false
+}
+
+func (s *CmdLineOption) getFlagInCommandPath(flag string, commandPath string) (*FlagInfo, bool) {
+	// First, check if the flag exists in the command-specific path
+	if commandPath != "" {
+		flagKey := buildLookupFlag(flag, commandPath)
+		if flagInfo, exists := s.acceptedFlags.Get(flagKey); exists {
+			return flagInfo, true
+		}
+	}
+
+	// Fallback to global flag
+	if flagInfo, exists := s.acceptedFlags.Get(flag); exists {
+		return flagInfo, true
+	}
+
+	return nil, false
 }
 
 func (s *CmdLineOption) setBoundVariable(value string, currentArg string) error {
@@ -692,9 +742,9 @@ func (s *CmdLineOption) setBoundVariable(value string, currentArg string) error 
 		return nil
 	}
 
-	accepted, _ := s.acceptedFlags.Get(currentArg)
+	flagInfo, _ := s.acceptedFlags.Get(currentArg)
 	if value == "" {
-		value = accepted.DefaultValue
+		value = flagInfo.Argument.DefaultValue
 	}
 
 	if len(s.customBind) > 0 {
@@ -1063,8 +1113,11 @@ func typeOfFromString(s string) OptionType {
 	}
 }
 
-func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
+func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) error {
 	for k, v := range nestedCmdLine.bind {
+		if _, exists := s.bind[k]; exists {
+			return fmt.Errorf("conflict: flag '%s' is already bound in this CmdLineOption", k)
+		}
 		s.bind[k] = v
 	}
 	for k, v := range nestedCmdLine.customBind {
@@ -1073,11 +1126,13 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) {
 	for it := nestedCmdLine.acceptedFlags.Front(); it != nil; it = it.Next() {
 		s.acceptedFlags.Set(*it.Key, it.Value)
 	}
+
+	return nil
 }
 
 // unmarshalTagsToArgument populates the Argument struct based on struct tags
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
-	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt"}
+	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt", "Path"}
 
 	for _, tag := range tagNames {
 		value, ok := field.Tag.Lookup(tag)
@@ -1087,7 +1142,7 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 
 		switch tag {
 		case "long":
-			// handled separately
+			// This will be handled separately
 		case "short":
 			arg.Short = value
 		case "description":
@@ -1114,6 +1169,8 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 			if arg.Secure.IsSecure {
 				arg.Secure.Prompt = value
 			}
+		case "Path":
+			// Path is handled separately.
 		default:
 			return fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
 		}
@@ -1132,7 +1189,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	st := structValue.Type()
 	if st.Kind() == reflect.Ptr {
 		if structValue.IsNil() {
-			return nil, errors.New("nil pointer encountered")
+			return nil, fmt.Errorf("nil pointer encountered")
 		}
 		st = st.Elem()
 		structValue = structValue.Elem()
@@ -1148,10 +1205,12 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		if _, ok := field.Tag.Lookup("ignore"); ok {
 			continue
 		}
+
 		fieldValue := structValue.Field(i)
 		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
 			continue // Skip unexported fields
 		}
+
 		// Get the 'long' tag for the flag name
 		longName, ok := field.Tag.Lookup("long")
 		if !ok {
@@ -1199,10 +1258,22 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
 		}
 
-		// Now that the full path is known, bind the flag
-		err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
-		if err != nil {
-			return nil, err
+		// Process the path tag to associate the flag with a command or global
+		pathTag := field.Tag.Get("Path")
+		if pathTag != "" {
+			paths := strings.Split(pathTag, ",")
+			for _, cmdPath := range paths {
+				err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg, cmdPath)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			// If no path is specified, consider it a global flag
+			err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1213,8 +1284,11 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	return c, nil
 }
 
-// Adjusted function to process slices of structs
 func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {
+	if fieldValue.IsNil() {
+		fieldValue.Set(reflect.MakeSlice(fieldValue.Type(), 0, 0))
+	}
+
 	for idx := 0; idx < fieldValue.Len(); idx++ {
 		elem := fieldValue.Index(idx).Addr()
 
@@ -1226,7 +1300,10 @@ func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, curren
 		if err != nil {
 			return fmt.Errorf("error processing slice element %s[%d]: %w", prefix, idx, err)
 		}
-		c.mergeCmdLine(nestedCmdLine)
+		err = c.mergeCmdLine(nestedCmdLine)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1239,7 +1316,21 @@ func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, curr
 	if err != nil {
 		return fmt.Errorf("error processing nested struct %s: %w", prefix, err)
 	}
-	c.mergeCmdLine(nestedCmdLine)
+	err = c.mergeCmdLine(nestedCmdLine)
+	if err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func buildLookupFlag(flag string, commandPath ...string) string {
+	if len(commandPath) > 0 && commandPath[0] != "" {
+		return fmt.Sprintf("%s@%s", flag, strings.Join(commandPath, " "))
+	}
+	return flag
+}
+
+func splitCommandFlag(flag string) []string {
+	return strings.Split(flag, "@")
 }

@@ -16,7 +16,6 @@ import (
 type Iterator[K comparable, V any] struct {
 	forward bool
 	ll      *list.Element
-	curr    *list.Element
 	Key     *K
 	Value   V
 }

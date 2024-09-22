@@ -136,11 +136,10 @@ func TestCmdLineOption_AddCommand(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	cmd := &Command{
-		Name:         "",
-		Subcommands:  nil,
-		Callback:     nil,
-		Description:  "",
-		DefaultValue: "",
+		Name:        "",
+		Subcommands: nil,
+		Callback:    nil,
+		Description: "",
 	}
 
 	err := opts.AddCommand(cmd)
@@ -163,7 +162,7 @@ func TestCmdLineOption_AddCommand(t *testing.T) {
 	assert.True(t, opts.ParseString("create user type author"), "should parse command with nested subcommands properly")
 }
 
-func TestCmdLineOption_GetCommandValue(t *testing.T) {
+func TestCmdLineOption_RegisterCommand(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	cmd := &Command{
@@ -179,14 +178,18 @@ func TestCmdLineOption_GetCommandValue(t *testing.T) {
 
 	err := opts.AddCommand(cmd)
 	assert.Nil(t, err, "should properly add named command chain")
-
-	assert.True(t, opts.ParseString("create user type author"), "should parse well-formed command")
+	err = opts.AddFlag("author", NewArg(
+		WithShortFlag("a"),
+		WithDescription("specify author"),
+		WithType(Single)))
+	assert.Nil(t, err, "should properly add named flag chain")
+	assert.True(t, opts.ParseString("create user type --author john"), "should parse well-formed command")
 	assert.True(t, opts.HasCommand("create"), "should properly register root command")
 	assert.True(t, opts.HasCommand("create user"), "should properly register sub-command")
 	assert.True(t, opts.HasCommand("create user type"), "should properly register nested sub-command")
-	value, err := opts.GetCommandValue("create user type")
-	assert.Nil(t, err, "should find value of sub-command")
-	assert.Equal(t, "author", value, "value of nested sub-command should be that supplied via command line")
+	value, ok := opts.Get("author")
+	assert.True(t, ok, "should find value of sub-command")
+	assert.Equal(t, "john", value, "value of nested sub-command should be that supplied via command line")
 }
 
 func TestCmdLineOption_GetCommandValues(t *testing.T) {
@@ -203,7 +206,6 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 							NewCommand(
 								WithName("copy"),
 								WithCommandDescription("test blob"),
-								WithCommandDefault("all"),
 							),
 						),
 					),
@@ -214,7 +216,6 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 							NewCommand(
 								WithName("copy"),
 								WithCommandDescription("copy repo"),
-								WithCommandDefault("all"),
 							),
 						),
 					),
@@ -225,7 +226,6 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 							NewCommand(
 								WithName("copy"),
 								WithCommandDescription("copy role"),
-								WithCommandDefault("all"),
 							),
 						),
 					),
@@ -234,17 +234,16 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 
 	// current behavior: last command overwrites a previous one with the same path - TODO check if this is the desired behaviour
 	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy test blobs copy blob_name"), "should parse well-formed commands")
-	paths := opts.GetCommandValues()
+	paths := opts.GetCommands()
 	assert.Len(t, paths, 3, "should have parsed 3 commands")
 	for i, path := range paths {
 		switch i {
 		case 0:
-			assert.Equal(t, path.Path, "test blobs copy")
-			assert.Equal(t, path.Value, "blob_name")
+			assert.Equal(t, path, "test blobs copy")
 		case 1:
-			assert.Equal(t, path.Path, "test repos copy")
+			assert.Equal(t, path, "test repos copy")
 		case 2:
-			assert.Equal(t, path.Path, "test roles copy")
+			assert.Equal(t, path, "test roles copy")
 		}
 
 	}
@@ -260,14 +259,9 @@ func TestCmdLineOption_ValueCallback(t *testing.T) {
 			Name: "user",
 			Subcommands: []Command{{
 				Name: "type",
-				Callback: func(cmdLine *CmdLineOption, command *Command, value string) error {
-					var err error
-					if value != "author" {
-						err = fmt.Errorf("should receive nested sub-command value on parse")
-					}
-
+				Callback: func(cmdLine *CmdLineOption, command *Command) error {
 					shouldBeEqualToOneAfterExecute = 1
-					return err
+					return nil
 				},
 			}},
 		}},
@@ -408,7 +402,7 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
 			"should be able to reference by long name when long name is not explicitly set")
 	}
-	cmd, err = NewCmdLineFromStruct(&TestOptNok{})
+	_, err = NewCmdLineFromStruct(&TestOptNok{})
 	assert.NotNil(t, err, "should error out on invalid struct")
 
 	cmd, err = NewCmdLineFromStruct(&testOpt)
@@ -432,6 +426,7 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 	profile := &UserProfile{
 		Addresses: make([]Address, 1),
 	}
+
 	cmd, err := NewCmdLineFromStruct(profile)
 	assert.Nil(t, err, "should handle nested structs")
 	assert.True(t, cmd.ParseString("--name Jack -a 10 --address.0.city 'New York'"), "should parse nested arguments")
@@ -440,10 +435,121 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 	assert.Equal(t, "10", cmd.GetOrDefault("age", ""))
 }
 
+func TestCmdLineOption_CommandSpecificFlags(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Define commands and associated flags
+	_ = opts.AddCommand(&Command{
+		Name: "create",
+		Subcommands: []Command{
+			{
+				Name: "user",
+				Subcommands: []Command{
+					{
+						Name: "type",
+					},
+				},
+			},
+		},
+	})
+
+	err := opts.AddFlag("username", &Argument{
+		Description: "Username for user creation",
+		TypeOf:      Single,
+	}, "create user type")
+	assert.Nil(t, err, "should properly associate flag with command Path")
+
+	err = opts.AddFlag("email", &Argument{
+		Description: "Email for user creation",
+		TypeOf:      Single,
+	}, "create user")
+	assert.Nil(t, err, "should properly associate flag with user subcommand")
+
+	// Test with valid command and flag
+	assert.True(t, opts.ParseString("create user type --username john_doe"), "should parse flag associated with specific command Path")
+	assert.Equal(t, "john_doe", opts.GetOrDefault("username", ""), "flag should be parsed correctly for its command Path")
+
+	// Test with missing command flag
+	assert.False(t, opts.ParseString("create user --username john_doe"), "should not parse flag not associated with the command Path")
+}
+
+func TestCmdLineOption_GlobalFlags(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Define commands
+	_ = opts.AddCommand(&Command{
+		Name: "create",
+		Subcommands: []Command{
+			{
+				Name: "user",
+				Subcommands: []Command{
+					{
+						Name: "type",
+					},
+				},
+			},
+		},
+	})
+
+	verbose := false
+	// Add a global flag
+	err := opts.BindFlag(&verbose, "verbose", &Argument{
+		Description: "Enable verbose logging",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err, "should properly add global flag")
+
+	// Test global flag with command
+	assert.True(t, opts.ParseString("create user type --verbose"), "should parse global flag with any command")
+	assert.True(t, opts.HasFlag("verbose"), "global flag should be recognized")
+}
+
+func TestCmdLineOption_SharedFlags(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Define commands
+	_ = opts.AddCommand(&Command{
+		Name: "create",
+		Subcommands: []Command{
+			{
+				Name: "user",
+				Subcommands: []Command{
+					{
+						Name: "type",
+					},
+				},
+			},
+			{
+				Name: "group",
+			},
+		},
+	})
+
+	// Shared flag for both commands
+	err := opts.AddFlag("sharedFlag", &Argument{
+		Description: "Shared flag for user creation",
+		TypeOf:      Single,
+	}, "create user type")
+	assert.Nil(t, err, "should properly add shared flag to user creation command")
+
+	err = opts.AddFlag("sharedFlag", &Argument{
+		Description: "Shared flag for group creation",
+		TypeOf:      Single,
+	}, "create group")
+	assert.Nil(t, err, "should properly add shared flag to group creation command")
+
+	// Test flag in both paths
+	assert.True(t, opts.ParseString("create user type --sharedFlag user_value"), "should parse flag in user command")
+	assert.Equal(t, "user_value", opts.GetOrDefault("sharedFlag", ""), "flag should be parsed correctly in user command")
+
+	assert.True(t, opts.ParseString("create group --sharedFlag group_value"), "should parse flag in group command")
+	assert.Equal(t, "group_value", opts.GetOrDefault("sharedFlag", ""), "flag should be parsed correctly in group command")
+}
+
 func TestCmdLineOption_EnvToFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewCmdLine(
-		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"), WithCommandDefault("all"))))),
+		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
 		WithBindFlag("testMe", &s,
 			NewArg(WithShortFlag("t"),
 				WithType(Single))))
@@ -460,10 +566,6 @@ func TestCmdLineOption_EnvToFlag(t *testing.T) {
 	assert.True(t, cmdLine.ParseString("command test"))
 	assert.Equal(t, "test", s)
 	assert.True(t, cmdLine.HasCommand("command test"))
-}
-
-func camelCaseToEnvVar(s string) string {
-	return strcase.ToScreamingSnake(s)
 }
 
 func upperSnakeToCamelCase(s string) string {
@@ -491,7 +593,7 @@ func TestCmdLineOption_VarInFileFlag(t *testing.T) {
 	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test %s", fp)), "should parse file flag with var")
 	assert.Equal(t, "test123", s)
 	s = ""
-	assert.True(t, cmdLine.ParseString(fmt.Sprintf("--test")), "should parse file flag with var with default value ")
+	assert.True(t, cmdLine.ParseString("--test"), "should parse file flag with var with default value ")
 	assert.Equal(t, "test123", s)
 	os.RemoveAll(filepath.Join(execDir, uname))
 }
@@ -501,7 +603,6 @@ func TestNewCmdLineOption_BindNil(t *testing.T) {
 
 	type tester struct {
 		TestStr string
-		testInt int
 	}
 
 	var test *tester
@@ -616,19 +717,11 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	assert.True(t, cmdLine.ParseString(`--flagWithValue 
 		"test value" --fa --flagB 
 --flagC "1|2|3" create user type
- author create group member admin`), "command line options should be passed correctly")
+ create group member`), "command line options should be passed correctly")
 
-	value, err := cmdLine.GetCommandValue("create user type")
-	assert.Nil(t, err, "should find value of sub-command")
-	assert.Equal(t, "author", value, "value of nested sub-command should be that supplied via command line")
-
-	value, err = cmdLine.GetCommandValue("create nil type")
-	assert.NotNil(t, err, "should find not value of a sub-command when part of the path is incorrect")
-	assert.Equal(t, "", value, "value of nested sub-command should be empty for incorrect path")
-
-	value, err = cmdLine.GetCommandValue("create group member")
-	assert.Nil(t, err, "should find value of sub-command")
-	assert.Equal(t, "admin", value, "value of nested sub-command should be that supplied via command line")
+	assert.True(t, cmdLine.HasCommand("create user type"), "should find command")
+	assert.False(t, cmdLine.HasCommand("create nil type"), "should find not command with incorrect Path")
+	assert.True(t, cmdLine.HasCommand("create group member"), "should find all subcommands")
 
 	list, err := cmdLine.GetList("flagC")
 	assert.Nil(t, err, "chained flag should return a list")
@@ -642,7 +735,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	warnings := cmdLine.GetWarnings()
 	assert.Len(t, warnings, 0, "no warnings were expected all options were supplied")
 
-	allCommands := cmdLine.GetCommandValues()
+	allCommands := cmdLine.GetCommands()
 	assert.Len(t, allCommands, 2)
 	// reset parsed options and commands to parse again
 	cmdLine.ClearAll()
@@ -835,8 +928,8 @@ func TestCmdLineOption_FluentCommands(t *testing.T) {
 					WithName("user"),
 					WithCommandDescription("create user"),
 					WithCallback(
-						func(cmdLine *CmdLineOption, command *Command, value string) error {
-							valueReceived = value
+						func(cmdLine *CmdLineOption, command *Command) error {
+							valueReceived = command.Name
 
 							return nil
 						}),
@@ -851,14 +944,16 @@ func TestCmdLineOption_FluentCommands(t *testing.T) {
 
 	assert.Equal(t, "", valueReceived, "command callback should not be called before execute")
 	assert.Equal(t, 0, opts.ExecuteCommands(), "command callback error should be nil if no error occurred")
-	assert.Equal(t, "test", valueReceived, "command callback should be called on execute")
+	assert.Equal(t, "user", valueReceived, "command callback should be called on execute")
+	assert.Equal(t, 2, opts.GetPositionalArgCount(), "values which are neither commands nor flags should be assessed as positional arguments")
+	posArgs := opts.GetPositionalArgs()
+	assert.Equal(t, "test", posArgs[0].Value)
+	// positional arguments are 0-based
+	assert.Equal(t, 2, posArgs[0].Position)
+	assert.Equal(t, "test2", posArgs[1].Value)
+	// positional arguments are 0-based
+	assert.Equal(t, 5, posArgs[1].Position)
 
-	val, err := opts.GetCommandValue("create user")
-	assert.Nil(t, err, "error should be nil when retrieving existing command value")
-	assert.Equal(t, "test", val, "value of terminating command should be correct")
-	val, err = opts.GetCommandValue("create group")
-	assert.Nil(t, err, "error should be nil when retrieving existing command value")
-	assert.Equal(t, "test2", val, "value of terminating command should be correct")
 }
 
 func TestCmdLineOption_ParseWithDefaults(t *testing.T) {
@@ -916,6 +1011,156 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 		"set invalid boolean flag value among other values")
 	_, err = cmdLine.GetBool("fa")
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
+}
+
+func TestCmdLineOption_PrintUsageWithGroups(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Add global flags
+	err := opts.AddFlag("help", &Argument{
+		Description: "Display help",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err, "should add global flag successfully")
+
+	// Add commands
+	cmd := &Command{
+		Name:        "create",
+		Description: "Create resources",
+		Subcommands: []Command{
+			{
+				Name:        "user",
+				Description: "Manage users",
+				Subcommands: []Command{
+					{
+						Name:        "type",
+						Description: "Specify user type",
+					},
+				},
+			},
+			{
+				Name:        "group",
+				Description: "Manage groups",
+			},
+		},
+	}
+	err = opts.AddCommand(cmd)
+	assert.Nil(t, err, "should add commands successfully")
+
+	// Add command-specific flags
+	err = opts.AddFlag("username", &Argument{
+		Description: "Username for user creation",
+		TypeOf:      Single,
+		Required:    true,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+	err = opts.AddFlag("firstName", &Argument{
+		Description: "User first name",
+		TypeOf:      Single,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	err = opts.AddFlag("email", &Argument{
+		Description: "Email for user creation",
+		TypeOf:      Single,
+	}, "create user")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	// Capture the output of PrintUsageWithGroups
+	writer := newArrayWriter()
+	opts.PrintUsageWithGroups(writer)
+
+	expectedOutput := `usage: ` + os.Args[0] + `
+
+Global Flags:
+
+ --help or - "Display help" (optional)
+
+Commands:
+ +  create "Create resources"
+ │─  ** create user "Manage users"
+ |   |  --email "Email for user creation" (optional)
+ └─  **  ** create user type "Specify user type"
+ |   |   |  --username "Username for user creation" (required)
+ |   |   |  --firstName "User first name" (optional)
+ └─  ** create group "Manage groups"
+`
+	output := strings.Join(*writer.data, "")
+	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly")
+}
+
+func TestCmdLineOption_PrintUsageWithCustomGroups(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Add global flags
+	err := opts.AddFlag("help", &Argument{
+		Description: "Display help",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err, "should add global flag successfully")
+
+	// Add commands
+	cmd := &Command{
+		Name:        "create",
+		Description: "Create resources",
+		Subcommands: []Command{
+			{
+				Name:        "user",
+				Description: "Manage users",
+				Subcommands: []Command{
+					{
+						Name:        "type",
+						Description: "Specify user type",
+					},
+				},
+			},
+			{
+				Name:        "group",
+				Description: "Manage groups",
+			},
+		},
+	}
+	err = opts.AddCommand(cmd)
+	assert.Nil(t, err, "should add commands successfully")
+
+	// Add command-specific flags
+	err = opts.AddFlag("username", &Argument{
+		Description: "Username for user creation",
+		TypeOf:      Single,
+		Required:    true,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	err = opts.AddFlag("email", &Argument{
+		Description: "Email for user creation",
+		TypeOf:      Single,
+	}, "create user")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	// Define custom print config
+	printConfig := &PrettyPrintConfig{
+		NewCommandPrefix:     " + ",
+		DefaultPrefix:        " │ ",
+		TerminalPrefix:       " └ ",
+		OuterLevelBindPrefix: " └ ",
+		InnerLevelBindPrefix: " * ",
+	}
+
+	// Capture the output of PrintUsageWithGroups
+	writer := newArrayWriter()
+	opts.PrintCommandsWithFlags(writer, printConfig)
+
+	expectedOutput := ` + create "Create resources"
+ │  * create user "Manage users"
+ └  └ --email "Email for user creation" (optional)
+ └  *  * create user type "Specify user type"
+ └  └  └ --username "Username for user creation" (required)
+ └  * create group "Manage groups"
+`
+
+	// Check that the printed output matches the expected structure
+	output := strings.Join(*writer.data, "")
+	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
 }
 
 func TestMain(m *testing.M) {
