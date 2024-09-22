@@ -69,9 +69,9 @@ func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
 //   - *time.Time
 //   - *bool
 //     For other types use WithCustomBindFlag (fluent wrapper around CustomBindFlag) or CustomBindFlag
-func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument) ConfigureCmdLineFunc {
+func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument, commandPath ...string) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
-		*err = BindFlagToCmdLine(cmdLine, bindVar, flag, argument)
+		*err = BindFlagToCmdLine(cmdLine, bindVar, flag, argument, commandPath...)
 	}
 }
 
@@ -80,9 +80,9 @@ func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument) Confi
 //   - the bound flag name as string
 //   - the command-line value as string
 //   - the custom struct or variable which was bound. The bound structure is passed as reflect.Value
-func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argument *Argument) ConfigureCmdLineFunc {
+func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argument *Argument, commandPath ...string) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
-		*err = CustomBindFlagToCmdLine(cmdLine, bindVar, proc, flag, argument)
+		*err = CustomBindFlagToCmdLine(cmdLine, bindVar, proc, flag, argument, commandPath...)
 	}
 }
 

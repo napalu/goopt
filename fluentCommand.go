@@ -3,13 +3,12 @@ package goopt
 // NewCommand creates and returns a new Command object. This function takes variadic `ConfigureCommandFunc` functions to customize the created command.
 func NewCommand(configs ...ConfigureCommandFunc) *Command {
 	cmd := &Command{
-		Name:         "",
-		Subcommands:  nil,
-		Callback:     nil,
-		Description:  "",
-		DefaultValue: "",
-		Required:     false,
-		path:         "",
+		Name:        "",
+		Subcommands: nil,
+		Callback:    nil,
+		Description: "",
+		Required:    false,
+		Path:        "",
 	}
 
 	for _, config := range configs {
@@ -45,12 +44,6 @@ func WithCommandDescription(description string) ConfigureCommandFunc {
 func SetCommandRequired(required bool) ConfigureCommandFunc {
 	return func(command *Command) {
 		command.Required = required
-	}
-}
-
-func WithCommandDefault(defaultValue string) ConfigureCommandFunc {
-	return func(command *Command) {
-		command.DefaultValue = defaultValue
 	}
 }
 
