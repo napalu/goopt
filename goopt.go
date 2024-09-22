@@ -1047,7 +1047,7 @@ func (s *CmdLineOption) PrintCommandsWithFlags(writer io.Writer, config *PrettyP
 				}
 
 				// Print flags specific to this command
-				s.printCommandSpecificFlags(writer, cmd.Path, level, config)
+				s.PrintCommandSpecificFlags(writer, cmd.Path, level, config)
 
 				return true
 			}, 0)
@@ -1055,8 +1055,8 @@ func (s *CmdLineOption) PrintCommandsWithFlags(writer io.Writer, config *PrettyP
 	}
 }
 
-// Function to print flags for a specific command with the appropriate indentation
-func (s *CmdLineOption) printCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
+// PrintCommandSpecificFlags print flags for a specific command with the appropriate indentation
+func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
 	hasFlags := false
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
