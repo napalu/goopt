@@ -426,6 +426,7 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 	profile := &UserProfile{
 		Addresses: make([]Address, 1),
 	}
+
 	cmd, err := NewCmdLineFromStruct(profile)
 	assert.Nil(t, err, "should handle nested structs")
 	assert.True(t, cmd.ParseString("--name Jack -a 10 --address.0.city 'New York'"), "should parse nested arguments")
@@ -1010,6 +1011,156 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 		"set invalid boolean flag value among other values")
 	_, err = cmdLine.GetBool("fa")
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
+}
+
+func TestCmdLineOption_PrintUsageWithGroups(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Add global flags
+	err := opts.AddFlag("help", &Argument{
+		Description: "Display help",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err, "should add global flag successfully")
+
+	// Add commands
+	cmd := &Command{
+		Name:        "create",
+		Description: "Create resources",
+		Subcommands: []Command{
+			{
+				Name:        "user",
+				Description: "Manage users",
+				Subcommands: []Command{
+					{
+						Name:        "type",
+						Description: "Specify user type",
+					},
+				},
+			},
+			{
+				Name:        "group",
+				Description: "Manage groups",
+			},
+		},
+	}
+	err = opts.AddCommand(cmd)
+	assert.Nil(t, err, "should add commands successfully")
+
+	// Add command-specific flags
+	err = opts.AddFlag("username", &Argument{
+		Description: "Username for user creation",
+		TypeOf:      Single,
+		Required:    true,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+	err = opts.AddFlag("firstName", &Argument{
+		Description: "User first name",
+		TypeOf:      Single,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	err = opts.AddFlag("email", &Argument{
+		Description: "Email for user creation",
+		TypeOf:      Single,
+	}, "create user")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	// Capture the output of PrintUsageWithGroups
+	writer := newArrayWriter()
+	opts.PrintUsageWithGroups(writer)
+
+	expectedOutput := `usage: ` + os.Args[0] + `
+
+Global Flags:
+
+ --help or - "Display help" (optional)
+
+Commands:
+ +  create "Create resources"
+ │─  ** create user "Manage users"
+ |   |  --email "Email for user creation" (optional)
+ └─  **  ** create user type "Specify user type"
+ |   |   |  --username "Username for user creation" (required)
+ |   |   |  --firstName "User first name" (optional)
+ └─  ** create group "Manage groups"
+`
+	output := strings.Join(*writer.data, "")
+	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly")
+}
+
+func TestCmdLineOption_PrintUsageWithCustomGroups(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Add global flags
+	err := opts.AddFlag("help", &Argument{
+		Description: "Display help",
+		TypeOf:      Standalone,
+	})
+	assert.Nil(t, err, "should add global flag successfully")
+
+	// Add commands
+	cmd := &Command{
+		Name:        "create",
+		Description: "Create resources",
+		Subcommands: []Command{
+			{
+				Name:        "user",
+				Description: "Manage users",
+				Subcommands: []Command{
+					{
+						Name:        "type",
+						Description: "Specify user type",
+					},
+				},
+			},
+			{
+				Name:        "group",
+				Description: "Manage groups",
+			},
+		},
+	}
+	err = opts.AddCommand(cmd)
+	assert.Nil(t, err, "should add commands successfully")
+
+	// Add command-specific flags
+	err = opts.AddFlag("username", &Argument{
+		Description: "Username for user creation",
+		TypeOf:      Single,
+		Required:    true,
+	}, "create user type")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	err = opts.AddFlag("email", &Argument{
+		Description: "Email for user creation",
+		TypeOf:      Single,
+	}, "create user")
+	assert.Nil(t, err, "should add command-specific flag successfully")
+
+	// Define custom print config
+	printConfig := &PrettyPrintConfig{
+		NewCommandPrefix:     " + ",
+		DefaultPrefix:        " │ ",
+		TerminalPrefix:       " └ ",
+		OuterLevelBindPrefix: " └ ",
+		InnerLevelBindPrefix: " * ",
+	}
+
+	// Capture the output of PrintUsageWithGroups
+	writer := newArrayWriter()
+	opts.PrintCommandsWithFlags(writer, printConfig)
+
+	expectedOutput := ` + create "Create resources"
+ │  * create user "Manage users"
+ └  └ --email "Email for user creation" (optional)
+ └  *  * create user type "Specify user type"
+ └  └  └ --username "Username for user creation" (required)
+ └  * create group "Manage groups"
+`
+
+	// Check that the printed output matches the expected structure
+	output := strings.Join(*writer.data, "")
+	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
 }
 
 func TestMain(m *testing.M) {

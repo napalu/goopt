@@ -988,6 +988,98 @@ func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 	}
 }
 
+// PrintUsageWithGroups pretty prints accepted Flags and show command-specific Flags grouped by Commands to io.Writer.
+func (s *CmdLineOption) PrintUsageWithGroups(writer io.Writer) {
+	// Print the program usage
+	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s\n", os.Args[0])))
+
+	// Print global flags
+	s.PrintGlobalFlags(writer)
+
+	// Print command-specific flags and commands
+	if s.registeredCommands.Count() > 0 {
+		_, _ = writer.Write([]byte("\nCommands:\n"))
+		s.PrintCommandsWithFlags(writer, &PrettyPrintConfig{
+			NewCommandPrefix:     " +  ",
+			DefaultPrefix:        " │─ ",
+			TerminalPrefix:       " └─ ",
+			InnerLevelBindPrefix: " ** ",
+			OuterLevelBindPrefix: " |  ",
+		})
+	}
+}
+
+// PrintGlobalFlags prints global (non-command-specific) flags
+func (s *CmdLineOption) PrintGlobalFlags(writer io.Writer) {
+	_, _ = writer.Write([]byte("\nGlobal Flags:\n\n"))
+
+	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.CommandPath == "" { // Global flags have no command path
+			shortFlag, _ := s.GetShortFlag(*f.Key)
+			requiredOrOptional := "optional"
+			if f.Value.Argument.Required {
+				requiredOrOptional = "required"
+			}
+			_, _ = writer.Write([]byte(fmt.Sprintf(" --%s or -%s \"%s\" (%s)\n", *f.Key, shortFlag, f.Value.Argument.Description, requiredOrOptional)))
+		}
+	}
+}
+
+// PrintCommandsWithFlags prints commands with their respective flags
+func (s *CmdLineOption) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintConfig) {
+	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		if kv.Value.TopLevel {
+			kv.Value.Visit(func(cmd *Command, level int) bool {
+				// Determine the correct prefix based on command level and position
+				var prefix string
+				if level == 0 {
+					prefix = config.NewCommandPrefix
+				} else if len(cmd.Subcommands) == 0 {
+					prefix = config.TerminalPrefix
+				} else {
+					prefix = config.DefaultPrefix
+				}
+
+				// Print the command itself with proper indentation
+				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.Path, cmd.Description)
+				if _, err := writer.Write([]byte(command)); err != nil {
+					return false
+				}
+
+				// Print flags specific to this command
+				s.printCommandSpecificFlags(writer, cmd.Path, level, config)
+
+				return true
+			}, 0)
+		}
+	}
+}
+
+// Function to print flags for a specific command with the appropriate indentation
+func (s *CmdLineOption) printCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
+	hasFlags := false
+	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.CommandPath == commandPath {
+			if !hasFlags {
+				// Print the header for flags of this command
+				//flagHeader := fmt.Sprintf("%sFlags for command '%s':\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), commandPath)
+				//_, _ = writer.Write([]byte(flagHeader))
+				hasFlags = true
+			}
+
+			// Determine if the flag is required or optional
+			requiredOrOptional := "optional"
+			if f.Value.Argument.Required {
+				requiredOrOptional = "required"
+			}
+
+			// Print each flag with proper indentation, aligning with the command hierarchy
+			flag := fmt.Sprintf("%s--%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), splitCommandFlag(*f.Key)[0], f.Value.Argument.Description, requiredOrOptional)
+			_, _ = writer.Write([]byte(flag))
+		}
+	}
+}
+
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 	var shortOption string
@@ -1010,10 +1102,10 @@ func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 // PrintCommands writes the list of accepted Command structs to io.Writer.
 func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 	s.PrintCommandsUsing(writer, &PrettyPrintConfig{
-		NewCommandPrefix: " +",
-		DefaultPrefix:    " │",
-		TerminalPrefix:   " └",
-		LevelBindPrefix:  "─",
+		NewCommandPrefix:     " +",
+		DefaultPrefix:        " │",
+		TerminalPrefix:       " └",
+		OuterLevelBindPrefix: "─",
 	})
 }
 
@@ -1021,7 +1113,7 @@ func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 // PrettyPrintConfig.NewCommandPrefix precedes the start of a new command
 // PrettyPrintConfig.DefaultPrefix precedes sub-commands by default
 // PrettyPrintConfig.TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
-// PrettyPrintConfig.LevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
+// PrettyPrintConfig.OuterLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
 //
 //	command root. The Command root is at Level 0.
 func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
@@ -1035,7 +1127,7 @@ func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrint
 				case len(cmd.Subcommands) == 0:
 					start = config.TerminalPrefix
 				}
-				command := fmt.Sprintf("%s%s %s \"%s\"\n", start, strings.Repeat(config.LevelBindPrefix, level),
+				command := fmt.Sprintf("%s%s %s \"%s\"\n", start, strings.Repeat(config.OuterLevelBindPrefix, level),
 					cmd.Name, cmd.Description)
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false

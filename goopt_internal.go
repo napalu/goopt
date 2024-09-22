@@ -309,7 +309,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 		ok     bool
 	)
 	if cmdQueue.Len() > 0 {
-		ok, curSub = s.checkSubCommands(cmdQueue, currentArg, state)
+		ok, curSub = s.checkSubCommands(cmdQueue, currentArg)
 		if !ok {
 			return
 		}
@@ -415,7 +415,7 @@ func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg st
 	return arg, err
 }
 
-func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg string, state *parseState) (bool, *Command) {
+func (s *CmdLineOption) checkSubCommands(cmdQueue *deque.Deque, currentArg string) (bool, *Command) {
 	found := false
 	var sub Command
 
@@ -722,7 +722,7 @@ func (s *CmdLineOption) validateDependencies(flagInfo *FlagInfo, mainKey string,
 func (s *CmdLineOption) getFlagInCommandPath(flag string, commandPath string) (*FlagInfo, bool) {
 	// First, check if the flag exists in the command-specific path
 	if commandPath != "" {
-		flagKey := flag + "@" + commandPath
+		flagKey := buildLookupFlag(flag, commandPath)
 		if flagInfo, exists := s.acceptedFlags.Get(flagKey); exists {
 			return flagInfo, true
 		}
@@ -1326,7 +1326,11 @@ func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, curr
 
 func buildLookupFlag(flag string, commandPath ...string) string {
 	if len(commandPath) > 0 && commandPath[0] != "" {
-		return "@" + strings.Join(commandPath, " ") + "/" + flag
+		return fmt.Sprintf("%s@%s", flag, strings.Join(commandPath, " "))
 	}
 	return flag
+}
+
+func splitCommandFlag(flag string) []string {
+	return strings.Split(flag, "@")
 }

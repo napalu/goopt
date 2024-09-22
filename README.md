@@ -2,3 +2,258 @@
 
 [![GoDoc](https://godoc.org/github.com/napalu/go-opt?status.svg)](https://godoc.org/github.com/napalu/goopt)
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
+
+`goopt` is a flexible and powerful command-line option parser for Go applications. It provides a way to define commands, subcommands, flags, and their relationships declaratively or programmatically, offering both ease of use and extensibility.
+
+## Key Features
+
+- **Declarative and Programmatic Definition**: Supports both declarative struct tag parsing and programmatic definition of commands and flags.
+- **Command and Flag Grouping**: Organize commands and flags hierarchically, supporting global, command-specific, and shared flags.
+- **Flag Dependencies**: Enforce flag dependencies based on the presence or specific values of other flags.
+- **POSIX Compatibility**: Offers POSIX-compliant flag parsing, including support for short flags.
+- **Secure Flags**: Enable secure, hidden input for sensitive information like passwords.
+- **Fluent Interface**: Provides a fluent interface for building command-line options imperatively.
+- **Automatic Usage Generation**: Automatically generates usage documentation based on defined flags and commands.
+
+## Installation
+
+Install `goopt` via `go get`:
+
+```bash
+go get github.com/napalu/goopt
+```
+
+## Basic Design
+
+`goopt` follows a design that allows flexibility in how flags and commands are defined and parsed.
+
+- **Declarative Flags via Struct Tags**: Flags can be defined using struct tags. The parser introspects the struct and automatically binds the struct fields to flags.
+- **Programmatic Definition (Imperative or Fluent)**: Commands and flags can also be defined programmatically, either through imperative code or via a fluent interface. This allows dynamic construction of commands based on runtime conditions.
+- **Flag Grouping**: Flags can be associated with specific commands or shared across multiple commands. Global flags are available across all commands.
+- **Dependency Validation**: Flags can be defined to depend on the presence or value of other flags. This validation is performed automatically after parsing.
+
+## Usage
+
+### Basic Example
+
+### Declarative Definition Using Struct Tags
+
+```go
+package main
+
+import (
+   "os"
+   "fmt"
+   "github.com/napalu/goopt"
+)
+
+type Options struct {
+    Verbose bool   `long:"verbose" short:"v" description:"Enable verbose output"`
+    Output  string `long:"output" description:"Output file" required:"true"`
+}
+
+func main() {
+    opts := &Options{}
+    cmdLine, err := goopt.NewCmdLineFromStruct(opts)
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
+
+	if !cmdLine.Parse(os.Args) {
+		cmdLine.PrintUsage(os.Stdout)
+		return
+	}
+
+	fmt.Println("Verbose:", opts.Verbose)
+	fmt.Println("Output:", opts.Output)
+}
+```
+### Programmatic Definition with Commands
+
+```go
+package main
+
+import (
+	"os"
+	"fmt"
+	"github.com/napalu/goopt"
+)
+
+func main() {
+	cmdLine := goopt.NewCmdLineOption()
+
+	// Define flags
+	cmdLine.AddFlag("output", goopt.NewArgument("Output file", goopt.Single, true))
+
+	// Define commands and subcommands
+	createCmd := &goopt.Command{
+		Name: "create",
+		Subcommands: []goopt.Command{
+			{Name: "user"},
+			{Name: "group"},
+		},
+	}
+
+	cmdLine.AddCommand(createCmd)
+
+	// Parse the command-line arguments
+	if !cmdLine.Parse(os.Args) {
+		cmdLine.PrintUsage(os.Stdout)
+		return
+	}
+
+	// Access parsed flags
+	output, _ := cmdLine.Get("output")
+	fmt.Println("Output:", output)
+
+	// Access parsed commands
+	cmdValue, _ := cmdLine.GetCommandValue("create user")
+	fmt.Println("Command value:", cmdValue)
+}
+```
+
+---
+
+### Advanced Features
+
+#### Secure Flags
+Some flags contain sensitive information (like passwords) and should be kept secure during input. `goopt` supports secure flags, which prompt the user without echoing input back to the terminal.
+
+```go
+package main
+
+import (
+	"os"
+	"fmt"
+	"github.com/napalu/goopt"
+)
+
+func main() {
+	cmdLine := goopt.NewCmdLineOption()
+
+	// Define a secure flag
+	cmdLine.AddFlag("password", goopt.NewArgument("p", "password for app", goopt.Single, true, goopt.Secure{IsSecure: true, Prompt: "Password: "}, ""))
+
+	// Parse the arguments
+	if cmdLine.Parse(os.Args) {
+		password, _ := cmdLine.Get("password")
+		fmt.Println("Password received (but not echoed):", password)
+	} else {
+		cmdLine.PrintUsage(os.Stdout)
+	}
+}
+```
+
+Secure flags ensure that user input for sensitive fields is hidden, and can optionally display a prompt message.
+
+### Flag Dependeny Validation
+
+`goopt` allows you to define dependencies between flags, ensuring that certain flags are present or have specific values when others are set. This is useful for enforcing consistency in user input.
+
+```go
+package main
+
+import (
+	"os"
+	g "github.com/napalu/goopt"
+)
+
+cmdLine := g.NewCmdLineOption()
+
+// Define flags
+cmdLine.AddFlag("notify", g.NewArg( 
+	g.WithDescription("Enable email notifications"), 
+	g.WithType(g.Standalone))
+cmdLine.AddFlag("email", g.NewArg(
+	g.WithDescription("Email address for notifications"), 
+	g.WithType(g.Single))
+
+// Set flag dependencies
+cmdLine.DependsOnFlagValue("email", "notify", "true")
+
+// Parse the arguments
+if !cmdLine.Parse(os.Args) {
+	cmdLine.PrintUsage(os.Stdout)
+} else {
+	email, _ := cmdLine.Get("email")
+	fmt.Println("Email notifications enabled for:", email)
+}
+```
+
+In this example, the email flag is only valid if the notify flag is set to true. If the dependency is not satisfied, goopt will add a warning which can be displayed to the user (see `goopt.GetWarnings()`).
+
+### Command-Specific Flags
+
+`goopt` supports associating flags with specific commands or subcommands. This allows you to define different behaviors and options for different parts of your application.
+
+```go
+package main
+
+import (
+	"os"
+	"github.com/napalu/goopt"
+)
+
+cmdLine := goopt.NewCmdLineOption()
+
+// Define commands
+cmdLine.AddCommand(&goopt.Command{
+	Name: "create",
+	Subcommands: []goopt.Command{
+		{Name: "user"},
+		{Name: "group"},
+	},
+})
+
+// Define flags for specific commands
+cmdLine.AddFlag("username", goopt.NewArgument("Username for user creation", goopt.Single), "create user")
+cmdLine.AddFlag("email", goopt.NewArgument("Email address for user creation", goopt.Single), "create user")
+
+// Parse the command-line arguments
+if cmdLine.Parse(os.Args) {
+	username, _ := cmdLine.Get("username")
+	email, _ := cmdLine.Get("email")
+	fmt.Println("Creating user with username:", username)
+	fmt.Println("Email address:", email)
+}
+```
+
+### Fluent Interface
+
+The library provides a fluent interface for defining flags and commands.
+
+```go
+package main
+
+import (
+	"os"
+	"github.com/napalu/goopt"
+)
+
+cmdLine, _ := goopt.NewCmdLine(
+    goopt.WithFlag("testFlag", goopt.NewArg(goopt.WithType(goopt.Single))),
+    goopt.WithCommand(
+        goopt.NewCommand(goopt.WithName("testCommand")),
+    ),
+)
+
+cmdLine.Parse(os.Args)
+```
+This interface allows for dynamic and flexible construction of command-line parsers.
+
+---
+
+### Automatic Usage Generation
+
+`goopt` automatically generates usage documentation based on defined commands and flags. To print the usage:
+
+```go
+cmdLine.PrintUsage(os.Stdout)
+```
+
+---
+
+### Contributing
+
+Contributions are welcome! Please check the issues for open tasks and feel free to submit a pull request.

@@ -22,9 +22,12 @@ type PrettyPrintConfig struct {
 	DefaultPrefix string
 	// TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
 	TerminalPrefix string
-	// LevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
+	// InnerLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
 	//  command root. The Command root is at Level 0. Each sub-command increases root Level by 1.
-	LevelBindPrefix string
+	InnerLevelBindPrefix string
+	// OuterLevelBindPrefix is used for indentation after InnerLevelBindPrefix has been rendered. The indentation is repeated for each Level under the
+	//  command root. The Command root is at Level 0. Each sub-command increases root Level by 1.
+	OuterLevelBindPrefix string
 }
 
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
