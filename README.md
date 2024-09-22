@@ -159,25 +159,27 @@ import (
 	g "github.com/napalu/goopt"
 )
 
-cmdLine := g.NewCmdLineOption()
-
-// Define flags
-cmdLine.AddFlag("notify", g.NewArg( 
-	g.WithDescription("Enable email notifications"), 
-	g.WithType(g.Standalone))
-cmdLine.AddFlag("email", g.NewArg(
-	g.WithDescription("Email address for notifications"), 
-	g.WithType(g.Single))
-
-// Set flag dependencies
-cmdLine.DependsOnFlagValue("email", "notify", "true")
-
-// Parse the arguments
-if !cmdLine.Parse(os.Args) {
-	cmdLine.PrintUsage(os.Stdout)
-} else {
-	email, _ := cmdLine.Get("email")
-	fmt.Println("Email notifications enabled for:", email)
+func main() {
+    cmdLine := g.NewCmdLineOption()
+    
+    // Define flags
+    cmdLine.AddFlag("notify", g.NewArg( 
+        g.WithDescription("Enable email notifications"), 
+        g.WithType(g.Standalone))
+    cmdLine.AddFlag("email", g.NewArg(
+        g.WithDescription("Email address for notifications"), 
+        g.WithType(g.Single))
+    
+    // Set flag dependencies
+    cmdLine.DependsOnFlagValue("email", "notify", "true")
+    
+    // Parse the arguments
+    if !cmdLine.Parse(os.Args) {
+        cmdLine.PrintUsage(os.Stdout)
+    } else {
+        email, _ := cmdLine.Get("email")
+        fmt.Println("Email notifications enabled for:", email)
+    }
 }
 ```
 
@@ -195,27 +197,29 @@ import (
 	"github.com/napalu/goopt"
 )
 
-cmdLine := goopt.NewCmdLineOption()
+func main() {
+	cmdLine := goopt.NewCmdLineOption()
 
-// Define commands
-cmdLine.AddCommand(&goopt.Command{
-	Name: "create",
-	Subcommands: []goopt.Command{
-		{Name: "user"},
-		{Name: "group"},
-	},
-})
+	// Define commands
+	cmdLine.AddCommand(&goopt.Command{
+		Name: "create",
+		Subcommands: []goopt.Command{
+			{Name: "user"},
+			{Name: "group"},
+		},
+	})
 
-// Define flags for specific commands
-cmdLine.AddFlag("username", goopt.NewArgument("Username for user creation", goopt.Single), "create user")
-cmdLine.AddFlag("email", goopt.NewArgument("Email address for user creation", goopt.Single), "create user")
+	// Define flags for specific commands
+	cmdLine.AddFlag("username", goopt.NewArgument("Username for user creation", goopt.Single), "create user")
+	cmdLine.AddFlag("email", goopt.NewArgument("Email address for user creation", goopt.Single), "create user")
 
-// Parse the command-line arguments
-if cmdLine.Parse(os.Args) {
-	username, _ := cmdLine.Get("username")
-	email, _ := cmdLine.Get("email")
-	fmt.Println("Creating user with username:", username)
-	fmt.Println("Email address:", email)
+	// Parse the command-line arguments
+	if cmdLine.Parse(os.Args) {
+		username, _ := cmdLine.Get("username")
+		email, _ := cmdLine.Get("email")
+		fmt.Println("Creating user with username:", username)
+		fmt.Println("Email address:", email)
+	}
 }
 ```
 
@@ -231,14 +235,16 @@ import (
 	"github.com/napalu/goopt"
 )
 
-cmdLine, _ := goopt.NewCmdLine(
-    goopt.WithFlag("testFlag", goopt.NewArg(goopt.WithType(goopt.Single))),
-    goopt.WithCommand(
-        goopt.NewCommand(goopt.WithName("testCommand")),
-    ),
-)
+func main() {
+	cmdLine, _ := goopt.NewCmdLine(
+		goopt.WithFlag("testFlag", goopt.NewArg(goopt.WithType(goopt.Single))),
+		goopt.WithCommand(
+			goopt.NewCommand(goopt.WithName("testCommand")),
+		),
+	)
 
-cmdLine.Parse(os.Args)
+	cmdLine.Parse(os.Args)
+}
 ```
 This interface allows for dynamic and flexible construction of command-line parsers.
 
@@ -250,6 +256,12 @@ This interface allows for dynamic and flexible construction of command-line pars
 
 ```go
 cmdLine.PrintUsage(os.Stdout)
+```
+
+To print the usage grouped by command:
+
+```go
+cmdLine.PrintUsageWithGroups(os.Stdout)
 ```
 
 ---
