@@ -1132,7 +1132,7 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) error {
 
 // unmarshalTagsToArgument populates the Argument struct based on struct tags
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
-	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt", "Path"}
+	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt", "path"}
 
 	for _, tag := range tagNames {
 		value, ok := field.Tag.Lookup(tag)
@@ -1169,7 +1169,7 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 			if arg.Secure.IsSecure {
 				arg.Secure.Prompt = value
 			}
-		case "Path":
+		case "path":
 			// Path is handled separately.
 		default:
 			return fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
@@ -1259,7 +1259,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		}
 
 		// Process the path tag to associate the flag with a command or global
-		pathTag := field.Tag.Get("Path")
+		pathTag := field.Tag.Get("path")
 		if pathTag != "" {
 			paths := strings.Split(pathTag, ",")
 			for _, cmdPath := range paths {
