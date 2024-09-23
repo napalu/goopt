@@ -49,7 +49,7 @@ import (
 
 type Options struct {
     Verbose bool   `long:"verbose" short:"v" description:"Enable verbose output"`
-    Output  string `long:"output" description:"Output file" required:"true"`
+    Output  string `long:"output" description:"Output file" required:"true" path:"create file"`
 }
 
 func main() {
@@ -61,7 +61,7 @@ func main() {
     }
 
 	if !cmdLine.Parse(os.Args) {
-		cmdLine.PrintUsage(os.Stdout)
+		cmdLine.PrintUsageWithGroups(os.Stdout)
 		return
 	}
 
@@ -147,7 +147,7 @@ func main() {
 
 Secure flags ensure that user input for sensitive fields is hidden, and can optionally display a prompt message.
 
-### Flag Dependeny Validation
+### Flag Dependency Validation
 
 `goopt` allows you to define dependencies between flags, ensuring that certain flags are present or have specific values when others are set. This is useful for enforcing consistency in user input.
 

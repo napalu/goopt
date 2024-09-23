@@ -391,7 +391,7 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 	testOpt := TestOptOk{}
 	cmd, err := NewCmdLineFromStruct(&testOpt)
 	assert.Nil(t, err)
-	/*if err == nil {
+	if err == nil {
 		assert.False(t, cmd.ParseString("-t true --stringOption one"), "parse should fail when a command-specific flag is required but no associated command is specified")
 		cmd.ClearAll()
 		assert.True(t, cmd.ParseString("create user type -t --stringOption one"), "parse should success when a command-specific flag is given and the associated command is specified")
@@ -402,7 +402,6 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 	}
 	_, err = NewCmdLineFromStruct(&TestOptNok{})
 	assert.NotNil(t, err, "should error out on invalid struct")
-	*/
 	cmd, err = NewCmdLineFromStruct(&testOpt)
 	assert.Nil(t, err)
 	assert.True(t, cmd.ParseString("create user type create group type -t --stringOption"))
