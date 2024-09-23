@@ -1198,6 +1198,11 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
+	processedMap := make(map[uintptr]bool)
+	err := c.processStructCommands(structValue, processedMap, 0, maxDepth)
+	if err != nil {
+		c.addError(err)
+	}
 	countZeroTags := 0
 
 	for i := 0; i < st.NumField(); i++ {
@@ -1227,7 +1232,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		// Handle slice of structs
 		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
 			if err := processSliceField(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
-				return nil, fmt.Errorf("error processing slice field %s: %w", fieldPath, err)
+				c.addError(fmt.Errorf("error processing slice field %s: %w", fieldPath, err))
 			}
 			continue
 		}
@@ -1235,7 +1240,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		// Handle nested structs
 		if field.Type.Kind() == reflect.Struct {
 			if err := processNestedStruct(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
-				return nil, fmt.Errorf("error processing nested struct %s: %w", fieldPath, err)
+				c.addError(fmt.Errorf("error processing nested struct %s: %w", fieldPath, err))
 			}
 			continue
 		}
@@ -1244,7 +1249,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		arg := &Argument{}
 		err := unmarshalTagsToArgument(field, arg)
 		if err != nil {
-			return nil, fmt.Errorf("error processing field %s: %w", fieldPath, err)
+			c.addError(fmt.Errorf("error processing field %s: %w", fieldPath, err))
 		}
 
 		if reflect.DeepEqual(*arg, Argument{}) {
@@ -1258,11 +1263,29 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
 		}
 
-		// Process the path tag to associate the flag with a command or global
+		// Process the path tag to associate the flag with commands or global
 		pathTag := field.Tag.Get("path")
 		if pathTag != "" {
 			paths := strings.Split(pathTag, ",")
 			for _, cmdPath := range paths {
+				/*// Split the command path into components
+				cmdPathComponents := strings.Split(cmdPath, " ")
+				parentCommand := ""
+				for _, cmdComponent := range cmdPathComponents {
+					if parentCommand == "" {
+						parentCommand = cmdComponent
+					} else {
+						parentCommand = fmt.Sprintf("%s %s", parentCommand, cmdComponent)
+					}
+					// Ensure the command hierarchy exists up to this point
+					if !c.HasCommand(parentCommand) {
+						if _, err = c.CommandHierarchy(parentCommand); err != nil {
+							c.addError(fmt.Errorf("error processing command %s: %w", parentCommand, err))
+						}
+					}
+				}*/
+
+				// Bind the flag to the last command in the path
 				err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg, cmdPath)
 				if err != nil {
 					return nil, err
@@ -1282,6 +1305,54 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	}
 
 	return c, nil
+}
+
+func (s *CmdLineOption) processStructCommands(val reflect.Value, processed map[uintptr]bool, currentDepth, maxDepth int) error {
+	typ := val.Type()
+
+	// Check for nesting limit
+	if currentDepth > maxDepth {
+		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
+	}
+
+	// Get the address of the struct to detect circular references
+	valPtr := val.Addr().Pointer()
+
+	// Check if we've already processed this struct (circular reference detection)
+	if _, seen := processed[valPtr]; seen {
+		return fmt.Errorf("circular reference detected in struct %s", typ.Name())
+	}
+
+	// Mark the struct as processed
+	processed[valPtr] = true
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := typ.Field(i)
+
+		if !field.CanInterface() {
+			continue // Skip unexported fields
+		}
+
+		// Check if the field is a Command
+		if fieldType.Type == reflect.TypeOf(Command{}) {
+			cmd := field.Interface().(Command)
+			_, err := s.CommandHierarchy(cmd.Path)
+			if err != nil {
+				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.Path, err)
+			}
+		} else if field.Kind() == reflect.Struct {
+			// Recursively process nested structs if the field is a struct
+			if err := s.processStructCommands(field, processed, currentDepth+1, maxDepth); err != nil {
+				return fmt.Errorf("error processing nested struct %s: %w", fieldType.Name, err)
+			}
+		}
+	}
+
+	// Remove from the processed map after processing
+	delete(processed, valPtr)
+
+	return nil
 }
 
 func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *CmdLineOption) error {

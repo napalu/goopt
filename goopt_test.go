@@ -379,7 +379,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 }
 
 type TestOptOk struct {
-	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" type:"standalone"`
+	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" type:"standalone" path:"create user type,create group type"`
 	StringOption string `short:"so" description:"test string option" type:"single" default:"1"`
 }
 

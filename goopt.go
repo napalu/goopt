@@ -345,6 +345,71 @@ func (s *CmdLineOption) HasPositionalArgs() bool {
 	return s.GetPositionalArgCount() > 0
 }
 
+func (s *CmdLineOption) CommandHierarchy(commandPath string) (*Command, error) {
+	// Split the path into segments (commands)
+	commandNames := strings.Split(commandPath, " ")
+
+	// Start at the top level
+	var topParent *Command
+	var parent *Command
+	var currentCommand *Command
+
+	for _, cmdName := range commandNames {
+		// Look for the command in the current level (either top-level or subcommands)
+		found := false
+
+		if parent == nil {
+			// Top-level command
+			if cmd, exists := s.registeredCommands.Get(cmdName); exists {
+				currentCommand = &cmd
+				found = true
+			}
+		} else {
+			// Check for subcommands of the parent command
+			for _, subCmd := range parent.Subcommands {
+				if subCmd.Name == cmdName {
+					currentCommand = &subCmd
+					found = true
+					break
+				}
+			}
+		}
+
+		// If the command isn't found, create a new one
+		if !found {
+			newCommand := Command{
+				Name:        cmdName,
+				Description: fmt.Sprintf("Auto-generated command for %s", cmdName),
+				Subcommands: []Command{},
+			}
+
+			if parent == nil {
+				if topParent == nil {
+					topParent = &newCommand
+				}
+				currentCommand = &newCommand
+			} else {
+				// Add to the parent's subcommands
+				parent.Subcommands = append(parent.Subcommands, newCommand)
+				currentCommand = &parent.Subcommands[len(parent.Subcommands)-1]
+				s.registeredCommands.Set(cmdName, newCommand)
+			}
+		}
+
+		// Move to the next level in the hierarchy
+		parent = currentCommand
+	}
+
+	if topParent != nil {
+		err := s.AddCommand(topParent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return topParent, nil
+}
+
 // GetCommands returns the list of all commands seen on command-line
 func (s *CmdLineOption) GetCommands() []string {
 	pathValues := make([]string, 0, s.commandOptions.Count())
