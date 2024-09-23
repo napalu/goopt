@@ -650,43 +650,6 @@ func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Arg
 	return nil
 }
 
-/*func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
-	if bindPtr == nil {
-		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
-	}
-	if ok, err := canConvert(bindPtr, argument.TypeOf); !ok {
-		return err
-	}
-
-	// Determine if the flag is being bound to a specific command path or globally
-	var actualCommandPath string
-	if len(commandPath) > 0 {
-		actualCommandPath = commandPath[0]
-	}
-
-	// Handle the case for shared flags
-	if _, found := s.sharedFlags.Get(flag); found {
-		if s.sharedBind == nil {
-			s.sharedBind = make(map[string]map[string]interface{})
-		}
-		// Check if there is already a map for this flag
-		if _, exists := s.sharedBind[flag]; !exists {
-			s.sharedBind[flag] = make(map[string]interface{})
-		}
-		// Add the binding for this specific command path
-		s.sharedBind[flag][actualCommandPath] = bindPtr
-	} else {
-		// Regular flag binding (either global or for a single command path)
-		if actualCommandPath != "" {
-			s.bind[flag+"@"+actualCommandPath] = bindPtr
-		} else {
-			s.bind[flag] = bindPtr
-		}
-	}
-
-	return nil
-}*/
-
 // CustomBindFlag works like BindFlag but expects a ValueSetFunc callback which is called when a Flag is evaluated on Parse.
 // When the Flag is seen on the command like the ValueSetFunc is called with the user-supplied value. Allows binding
 // complex structures not supported by BindFlag
@@ -1068,8 +1031,6 @@ func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath 
 		if f.Value.CommandPath == commandPath {
 			if !hasFlags {
 				// Print the header for flags of this command
-				//flagHeader := fmt.Sprintf("%sFlags for command '%s':\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), commandPath)
-				//_, _ = writer.Write([]byte(flagHeader))
 				hasFlags = true
 			}
 
@@ -1120,8 +1081,7 @@ func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 // PrettyPrintConfig.DefaultPrefix precedes sub-commands by default
 // PrettyPrintConfig.TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
 // PrettyPrintConfig.OuterLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
-//
-//	command root. The Command root is at Level 0.
+// command root. The Command root is at Level 0.
 func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		if kv.Value.TopLevel {
