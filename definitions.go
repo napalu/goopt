@@ -2,8 +2,8 @@ package goopt
 
 import (
 	"errors"
-	"github.com/ef-ds/deque"
 	"github.com/napalu/goopt/types/orderedmap"
+	"github.com/napalu/goopt/types/queue"
 	"regexp"
 	"time"
 )
@@ -170,7 +170,7 @@ type CmdLineOption struct {
 	commandOptions     *orderedmap.OrderedMap[string, bool]
 	positionalArgs     []PositionalArgument
 	rawArgs            map[string]string
-	callbackQueue      *deque.Deque
+	callbackQueue      *queue.Q[commandCallback]
 	callbackResults    map[string]error
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 	envFilter          EnvFunc
