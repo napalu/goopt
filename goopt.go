@@ -16,9 +16,9 @@ package goopt
 
 import (
 	"fmt"
-	"github.com/ef-ds/deque"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
+	"github.com/napalu/goopt/types/queue"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,7 +41,7 @@ func NewCmdLineOption() *CmdLineOption {
 		commandOptions:     orderedmap.NewOrderedMap[string, bool](),
 		positionalArgs:     []PositionalArgument{},
 		listFunc:           matchChainedSeparators,
-		callbackQueue:      deque.New(),
+		callbackQueue:      queue.New[commandCallback](),
 		callbackResults:    map[string]error{},
 		secureArguments:    orderedmap.NewOrderedMap[string, *Secure](),
 		prefixes:           []rune{'-', '/'},
@@ -87,9 +87,7 @@ func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
 func (s *CmdLineOption) ExecuteCommands() int {
 	callbackErrors := 0
 	for s.callbackQueue.Len() > 0 {
-
-		ele, _ := s.callbackQueue.PopFront()
-		call := ele.(commandCallback)
+		call, _ := s.callbackQueue.Pop()
 		if call.callback != nil && len(call.arguments) == 2 {
 			cmdLine, cmdLineOk := call.arguments[0].(*CmdLineOption)
 			cmd, cmdOk := call.arguments[1].(*Command)
@@ -217,6 +215,7 @@ func (s *CmdLineOption) AddCommand(cmd *Command) error {
 
 // Parse this function should be called on os.Args (or a user-defined array of arguments). Returns true when
 // user command line arguments match the defined Flag and Command rules
+// Parse processes user command line arguments matching the defined Flag and Command rules.
 func (s *CmdLineOption) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
@@ -230,9 +229,13 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		skip:  -1,
 	}
 
-	var cmdQueue deque.Deque
-	var commandPathSlice []string
-	var currentCommandPath string
+	var (
+		cmdQueue           = queue.New[*Command]()
+		ctxStack           = queue.New[string]() // Stack for command contexts
+		commandPathSlice   []string
+		currentCommandPath string
+		processedStack     bool
+	)
 
 	for state.pos = 0; state.pos < state.endOf; state.pos++ {
 		if state.skip == state.pos {
@@ -240,20 +243,49 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		}
 
 		if s.isFlag(args[state.pos]) {
-			if s.posixCompatible {
-				args = s.parsePosixFlag(args, state, currentCommandPath)
+			if s.isGlobalFlag(args[state.pos]) {
+				args = s.evalFlagWithPath(args, state, "")
 			} else {
-				s.parseFlag(args, state, currentCommandPath)
+				// We now iterate over the stack to handle flags for each command context
+				for i := ctxStack.Len() - 1; i >= 0; i-- {
+					cmdContext, ok := ctxStack.At(i)
+					if ok {
+						currentCommandPath = cmdContext
+					} else {
+						currentCommandPath = ""
+					}
+					args = s.evalFlagWithPath(args, state, currentCommandPath)
+					processedStack = true
+				}
+
+				if !processedStack {
+					// fallback - possibly POSIX style
+					args = s.evalFlagWithPath(args, state, "")
+				}
 			}
+
 		} else {
-			s.parseCommand(args, state, &cmdQueue, &commandPathSlice)
+			// Parse the next command
+			terminating := s.parseCommand(args, state, cmdQueue, &commandPathSlice)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
+			if terminating {
+				if processedStack {
+					ctxStack.Clear()
+					processedStack = false
+				}
+				if currentCommandPath != "" {
+					ctxStack.Push(currentCommandPath)
+				}
+				commandPathSlice = commandPathSlice[:0]
+			}
 		}
 	}
 
+	// Validate all processed options
 	s.validateProcessedOptions()
 	s.setPositionalArguments(args)
 
+	// Process secure arguments if parsing succeeded
 	success := len(s.errors) == 0
 	if success {
 		for f := s.secureArguments.Front(); f != nil; f = f.Next() {
@@ -321,8 +353,8 @@ func (s *CmdLineOption) SetPosix(posixCompatible bool) bool {
 }
 
 // GetOrDefault returns the value of a defined Flag or defaultValue if no value is set
-func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string) string {
-	value, found := s.Get(flag)
+func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string, commandPath ...string) string {
+	value, found := s.Get(flag, commandPath...)
 	if found {
 		return value
 	}
@@ -358,8 +390,9 @@ func (s *CmdLineOption) GetCommands() []string {
 }
 
 // Get returns a combination of a Flag's value as string and true if found. Returns an empty string and false otherwise
-func (s *CmdLineOption) Get(flag string) (string, bool) {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
+	lookup := buildLookupFlag(flag, commandPath...)
+	mainKey := s.flagOrShortFlag(lookup)
 	value, found := s.options[mainKey]
 	if found {
 		if flagInfo, ok := s.acceptedFlags.Get(mainKey); ok {
@@ -547,58 +580,31 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument, commandPath ...
 
 	// Ensure no duplicate flags for the same command path or globally
 	if _, exists := s.acceptedFlags.Get(lookupFlag); exists {
-		return fmt.Errorf("flag '%s' already exists for the given command Path", lookupFlag)
+		return fmt.Errorf("flag '%s' already exists for the given command path", lookupFlag)
 	}
 
-	// Handle short flag validation
 	if lenS := len(argument.Short); lenS > 0 {
 		if s.posixCompatible && lenS > 1 {
 			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", ErrPosixIncompatible, flag, argument.Short)
 		}
-		if arg, exists := s.lookup[argument.Short]; exists {
-			return fmt.Errorf("short flag '%s' on flag %s already exists as %v", argument.Short, flag, arg)
+
+		// Check for short flag conflicts only for global flags
+		if len(commandPath) == 0 { // Global flag
+			if arg, exists := s.lookup[argument.Short]; exists {
+				return fmt.Errorf("short flag '%s' on global flag %s already exists as %v", argument.Short, flag, arg)
+			}
 		}
+
 		s.lookup[argument.Short] = flag
 	}
 
-	// Store the flag in acceptedFlags
 	s.acceptedFlags.Set(lookupFlag, &FlagInfo{
 		Argument:    argument,
-		CommandPath: strings.Join(commandPath, " "),
+		CommandPath: strings.Join(commandPath, " "), // Keep track of the command path
 	})
 
 	return nil
 }
-
-// AddFlagToCommand maps a flag to a specific command path
-/*func (s *CmdLineOption) AddFlagToCommand(commandPath string, flag string, argument *Argument, varPtr interface{}) error {
-	// Split the command path into individual command names
-	pathParts := strings.Split(commandPath, " ")
-
-	// Navigate the command hierarchy
-	currentCmd := s.getOrCreateCommand(pathParts[0])
-	for _, part := range pathParts[1:] {
-		currentCmd = currentCmd.getOrCreateSubcommand(part)
-	}
-
-	// Add the flag to the final command in the hierarchy
-	currentCmd.addFlag(argument)
-
-	// Ensure we bind the flag to the variable pointer for command-specific parsing
-	if varPtr != nil {
-		if err := s.BindFlag(varPtr, flag, argument); err != nil {
-			return fmt.Errorf("error binding flag '%s' to variable: %w", flag, err)
-		}
-	}
-
-	// Also, add the flag to the commandFlags map for quick lookup
-	if s.commandFlags == nil {
-		s.commandFlags = make(map[string][]*Argument)
-	}
-	s.commandFlags[commandPath] = append(s.commandFlags[commandPath], argument)
-
-	return nil
-}*/
 
 // BindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.BindFlag method
 func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argument *Argument, commandPath ...string) error {
@@ -633,11 +639,11 @@ func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Arg
 		return fmt.Errorf("BindFlag only accepts pointer types")
 	}
 
-	lookupFlag := buildLookupFlag(flag, commandPath...)
-
-	if err := s.AddFlag(lookupFlag, argument); err != nil {
+	if err := s.AddFlag(flag, argument, commandPath...); err != nil {
 		return err
 	}
+
+	lookupFlag := buildLookupFlag(flag, commandPath...)
 	// Bind the flag to the variable
 	s.bind[lookupFlag] = bindPtr
 
