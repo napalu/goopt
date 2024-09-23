@@ -695,7 +695,7 @@ func (s *CmdLineOption) walkCommands() {
 
 		for _, m := range matchedCommands {
 			for _, sub := range m.Subcommands {
-				stack.PushFront(sub)
+				stack.Push(sub)
 			}
 		}
 	}
