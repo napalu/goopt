@@ -1292,8 +1292,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
-	processedMap := make(map[uintptr]bool)
-	err := c.processStructCommands(structValue, processedMap, 0, maxDepth)
+	err := c.processStructCommands(structValue, 0, maxDepth)
 	if err != nil {
 		c.addError(err)
 	}
@@ -1416,7 +1415,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 	return c, nil
 }
 
-func (s *CmdLineOption) processStructCommands(val reflect.Value, processed map[uintptr]bool, currentDepth, maxDepth int) error {
+func (s *CmdLineOption) processStructCommands(val reflect.Value, currentDepth, maxDepth int) error {
 	typ := val.Type()
 
 	// Check for nesting limit
@@ -1424,22 +1423,12 @@ func (s *CmdLineOption) processStructCommands(val reflect.Value, processed map[u
 		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
 	}
 
-	// Get the address of the struct to detect circular references
-	valPtr := val.Addr().Pointer()
-
-	// Check if we've already processed this struct (circular reference detection)
-	if _, seen := processed[valPtr]; seen {
-		return fmt.Errorf("circular reference detected in struct %s", typ.Name())
-	}
-
-	// Mark the struct as processed
-	processed[valPtr] = true
-
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
 
-		if !field.CanInterface() {
+		fieldValue := val.Field(i)
+		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
 			continue // Skip unexported fields
 		}
 
@@ -1452,14 +1441,11 @@ func (s *CmdLineOption) processStructCommands(val reflect.Value, processed map[u
 			}
 		} else if field.Kind() == reflect.Struct {
 			// Recursively process nested structs if the field is a struct
-			if err := s.processStructCommands(field, processed, currentDepth+1, maxDepth); err != nil {
+			if err := s.processStructCommands(field, currentDepth+1, maxDepth); err != nil {
 				return fmt.Errorf("error processing nested struct %s: %w", fieldType.Name, err)
 			}
 		}
 	}
-
-	// Remove from the processed map after processing
-	delete(processed, valPtr)
 
 	return nil
 }
