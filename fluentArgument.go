@@ -10,6 +10,20 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	return argument
 }
 
+// Set configures the Argument instance with the provided ConfigureArgumentFunc(s),
+// and returns an error if a configuration results in an error.
+//
+// Usage example:
+//
+//	arg := &Argument{}
+//	err := arg.Set(
+//	    WithDescription("example argument"),
+//	    WithType(Standalone),
+//	    IsRequired,
+//	)
+//	if err != nil {
+//	    // handle error
+//	}
 func (a *Argument) Set(configs ...ConfigureArgumentFunc) error {
 	a.ensureInit()
 	var err error

@@ -504,6 +504,9 @@ func (s *CmdLineOption) processValueFlag(currentArg string, next string, argumen
 
 func (s *CmdLineOption) processSecureFlag(name string, config *Secure) {
 	var prompt string
+	if !s.HasFlag(name) {
+		return
+	}
 	if !config.IsSecure {
 		return
 	}
@@ -1426,10 +1429,12 @@ func (s *CmdLineOption) processStructCommands(val reflect.Value, currentDepth, m
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
+		if _, ok := fieldType.Tag.Lookup("ignore"); ok {
+			continue
+		}
 
-		fieldValue := val.Field(i)
-		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
-			continue // Skip unexported fields
+		if !fieldType.IsExported() {
+			continue
 		}
 
 		// Check if the field is a Command

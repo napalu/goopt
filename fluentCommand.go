@@ -18,6 +18,12 @@ func NewCommand(configs ...ConfigureCommandFunc) *Command {
 	return cmd
 }
 
+func (c *Command) Set(configs ...ConfigureCommandFunc) {
+	for _, config := range configs {
+		config(c)
+	}
+}
+
 // WithName sets the name for the command. The name is used to identify the command and invoke it from the command line.
 func WithName(name string) ConfigureCommandFunc {
 	return func(command *Command) {
@@ -47,8 +53,18 @@ func SetCommandRequired(required bool) ConfigureCommandFunc {
 	}
 }
 
+// WithSubcommands function takes a list of subcommands and associates them with a command
 func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {
+		for i := 0; i < len(subcommands); i++ {
+			command.Subcommands = append(command.Subcommands, *subcommands[i])
+		}
+	}
+}
+
+func WithOverwriteSubcommands(subcommands ...*Command) ConfigureCommandFunc {
+	return func(command *Command) {
+		command.Subcommands = command.Subcommands[:0]
 		for i := 0; i < len(subcommands); i++ {
 			command.Subcommands = append(command.Subcommands, *subcommands[i])
 		}

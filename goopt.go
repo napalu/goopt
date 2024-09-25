@@ -775,8 +775,12 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 	_, found := s.options[mainKey]
 	if !found && s.secureArguments != nil {
 		// secure arguments are evaluated after all others - if a callback (ex. RequiredIf) relies
-		// on HasFlag during Parse then we need to check secureArguments
-		_, found = s.secureArguments.Get(mainKey)
+		// on HasFlag during Parse then we need to check secureArguments - we only do this
+		// if the argument has been passed on the command line
+		flagParts := splitCommandFlag(mainKey)
+		if _, found = s.rawArgs[flagParts[0]]; found {
+			_, found = s.secureArguments.Get(mainKey)
+		}
 	}
 
 	return found
@@ -834,6 +838,22 @@ func (s *CmdLineOption) GetDescription(flag string) string {
 	}
 
 	return ""
+}
+
+// SetCommand allows for fluent setting of Command fields
+// Example:
+//
+//	 s.Set("user create",
+//		WithCommandDescription("create user),
+//		WithCommandCallback(callbackFunc),
+//	)
+func (s *CmdLineOption) SetCommand(commandPath string, configs ...ConfigureCommandFunc) error {
+	if cmd, ok := s.registeredCommands.Get(commandPath); ok {
+		cmd.Set(configs...)
+		return nil
+	} else {
+		return fmt.Errorf("command path %s not found", commandPath)
+	}
 }
 
 // SetFlag is used to re-define a Flag or define a new Flag at runtime. This can be sometimes useful for dynamic
