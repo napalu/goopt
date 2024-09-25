@@ -145,8 +145,8 @@ type Command struct {
 	Subcommands []Command
 	Callback    CommandFunc
 	Description string
-	Required    bool
 	TopLevel    bool
+	Required    bool
 	Path        string
 }
 
