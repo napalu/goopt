@@ -1,9 +1,9 @@
 package goopt
 
-// NewCmdLine allows fluent initialization of CmdLineOption. The caller should always test for error on
+// NewCmdLine allows initialization of CmdLineOption using option functions. The caller should always test for error on
 // return because CmdLineOption will be nil when an error occurs during initialization.
 //
-// Examples of fluent configuration:
+// Configuration example:
 //
 //	 cmdLine, err := NewCmdLine(
 //			WithFlag("flagWithValue",
@@ -42,7 +42,7 @@ func NewCmdLine(configs ...ConfigureCmdLineFunc) (*CmdLineOption, error) {
 	return cmdLine, err
 }
 
-// WithFlag is a fluent wrapper for AddFlag which is used to define a flag.
+// WithFlag is a wrapper for AddFlag which is used to define a flag.
 // A flag represents a command line option as a "long" and optional "short" form
 // which is prefixed by '-', '--' or '/'.
 func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
@@ -59,7 +59,7 @@ func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
 	}
 }
 
-// WithBindFlag is a fluent wrapper to BindFlag which is used to bind a pointer to a variable with a flag.
+// WithBindFlag is a wrapper to BindFlag which is used to bind a pointer to a variable with a flag.
 // If `bindVar` is not a pointer, an error is returned
 // The following variable types are supported:
 //   - *string
@@ -68,14 +68,14 @@ func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
 //   - *float32, *float64
 //   - *time.Time
 //   - *bool
-//     For other types use WithCustomBindFlag (fluent wrapper around CustomBindFlag) or CustomBindFlag
+//     For other types use WithCustomBindFlag (wrapper around CustomBindFlag) or CustomBindFlag
 func WithBindFlag[T Bindable](flag string, bindVar *T, argument *Argument, commandPath ...string) ConfigureCmdLineFunc {
 	return func(cmdLine *CmdLineOption, err *error) {
 		*err = BindFlagToCmdLine(cmdLine, bindVar, flag, argument, commandPath...)
 	}
 }
 
-// WithCustomBindFlag is a fluent wrapper for CustomBindFlag which receives parsed value via the ValueSetFunc callback
+// WithCustomBindFlag is a wrapper for CustomBindFlag which receives parsed value via the ValueSetFunc callback
 // On Parse the callback is called with the following arguments:
 //   - the bound flag name as string
 //   - the command-line value as string
@@ -86,7 +86,7 @@ func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argum
 	}
 }
 
-// WithCommand is a fluent wrapper for AddCommand. A Command represents a verb followed by optional sub-commands. A
+// WithCommand is a wrapper for AddCommand. A Command represents a verb followed by optional sub-commands. A
 // sub-command is a Command which is stored in a Command's []Subcommands field. A command which has no children is
 // a terminating command which can receive values supplied by the user on the command line. Like flags, commands are
 // evaluated on Parse.

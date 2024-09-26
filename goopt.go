@@ -27,8 +27,8 @@ import (
 	"strings"
 )
 
-// NewCmdLineOption convenience initialization method. Does not support fluent configuration. Use NewCmdLine to
-// configure CmdLineOption fluently.
+// NewCmdLineOption convenience initialization method. Use NewCmdLine to
+// configure CmdLineOption using option functions.
 func NewCmdLineOption() *CmdLineOption {
 	return &CmdLineOption{
 		acceptedFlags:      orderedmap.NewOrderedMap[string, *FlagInfo](),
@@ -37,7 +37,7 @@ func NewCmdLineOption() *CmdLineOption {
 		errors:             []error{},
 		bind:               make(map[string]interface{}, 1),
 		customBind:         map[string]ValueSetFunc{},
-		registeredCommands: orderedmap.NewOrderedMap[string, Command](),
+		registeredCommands: orderedmap.NewOrderedMap[string, *Command](),
 		commandOptions:     orderedmap.NewOrderedMap[string, bool](),
 		positionalArgs:     []PositionalArgument{},
 		listFunc:           matchChainedSeparators,
@@ -58,8 +58,8 @@ func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Cmd
 	return newCmdLineFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
 }
 
-// NewArgument convenience initialization method to describe Flags. Does not support fluent configuration. Use NewArg to
-// configure Argument fluently.
+// NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
+// configure Argument using option functions.
 func NewArgument(shortFlag string, description string, typeOf OptionType, required bool, secure Secure, defaultValue string) *Argument {
 	return &Argument{
 		Description:  description,
@@ -406,8 +406,8 @@ func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
 }
 
 // GetBool attempts to convert the string value of a Flag to boolean.
-func (s *CmdLineOption) GetBool(flag string) (bool, error) {
-	value, success := s.Get(flag)
+func (s *CmdLineOption) GetBool(flag string, commandPath ...string) (bool, error) {
+	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return false, fmt.Errorf("no option with flag '%s' exists", flag)
 	}
@@ -418,8 +418,8 @@ func (s *CmdLineOption) GetBool(flag string) (bool, error) {
 }
 
 // GetInt attempts to convert the string value of a Flag to an int64.
-func (s *CmdLineOption) GetInt(flag string, bitSize int) (int64, error) {
-	value, success := s.Get(flag)
+func (s *CmdLineOption) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
+	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return 0, fmt.Errorf("no option with flag '%s' exists", flag)
 	}
@@ -430,8 +430,8 @@ func (s *CmdLineOption) GetInt(flag string, bitSize int) (int64, error) {
 }
 
 // GetFloat attempts to convert the string value of a Flag to a float64
-func (s *CmdLineOption) GetFloat(flag string, bitSize int) (float64, error) {
-	value, success := s.Get(flag)
+func (s *CmdLineOption) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
+	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return 0, fmt.Errorf("no option with flag '%s' exists", flag)
 	}
@@ -443,8 +443,8 @@ func (s *CmdLineOption) GetFloat(flag string, bitSize int) (float64, error) {
 
 // GetList attempts to split the string value of a Chained Flag to a string slice
 // by default the value is split on '|', ',' or ' ' delimiters
-func (s *CmdLineOption) GetList(flag string) ([]string, error) {
-	arg, err := s.GetArgument(flag)
+func (s *CmdLineOption) GetList(flag string, commandPath ...string) ([]string, error) {
+	arg, err := s.GetArgument(flag, commandPath...)
 	listDelimFunc := s.getListDelimiterFunc()
 	if err == nil {
 		if arg.TypeOf == Chained {
@@ -681,15 +681,15 @@ func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string,
 //
 //		a Flag which accepts only whole numbers could be defined as:
 //	 	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
-func (s *CmdLineOption) AcceptPattern(flag string, val PatternValue) error {
-	return s.AcceptPatterns(flag, []PatternValue{val})
+func (s *CmdLineOption) AcceptPattern(flag string, val PatternValue, commandPath ...string) error {
+	return s.AcceptPatterns(flag, []PatternValue{val}, commandPath...)
 }
 
 // AcceptPatterns same as PatternValue but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the PatternValue, Parse returns false.
-func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue) error {
-	arg, err := s.GetArgument(flag)
+func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue, commandPath ...string) error {
+	arg, err := s.GetArgument(flag, commandPath...)
 	if err != nil {
 		return err
 	}
@@ -709,8 +709,8 @@ func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue) er
 }
 
 // GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
-func (s *CmdLineOption) GetAcceptPatterns(flag string) ([]LiterateRegex, error) {
-	arg, err := s.GetArgument(flag)
+func (s *CmdLineOption) GetAcceptPatterns(flag string, commandPath ...string) ([]LiterateRegex, error) {
+	arg, err := s.GetArgument(flag, commandPath...)
 	if err != nil {
 		return []LiterateRegex{}, err
 	}
@@ -723,8 +723,8 @@ func (s *CmdLineOption) GetAcceptPatterns(flag string) ([]LiterateRegex, error) 
 }
 
 // GetArgument returns the Argument corresponding to the long or short flag or an error when not found
-func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *CmdLineOption) GetArgument(flag string, commandPath ...string) (*Argument, error) {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	v, found := s.acceptedFlags.Get(mainKey)
 	if !found {
 		return nil, fmt.Errorf("option with flag %s was not set", flag)
@@ -735,13 +735,35 @@ func (s *CmdLineOption) GetArgument(flag string) (*Argument, error) {
 
 // SetArgument sets an Argument configuration. Returns an error if the Argument is not found or the
 // configuration results in an error
-func (s *CmdLineOption) SetArgument(flag string, configs ...ConfigureArgumentFunc) error {
-	arg, err := s.GetArgument(flag)
-	if err != nil {
-		return err
+func (s *CmdLineOption) SetArgument(flag string, paths []string, configs ...ConfigureArgumentFunc) error {
+	var args = make([]*Argument, 0, 1)
+
+	if len(paths) == 0 {
+		arg, err := s.GetArgument(flag)
+		if err != nil {
+			return err
+		}
+		args = append(args, arg)
+
+	} else {
+		for _, path := range paths {
+			arg, err := s.GetArgument(flag, path)
+			if err != nil {
+				return err
+			}
+			args = append(args, arg)
+		}
+
 	}
 
-	return arg.Set(configs...)
+	for _, arg := range args {
+		err := arg.Set(configs...)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetShortFlag maps a long flag to its equivalent short flag. Short flags are concise alternatives to
@@ -784,6 +806,18 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 	}
 
 	return found
+}
+
+// HasRawFlag returns true when the Flag has been seen on the command line - can be used to check if a flag
+// was specified on the command line irrespective of the command context.
+func (s *CmdLineOption) HasRawFlag(flag string) bool {
+	mainKey := s.flagOrShortFlag(flag)
+	flagParts := splitCommandFlag(mainKey)
+	if _, found := s.rawArgs[flagParts[0]]; found {
+		return true
+	}
+
+	return false
 }
 
 // HasCommand return true when the name has been seen on the command line.
@@ -840,7 +874,7 @@ func (s *CmdLineOption) GetDescription(flag string) string {
 	return ""
 }
 
-// SetCommand allows for fluent setting of Command fields
+// SetCommand allows for setting of Command fields via option functions
 // Example:
 //
 //	 s.Set("user create",

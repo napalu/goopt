@@ -285,7 +285,7 @@ func TestCmdLineOption_WithBindFlag(t *testing.T) {
 			NewArg(
 				WithShortFlag("t"),
 				WithType(Single))))
-	assert.Nil(t, err, "should not fail to bind pointer to supported slice variable to flag when using fluent interface")
+	assert.Nil(t, err, "should not fail to bind pointer to supported slice variable to flag when using option functions")
 
 	cmdLine, err := NewCmdLine(
 		WithBindFlag("test", &s,
@@ -295,8 +295,8 @@ func TestCmdLineOption_WithBindFlag(t *testing.T) {
 			NewArg(WithShortFlag("i"),
 				WithType(Single))))
 
-	assert.Nil(t, err, "should not fail to bind multiple pointer variables to flag when using fluent interface")
-	assert.True(t, cmdLine.ParseString("--test value --test1 12334"), "should be able to parse a fluent argument")
+	assert.Nil(t, err, "should not fail to bind multiple pointer variables to flag when using option functions")
+	assert.True(t, cmdLine.ParseString("--test value --test1 12334"), "should be able to parse an argument configured via option function")
 	assert.Equal(t, "value", s, "should not fail to assign command line string argument to variable")
 	assert.Equal(t, 12334, i, "should not fail to assign command line integer argument to variable")
 }
@@ -369,7 +369,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 	assert.NotEmpty(t, name)
 	localArg := fmt.Sprintf(`--test "%s"`, name)
 	result := cmdLine.ParseString(localArg)
-	assert.True(t, result, "should be able to parse a fluent File argument")
+	assert.True(t, result, "should be able to parse a File argument")
 	assert.Equal(t, "test_value_123", s)
 	assert.Nil(t, cmdLine.SetFlag("test", "one234"), "should be able to set the value of a File flag")
 	assert.Equal(t, "one234", cmdLine.GetOrDefault("test", ""))
@@ -711,7 +711,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 			},
 		}),
 	)
-	assert.Nil(t, err, "fluent flag composition should work")
+	assert.Nil(t, err, "fflag composition should work")
 
 	assert.True(t, cmdLine.ParseString(`--flagWithValue 
 		"test value" --fa --flagB 
@@ -915,7 +915,7 @@ func TestPosixCompatibleFlags(t *testing.T) {
 	assert.Equal(t, "23", valT)
 }
 
-func TestCmdLineOption_FluentCommands(t *testing.T) {
+func TestCmdLineOption_FunctionOptionConfigurationOfCommands(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	var valueReceived string
@@ -937,7 +937,7 @@ func TestCmdLineOption_FluentCommands(t *testing.T) {
 					WithName("group"),
 					WithCommandDescription("create group")),
 			)))
-	assert.Nil(t, err, "should be able to fluently add commands")
+	assert.Nil(t, err, "should be able to add commands")
 
 	assert.True(t, opts.ParseString("create user test create group test2"), "should be able to parse commands")
 
