@@ -37,13 +37,13 @@ type RequiredIfFunc func(cmdLine *CmdLineOption, optionName string) (bool, strin
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
 
-// ConfigureCmdLineFunc is used to enable a fluent interface when defining options
+// ConfigureCmdLineFunc is used when defining CommandLineOption options
 type ConfigureCmdLineFunc func(cmdLine *CmdLineOption, err *error)
 
-// ConfigureArgumentFunc is used to enable a fluent interface when defining arguments
+// ConfigureArgumentFunc is used when defining Flag arguments
 type ConfigureArgumentFunc func(argument *Argument, err *error)
 
-// ConfigureCommandFunc is used to enable a fluent interface when defining commands
+// ConfigureCommandFunc is used when defining Command options
 type ConfigureCommandFunc func(command *Command)
 
 // FilterFunc used to "filter" (change/evaluate) flag values - see AddFilter/GetPreValidationFilter/HasPreValidationFilter
@@ -166,7 +166,7 @@ type CmdLineOption struct {
 	errors             []error
 	bind               map[string]any
 	customBind         map[string]ValueSetFunc
-	registeredCommands *orderedmap.OrderedMap[string, Command]
+	registeredCommands *orderedmap.OrderedMap[string, *Command]
 	commandOptions     *orderedmap.OrderedMap[string, bool]
 	positionalArgs     []PositionalArgument
 	rawArgs            map[string]string

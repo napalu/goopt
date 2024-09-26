@@ -1,6 +1,6 @@
 package goopt
 
-// NewArg convenience initialization method to fluently configure flags
+// NewArg convenience initialization method to configure flags
 func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument := &Argument{}
 	for _, config := range configs {

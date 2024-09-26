@@ -12,7 +12,6 @@
 - **Flag Dependencies**: Enforce flag dependencies based on the presence or specific values of other flags.
 - **POSIX Compatibility**: Offers POSIX-compliant flag parsing, including support for short flags.
 - **Secure Flags**: Enable secure, hidden input for sensitive information like passwords.
-- **Fluent Interface**: Provides a fluent interface for building command-line options imperatively.
 - **Automatic Usage Generation**: Automatically generates usage documentation based on defined flags and commands.
 
 ## Installation
@@ -28,7 +27,7 @@ go get github.com/napalu/goopt
 `goopt` follows a design that allows flexibility in how flags and commands are defined and parsed.
 
 - **Declarative Flags via Struct Tags**: Flags can be defined using struct tags. The parser introspects the struct and automatically binds the struct fields to flags.
-- **Programmatic Definition (Imperative or Fluent)**: Commands and flags can also be defined programmatically, either through imperative code or via a fluent interface. This allows dynamic construction of commands based on runtime conditions.
+- **Programmatic Definition**: Commands and flags can also be defined programmatically or declaratively. This allows dynamic construction of commands based on runtime conditions.
 - **Flag Grouping**: Flags can be associated with specific commands or shared across multiple commands. Global flags are available across all commands.
 - **Dependency Validation**: Flags can be defined to depend on the presence or value of other flags. This validation is performed automatically after parsing.
 
@@ -223,9 +222,9 @@ func main() {
 }
 ```
 
-### Fluent Interface
+### Initialization using option functions
 
-The library provides a fluent interface for defining flags and commands.
+The library provides an interface for defining flags and commands.
 
 ```go
 package main

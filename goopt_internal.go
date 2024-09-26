@@ -132,7 +132,7 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 func (s *CmdLineOption) registerCommandRecursive(cmd *Command) {
 	// Add the current command to the map
 	cmd.TopLevel = strings.Count(cmd.Path, " ") == 0
-	s.registeredCommands.Set(cmd.Path, *cmd)
+	s.registeredCommands.Set(cmd.Path, cmd)
 
 	// Recursively register all subcommands
 	for i := range cmd.Subcommands {
@@ -159,12 +159,6 @@ func (s *CmdLineOption) validateCommand(cmdArg *Command, level, maxDepth int) (b
 
 	if level == 0 {
 		cmdArg.Path = cmdArg.Name
-	}
-
-	if origCmd, found := s.registeredCommands.Get(cmdArg.Path); found {
-		if reflect.DeepEqual(origCmd, cmdArg) {
-			return false, fmt.Errorf("duplicate command '%s' already exists", cmdArg.Name)
-		}
 	}
 
 	for i := 0; i < len(cmdArg.Subcommands); i++ {
@@ -197,7 +191,7 @@ func (s *CmdLineOption) ensureInit() {
 		s.customBind = map[string]ValueSetFunc{}
 	}
 	if s.registeredCommands == nil {
-		s.registeredCommands = orderedmap.NewOrderedMap[string, Command]()
+		s.registeredCommands = orderedmap.NewOrderedMap[string, *Command]()
 	}
 	if s.commandOptions == nil {
 		s.commandOptions = orderedmap.NewOrderedMap[string, bool]()
@@ -278,7 +272,7 @@ func (s *CmdLineOption) addError(err error) {
 	s.errors = append(s.errors, err)
 }
 
-func (s *CmdLineOption) getCommand(name string) (Command, bool) {
+func (s *CmdLineOption) getCommand(name string) (*Command, bool) {
 	cmd, found := s.registeredCommands.Get(name)
 
 	return cmd, found
@@ -296,7 +290,8 @@ func (s *CmdLineOption) registerSecureValue(flag, value string) error {
 }
 
 func (s *CmdLineOption) registerFlagValue(flag, value, rawValue string) {
-	s.rawArgs[flag] = rawValue
+	parts := splitCommandFlag(flag)
+	s.rawArgs[parts[0]] = rawValue
 
 	s.options[flag] = value
 }
@@ -340,7 +335,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 		cmd = curSub
 	} else {
 		if registered, found := s.getCommand(currentArg); found {
-			cmd = &registered
+			cmd = registered
 			s.registerCommand(cmd, currentArg)
 		}
 	}
@@ -666,7 +661,7 @@ func (s *CmdLineOption) validateStandaloneFlag(key string) {
 }
 
 func (s *CmdLineOption) walkCommands() {
-	stack := queue.New[Command]()
+	stack := queue.New[*Command]()
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		stack.Push(kv.Value)
 	}
@@ -698,7 +693,7 @@ func (s *CmdLineOption) walkCommands() {
 
 		for _, m := range matchedCommands {
 			for _, sub := range m.Subcommands {
-				stack.Push(sub)
+				stack.Push(&sub)
 			}
 		}
 	}
@@ -1220,17 +1215,17 @@ func (s *CmdLineOption) buildCommand(commandPath string, parent *Command) (*Comm
 		if parent == nil {
 			// Look for the command at the top level
 			if cmd, exists := s.registeredCommands.Get(cmdName); exists {
-				currentCommand = &cmd
+				currentCommand = cmd
 				found = true
 			} else {
 				// Create a new top-level command
-				newCommand := Command{
+				newCommand := &Command{
 					Name:        cmdName,
 					Description: fmt.Sprintf("Auto-generated command for %s", cmdName),
 					Subcommands: []Command{},
 				}
 				s.registeredCommands.Set(cmdName, newCommand)
-				currentCommand = &newCommand
+				currentCommand = newCommand
 			}
 		} else {
 			if cmdName == parent.Name {
@@ -1269,7 +1264,7 @@ func (s *CmdLineOption) buildCommand(commandPath string, parent *Command) (*Comm
 	// Add the top-level command if not already registered
 	if topParent != nil && parent == nil {
 		if _, exists := s.registeredCommands.Get(topParent.Name); !exists {
-			s.registeredCommands.Set(topParent.Name, *topParent)
+			s.registeredCommands.Set(topParent.Name, topParent)
 		}
 	}
 
@@ -1373,7 +1368,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 				for i, cmdComponent := range cmdPathComponents {
 					if i == 0 {
 						if p, ok := c.registeredCommands.Get(cmdComponent); ok {
-							pCmd = &p
+							pCmd = p
 						}
 					}
 					if parentCommand == "" {
