@@ -219,9 +219,12 @@ func (s *CmdLineOption) AddCommand(cmd *Command) error {
 func (s *CmdLineOption) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
+	processedEnvVars := false
 
-	if s.envFilter != nil {
-		args = s.envToFlags(args)
+	// prepend environment variables directly if no commands have been specified
+	if s.registeredCommands.Count() == 0 && s.envFilter != nil {
+		args = s.envToFlags(args, 0)
+		processedEnvVars = true
 	}
 
 	state := &parseState{
@@ -269,6 +272,10 @@ func (s *CmdLineOption) Parse(args []string) bool {
 			terminating := s.parseCommand(args, state, cmdQueue, &commandPathSlice)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
 			if terminating {
+				if !processedEnvVars && s.envFilter != nil {
+					args = s.envToFlags(args, state.pos+1, currentCommandPath)
+					state.endOf = len(args)
+				}
 				if processedStack {
 					ctxStack.Clear()
 					processedStack = false
@@ -278,6 +285,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 				}
 				commandPathSlice = commandPathSlice[:0]
 			}
+
 		}
 	}
 
@@ -391,7 +399,7 @@ func (s *CmdLineOption) GetCommands() []string {
 
 // Get returns a combination of a Flag's value as string and true if found. Returns an empty string and false otherwise
 func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
-	lookup := buildLookupFlag(flag, commandPath...)
+	lookup := buildPathFlag(flag, commandPath...)
 	mainKey := s.flagOrShortFlag(lookup)
 	value, found := s.options[mainKey]
 	if found {
@@ -576,7 +584,7 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument, commandPath ...
 	}
 
 	// Use the helper function to generate the lookup key
-	lookupFlag := buildLookupFlag(flag, commandPath...)
+	lookupFlag := buildPathFlag(flag, commandPath...)
 
 	// Ensure no duplicate flags for the same command path or globally
 	if _, exists := s.acceptedFlags.Get(lookupFlag); exists {
@@ -643,7 +651,7 @@ func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Arg
 		return err
 	}
 
-	lookupFlag := buildLookupFlag(flag, commandPath...)
+	lookupFlag := buildPathFlag(flag, commandPath...)
 	// Bind the flag to the variable
 	s.bind[lookupFlag] = bindPtr
 
@@ -666,7 +674,7 @@ func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string,
 		return err
 	}
 
-	lookupFlag := buildLookupFlag(flag, commandPath...)
+	lookupFlag := buildPathFlag(flag, commandPath...)
 
 	s.bind[lookupFlag] = data
 	s.customBind[lookupFlag] = proc
@@ -799,7 +807,7 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 		// secure arguments are evaluated after all others - if a callback (ex. RequiredIf) relies
 		// on HasFlag during Parse then we need to check secureArguments - we only do this
 		// if the argument has been passed on the command line
-		flagParts := splitCommandFlag(mainKey)
+		flagParts := splitPathFlag(mainKey)
 		if _, found = s.rawArgs[flagParts[0]]; found {
 			_, found = s.secureArguments.Get(mainKey)
 		}
@@ -812,7 +820,7 @@ func (s *CmdLineOption) HasFlag(flag string) bool {
 // was specified on the command line irrespective of the command context.
 func (s *CmdLineOption) HasRawFlag(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
-	flagParts := splitCommandFlag(mainKey)
+	flagParts := splitPathFlag(mainKey)
 	if _, found := s.rawArgs[flagParts[0]]; found {
 		return true
 	}
@@ -962,6 +970,11 @@ func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
 	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
 }
 
+// FlagPath returns the command part of a Flag or an empty string when not.
+func (s *CmdLineOption) FlagPath(flag string) string {
+	return getFlagPath(flag)
+}
+
 // DependsOnFlagValue is used to describe flag dependencies. For example, a '--modify' flag could be specified to
 // depend on a '--group' Flag with a value of 'users'. If the '--group' Flag is not specified with a value of
 // 'users' on the command line a warning will be set during Parse.
@@ -1095,7 +1108,7 @@ func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath 
 			}
 
 			// Print each flag with proper indentation, aligning with the command hierarchy
-			flag := fmt.Sprintf("%s--%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), splitCommandFlag(*f.Key)[0], f.Value.Argument.Description, requiredOrOptional)
+			flag := fmt.Sprintf("%s--%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), splitPathFlag(*f.Key)[0], f.Value.Argument.Description, requiredOrOptional)
 			_, _ = writer.Write([]byte(flag))
 		}
 	}
