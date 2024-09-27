@@ -21,7 +21,7 @@ func (s *CmdLineOption) parseFlag(args []string, state *parseState, currentComma
 	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
 
 	// Use the helper function to build the lookup flag
-	lookupFlag := buildLookupFlag(currentArg, currentCommandPath)
+	lookupFlag := buildPathFlag(currentArg, currentCommandPath)
 
 	// Try finding the flag in the current command path
 	flagInfo, found := s.acceptedFlags.Get(lookupFlag)
@@ -103,7 +103,7 @@ func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, cur
 }
 
 func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argument *Argument, currentArg string, currentCommandPath ...string) {
-	lookup := buildLookupFlag(currentArg, currentCommandPath...)
+	lookup := buildPathFlag(currentArg, currentCommandPath...)
 	switch argument.TypeOf {
 	case Standalone:
 		if argument.Secure.IsSecure {
@@ -245,17 +245,25 @@ func (s *CmdLineOption) evalFlagWithPath(args []string, state *parseState, curre
 }
 
 func (s *CmdLineOption) flagOrShortFlag(flag string, commandPath ...string) string {
-	lookupFlag := buildLookupFlag(flag, commandPath...)
-
-	_, found := s.acceptedFlags.Get(lookupFlag)
-	if !found {
-		item, found := s.lookup[lookupFlag]
+	pathFlag := buildPathFlag(flag, commandPath...)
+	_, pathFound := s.acceptedFlags.Get(pathFlag)
+	if !pathFound {
+		globalFlag := splitPathFlag(flag)[0]
+		_, found := s.acceptedFlags.Get(globalFlag)
 		if found {
+			return globalFlag
+		}
+		item, found := s.lookup[flag]
+		if found {
+			pathFlag = buildPathFlag(item, commandPath...)
+			if _, found := s.acceptedFlags.Get(pathFlag); found {
+				return pathFlag
+			}
 			return item
 		}
 	}
 
-	return lookupFlag
+	return pathFlag
 }
 
 func (s *CmdLineOption) isFlag(flag string) bool {
@@ -290,7 +298,7 @@ func (s *CmdLineOption) registerSecureValue(flag, value string) error {
 }
 
 func (s *CmdLineOption) registerFlagValue(flag, value, rawValue string) {
-	parts := splitCommandFlag(flag)
+	parts := splitPathFlag(flag)
 	s.rawArgs[parts[0]] = rawValue
 
 	s.options[flag] = value
@@ -326,7 +334,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 	if cmdQueue.Len() > 0 {
 		ok, curSub = s.checkSubCommands(cmdQueue, currentArg)
 		if !ok {
-			return terminating
+			return false
 		}
 	}
 
@@ -372,7 +380,7 @@ func (s *CmdLineOption) queueCommandCallback(cmd *Command) {
 
 func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *parseState, currentArg string, currentCommandPath ...string) {
 	var err error
-	lookup := buildLookupFlag(currentArg, currentCommandPath...)
+	lookup := buildPathFlag(currentArg, currentCommandPath...)
 	if argument.Secure.IsSecure {
 		if state.pos < state.endOf-1 {
 			if !s.isFlag(args[state.pos+1]) {
@@ -744,7 +752,7 @@ func (s *CmdLineOption) validateDependencies(flagInfo *FlagInfo, mainKey string,
 func (s *CmdLineOption) getFlagInCommandPath(flag string, commandPath string) (*FlagInfo, bool) {
 	// First, check if the flag exists in the command-specific path
 	if commandPath != "" {
-		flagKey := buildLookupFlag(flag, commandPath)
+		flagKey := buildPathFlag(flag, commandPath)
 		if flagInfo, exists := s.acceptedFlags.Get(flagKey); exists {
 			return flagInfo, true
 		}
@@ -798,15 +806,16 @@ func (s *CmdLineOption) getListDelimiterFunc() ListDelimiterFunc {
 	return matchChainedSeparators
 }
 
-func (s *CmdLineOption) envToFlags(args []string) []string {
+func (s *CmdLineOption) envToFlags(args []string, insertPos int, path ...string) []string {
 	for _, env := range os.Environ() {
 		kv := strings.Split(env, "=")
 		v := s.envFilter(kv[0])
-		mainKey := s.flagOrShortFlag(v)
+		mainKey := s.flagOrShortFlag(v, path...)
 		if _, found := s.acceptedFlags.Get(mainKey); found && len(kv) > 1 {
-			args = util.InsertSlice(args, 0, fmt.Sprintf("--%s", mainKey), kv[1])
+			args = util.InsertSlice(args, insertPos, fmt.Sprintf("--%s", mainKey), kv[1])
 		}
 	}
+
 	return args
 }
 
@@ -1490,13 +1499,22 @@ func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, curr
 	return nil
 }
 
-func buildLookupFlag(flag string, commandPath ...string) string {
+func buildPathFlag(flag string, commandPath ...string) string {
 	if len(commandPath) > 0 && commandPath[0] != "" {
 		return fmt.Sprintf("%s@%s", flag, strings.Join(commandPath, " "))
 	}
 	return flag
 }
 
-func splitCommandFlag(flag string) []string {
+func splitPathFlag(flag string) []string {
 	return strings.Split(flag, "@")
+}
+
+func getFlagPath(flag string) string {
+	paths := splitPathFlag(flag)
+	if len(paths) > 1 {
+		return paths[1]
+	}
+
+	return ""
 }
