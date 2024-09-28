@@ -109,6 +109,25 @@ func (s *CmdLineOption) ExecuteCommands() int {
 	return callbackErrors
 }
 
+func (s *CmdLineOption) ExecuteCommand() error {
+	if s.callbackQueue.Len() > 0 {
+		call, _ := s.callbackQueue.Pop()
+		if call.callback != nil && len(call.arguments) == 2 {
+			cmdLine, cmdLineOk := call.arguments[0].(*CmdLineOption)
+			cmd, cmdOk := call.arguments[1].(*Command)
+			if cmdLineOk && cmdOk {
+				err := call.callback(cmdLine, cmd)
+				s.callbackResults[cmd.Name] = err
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetCommandExecutionError returns the error which occurred during execution of a command callback
 // after ExecuteCommands has been called. Returns nil on no error. Returns a CommandNotFound error when
 // no callback is associated with commandName
@@ -226,8 +245,14 @@ func (s *CmdLineOption) Parse(args []string) bool {
 	pruneExecPathFromArgs(&args)
 
 	var (
-		envFlagsByCommand = s.preSplitEnvVarsByCommand() // Get env flags split by command
-		envInserted       = make(map[string]int)         // Track env flags inserted per command instance
+		envFlagsByCommand  = s.preSplitEnvVarsByCommand() // Get env flags split by command
+		envInserted        = make(map[string]int)
+		lastCommandPath    string
+		cmdQueue           = queue.New[*Command]()
+		ctxStack           = queue.New[string]() // Stack for command contexts
+		commandPathSlice   []string
+		currentCommandPath string
+		processedStack     bool
 	)
 
 	if g, ok := envFlagsByCommand["global"]; ok && len(g) > 0 {
@@ -239,13 +264,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		skip:  -1,
 	}
 
-	var (
-		cmdQueue           = queue.New[*Command]()
-		ctxStack           = queue.New[string]() // Stack for command contexts
-		commandPathSlice   []string
-		currentCommandPath string
-		processedStack     bool
-	)
+	var ()
 
 	for state.pos = 0; state.pos < state.endOf; state.pos++ {
 		if state.skip == state.pos {
@@ -266,9 +285,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 					}
 
 					args = s.evalFlagWithPath(args, state, currentCommandPath)
-					if s.callbackOnParse {
-						s.ExecuteCommands()
-					}
+
 					processedStack = true
 				}
 
@@ -291,6 +308,14 @@ func (s *CmdLineOption) Parse(args []string) bool {
 				envInserted[currentCommandPath]++
 			}
 
+			if lastCommandPath != "" && s.callbackOnParse {
+				err := s.ExecuteCommand()
+				if err != nil {
+					s.addError(err)
+				}
+				lastCommandPath = ""
+			}
+
 			if terminating {
 				if processedStack {
 					ctxStack.Clear()
@@ -299,8 +324,17 @@ func (s *CmdLineOption) Parse(args []string) bool {
 				if currentCommandPath != "" {
 					ctxStack.Push(currentCommandPath)
 				}
+				lastCommandPath = currentCommandPath
 				commandPathSlice = commandPathSlice[:0]
 			}
+		}
+	}
+
+	// Execute any remaining command callback after parsing is done
+	if s.callbackOnParse && lastCommandPath != "" {
+		err := s.ExecuteCommand()
+		if err != nil {
+			s.addError(err)
 		}
 	}
 

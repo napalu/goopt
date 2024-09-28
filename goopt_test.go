@@ -653,10 +653,15 @@ func TestCmdLineOption_RepeatCommandWithDifferentContextWithCallbacks(t *testing
 
 	_ = opts.AddCommand(&Command{Name: "create", Callback: func(cmdLine *CmdLineOption, command *Command) error {
 		assert.True(t, cmdLine.HasFlag("id", command.Path))
+		assert.True(t, cmdLine.HasFlag("group", command.Path))
 		if idx == 0 {
 			assert.Equal(t, "1", cmdLine.GetOrDefault("id", "", command.Path))
+			assert.Equal(t, "3", cmdLine.GetOrDefault("group", "", command.Path))
+
 		} else if idx == 1 {
 			assert.Equal(t, "2", cmdLine.GetOrDefault("id", "", command.Path))
+			assert.Equal(t, "4", cmdLine.GetOrDefault("group", "", command.Path))
+			assert.Equal(t, "Mike", cmdLine.GetOrDefault("name", "", command.Path))
 		}
 
 		idx++
@@ -666,10 +671,11 @@ func TestCmdLineOption_RepeatCommandWithDifferentContextWithCallbacks(t *testing
 
 	// Define flags for specific commands
 	_ = opts.AddFlag("id", &Argument{Description: "User ID", TypeOf: Single}, "create")
+	_ = opts.AddFlag("group", &Argument{Description: "Group ID", TypeOf: Single}, "create")
 	_ = opts.AddFlag("name", &Argument{Description: "User Name", TypeOf: Single}, "create")
 
 	// Simulate repeated commands with flags
-	assert.True(t, opts.ParseString("create --id 1 create --id 2 --name Mike"), "should parse repeated commands with different contexts")
+	assert.True(t, opts.ParseString("create --id 1 --group 3 create --id 2 --group 4 --name Mike"), "should parse repeated commands with different contexts")
 
 	assert.Equal(t, "Mike", opts.GetOrDefault("name@create", ""), "name flag should be 'Mike'")
 }
