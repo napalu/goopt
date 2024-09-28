@@ -86,6 +86,13 @@ func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argum
 	}
 }
 
+// WithExecOnParse specifies whether Command callbacks should be executed during Parse as they are encountered.
+func WithExecOnParse(value bool) ConfigureCmdLineFunc {
+	return func(cmdLine *CmdLineOption, err *error) {
+		cmdLine.SetExecOnParse(value)
+	}
+}
+
 // WithCommand is a wrapper for AddCommand. A Command represents a verb followed by optional sub-commands. A
 // sub-command is a Command which is stored in a Command's []Subcommands field. A command which has no children is
 // a terminating command which can receive values supplied by the user on the command line. Like flags, commands are
