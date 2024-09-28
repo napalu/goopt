@@ -590,8 +590,8 @@ func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
 	opts := NewCmdLineOption()
 
 	// Define commands
-	_ = opts.AddCommand(&Command{Name: "create"})
-	_ = opts.AddCommand(&Command{Name: "update"})
+	_ = opts.AddCommand(&Command{Name: "create_cmd"})
+	_ = opts.AddCommand(&Command{Name: "update_cmd"})
 
 	// Define flags for global and specific commands
 	_ = opts.AddFlag("verboseTest", &Argument{Description: "Verbose output", TypeOf: Standalone})

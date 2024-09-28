@@ -8,6 +8,7 @@ import (
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -819,9 +820,11 @@ func (s *CmdLineOption) preSplitEnvVarsByCommand() map[string][]string {
 	for _, env := range os.Environ() {
 		kv := strings.Split(env, "=")
 		v := s.envFilter(kv[0])
+		log.Printf("kv %v", kv)
 		for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 			paths := splitPathFlag(*f.Key)
 			length := len(paths)
+			log.Printf("paths %v", paths)
 			// Global flag (no command path)
 			if length == 1 && paths[0] == v {
 				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", *f.Key), kv[1])
