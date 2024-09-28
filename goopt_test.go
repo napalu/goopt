@@ -594,26 +594,26 @@ func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
 	_ = opts.AddCommand(&Command{Name: "update"})
 
 	// Define flags for global and specific commands
-	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: Standalone})
-	_ = opts.AddFlag("config", &Argument{Description: "Config file", TypeOf: Single}, "create")
-	_ = opts.AddFlag("id", &Argument{Description: "User ID", TypeOf: Single}, "create")
+	_ = opts.AddFlag("verboseTest", &Argument{Description: "Verbose output", TypeOf: Standalone})
+	_ = opts.AddFlag("configTest", &Argument{Description: "Config file", TypeOf: Single}, "create")
+	_ = opts.AddFlag("idTest", &Argument{Description: "User ID", TypeOf: Single}, "create")
 	flagFunc := opts.SetEnvFilter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	// Simulate environment variables
-	os.Setenv("VERBOSE", "true")
-	os.Setenv("CONFIG", "/path/to/config")
-	os.Setenv("ID", "1234")
+	os.Setenv("VERBOSE_TEST", "true")
+	os.Setenv("CONFIG_TEST", "/path/to/config")
+	os.Setenv("ID_TEST", "1234")
 
 	assert.True(t, opts.ParseString("create"), "should parse command with global and env flags")
 
 	// Check global flag
-	assert.Equal(t, "true", opts.GetOrDefault("verbose", ""), "global verbose should be true")
+	assert.Equal(t, "true", opts.GetOrDefault("verboseTest", ""), "global verbose should be true")
 
 	// Check command-specific flags
-	assert.Equal(t, "/path/to/config", opts.GetOrDefault("config@create", ""), "config flag should be parsed from env var")
-	assert.Equal(t, "1234", opts.GetOrDefault("id@create", ""), "ID should be parsed from env var")
+	assert.Equal(t, "/path/to/config", opts.GetOrDefault("configTest@create", ""), "config flag should be parsed from env var")
+	assert.Equal(t, "1234", opts.GetOrDefault("idTest@create", ""), "ID should be parsed from env var")
 }
 
 func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
