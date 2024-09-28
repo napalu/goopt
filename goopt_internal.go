@@ -43,13 +43,13 @@ func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState, current
 	flagInfo, found := s.getFlagInCommandPath(currentArg, currentCommandPath)
 	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-		args = s.normalizePosixArgs(args, state, currentArg)
+		args = s.normalizePosixArgs(args, state, currentArg, currentCommandPath)
 		currentArg = s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
 		flagInfo, found = s.getFlagInCommandPath(currentArg, currentCommandPath)
 	}
 
 	if found {
-		s.processFlagArg(args, state, flagInfo.Argument, currentArg)
+		s.processFlagArg(args, state, flagInfo.Argument, currentArg, currentCommandPath)
 	} else {
 		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", currentArg, currentCommandPath))
 	}
@@ -57,7 +57,7 @@ func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState, current
 	return args
 }
 
-func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, currentArg string) []string {
+func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, currentArg string, commandPath string) []string {
 	sb := strings.Builder{}
 	lenS := len(currentArg)
 	newArgs := make([]string, 0, len(args))
@@ -67,21 +67,23 @@ func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, cur
 
 	startPos := 0
 	for startPos < lenS {
-		cf := s.flagOrShortFlag(currentArg[startPos : startPos+1])
+		cf := s.flagOrShortFlag(currentArg[startPos:startPos+1], commandPath)
 		_, found := s.acceptedFlags.Get(cf)
 		if found {
 			newArgs = append(newArgs, fmt.Sprintf("-%s", cf))
 			startPos++
 		} else {
-			sb.WriteString(cf)
+			val := splitPathFlag(cf)
+			sb.WriteString(val[0])
 			startPos++
 			for startPos < lenS {
-				cf = s.flagOrShortFlag(currentArg[startPos : startPos+1])
+				cf = s.flagOrShortFlag(currentArg[startPos:startPos+1], commandPath)
 				_, found = s.acceptedFlags.Get(cf)
 				if found {
 					break
 				} else {
-					sb.WriteString(cf)
+					val = splitPathFlag(cf)
+					sb.WriteString(val[0])
 					startPos++
 				}
 			}
@@ -271,9 +273,12 @@ func (s *CmdLineOption) isFlag(flag string) bool {
 }
 
 func (s *CmdLineOption) isGlobalFlag(arg string) bool {
-	_, ok := s.acceptedFlags.Get(s.flagOrShortFlag(strings.TrimLeftFunc(arg, s.prefixFunc)))
+	flag, ok := s.acceptedFlags.Get(s.flagOrShortFlag(strings.TrimLeftFunc(arg, s.prefixFunc)))
+	if ok {
+		return flag.CommandPath == ""
+	}
 
-	return ok
+	return false
 }
 
 func (s *CmdLineOption) addError(err error) {
@@ -806,17 +811,32 @@ func (s *CmdLineOption) getListDelimiterFunc() ListDelimiterFunc {
 	return matchChainedSeparators
 }
 
-func (s *CmdLineOption) envToFlags(args []string, insertPos int, path ...string) []string {
+func (s *CmdLineOption) preSplitEnvVarsByCommand() map[string][]string {
+	commandEnvVars := make(map[string][]string)
+	if s.envFilter == nil {
+		return commandEnvVars
+	}
 	for _, env := range os.Environ() {
 		kv := strings.Split(env, "=")
 		v := s.envFilter(kv[0])
-		mainKey := s.flagOrShortFlag(v, path...)
-		if _, found := s.acceptedFlags.Get(mainKey); found && len(kv) > 1 {
-			args = util.InsertSlice(args, insertPos, fmt.Sprintf("--%s", mainKey), kv[1])
+		if v == "" {
+			continue
+		}
+		for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
+			paths := splitPathFlag(*f.Key)
+			length := len(paths)
+			// Global flag (no command path)
+			if length == 1 && paths[0] == v {
+				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", *f.Key), kv[1])
+			}
+			// Command-specific flag
+			if length > 1 && paths[0] == v || v == f.Value.Argument.Short {
+				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", *f.Key), kv[1])
+			}
 		}
 	}
 
-	return args
+	return commandEnvVars
 }
 
 func canConvert(data interface{}, optionType OptionType) (bool, error) {
@@ -1500,7 +1520,7 @@ func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, curr
 }
 
 func buildPathFlag(flag string, commandPath ...string) string {
-	if len(commandPath) > 0 && commandPath[0] != "" {
+	if strings.Count(flag, "@") == 0 && len(commandPath) > 0 && commandPath[0] != "" {
 		return fmt.Sprintf("%s@%s", flag, strings.Join(commandPath, " "))
 	}
 	return flag

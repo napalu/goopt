@@ -172,6 +172,7 @@ type CmdLineOption struct {
 	rawArgs            map[string]string
 	callbackQueue      *queue.Q[commandCallback]
 	callbackResults    map[string]error
+	callbackOnParse    bool
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 	envFilter          EnvFunc
 }
