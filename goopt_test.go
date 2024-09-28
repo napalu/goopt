@@ -565,10 +565,137 @@ func TestCmdLineOption_EnvToFlag(t *testing.T) {
 	assert.True(t, cmdLine.ParseString("command test"))
 	assert.Equal(t, "test", s)
 	assert.True(t, cmdLine.HasCommand("command test"))
+
+	cmdLine, err = NewCmdLine(
+		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
+		WithBindFlag("testMe", &s,
+			NewArg(WithShortFlag("t"),
+				WithType(Single)), "command test"))
+	assert.Nil(t, err)
+	flagFunc = cmdLine.SetEnvFilter(func(s string) string {
+		return upperSnakeToCamelCase(s)
+	})
+
+	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
+
+	assert.Equal(t, "123", s)
+	assert.True(t, cmdLine.HasCommand("command test"))
+	assert.True(t, cmdLine.ParseString("command test"))
+	assert.Equal(t, "test", s)
+	assert.True(t, cmdLine.HasCommand("command test"))
+
+}
+
+func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Define commands
+	_ = opts.AddCommand(&Command{Name: "create"})
+	_ = opts.AddCommand(&Command{Name: "update"})
+
+	// Define flags for global and specific commands
+	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: Standalone})
+	_ = opts.AddFlag("config", &Argument{Description: "Config file", TypeOf: Single}, "create")
+	_ = opts.AddFlag("id", &Argument{Description: "User ID", TypeOf: Single}, "create")
+	flagFunc := opts.SetEnvFilter(func(s string) string {
+		return upperSnakeToCamelCase(s)
+	})
+	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
+	// Simulate environment variables
+	os.Setenv("VERBOSE", "true")
+	os.Setenv("CONFIG", "/path/to/config")
+	os.Setenv("ID", "1234")
+
+	assert.True(t, opts.ParseString("create"), "should parse command with global and env flags")
+
+	// Check global flag
+	assert.Equal(t, "true", opts.GetOrDefault("verbose", ""), "global verbose should be true")
+
+	// Check command-specific flags
+	assert.Equal(t, "/path/to/config", opts.GetOrDefault("config@create", ""), "config flag should be parsed from env var")
+	assert.Equal(t, "1234", opts.GetOrDefault("id@create", ""), "ID should be parsed from env var")
+}
+
+func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
+	opts := NewCmdLineOption()
+
+	// Define commands
+	_ = opts.AddCommand(&Command{Name: "delete"})
+	_ = opts.AddCommand(&Command{Name: "create"})
+
+	// Define flags for global and specific commands
+	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: Standalone})
+	_ = opts.AddFlag("config", &Argument{Description: "Config file", TypeOf: Single}, "create")
+	_ = opts.AddFlag("force", &Argument{Description: "Force deletion", TypeOf: Standalone}, "delete")
+	flagFunc := opts.SetEnvFilter(func(s string) string {
+		return upperSnakeToCamelCase(s)
+	})
+	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
+	// Simulate environment variables
+	os.Setenv("VERBOSE", "true")
+	os.Setenv("FORCE", "true")
+
+	// Mixed commands with flags
+	assert.True(t, opts.ParseString("delete create --config /my/config"), "should parse mixed commands with flags")
+
+	// Check global flag
+	assert.Equal(t, "true", opts.GetOrDefault("verbose", ""), "global verbose should be true")
+
+	// Check command-specific flags
+	assert.Equal(t, "true", opts.GetOrDefault("force@delete", ""), "force flag should be true from env var")
+	assert.Equal(t, "/my/config", opts.GetOrDefault("config@create", ""), "config flag should be parsed from command")
+}
+
+func TestCmdLineOption_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
+	opts := NewCmdLineOption()
+	opts.SetExecOnParse(true)
+	idx := 0
+
+	_ = opts.AddCommand(&Command{Name: "create", Callback: func(cmdLine *CmdLineOption, command *Command) error {
+		assert.True(t, cmdLine.HasFlag("id", command.Path))
+		if idx == 0 {
+			assert.Equal(t, "1", cmdLine.GetOrDefault("id", "", command.Path))
+		} else if idx == 1 {
+			assert.Equal(t, "2", cmdLine.GetOrDefault("id", "", command.Path))
+		}
+
+		idx++
+
+		return nil
+	}})
+
+	// Define flags for specific commands
+	_ = opts.AddFlag("id", &Argument{Description: "User ID", TypeOf: Single}, "create")
+	_ = opts.AddFlag("name", &Argument{Description: "User Name", TypeOf: Single}, "create")
+
+	// Simulate repeated commands with flags
+	assert.True(t, opts.ParseString("create --id 1 create --id 2 --name Mike"), "should parse repeated commands with different contexts")
+
+	assert.Equal(t, "Mike", opts.GetOrDefault("name@create", ""), "name flag should be 'Mike'")
 }
 
 func upperSnakeToCamelCase(s string) string {
 	return strcase.ToLowerCamel(s)
+}
+
+func TestParse_PosixFlagsWithEnvVars(t *testing.T) {
+	opts := NewCmdLineOption()
+	opts.SetPosix(true)
+
+	// Define commands and flags
+	_ = opts.AddCommand(&Command{Name: "build"})
+	_ = opts.AddFlag("output", &Argument{Description: "Output file", Short: "o", TypeOf: Single}, "build")
+	_ = opts.AddFlag("opt", &Argument{Description: "Optimization level", Short: "p", TypeOf: Single}, "build")
+	flagFunc := opts.SetEnvFilter(func(s string) string {
+		return upperSnakeToCamelCase(s)
+	})
+	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
+	// Simulate environment variables
+	os.Setenv("OUTPUT", "/build/output")
+
+	assert.True(t, opts.ParseString("build -p2"), "should handle posix-style flags")
+	assert.Equal(t, "/build/output", opts.GetOrDefault("output", "", "build"), "output flag should be 'mybuild'")
+	assert.Equal(t, "2", opts.GetOrDefault("opt", "", "build"), "optimization should be '2' from env var")
 }
 
 func TestCmdLineOption_VarInFileFlag(t *testing.T) {

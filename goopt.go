@@ -19,6 +19,7 @@ import (
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
+	"github.com/napalu/goopt/util"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ func NewCmdLineOption() *CmdLineOption {
 		callbackQueue:      queue.New[commandCallback](),
 		callbackResults:    map[string]error{},
 		secureArguments:    orderedmap.NewOrderedMap[string, *Secure](),
-		prefixes:           []rune{'-', '/'},
+		prefixes:           []rune{'-'},
 	}
 }
 
@@ -71,6 +72,10 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 		Short:        shortFlag,
 		DefaultValue: defaultValue,
 	}
+}
+
+func (s *CmdLineOption) SetExecOnParse(value bool) {
+	s.callbackOnParse = value
 }
 
 // SetEnvFilter allows setting an environment name lookup function
@@ -219,12 +224,14 @@ func (s *CmdLineOption) AddCommand(cmd *Command) error {
 func (s *CmdLineOption) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
-	processedEnvVars := false
 
-	// prepend environment variables directly if no commands have been specified
-	if s.registeredCommands.Count() == 0 && s.envFilter != nil {
-		args = s.envToFlags(args, 0)
-		processedEnvVars = true
+	var (
+		envFlagsByCommand = s.preSplitEnvVarsByCommand() // Get env flags split by command
+		envInserted       = make(map[string]int)         // Track env flags inserted per command instance
+	)
+
+	if g, ok := envFlagsByCommand["global"]; ok && len(g) > 0 {
+		args = util.InsertSlice(args, 0, g...)
 	}
 
 	state := &parseState{
@@ -257,7 +264,11 @@ func (s *CmdLineOption) Parse(args []string) bool {
 					} else {
 						currentCommandPath = ""
 					}
+
 					args = s.evalFlagWithPath(args, state, currentCommandPath)
+					if s.callbackOnParse {
+						s.ExecuteCommands()
+					}
 					processedStack = true
 				}
 
@@ -271,11 +282,16 @@ func (s *CmdLineOption) Parse(args []string) bool {
 			// Parse the next command
 			terminating := s.parseCommand(args, state, cmdQueue, &commandPathSlice)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
-			if terminating {
-				if !processedEnvVars && s.envFilter != nil {
-					args = s.envToFlags(args, state.pos+1, currentCommandPath)
+			// Inject relevant environment variables for the current command context
+			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
+				if len(envFlagsByCommand[currentCommandPath]) > 0 {
+					args = util.InsertSlice(args, state.pos+1, envFlagsByCommand[currentCommandPath]...)
 					state.endOf = len(args)
 				}
+				envInserted[currentCommandPath]++
+			}
+
+			if terminating {
 				if processedStack {
 					ctxStack.Clear()
 					processedStack = false
@@ -285,7 +301,6 @@ func (s *CmdLineOption) Parse(args []string) bool {
 				}
 				commandPathSlice = commandPathSlice[:0]
 			}
-
 		}
 	}
 
@@ -800,8 +815,8 @@ func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
 }
 
 // HasFlag returns true when the Flag has been seen on the command line.
-func (s *CmdLineOption) HasFlag(flag string) bool {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *CmdLineOption) HasFlag(flag string, commandPath ...string) bool {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	_, found := s.options[mainKey]
 	if !found && s.secureArguments != nil {
 		// secure arguments are evaluated after all others - if a callback (ex. RequiredIf) relies
