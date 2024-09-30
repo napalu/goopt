@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/araddon/dateparse"
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -17,54 +18,53 @@ import (
 	"time"
 )
 
-func (s *CmdLineOption) parseFlag(args []string, state *parseState, currentCommandPath string) {
-	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-
-	// Use the helper function to build the lookup flag
-	lookupFlag := buildPathFlag(currentArg, currentCommandPath)
+func (s *CmdLineOption) parseFlag(state parse.State, currentCommandPath string) {
+	flag := s.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), s.prefixFunc), currentCommandPath)
 
 	// Try finding the flag in the current command path
-	flagInfo, found := s.acceptedFlags.Get(lookupFlag)
+	flagInfo, found := s.acceptedFlags.Get(flag)
 
 	// If not found in the current command path, check for global flags
 	if !found {
-		flagInfo, found = s.acceptedFlags.Get(currentArg)
+		flagInfo, found = s.acceptedFlags.Get(state.CurrentArg())
+		if found {
+			flag = state.CurrentArg()
+		}
 	}
 
 	if found {
-		s.processFlagArg(args, state, flagInfo.Argument, currentArg, currentCommandPath)
+		s.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 	} else {
-		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", currentArg, currentCommandPath))
+		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", flag, currentCommandPath))
 	}
 }
 
-func (s *CmdLineOption) parsePosixFlag(args []string, state *parseState, currentCommandPath string) []string {
-	currentArg := s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-	flagInfo, found := s.getFlagInCommandPath(currentArg, currentCommandPath)
+func (s *CmdLineOption) parsePosixFlag(state parse.State, currentCommandPath string) {
+	flag := s.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), s.prefixFunc))
+	flagInfo, found := s.getFlagInCommandPath(flag, currentCommandPath)
 	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-		args = s.normalizePosixArgs(args, state, currentArg, currentCommandPath)
-		currentArg = s.flagOrShortFlag(strings.TrimLeftFunc(args[state.pos], s.prefixFunc))
-		flagInfo, found = s.getFlagInCommandPath(currentArg, currentCommandPath)
+		s.normalizePosixArgs(state, flag, currentCommandPath)
+		flag = s.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), s.prefixFunc))
+		flagInfo, found = s.getFlagInCommandPath(flag, currentCommandPath)
 	}
 
 	if found {
-		s.processFlagArg(args, state, flagInfo.Argument, currentArg, currentCommandPath)
+		s.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 	} else {
-		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", currentArg, currentCommandPath))
+		s.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", flag, currentCommandPath))
 	}
-
-	return args
 }
 
-func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, currentArg string, commandPath string) []string {
+func (s *CmdLineOption) normalizePosixArgs(state parse.State, currentArg string, commandPath string) {
 	sb := strings.Builder{}
 	lenS := len(currentArg)
-	newArgs := make([]string, 0, len(args))
-	if state.pos > 0 {
-		newArgs = append(newArgs, args[:state.pos]...)
+	statePos := state.CurrentPos()
+	stateEndOf := state.Len()
+	newArgs := make([]string, 0, state.Len())
+	if statePos > 0 {
+		newArgs = append(newArgs, state.Args()[:statePos]...)
 	}
-
 	startPos := 0
 	for startPos < lenS {
 		cf := s.flagOrShortFlag(currentArg[startPos:startPos+1], commandPath)
@@ -73,8 +73,8 @@ func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, cur
 			newArgs = append(newArgs, fmt.Sprintf("-%s", cf))
 			startPos++
 		} else {
-			val := splitPathFlag(cf)
-			sb.WriteString(val[0])
+			v := splitPathFlag(cf)
+			sb.WriteString(v[0])
 			startPos++
 			for startPos < lenS {
 				cf = s.flagOrShortFlag(currentArg[startPos:startPos+1], commandPath)
@@ -82,29 +82,29 @@ func (s *CmdLineOption) normalizePosixArgs(args []string, state *parseState, cur
 				if found {
 					break
 				} else {
-					val = splitPathFlag(cf)
-					sb.WriteString(val[0])
+					v = splitPathFlag(cf)
+					sb.WriteString(v[0])
 					startPos++
 				}
 			}
 			newArgs = append(newArgs, sb.String())
 			sb.Reset()
 		}
-		state.endOf++
+		stateEndOf++
 	}
 
 	if startPos > 0 {
-		state.endOf--
+		stateEndOf--
 	}
 
-	if len(args) > state.pos+1 {
-		newArgs = append(newArgs, args[state.pos+1:]...)
+	if state.Len() > statePos+1 {
+		newArgs = append(newArgs, state.Args()[statePos+1:]...)
 	}
 
-	return newArgs
+	state.ReplaceArgs(newArgs...)
 }
 
-func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argument *Argument, currentArg string, currentCommandPath ...string) {
+func (s *CmdLineOption) processFlagArg(state parse.State, argument *Argument, currentArg string, currentCommandPath ...string) {
 	lookup := buildPathFlag(currentArg, currentCommandPath...)
 	switch argument.TypeOf {
 	case Standalone:
@@ -112,22 +112,23 @@ func (s *CmdLineOption) processFlagArg(args []string, state *parseState, argumen
 			s.queueSecureArgument(lookup, argument)
 		} else {
 			boolVal := "true"
-			if state.pos+1 < state.endOf {
-				_, found := s.registeredCommands.Get(args[state.pos+1])
-				if !found && !s.isFlag(args[state.pos+1]) {
-					boolVal = args[state.pos+1]
-					state.skip = state.pos + 1
+			if state.CurrentPos()+1 < state.Len() {
+				nextArg := state.Peek()
+				_, found := s.registeredCommands.Get(nextArg)
+				if !found && !s.isFlag(state.Peek()) {
+					boolVal = nextArg
+					state.SkipCurrent()
 				}
 			}
 			s.options[lookup] = boolVal
 			err := s.setBoundVariable(boolVal, lookup)
 			if err != nil {
 				s.addError(fmt.Errorf(
-					"could not process input argument '%s' - the following error occurred: %s", currentArg, err))
+					"could not process input argument '%s' - the following error occurred: %s", lookup, err))
 			}
 		}
 	case Single, Chained, File:
-		s.processFlag(args, argument, state, currentArg, currentCommandPath...)
+		s.processFlag(argument, state, lookup)
 	}
 }
 
@@ -236,14 +237,12 @@ func (s *CmdLineOption) setPositionalArguments(args []string, commandPath ...str
 	s.positionalArgs = positional
 }
 
-func (s *CmdLineOption) evalFlagWithPath(args []string, state *parseState, currentCommandPath string) []string {
+func (s *CmdLineOption) evalFlagWithPath(state parse.State, currentCommandPath string) {
 	if s.posixCompatible {
-		args = s.parsePosixFlag(args, state, currentCommandPath)
+		s.parsePosixFlag(state, currentCommandPath)
 	} else {
-		s.parseFlag(args, state, currentCommandPath)
+		s.parseFlag(state, currentCommandPath)
 	}
-
-	return args
 }
 
 func (s *CmdLineOption) flagOrShortFlag(flag string, commandPath ...string) string {
@@ -327,9 +326,9 @@ func (s *CmdLineOption) queueSecureArgument(name string, argument *Argument) {
 	s.secureArguments.Set(name, &argument.Secure)
 }
 
-func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue *queue.Q[*Command], commandPathSlice *[]string) bool {
+func (s *CmdLineOption) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], commandPathSlice *[]string) bool {
 	terminating := false
-	currentArg := args[state.pos]
+	currentArg := state.CurrentArg()
 
 	// Check if we're dealing with a subcommand
 	var (
@@ -367,7 +366,7 @@ func (s *CmdLineOption) parseCommand(args []string, state *parseState, cmdQueue 
 			s.queueCommandCallback(cmd)
 		}
 
-	} else if state.pos == 0 && !s.isFlag(currentArg) {
+	} else if state.CurrentPos() == 0 && !s.isFlag(currentArg) {
 		s.addError(fmt.Errorf("options should be prefixed by '-'"))
 	}
 
@@ -383,62 +382,61 @@ func (s *CmdLineOption) queueCommandCallback(cmd *Command) {
 	}
 }
 
-func (s *CmdLineOption) processFlag(args []string, argument *Argument, state *parseState, currentArg string, currentCommandPath ...string) {
+func (s *CmdLineOption) processFlag(argument *Argument, state parse.State, flag string) {
 	var err error
-	lookup := buildPathFlag(currentArg, currentCommandPath...)
 	if argument.Secure.IsSecure {
-		if state.pos < state.endOf-1 {
-			if !s.isFlag(args[state.pos+1]) {
-				state.skip = state.pos + 1
+		if state.CurrentPos() < state.Len()-1 {
+			if !s.isFlag(state.Peek()) {
+				state.SkipCurrent()
 			}
 		}
-		s.queueSecureArgument(lookup, argument)
+		s.queueSecureArgument(flag, argument)
 	} else {
 		var next string
-		if state.pos < state.endOf-1 {
-			next = args[state.pos+1]
+		if state.CurrentPos() < state.Len()-1 {
+			next = state.Peek()
 		}
 		if (len(next) == 0 || s.isFlag(next)) && len(argument.DefaultValue) > 0 {
 			next = argument.DefaultValue
 		} else {
-			state.skip = state.pos + 1
+			state.SkipCurrent()
 		}
-		if state.pos >= state.endOf-1 && len(next) == 0 {
-			s.addError(fmt.Errorf("flag '%s' expects a value", lookup))
+		if state.CurrentPos() >= state.Len()-1 && len(next) == 0 {
+			s.addError(fmt.Errorf("flag '%s' expects a value", flag))
 		} else {
-			next, err = s.flagValue(argument, next, lookup)
+			next, err = s.flagValue(argument, next, flag)
 			if err != nil {
 				s.addError(err)
 			} else {
-				if err := s.processValueFlag(lookup, next, argument); err != nil {
-					s.addError(fmt.Errorf("failed to process your input for Flag '%s': %s", lookup, err))
+				if err = s.processValueFlag(flag, next, argument); err != nil {
+					s.addError(fmt.Errorf("failed to process your input for Flag '%s': %s", flag, err))
 				}
 			}
 		}
 	}
 }
 
-func (s *CmdLineOption) flagValue(argument *Argument, next string, currentArg string) (arg string, err error) {
+func (s *CmdLineOption) flagValue(argument *Argument, next string, flag string) (arg string, err error) {
 	if argument.TypeOf == File {
 		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid Path but could not find %s - error %s", currentArg, next, e.Error())
+			err = fmt.Errorf("flag '%s' should be a valid Path but could not find %s - error %s", flag, next, e.Error())
 			return
 		} else if st.IsDir() {
-			err = fmt.Errorf("flag '%s' should be a file but is a directory", currentArg)
+			err = fmt.Errorf("flag '%s' should be a file but is a directory", flag)
 			return
 		}
 		next = filepath.Clean(next)
 		if val, e := os.ReadFile(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", currentArg, next, e.Error())
+			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", flag, next, e.Error())
 		} else {
 			arg = string(val)
 		}
-		s.registerFlagValue(currentArg, arg, next)
+		s.registerFlagValue(flag, arg, next)
 	} else {
 		arg = next
-		s.registerFlagValue(currentArg, next, next)
+		s.registerFlagValue(flag, next, next)
 	}
 
 	return arg, err

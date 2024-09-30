@@ -19,7 +19,6 @@ import (
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
-	"github.com/napalu/goopt/util"
 	"io"
 	"os"
 	"path/filepath"
@@ -255,25 +254,18 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		processedStack     bool
 	)
 
+	state := parse.NewState(args)
 	if g, ok := envFlagsByCommand["global"]; ok && len(g) > 0 {
-		args = util.InsertSlice(args, 0, g...)
-	}
-
-	state := &parseState{
-		endOf: len(args),
-		skip:  -1,
+		state.InsertArgsAt(0, g...)
 	}
 
 	var ()
 
-	for state.pos = 0; state.pos < state.endOf; state.pos++ {
-		if state.skip == state.pos {
-			continue
-		}
-
-		if s.isFlag(args[state.pos]) {
-			if s.isGlobalFlag(args[state.pos]) {
-				args = s.evalFlagWithPath(args, state, "")
+	for state.Advance() {
+		cur := state.CurrentArg()
+		if s.isFlag(state.CurrentArg()) {
+			if s.isGlobalFlag(cur) {
+				s.evalFlagWithPath(state, "")
 			} else {
 				// We now iterate over the stack to handle flags for each command context
 				for i := ctxStack.Len() - 1; i >= 0; i-- {
@@ -284,26 +276,25 @@ func (s *CmdLineOption) Parse(args []string) bool {
 						currentCommandPath = ""
 					}
 
-					args = s.evalFlagWithPath(args, state, currentCommandPath)
+					s.evalFlagWithPath(state, currentCommandPath)
 
 					processedStack = true
 				}
 
 				if !processedStack {
 					// fallback - possibly POSIX style
-					args = s.evalFlagWithPath(args, state, "")
+					s.evalFlagWithPath(state, "")
 				}
 			}
 
 		} else {
 			// Parse the next command
-			terminating := s.parseCommand(args, state, cmdQueue, &commandPathSlice)
+			terminating := s.parseCommand(state, cmdQueue, &commandPathSlice)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
 				if len(envFlagsByCommand[currentCommandPath]) > 0 {
-					args = util.InsertSlice(args, state.pos+1, envFlagsByCommand[currentCommandPath]...)
-					state.endOf = len(args)
+					state.InsertArgsAt(state.CurrentPos()+1, envFlagsByCommand[currentCommandPath]...)
 				}
 				envInserted[currentCommandPath]++
 			}

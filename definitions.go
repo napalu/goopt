@@ -189,9 +189,3 @@ type commandCallback struct {
 	callback  CommandFunc
 	arguments []any
 }
-
-type parseState struct {
-	endOf int
-	skip  int
-	pos   int
-}
