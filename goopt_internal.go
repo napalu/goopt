@@ -60,7 +60,6 @@ func (s *CmdLineOption) normalizePosixArgs(state parse.State, currentArg string,
 	sb := strings.Builder{}
 	lenS := len(currentArg)
 	statePos := state.CurrentPos()
-	stateEndOf := state.Len()
 	newArgs := make([]string, 0, state.Len())
 	if statePos > 0 {
 		newArgs = append(newArgs, state.Args()[:statePos]...)
@@ -90,11 +89,6 @@ func (s *CmdLineOption) normalizePosixArgs(state parse.State, currentArg string,
 			newArgs = append(newArgs, sb.String())
 			sb.Reset()
 		}
-		stateEndOf++
-	}
-
-	if startPos > 0 {
-		stateEndOf--
 	}
 
 	if state.Len() > statePos+1 {
