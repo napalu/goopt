@@ -1101,10 +1101,7 @@ func (s *CmdLineOption) PrintGlobalFlags(writer io.Writer) {
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == "" { // Global flags have no command path
 			shortFlag, _ := s.GetShortFlag(*f.Key)
-			requiredOrOptional := "optional"
-			if f.Value.Argument.Required {
-				requiredOrOptional = "required"
-			}
+			requiredOrOptional := describeRequired(f.Value.Argument)
 			_, _ = writer.Write([]byte(fmt.Sprintf(" --%s or -%s \"%s\" (%s)\n", *f.Key, shortFlag, f.Value.Argument.Description, requiredOrOptional)))
 		}
 	}
@@ -1146,17 +1143,10 @@ func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath 
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
 			if !hasFlags {
-				// Print the header for flags of this command
 				hasFlags = true
 			}
 
-			// Determine if the flag is required or optional
-			requiredOrOptional := "optional"
-			if f.Value.Argument.Required {
-				requiredOrOptional = "required"
-			}
-
-			// Print each flag with proper indentation, aligning with the command hierarchy
+			requiredOrOptional := describeRequired(f.Value.Argument)
 			flag := fmt.Sprintf("%s--%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), splitPathFlag(*f.Key)[0], f.Value.Argument.Description, requiredOrOptional)
 			_, _ = writer.Write([]byte(flag))
 		}
@@ -1173,10 +1163,8 @@ func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 		} else {
 			shortOption = " "
 		}
-		requiredOrOptional := "optional"
-		if f.Value.Argument.Required {
-			requiredOrOptional = "required"
-		}
+
+		requiredOrOptional := describeRequired(f.Value.Argument)
 		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s%s\"%s\" (%s)",
 			*f.Key, shortOption, s.GetDescription(*f.Key), requiredOrOptional)))
 	}

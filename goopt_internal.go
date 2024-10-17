@@ -1538,3 +1538,13 @@ func getFlagPath(flag string) string {
 
 	return ""
 }
+
+func describeRequired(argument *Argument) string {
+	requiredOrOptional := "optional"
+	if argument.Required {
+		requiredOrOptional = "required"
+	} else if argument.RequiredIf != nil {
+		requiredOrOptional = "conditional"
+	}
+	return requiredOrOptional
+}
