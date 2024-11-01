@@ -1194,6 +1194,7 @@ func TestCmdLineOption_PrintUsageWithGroups(t *testing.T) {
 
 	err = opts.AddFlag("email", &Argument{
 		Description: "Email for user creation",
+		Short:       "e",
 		TypeOf:      Single,
 	}, "create user")
 	assert.Nil(t, err, "should add command-specific flag successfully")
@@ -1211,7 +1212,7 @@ Global Flags:
 Commands:
  +  create "Create resources"
  │─  ** create user "Manage users"
- |   |  --email "Email for user creation" (optional)
+ |   |  --email or -e "Email for user creation" (optional)
  └─  **  ** create user type "Specify user type"
  |   |   |  --username "Username for user creation" (required)
  |   |   |  --firstName "User first name" (optional)

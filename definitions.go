@@ -183,6 +183,12 @@ var (
 	ErrFlagNotFound              = errors.New("flag not found")
 	ErrPosixIncompatible         = errors.New("posix incompatible")
 	ErrValidationFailed          = errors.New("validation failed")
+	ErrBindNilPointer            = errors.New("can't bind flag to nil")
+	ErrVariableNotAPointer       = errors.New("variable is not a pointer")
+)
+
+const (
+	FmtErrorWithString = "%w: %s"
 )
 
 type commandCallback struct {

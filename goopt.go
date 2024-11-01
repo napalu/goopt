@@ -149,7 +149,7 @@ func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc)
 		return nil
 	}
 
-	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -162,7 +162,7 @@ func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc
 		return nil
 	}
 
-	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -466,7 +466,7 @@ func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
 func (s *CmdLineOption) GetBool(flag string, commandPath ...string) (bool, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
-		return false, fmt.Errorf("no option with flag '%s' exists", flag)
+		return false, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseBool(value)
@@ -478,7 +478,7 @@ func (s *CmdLineOption) GetBool(flag string, commandPath ...string) (bool, error
 func (s *CmdLineOption) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf("no option with flag '%s' exists", flag)
+		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseInt(value, 10, bitSize)
@@ -490,7 +490,7 @@ func (s *CmdLineOption) GetInt(flag string, bitSize int, commandPath ...string) 
 func (s *CmdLineOption) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf("no option with flag '%s' exists", flag)
+		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseFloat(value, bitSize)
@@ -666,7 +666,7 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument, commandPath ...
 // BindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.BindFlag method
 func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
+		return ErrBindNilPointer
 	}
 
 	return s.BindFlag(data, flag, argument, commandPath...)
@@ -675,7 +675,7 @@ func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argum
 // CustomBindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.CustomBindFlag method
 func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
+		return ErrBindNilPointer
 	}
 
 	return s.CustomBindFlag(data, proc, flag, argument, commandPath...)
@@ -686,14 +686,14 @@ func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc
 // An error is returned if data cannot be bound - for compile-time safety use BindFlagToCmdLine instead
 func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
 	if bindPtr == nil {
-		return fmt.Errorf("can't bind flag to nil CmdLineOption pointer")
+		return ErrBindNilPointer
 	}
 	if ok, err := canConvert(bindPtr, argument.TypeOf); !ok {
 		return err
 	}
 
 	if reflect.ValueOf(bindPtr).Kind() != reflect.Ptr {
-		return fmt.Errorf("BindFlag only accepts pointer types")
+		return ErrVariableNotAPointer
 	}
 
 	if err := s.AddFlag(flag, argument, commandPath...); err != nil {
@@ -835,8 +835,8 @@ func (s *CmdLineOption) SetArgument(flag string, paths []string, configs ...Conf
 // Returns:
 // string: The short flag variant if it exists.
 // error: An error if no short flag is defined for the provided long flag, or if any other error occurs.
-func (s *CmdLineOption) GetShortFlag(flag string) (string, error) {
-	argument, err := s.GetArgument(flag)
+func (s *CmdLineOption) GetShortFlag(flag string, commandPath ...string) (string, error) {
+	argument, err := s.GetArgument(flag, commandPath...)
 	if err == nil {
 		if argument.Short != "" {
 			return argument.Short, nil
@@ -917,7 +917,7 @@ func (s *CmdLineOption) DescribeFlag(flag, description string) error {
 		return nil
 	}
 
-	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // GetDescription retrieves a Flag's description as set by DescribeFlag
@@ -1016,7 +1016,7 @@ func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
 		return nil
 	}
 
-	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // FlagPath returns the command part of a Flag or an empty string when not.
@@ -1050,7 +1050,7 @@ func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) erro
 		return nil
 	}
 
-	return fmt.Errorf("%w: %s", ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // GetErrors returns a list of the errors encountered during Parse
@@ -1146,8 +1146,15 @@ func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath 
 				hasFlags = true
 			}
 
+			flagParts := splitPathFlag(*f.Key)
+			flagDesc := fmt.Sprintf("--%s", flagParts[0])
+			if f.Value.Argument != nil && f.Value.Argument.Short != "" {
+				flagDesc = fmt.Sprintf("%s or -%s", flagDesc, f.Value.Argument.Short)
+			}
+
 			requiredOrOptional := describeRequired(f.Value.Argument)
-			flag := fmt.Sprintf("%s--%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), splitPathFlag(*f.Key)[0], f.Value.Argument.Description, requiredOrOptional)
+			flag := fmt.Sprintf("%s%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), flagDesc, f.Value.Argument.Description, requiredOrOptional)
+
 			_, _ = writer.Write([]byte(flag))
 		}
 	}
@@ -1165,7 +1172,7 @@ func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 		}
 
 		requiredOrOptional := describeRequired(f.Value.Argument)
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s%s\"%s\" (%s)",
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s %s\"%s\" (%s)",
 			*f.Key, shortOption, s.GetDescription(*f.Key), requiredOrOptional)))
 	}
 }

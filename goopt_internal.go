@@ -1234,7 +1234,7 @@ func (s *CmdLineOption) buildCommand(commandPath string, parent *Command) (*Comm
 	// Split the path into segments (commands)
 	commandNames := strings.Split(commandPath, " ")
 
-	var topParent *Command = parent
+	var topParent = parent
 	var currentCommand *Command
 
 	for _, cmdName := range commandNames {
