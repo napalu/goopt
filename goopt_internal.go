@@ -646,7 +646,7 @@ func (s *CmdLineOption) walkFlags() {
 			continue
 		}
 
-		cmdArg := strings.Split(mainKey, "@")
+		cmdArg := splitPathFlag(mainKey)
 		if len(flagInfo.Argument.DependsOn) == 0 {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && s.HasCommand(cmdArg[1])) {
 				s.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))

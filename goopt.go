@@ -400,16 +400,6 @@ func (s *CmdLineOption) SetPosix(posixCompatible bool) bool {
 	return oldValue
 }
 
-// GetOrDefault returns the value of a defined Flag or defaultValue if no value is set
-func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string, commandPath ...string) string {
-	value, found := s.Get(flag, commandPath...)
-	if found {
-		return value
-	}
-
-	return defaultValue
-}
-
 // GetPositionalArgs TODO explain
 func (s *CmdLineOption) GetPositionalArgs() []PositionalArgument {
 	return s.positionalArgs
@@ -437,20 +427,38 @@ func (s *CmdLineOption) GetCommands() []string {
 	return pathValues
 }
 
-// Get returns a combination of a Flag's value as string and true if found. Returns an empty string and false otherwise
+// Get returns a combination of a Flag's value as string and true if found. If a flag is not set but has a configured default value
+// the default value is registered and is returned. Returns an empty string and false otherwise
 func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
 	lookup := buildPathFlag(flag, commandPath...)
 	mainKey := s.flagOrShortFlag(lookup)
 	value, found := s.options[mainKey]
-	if found {
-		if flagInfo, ok := s.acceptedFlags.Get(mainKey); ok {
+	flagInfo, ok := s.acceptedFlags.Get(mainKey)
+	if ok {
+		if found {
 			if flagInfo.Argument.Secure.IsSecure {
 				s.options[mainKey] = ""
+			}
+		} else {
+			if flagInfo.Argument.DefaultValue != "" {
+				s.options[mainKey] = flagInfo.Argument.DefaultValue
+				value = flagInfo.Argument.DefaultValue
+				found = true
 			}
 		}
 	}
 
 	return value, found
+}
+
+// GetOrDefault returns the value of a defined Flag or defaultValue if no value is set
+func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string, commandPath ...string) string {
+	value, found := s.Get(flag, commandPath...)
+	if found {
+		return value
+	}
+
+	return defaultValue
 }
 
 // GetBool attempts to convert the string value of a Flag to boolean.
