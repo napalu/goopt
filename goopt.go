@@ -441,6 +441,10 @@ func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
 			if flagInfo.Argument.DefaultValue != "" {
 				s.options[mainKey] = flagInfo.Argument.DefaultValue
 				value = flagInfo.Argument.DefaultValue
+				err := s.setBoundVariable(value, mainKey)
+				if err != nil {
+					s.addError(fmt.Errorf("error setting bound variable value %w", err))
+				}
 				found = true
 			}
 		}
