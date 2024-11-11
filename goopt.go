@@ -259,8 +259,6 @@ func (s *CmdLineOption) Parse(args []string) bool {
 		state.InsertArgsAt(0, g...)
 	}
 
-	var ()
-
 	for state.Advance() {
 		cur := state.CurrentArg()
 		if s.isFlag(state.CurrentArg()) {

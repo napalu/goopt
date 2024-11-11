@@ -1359,7 +1359,7 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 
 		// Regular field handling
 		arg := &Argument{}
-		err := unmarshalTagsToArgument(field, arg)
+		err = unmarshalTagsToArgument(field, arg)
 		if err != nil {
 			c.addError(fmt.Errorf("error processing field %s: %w", fieldPath, err))
 		}
@@ -1416,6 +1416,12 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 				if err != nil {
 					return nil, err
 				}
+				if arg.DefaultValue != "" {
+					err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
+					if err != nil {
+						c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+					}
+				}
 			}
 
 		} else {
@@ -1423,6 +1429,12 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 			err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
 			if err != nil {
 				return nil, err
+			}
+			if arg.DefaultValue != "" {
+				err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
+				if err != nil {
+					c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+				}
 			}
 		}
 	}

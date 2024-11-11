@@ -380,6 +380,7 @@ func TestCmdLineOption_FileFlag(t *testing.T) {
 
 type TestOptOk struct {
 	IsTest       bool   `long:"isTest" short:"t" description:"test bool option" required:"true" type:"standalone" path:"create user type,create group type"`
+	IntOption    int    `short:"i" description:"test int option" default:"-20"`
 	StringOption string `short:"so" description:"test string option" type:"single" default:"1"`
 }
 
@@ -406,7 +407,8 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, cmd.ParseString("create user type create group type -t --stringOption"))
 	assert.Equal(t, true, testOpt.IsTest, "test bool option should be true when multiple commands share same flag")
-	assert.Equal(t, "1", testOpt.StringOption, "should use default value if defined and not set on command line")
+	assert.Equal(t, "1", testOpt.StringOption, "should use default value if flag is parsed without a default value")
+	assert.Equal(t, -20, testOpt.IntOption, "should use default value if not required and not defined and not set on command line")
 }
 
 type Address struct {
