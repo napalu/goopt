@@ -1416,6 +1416,12 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 				if err != nil {
 					return nil, err
 				}
+				if arg.DefaultValue != "" {
+					err = c.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
+					if err != nil {
+						c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+					}
+				}
 			}
 
 		} else {
@@ -1424,13 +1430,11 @@ func newCmdLineFromReflectValue(structValue reflect.Value, prefix string, maxDep
 			if err != nil {
 				return nil, err
 			}
-
-		}
-
-		if arg.DefaultValue != "" {
-			err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
-			if err != nil {
-				c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+			if arg.DefaultValue != "" {
+				err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
+				if err != nil {
+					c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+				}
 			}
 		}
 	}
