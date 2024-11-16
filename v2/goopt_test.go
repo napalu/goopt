@@ -1,4 +1,4 @@
-package goopt
+package v2
 
 import (
 	"crypto/md5"
@@ -28,7 +28,7 @@ func (writer arrayWriter) Write(p []byte) (int, error) {
 }
 
 func TestCmdLineOption_AcceptPattern(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	_ = opts.AddFlag("test2", NewArgument("t2", "", Single, false, Secure{}, ""))
 
@@ -38,7 +38,7 @@ func TestCmdLineOption_AcceptPattern(t *testing.T) {
 }
 
 func TestCmdLineOption_AcceptPatterns(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
 
@@ -57,7 +57,7 @@ func TestCmdLineOption_AcceptPatterns(t *testing.T) {
 }
 
 func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
 	err := opts.AddFlagPreValidationFilter("upper", strings.ToUpper)
@@ -72,7 +72,7 @@ func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
 }
 
 func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	_ = opts.AddFlag("status", NewArgument("t", "", Single, false, Secure{}, ""))
 	err := opts.AddFlagPostValidationFilter("status", func(s string) string {
@@ -98,7 +98,7 @@ func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
 }
 
 func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	_ = opts.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
 	_ = opts.AddFlag("dependent", NewArgument("d", "", Single, false, Secure{}, ""))
@@ -108,12 +108,15 @@ func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
 
 	assert.True(t, opts.ParseString("-d test"), "should parse since all flags are optional")
 
-	for _, wrn := range opts.GetWarnings() {
+	warnings := opts.GetWarnings()
+	assert.True(t, len(warnings) > 0)
+	for _, wrn := range warnings {
 		assert.Contains(t, wrn, "depends on", "should warn of missing dependency")
 	}
 
 	_ = opts.ParseString("-d test -m not")
-	for _, wrn := range opts.GetWarnings() {
+	warnings = opts.GetWarnings()
+	for _, wrn := range warnings {
 		assert.Contains(t, wrn, "depends on",
 			"should warn of missing dependency because the value of the dependent flag does not match the expected value")
 		assert.Contains(t, wrn, "qww1113394", "should mention the expected value of the dependent variable")
@@ -123,7 +126,9 @@ func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
 	assert.Nil(t, err, "should set dependent value on short flag")
 
 	_ = opts.ParseString("-d test -m not")
-	for _, wrn := range opts.GetWarnings() {
+	warnings = opts.GetWarnings()
+	assert.True(t, len(warnings) > 0)
+	for _, wrn := range warnings {
 		assert.Contains(t, wrn, "depends on", "should warn of missing dependency because the value of the dependent flag does not match one of the expected values")
 		assert.Contains(t, wrn, "'qww1113394' or 'aee12ew4eee'", "should mention the expected values of the dependent variable")
 	}
@@ -133,7 +138,7 @@ func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
 }
 
 func TestCmdLineOption_AddCommand(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	cmd := &Command{
 		Name:        "",
@@ -163,7 +168,7 @@ func TestCmdLineOption_AddCommand(t *testing.T) {
 }
 
 func TestCmdLineOption_RegisterCommand(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	cmd := &Command{
 		Name: "create",
@@ -250,7 +255,7 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 }
 
 func TestCmdLineOption_ValueCallback(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	shouldBeEqualToOneAfterExecute := 0
 	cmd := &Command{
@@ -259,7 +264,7 @@ func TestCmdLineOption_ValueCallback(t *testing.T) {
 			Name: "user",
 			Subcommands: []Command{{
 				Name: "type",
-				Callback: func(cmdLine *CmdLineOption, command *Command) error {
+				Callback: func(cmdLine *CmdLine, command *Command) error {
 					shouldBeEqualToOneAfterExecute = 1
 					return nil
 				},
@@ -305,7 +310,7 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 	var s string
 	var i int
 
-	opts := NewCmdLineOption()
+	opts := New()
 	err := opts.BindFlag(s, "test", NewArgument("t", "", Single, false, Secure{}, ""))
 	assert.NotNil(t, err, "should not accept non-pointer type in BindFlag")
 
@@ -333,12 +338,12 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 
 	assert.True(t, opts.ParseString("--test1 2"), "should parse a command line argument when given a bound variable")
 
-	opts = NewCmdLineOption()
+	opts = New()
 	var boolBind bool
 	err = opts.BindFlag(&boolBind, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	assert.Nil(t, err, "should accept Standalone flags in BindFlag if the data type is boolean")
 
-	opts = NewCmdLineOption()
+	opts = New()
 	err = opts.BindFlag(&i, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
 	assert.NotNil(t, err, "should not accept Standalone flags in BindFlag if the data type is not boolean")
 	err = opts.BindFlag(&boolBind, "test", NewArgument("t", "", Standalone, false, Secure{}, ""))
@@ -389,7 +394,7 @@ type TestOptNok struct {
 
 func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 	testOpt := TestOptOk{}
-	cmd, err := NewCmdLineFromStruct(&testOpt)
+	cmd, err := NewFromStruct(&testOpt)
 	assert.Nil(t, err)
 	if err == nil {
 		assert.False(t, cmd.ParseString("-t true --stringOption one"), "parse should fail when a command-specific flag is required but no associated command is specified")
@@ -400,9 +405,9 @@ func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
 		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
 			"should be able to reference by long name when long name is not explicitly set")
 	}
-	_, err = NewCmdLineFromStruct(&TestOptNok{})
+	_, err = NewFromStruct(&TestOptNok{})
 	assert.NotNil(t, err, "should error out on invalid struct")
-	cmd, err = NewCmdLineFromStruct(&testOpt)
+	cmd, err = NewFromStruct(&testOpt)
 	assert.Nil(t, err)
 	assert.True(t, cmd.ParseString("create user type create group type -t --stringOption"))
 	assert.Equal(t, true, testOpt.IsTest, "test bool option should be true when multiple commands share same flag")
@@ -425,7 +430,7 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 		Addresses: make([]Address, 1),
 	}
 
-	cmd, err := NewCmdLineFromStruct(profile)
+	cmd, err := NewFromStruct(profile)
 	assert.Nil(t, err, "should handle nested structs")
 	assert.True(t, cmd.ParseString("--name Jack -a 10 --address.0.city 'New York'"), "should parse nested arguments")
 	assert.Equal(t, "Jack", cmd.GetOrDefault("name", ""))
@@ -434,7 +439,7 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 }
 
 func TestCmdLineOption_CommandSpecificFlags(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Define commands and associated flags
 	_ = opts.AddCommand(&Command{
@@ -473,7 +478,7 @@ func TestCmdLineOption_CommandSpecificFlags(t *testing.T) {
 }
 
 func TestCmdLineOption_GlobalFlags(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Define commands
 	_ = opts.AddCommand(&Command{
@@ -504,7 +509,7 @@ func TestCmdLineOption_GlobalFlags(t *testing.T) {
 }
 
 func TestCmdLineOption_SharedFlags(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Define commands
 	_ = opts.AddCommand(&Command{
@@ -587,7 +592,7 @@ func TestCmdLineOption_EnvToFlag(t *testing.T) {
 }
 
 func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Define commands
 	_ = opts.AddCommand(&Command{Name: "create"})
@@ -617,7 +622,7 @@ func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
 }
 
 func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Define commands
 	_ = opts.AddCommand(&Command{Name: "delete"})
@@ -647,11 +652,11 @@ func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
 }
 
 func TestCmdLineOption_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 	opts.SetExecOnParse(true)
 	idx := 0
 
-	_ = opts.AddCommand(&Command{Name: "create", Callback: func(cmdLine *CmdLineOption, command *Command) error {
+	_ = opts.AddCommand(&Command{Name: "create", Callback: func(cmdLine *CmdLine, command *Command) error {
 		assert.True(t, cmdLine.HasFlag("id", command.Path))
 		assert.True(t, cmdLine.HasFlag("group", command.Path))
 		if idx == 0 {
@@ -685,7 +690,7 @@ func upperSnakeToCamelCase(s string) string {
 }
 
 func TestParse_PosixFlagsWithEnvVars(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 	opts.SetPosix(true)
 
 	// Define commands and flags
@@ -731,7 +736,7 @@ func TestCmdLineOption_VarInFileFlag(t *testing.T) {
 }
 
 func TestNewCmdLineOption_BindNil(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	type tester struct {
 		TestStr string
@@ -751,7 +756,7 @@ func TestCmdLineOption_CustomBindFlag(t *testing.T) {
 		testInt int
 	}
 
-	opts := NewCmdLineOption()
+	opts := New()
 	customType := &tester{
 		TestStr: "3",
 		testInt: 0,
@@ -846,8 +851,8 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	)
 	assert.Nil(t, err, "fflag composition should work")
 
-	assert.True(t, cmdLine.ParseString(`--flagWithValue 
-		"test value" --fa --flagB 
+	assert.True(t, cmdLine.ParseString(`--flagWithValue
+		"test value" --fa --flagB
 --flagC "1|2|3" create user type
  create group member`), "command line options should be passed correctly")
 
@@ -872,7 +877,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 	// reset parsed options and commands to parse again
 	cmdLine.ClearAll()
 
-	if !cmdLine.ParseString(`--flagWithValue 
+	if !cmdLine.ParseString(`--flagWithValue
 		"test value" create user type
  author --fa
 --flagC "1|2|3" `,
@@ -891,7 +896,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 }
 
 func TestCmdLineOption_PrintUsage(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	err := opts.AddCommand(&Command{
 		Name: "create",
@@ -977,7 +982,7 @@ func TestCmdLineOption_PrintUsage(t *testing.T) {
 }
 
 func TestPosixCompatibleFlags(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 	opts.SetPosix(true)
 	err := opts.AddFlag("alongflag", &Argument{
 		Short:       "a",
@@ -1049,7 +1054,7 @@ func TestPosixCompatibleFlags(t *testing.T) {
 }
 
 func TestCmdLineOption_FunctionOptionConfigurationOfCommands(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	var valueReceived string
 	err := opts.AddCommand(
@@ -1060,7 +1065,7 @@ func TestCmdLineOption_FunctionOptionConfigurationOfCommands(t *testing.T) {
 					WithName("user"),
 					WithCommandDescription("create user"),
 					WithCallback(
-						func(cmdLine *CmdLineOption, command *Command) error {
+						func(cmdLine *CmdLine, command *Command) error {
 							valueReceived = command.Name
 
 							return nil
@@ -1146,7 +1151,7 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 }
 
 func TestCmdLineOption_PrintUsageWithGroups(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Add global flags
 	err := opts.AddFlag("help", &Argument{
@@ -1222,7 +1227,7 @@ Commands:
 }
 
 func TestCmdLineOption_PrintUsageWithCustomGroups(t *testing.T) {
-	opts := NewCmdLineOption()
+	opts := New()
 
 	// Add global flags
 	err := opts.AddFlag("help", &Argument{

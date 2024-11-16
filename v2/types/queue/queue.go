@@ -70,15 +70,25 @@ func (q *Q[T]) At(index int) (T, bool) {
 	return q.items[index], true
 }
 
-// Iterate allows you to iterate over the stack (from top to bottom) or queue (from front to back)
-func (q *Q[T]) Iterate(callback func(item T, index int) bool) {
-	for i := len(q.items) - 1; i >= 0; i-- {
-		if !callback(q.items[i], i) {
-			break
+// Iterate allows you to iterate over the stack (from top to bottom when top == true)
+// or queue (from front to back when top == false )
+func (q *Q[T]) Iterate(top bool, callback func(item T, index int) bool) {
+	if top {
+		for i := len(q.items) - 1; i >= 0; i-- {
+			if !callback(q.items[i], i) {
+				break
+			}
+		}
+	} else {
+		for i := 0; i < len(q.items); i++ {
+			if !callback(q.items[i], i) {
+				break
+			}
 		}
 	}
 }
 
+// Clear empties the queue
 func (q *Q[T]) Clear() {
 	q.items = q.items[:0]
 }
