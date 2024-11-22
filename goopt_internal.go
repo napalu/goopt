@@ -1172,6 +1172,9 @@ func (s *CmdLineOption) mergeCmdLine(nestedCmdLine *CmdLineOption) error {
 	for k, v := range nestedCmdLine.lookup {
 		s.lookup[k] = v
 	}
+	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
+		s.registeredCommands.Set(*it.Key, it.Value)
+	}
 
 	return nil
 }
