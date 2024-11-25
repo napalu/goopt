@@ -19,16 +19,17 @@ import (
 )
 
 func (s *CmdLineOption) parseFlag(state parse.State, currentCommandPath string) {
-	flag := s.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), s.prefixFunc), currentCommandPath)
+	stripped := strings.TrimLeftFunc(state.CurrentArg(), s.prefixFunc)
+	flag := s.flagOrShortFlag(stripped, currentCommandPath)
 
 	// Try finding the flag in the current command path
 	flagInfo, found := s.acceptedFlags.Get(flag)
 
 	// If not found in the current command path, check for global flags
 	if !found {
-		flagInfo, found = s.acceptedFlags.Get(state.CurrentArg())
+		flagInfo, found = s.acceptedFlags.Get(stripped)
 		if found {
-			flag = state.CurrentArg()
+			flag = stripped
 		}
 	}
 
