@@ -363,6 +363,9 @@ func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []str
 			arg := s.flagOrShortFlag(strings.TrimLeftFunc(args[i], s.prefixFunc))
 			if i < argLen-1 {
 				argMap[arg] = args[i+1]
+				if args[i] != arg {
+					argMap[args[i]] = args[i+1]
+				}
 			}
 		}
 	}
