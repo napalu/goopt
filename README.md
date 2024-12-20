@@ -59,13 +59,13 @@ func main() {
         return
     }
 
-if !parser.Parse(os.Args) {
-parser.PrintUsageWithGroups(os.Stdout)
-return
-}
+   if !parser.Parse(os.Args) {
+        parser.PrintUsageWithGroups(os.Stdout)
+        return
+    }
 
-	fmt.Println("Verbose:", opts.Verbose)
-	fmt.Println("Output:", opts.Output)
+    fmt.Println("Verbose:", opts.Verbose)
+    fmt.Println("Output:", opts.Output)
 }
 ```
 ### Programmatic Definition with Commands
