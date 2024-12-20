@@ -1,4 +1,4 @@
-// Copyright 2021, Florent Heyworth. All rights reserved.
+// Copyright 2021-2024, Florent Heyworth. All rights reserved.
 // Use of this source code is governed by the MIT licensee
 // which can be found in the LICENSE file.
 
