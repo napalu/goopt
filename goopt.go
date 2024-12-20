@@ -16,21 +16,22 @@ package goopt
 
 import (
 	"fmt"
-	"github.com/napalu/goopt/parse"
-	"github.com/napalu/goopt/types/orderedmap"
-	"github.com/napalu/goopt/types/queue"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/types/orderedmap"
+	"github.com/napalu/goopt/types/queue"
 )
 
-// NewCmdLineOption convenience initialization method. Use NewCmdLine to
+// NewParser convenience initialization method. Use NewCmdLine to
 // configure CmdLineOption using option functions.
-func NewCmdLineOption() *CmdLineOption {
-	return &CmdLineOption{
+func NewParser() *Parser {
+	return &Parser{
 		acceptedFlags:      orderedmap.NewOrderedMap[string, *FlagInfo](),
 		lookup:             map[string]string{},
 		options:            map[string]string{},
@@ -48,14 +49,35 @@ func NewCmdLineOption() *CmdLineOption {
 	}
 }
 
-// NewCmdLineFromStruct parses a struct and binds its fields to command-line flags
-func NewCmdLineFromStruct[T any](structWithTags *T) (*CmdLineOption, error) {
-	return NewCmdLineFromStructWithLevel(structWithTags, 5)
+// NewCmdLineOption creates a new parser with default initialization.
+//
+// Deprecated: Use NewParser instead. This function will be removed in v2.0.0.
+func NewCmdLineOption() *Parser {
+	return NewParser()
 }
 
-// NewCmdLineFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
-func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*CmdLineOption, error) {
-	return newCmdLineFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
+// NewParserFromStruct parses a struct and binds its fields to command-line flags
+func NewParserFromStruct[T any](structWithTags *T) (*Parser, error) {
+	return NewParserFromStructWithLevel(structWithTags, 5)
+}
+
+// NewCmdLineFromStruct is an alias for NewParserFromStruct.
+//
+// Deprecated: Use NewParserFromStruct instead. This function will be removed in v2.0.0.
+func NewCmdLineFromStruct[T any](structWithTags *T) (*Parser, error) {
+	return NewParserFromStruct(structWithTags)
+}
+
+// NewParserFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
+func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
+	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
+}
+
+// NewCmdLineFromStructWithLevel is an alias for NewParserFromStructWithLevel.
+//
+// Deprecated: Use NewParserFromStructWithLevel instead. This function will be removed in v2.0.0.
+func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
+	return NewParserFromStructWithLevel(structWithTags, maxDepth)
 }
 
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
@@ -73,13 +95,13 @@ func NewArgument(shortFlag string, description string, typeOf OptionType, requir
 	}
 }
 
-func (s *CmdLineOption) SetExecOnParse(value bool) {
+func (s *Parser) SetExecOnParse(value bool) {
 	s.callbackOnParse = value
 }
 
 // SetEnvFilter allows setting an environment name lookup function
 // If set and the environment variable exists, it will be prepended to the args array
-func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
+func (s *Parser) SetEnvFilter(env EnvFunc) EnvFunc {
 	oldFilter := s.envFilter
 	s.envFilter = env
 
@@ -88,12 +110,12 @@ func (s *CmdLineOption) SetEnvFilter(env EnvFunc) EnvFunc {
 
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
 // Returns the count of errors encountered during execution.
-func (s *CmdLineOption) ExecuteCommands() int {
+func (s *Parser) ExecuteCommands() int {
 	callbackErrors := 0
 	for s.callbackQueue.Len() > 0 {
 		call, _ := s.callbackQueue.Pop()
 		if call.callback != nil && len(call.arguments) == 2 {
-			cmdLine, cmdLineOk := call.arguments[0].(*CmdLineOption)
+			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
 			cmd, cmdOk := call.arguments[1].(*Command)
 			if cmdLineOk && cmdOk {
 				err := call.callback(cmdLine, cmd)
@@ -108,11 +130,13 @@ func (s *CmdLineOption) ExecuteCommands() int {
 	return callbackErrors
 }
 
-func (s *CmdLineOption) ExecuteCommand() error {
+// ExecuteCommand command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
+// Returns the error which occurred during execution of a command callback.
+func (s *Parser) ExecuteCommand() error {
 	if s.callbackQueue.Len() > 0 {
 		call, _ := s.callbackQueue.Pop()
 		if call.callback != nil && len(call.arguments) == 2 {
-			cmdLine, cmdLineOk := call.arguments[0].(*CmdLineOption)
+			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
 			cmd, cmdOk := call.arguments[1].(*Command)
 			if cmdLineOk && cmdOk {
 				err := call.callback(cmdLine, cmd)
@@ -130,7 +154,7 @@ func (s *CmdLineOption) ExecuteCommand() error {
 // GetCommandExecutionError returns the error which occurred during execution of a command callback
 // after ExecuteCommands has been called. Returns nil on no error. Returns a CommandNotFound error when
 // no callback is associated with commandName
-func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
+func (s *Parser) GetCommandExecutionError(commandName string) error {
 	if err, found := s.callbackResults[commandName]; found {
 		return err
 	}
@@ -140,8 +164,8 @@ func (s *CmdLineOption) GetCommandExecutionError(commandName string) error {
 
 // AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
 // *before* AcceptedValues are checked
-func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc) error {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, commandPath ...string) error {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		flagInfo.Argument.PreFilter = proc
 
@@ -153,8 +177,8 @@ func (s *CmdLineOption) AddFlagPreValidationFilter(flag string, proc FilterFunc)
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
 // *after* AcceptedValues are checked
-func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc) error {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) AddFlagPostValidationFilter(flag string, proc FilterFunc, commandPath ...string) error {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		flagInfo.Argument.PostFilter = proc
 
@@ -166,8 +190,8 @@ func (s *CmdLineOption) AddFlagPostValidationFilter(flag string, proc FilterFunc
 
 // HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
 // before checking for acceptable values
-func (s *CmdLineOption) HasPreValidationFilter(flag string) bool {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) HasPreValidationFilter(flag string, commandPath ...string) bool {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		return flagInfo.Argument.PreFilter != nil
 	}
@@ -177,8 +201,8 @@ func (s *CmdLineOption) HasPreValidationFilter(flag string) bool {
 
 // GetPreValidationFilter retrieve Flag transform/evaluate function which is called on Parse before checking for
 // acceptable values
-func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) GetPreValidationFilter(flag string, commandPath ...string) (FilterFunc, error) {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		if flagInfo.Argument.PreFilter != nil {
 			return flagInfo.Argument.PreFilter, nil
@@ -190,8 +214,8 @@ func (s *CmdLineOption) GetPreValidationFilter(flag string) (FilterFunc, error) 
 
 // HasPostValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
 // after checking for acceptable values
-func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) HasPostValidationFilter(flag string, commandPath ...string) bool {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		return flagInfo.Argument.PostFilter != nil
 	}
@@ -201,8 +225,8 @@ func (s *CmdLineOption) HasPostValidationFilter(flag string) bool {
 
 // GetPostValidationFilter retrieve Flag transform/evaluate function which is called on Parse after checking for
 // acceptable values
-func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error) {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) GetPostValidationFilter(flag string, commandPath ...string) (FilterFunc, error) {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := s.acceptedFlags.Get(mainKey); found {
 		if flagInfo.Argument.PostFilter != nil {
 			return flagInfo.Argument.PostFilter, nil
@@ -213,8 +237,8 @@ func (s *CmdLineOption) GetPostValidationFilter(flag string) (FilterFunc, error)
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
-func (s *CmdLineOption) HasAcceptedValues(flag string) bool {
-	flagInfo, found := s.acceptedFlags.Get(s.flagOrShortFlag(flag))
+func (s *Parser) HasAcceptedValues(flag string, commandPath ...string) bool {
+	flagInfo, found := s.acceptedFlags.Get(s.flagOrShortFlag(flag, commandPath...))
 	if found {
 		return len(flagInfo.Argument.AcceptedValues) > 0
 	}
@@ -224,7 +248,7 @@ func (s *CmdLineOption) HasAcceptedValues(flag string) bool {
 
 // AddCommand used to define a Command/sub-command chain
 // Unlike a flag which starts with a '-' or '/' a Command represents a verb or action
-func (s *CmdLineOption) AddCommand(cmd *Command) error {
+func (s *Parser) AddCommand(cmd *Command) error {
 	// Validate the command hierarchy and ensure unique paths
 	if ok, err := s.validateCommand(cmd, 0, 100); !ok {
 		return err
@@ -239,7 +263,7 @@ func (s *CmdLineOption) AddCommand(cmd *Command) error {
 // Parse this function should be called on os.Args (or a user-defined array of arguments). Returns true when
 // user command line arguments match the defined Flag and Command rules
 // Parse processes user command line arguments matching the defined Flag and Command rules.
-func (s *CmdLineOption) Parse(args []string) bool {
+func (s *Parser) Parse(args []string) bool {
 	s.ensureInit()
 	pruneExecPathFromArgs(&args)
 
@@ -344,7 +368,7 @@ func (s *CmdLineOption) Parse(args []string) bool {
 }
 
 // ParseString calls Parse
-func (s *CmdLineOption) ParseString(argString string) bool {
+func (s *Parser) ParseString(argString string) bool {
 	args, err := parse.Split(argString)
 	if err != nil {
 		return false
@@ -354,7 +378,7 @@ func (s *CmdLineOption) ParseString(argString string) bool {
 }
 
 // ParseWithDefaults calls Parse supplementing missing arguments in args array with default values from defaults
-func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []string) bool {
+func (s *Parser) ParseWithDefaults(defaults map[string]string, args []string) bool {
 	argLen := len(args)
 	argMap := make(map[string]string, argLen)
 
@@ -381,7 +405,7 @@ func (s *CmdLineOption) ParseWithDefaults(defaults map[string]string, args []str
 }
 
 // ParseStringWithDefaults calls Parse supplementing missing arguments in argString with default values from defaults
-func (s *CmdLineOption) ParseStringWithDefaults(defaults map[string]string, argString string) bool {
+func (s *Parser) ParseStringWithDefaults(defaults map[string]string, argString string) bool {
 	args, err := parse.Split(argString)
 	if err != nil {
 		return false
@@ -390,7 +414,8 @@ func (s *CmdLineOption) ParseStringWithDefaults(defaults map[string]string, argS
 	return s.ParseWithDefaults(defaults, args)
 }
 
-func (s *CmdLineOption) SetPosix(posixCompatible bool) bool {
+// SetPosix sets the posixCompatible flag.
+func (s *Parser) SetPosix(posixCompatible bool) bool {
 	oldValue := s.posixCompatible
 
 	s.posixCompatible = posixCompatible
@@ -399,22 +424,22 @@ func (s *CmdLineOption) SetPosix(posixCompatible bool) bool {
 }
 
 // GetPositionalArgs TODO explain
-func (s *CmdLineOption) GetPositionalArgs() []PositionalArgument {
+func (s *Parser) GetPositionalArgs() []PositionalArgument {
 	return s.positionalArgs
 }
 
 // GetPositionalArgCount TODO explain
-func (s *CmdLineOption) GetPositionalArgCount() int {
+func (s *Parser) GetPositionalArgCount() int {
 	return len(s.positionalArgs)
 }
 
 // HasPositionalArgs TODO explain
-func (s *CmdLineOption) HasPositionalArgs() bool {
+func (s *Parser) HasPositionalArgs() bool {
 	return s.GetPositionalArgCount() > 0
 }
 
 // GetCommands returns the list of all commands seen on command-line
-func (s *CmdLineOption) GetCommands() []string {
+func (s *Parser) GetCommands() []string {
 	pathValues := make([]string, 0, s.commandOptions.Count())
 	for kv := s.commandOptions.Front(); kv != nil; kv = kv.Next() {
 		if kv.Value {
@@ -427,7 +452,7 @@ func (s *CmdLineOption) GetCommands() []string {
 
 // Get returns a combination of a Flag's value as string and true if found. If a flag is not set but has a configured default value
 // the default value is registered and is returned. Returns an empty string and false otherwise
-func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
+func (s *Parser) Get(flag string, commandPath ...string) (string, bool) {
 	lookup := buildPathFlag(flag, commandPath...)
 	mainKey := s.flagOrShortFlag(lookup)
 	value, found := s.options[mainKey]
@@ -454,7 +479,7 @@ func (s *CmdLineOption) Get(flag string, commandPath ...string) (string, bool) {
 }
 
 // GetOrDefault returns the value of a defined Flag or defaultValue if no value is set
-func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string, commandPath ...string) string {
+func (s *Parser) GetOrDefault(flag string, defaultValue string, commandPath ...string) string {
 	value, found := s.Get(flag, commandPath...)
 	if found {
 		return value
@@ -464,7 +489,7 @@ func (s *CmdLineOption) GetOrDefault(flag string, defaultValue string, commandPa
 }
 
 // GetBool attempts to convert the string value of a Flag to boolean.
-func (s *CmdLineOption) GetBool(flag string, commandPath ...string) (bool, error) {
+func (s *Parser) GetBool(flag string, commandPath ...string) (bool, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return false, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
@@ -476,7 +501,7 @@ func (s *CmdLineOption) GetBool(flag string, commandPath ...string) (bool, error
 }
 
 // GetInt attempts to convert the string value of a Flag to an int64.
-func (s *CmdLineOption) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
+func (s *Parser) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
@@ -488,7 +513,7 @@ func (s *CmdLineOption) GetInt(flag string, bitSize int, commandPath ...string) 
 }
 
 // GetFloat attempts to convert the string value of a Flag to a float64
-func (s *CmdLineOption) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
+func (s *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
 	value, success := s.Get(flag, commandPath...)
 	if !success {
 		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
@@ -501,7 +526,7 @@ func (s *CmdLineOption) GetFloat(flag string, bitSize int, commandPath ...string
 
 // GetList attempts to split the string value of a Chained Flag to a string slice
 // by default the value is split on '|', ',' or ' ' delimiters
-func (s *CmdLineOption) GetList(flag string, commandPath ...string) ([]string, error) {
+func (s *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	arg, err := s.GetArgument(flag, commandPath...)
 	listDelimFunc := s.getListDelimiterFunc()
 	if err == nil {
@@ -521,7 +546,7 @@ func (s *CmdLineOption) GetList(flag string, commandPath ...string) ([]string, e
 }
 
 // SetListDelimiterFunc TODO explain
-func (s *CmdLineOption) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) error {
+func (s *Parser) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) error {
 	if delimiterFunc != nil {
 		s.listFunc = delimiterFunc
 
@@ -531,7 +556,7 @@ func (s *CmdLineOption) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) er
 	return fmt.Errorf("invalid ListDelimiterFunc (should not be null)")
 }
 
-func (s *CmdLineOption) SetArgumentPrefixes(prefixes []rune) error {
+func (s *Parser) SetArgumentPrefixes(prefixes []rune) error {
 	prefixesLen := len(prefixes)
 	if prefixesLen == 0 {
 		return fmt.Errorf("can't parse with empty argument prefix list")
@@ -544,7 +569,7 @@ func (s *CmdLineOption) SetArgumentPrefixes(prefixes []rune) error {
 
 // GetConsistencyWarnings is a helper function which provides information about eventual option consistency warnings.
 // It is intended for users of the library rather than for end-users
-func (s *CmdLineOption) GetConsistencyWarnings() []string {
+func (s *Parser) GetConsistencyWarnings() []string {
 	var configWarnings []string
 	for opt := range s.options {
 		mainKey := s.flagOrShortFlag(opt)
@@ -564,7 +589,7 @@ func (s *CmdLineOption) GetConsistencyWarnings() []string {
 
 // GetWarnings returns a string slice of all warnings (non-fatal errors) - a warning is set when optional dependencies
 // are not met - for instance, specifying the value of a Flag which relies on a missing argument
-func (s *CmdLineOption) GetWarnings() []string {
+func (s *Parser) GetWarnings() []string {
 	var warnings []string
 	for opt := range s.options {
 		mainKey := s.flagOrShortFlag(opt)
@@ -611,7 +636,7 @@ func (s *CmdLineOption) GetWarnings() []string {
 }
 
 // GetOptions returns a slice of KeyValue pairs which have been supplied on the command-line.
-func (s *CmdLineOption) GetOptions() []KeyValue {
+func (s *Parser) GetOptions() []KeyValue {
 	keyValues := make([]KeyValue, len(s.options))
 	i := 0
 	for key, value := range s.options {
@@ -626,7 +651,7 @@ func (s *CmdLineOption) GetOptions() []KeyValue {
 // AddFlag is used to define a Flag. A Flag represents a command line option
 // with a "long" name and an optional "short" form prefixed by '-', '--' or '/'.
 // This version supports both global flags and command-specific flags using the optional commandPath argument.
-func (s *CmdLineOption) AddFlag(flag string, argument *Argument, commandPath ...string) error {
+func (s *Parser) AddFlag(flag string, argument *Argument, commandPath ...string) error {
 	argument.ensureInit()
 
 	if flag == "" {
@@ -664,8 +689,8 @@ func (s *CmdLineOption) AddFlag(flag string, argument *Argument, commandPath ...
 	return nil
 }
 
-// BindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.BindFlag method
-func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argument *Argument, commandPath ...string) error {
+// BindFlagToParser is a helper function to allow passing generics to the Parser.BindFlag method
+func BindFlagToParser[T Bindable](s *Parser, data *T, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
 		return ErrBindNilPointer
 	}
@@ -673,8 +698,15 @@ func BindFlagToCmdLine[T Bindable](s *CmdLineOption, data *T, flag string, argum
 	return s.BindFlag(data, flag, argument, commandPath...)
 }
 
-// CustomBindFlagToCmdLine is a helper function to allow passing generics to the CmdLineOption.CustomBindFlag method
-func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
+// BindFlagToCmdLine is an alias for BindFlagToParser.
+//
+// Deprecated: Use BindFlagToParser instead. This function will be removed in v2.0.0.
+func BindFlagToCmdLine[T Bindable](s *Parser, data *T, flag string, argument *Argument, commandPath ...string) error {
+	return BindFlagToParser(s, data, flag, argument, commandPath...)
+}
+
+// CustomBindFlagToParser is a helper function to allow passing generics to the Parser.CustomBindFlag method
+func CustomBindFlagToParser[T any](s *Parser, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
 		return ErrBindNilPointer
 	}
@@ -682,10 +714,17 @@ func CustomBindFlagToCmdLine[T any](s *CmdLineOption, data *T, proc ValueSetFunc
 	return s.CustomBindFlag(data, proc, flag, argument, commandPath...)
 }
 
+// CustomBindFlagToCmdLine is an alias for CustomBindFlagToParser.
+//
+// Deprecated: Use CustomBindFlagToParser instead. This function will be removed in v2.0.0.
+func CustomBindFlagToCmdLine[T any](s *Parser, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
+	return CustomBindFlagToParser(s, data, proc, flag, argument, commandPath...)
+}
+
 // BindFlag is used to bind a *pointer* to string, int, uint, bool, float or time.Time scalar or slice variable with a Flag
 // which is set when Parse is invoked.
-// An error is returned if data cannot be bound - for compile-time safety use BindFlagToCmdLine instead
-func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
+// An error is returned if data cannot be bound - for compile-time safety use BindFlagToParser instead
+func (s *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
 	if bindPtr == nil {
 		return ErrBindNilPointer
 	}
@@ -711,7 +750,7 @@ func (s *CmdLineOption) BindFlag(bindPtr interface{}, flag string, argument *Arg
 // CustomBindFlag works like BindFlag but expects a ValueSetFunc callback which is called when a Flag is evaluated on Parse.
 // When the Flag is seen on the command like the ValueSetFunc is called with the user-supplied value. Allows binding
 // complex structures not supported by BindFlag
-func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
+func (s *Parser) CustomBindFlag(data any, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if reflect.TypeOf(data).Kind() != reflect.Ptr {
 		return fmt.Errorf("we expect a pointer to a variable")
 	}
@@ -739,14 +778,14 @@ func (s *CmdLineOption) CustomBindFlag(data any, proc ValueSetFunc, flag string,
 //
 //		a Flag which accepts only whole numbers could be defined as:
 //	 	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
-func (s *CmdLineOption) AcceptPattern(flag string, val PatternValue, commandPath ...string) error {
+func (s *Parser) AcceptPattern(flag string, val PatternValue, commandPath ...string) error {
 	return s.AcceptPatterns(flag, []PatternValue{val}, commandPath...)
 }
 
 // AcceptPatterns same as PatternValue but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the PatternValue, Parse returns false.
-func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue, commandPath ...string) error {
+func (s *Parser) AcceptPatterns(flag string, acceptVal []PatternValue, commandPath ...string) error {
 	arg, err := s.GetArgument(flag, commandPath...)
 	if err != nil {
 		return err
@@ -767,7 +806,7 @@ func (s *CmdLineOption) AcceptPatterns(flag string, acceptVal []PatternValue, co
 }
 
 // GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
-func (s *CmdLineOption) GetAcceptPatterns(flag string, commandPath ...string) ([]LiterateRegex, error) {
+func (s *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]LiterateRegex, error) {
 	arg, err := s.GetArgument(flag, commandPath...)
 	if err != nil {
 		return []LiterateRegex{}, err
@@ -781,7 +820,7 @@ func (s *CmdLineOption) GetAcceptPatterns(flag string, commandPath ...string) ([
 }
 
 // GetArgument returns the Argument corresponding to the long or short flag or an error when not found
-func (s *CmdLineOption) GetArgument(flag string, commandPath ...string) (*Argument, error) {
+func (s *Parser) GetArgument(flag string, commandPath ...string) (*Argument, error) {
 	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	v, found := s.acceptedFlags.Get(mainKey)
 	if !found {
@@ -793,7 +832,7 @@ func (s *CmdLineOption) GetArgument(flag string, commandPath ...string) (*Argume
 
 // SetArgument sets an Argument configuration. Returns an error if the Argument is not found or the
 // configuration results in an error
-func (s *CmdLineOption) SetArgument(flag string, paths []string, configs ...ConfigureArgumentFunc) error {
+func (s *Parser) SetArgument(flag string, paths []string, configs ...ConfigureArgumentFunc) error {
 	var args = make([]*Argument, 0, 1)
 
 	if len(paths) == 0 {
@@ -836,7 +875,7 @@ func (s *CmdLineOption) SetArgument(flag string, paths []string, configs ...Conf
 // Returns:
 // string: The short flag variant if it exists.
 // error: An error if no short flag is defined for the provided long flag, or if any other error occurs.
-func (s *CmdLineOption) GetShortFlag(flag string, commandPath ...string) (string, error) {
+func (s *Parser) GetShortFlag(flag string, commandPath ...string) (string, error) {
 	argument, err := s.GetArgument(flag, commandPath...)
 	if err == nil {
 		if argument.Short != "" {
@@ -850,7 +889,7 @@ func (s *CmdLineOption) GetShortFlag(flag string, commandPath ...string) (string
 }
 
 // HasFlag returns true when the Flag has been seen on the command line.
-func (s *CmdLineOption) HasFlag(flag string, commandPath ...string) bool {
+func (s *Parser) HasFlag(flag string, commandPath ...string) bool {
 	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	_, found := s.options[mainKey]
 	if !found && s.secureArguments != nil {
@@ -868,7 +907,7 @@ func (s *CmdLineOption) HasFlag(flag string, commandPath ...string) bool {
 
 // HasRawFlag returns true when the Flag has been seen on the command line - can be used to check if a flag
 // was specified on the command line irrespective of the command context.
-func (s *CmdLineOption) HasRawFlag(flag string) bool {
+func (s *Parser) HasRawFlag(flag string) bool {
 	mainKey := s.flagOrShortFlag(flag)
 	flagParts := splitPathFlag(mainKey)
 	if _, found := s.rawArgs[flagParts[0]]; found {
@@ -879,7 +918,7 @@ func (s *CmdLineOption) HasRawFlag(flag string) bool {
 }
 
 // HasCommand return true when the name has been seen on the command line.
-func (s *CmdLineOption) HasCommand(path string) bool {
+func (s *Parser) HasCommand(path string) bool {
 	_, found := s.commandOptions.Get(path)
 
 	return found
@@ -888,12 +927,12 @@ func (s *CmdLineOption) HasCommand(path string) bool {
 // ClearAll clears all parsed options and  commands as well as filters and acceptedValues (guards).
 // Configured flags and registered commands are not cleared. Use this when parsing a command line
 // repetitively.
-func (s *CmdLineOption) ClearAll() {
+func (s *Parser) ClearAll() {
 	s.Clear(ClearConfig{})
 }
 
 // Clear can be used to selectively clear sensitive options or when re-defining options on the fly.
-func (s *CmdLineOption) Clear(config ClearConfig) {
+func (s *Parser) Clear(config ClearConfig) {
 	if !config.KeepOptions {
 		s.options = nil
 	}
@@ -909,8 +948,8 @@ func (s *CmdLineOption) Clear(config ClearConfig) {
 }
 
 // DescribeFlag is used to provide a description of a Flag
-func (s *CmdLineOption) DescribeFlag(flag, description string) error {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) DescribeFlag(flag, description string, commandPath ...string) error {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := s.acceptedFlags.Get(mainKey)
 	if found {
 		flagInfo.Argument.Description = description
@@ -922,8 +961,8 @@ func (s *CmdLineOption) DescribeFlag(flag, description string) error {
 }
 
 // GetDescription retrieves a Flag's description as set by DescribeFlag
-func (s *CmdLineOption) GetDescription(flag string) string {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) GetDescription(flag string, commandPath ...string) string {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := s.acceptedFlags.Get(mainKey)
 	if found {
 		return flagInfo.Argument.Description
@@ -939,7 +978,7 @@ func (s *CmdLineOption) GetDescription(flag string) string {
 //		WithCommandDescription("create user),
 //		WithCommandCallback(callbackFunc),
 //	)
-func (s *CmdLineOption) SetCommand(commandPath string, configs ...ConfigureCommandFunc) error {
+func (s *Parser) SetCommand(commandPath string, configs ...ConfigureCommandFunc) error {
 	if cmd, ok := s.registeredCommands.Get(commandPath); ok {
 		cmd.Set(configs...)
 		return nil
@@ -952,8 +991,8 @@ func (s *CmdLineOption) SetCommand(commandPath string, configs ...ConfigureComma
 // evaluation of combinations of options and values which can't be expressed statically. For instance, when the user
 // should supply these during a program's execution but after command-line options have been parsed. If the Flag is of type
 // File the value is stored in the file.
-func (s *CmdLineOption) SetFlag(flag, value string) error {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) SetFlag(flag, value string, commandPath ...string) error {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	key := ""
 	_, found := s.options[flag]
 	if found {
@@ -990,8 +1029,8 @@ func (s *CmdLineOption) SetFlag(flag, value string) error {
 }
 
 // Remove used to remove a defined-flag at runtime - returns false if the Flag was not found and true on removal.
-func (s *CmdLineOption) Remove(flag string) bool {
-	mainKey := s.flagOrShortFlag(flag)
+func (s *Parser) Remove(flag string, commandPath ...string) bool {
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	_, found := s.options[mainKey]
 	if found {
 		delete(s.options, mainKey)
@@ -1004,12 +1043,12 @@ func (s *CmdLineOption) Remove(flag string) bool {
 
 // DependsOnFlag same as DependsOnFlagValue but does not specify that the Flag it depends on must have a particular value
 // to be valid.
-func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
+func (s *Parser) DependsOnFlag(flag, dependsOn string, commandPath ...string) error {
 	if flag == "" {
 		return fmt.Errorf("can't set dependency on empty flag")
 	}
 
-	mainKey := s.flagOrShortFlag(flag)
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := s.acceptedFlags.Get(mainKey)
 	if found {
 		flagInfo.Argument.DependsOn = append(flagInfo.Argument.DependsOn, dependsOn)
@@ -1021,14 +1060,14 @@ func (s *CmdLineOption) DependsOnFlag(flag, dependsOn string) error {
 }
 
 // FlagPath returns the command part of a Flag or an empty string when not.
-func (s *CmdLineOption) FlagPath(flag string) string {
+func (s *Parser) FlagPath(flag string) string {
 	return getFlagPath(flag)
 }
 
 // DependsOnFlagValue is used to describe flag dependencies. For example, a '--modify' flag could be specified to
 // depend on a '--group' Flag with a value of 'users'. If the '--group' Flag is not specified with a value of
 // 'users' on the command line a warning will be set during Parse.
-func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) error {
+func (s *Parser) DependsOnFlagValue(flag, dependsOn, ofValue string) error {
 	if flag == "" {
 		return fmt.Errorf("can't set dependency on empty flag")
 	}
@@ -1055,17 +1094,17 @@ func (s *CmdLineOption) DependsOnFlagValue(flag, dependsOn, ofValue string) erro
 }
 
 // GetErrors returns a list of the errors encountered during Parse
-func (s *CmdLineOption) GetErrors() []error {
+func (s *Parser) GetErrors() []error {
 	return s.errors
 }
 
 // GetErrorCount is greater than zero when errors were encountered during Parse.
-func (s *CmdLineOption) GetErrorCount() int {
+func (s *Parser) GetErrorCount() int {
 	return len(s.errors)
 }
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
-func (s *CmdLineOption) PrintUsage(writer io.Writer) {
+func (s *Parser) PrintUsage(writer io.Writer) {
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s", []byte(os.Args[0]))))
 	s.PrintFlags(writer)
 	if s.registeredCommands.Count() > 0 {
@@ -1075,7 +1114,7 @@ func (s *CmdLineOption) PrintUsage(writer io.Writer) {
 }
 
 // PrintUsageWithGroups pretty prints accepted Flags and show command-specific Flags grouped by Commands to io.Writer.
-func (s *CmdLineOption) PrintUsageWithGroups(writer io.Writer) {
+func (s *Parser) PrintUsageWithGroups(writer io.Writer) {
 	// Print the program usage
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s\n", os.Args[0])))
 
@@ -1096,7 +1135,7 @@ func (s *CmdLineOption) PrintUsageWithGroups(writer io.Writer) {
 }
 
 // PrintGlobalFlags prints global (non-command-specific) flags
-func (s *CmdLineOption) PrintGlobalFlags(writer io.Writer) {
+func (s *Parser) PrintGlobalFlags(writer io.Writer) {
 	_, _ = writer.Write([]byte("\nGlobal Flags:\n\n"))
 
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
@@ -1109,7 +1148,7 @@ func (s *CmdLineOption) PrintGlobalFlags(writer io.Writer) {
 }
 
 // PrintCommandsWithFlags prints commands with their respective flags
-func (s *CmdLineOption) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintConfig) {
+func (s *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintConfig) {
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		if kv.Value.TopLevel {
 			kv.Value.Visit(func(cmd *Command, level int) bool {
@@ -1139,7 +1178,7 @@ func (s *CmdLineOption) PrintCommandsWithFlags(writer io.Writer, config *PrettyP
 }
 
 // PrintCommandSpecificFlags print flags for a specific command with the appropriate indentation
-func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
+func (s *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
 	hasFlags := false
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
@@ -1162,7 +1201,7 @@ func (s *CmdLineOption) PrintCommandSpecificFlags(writer io.Writer, commandPath 
 }
 
 // PrintFlags pretty prints accepted command-line switches to io.Writer
-func (s *CmdLineOption) PrintFlags(writer io.Writer) {
+func (s *Parser) PrintFlags(writer io.Writer) {
 	var shortOption string
 	for f := s.acceptedFlags.Front(); f != nil; f = f.Next() {
 		shortFlag, err := s.GetShortFlag(*f.Key)
@@ -1179,7 +1218,7 @@ func (s *CmdLineOption) PrintFlags(writer io.Writer) {
 }
 
 // PrintCommands writes the list of accepted Command structs to io.Writer.
-func (s *CmdLineOption) PrintCommands(writer io.Writer) {
+func (s *Parser) PrintCommands(writer io.Writer) {
 	s.PrintCommandsUsing(writer, &PrettyPrintConfig{
 		NewCommandPrefix:     " +",
 		DefaultPrefix:        " │",
@@ -1194,7 +1233,7 @@ func (s *CmdLineOption) PrintCommands(writer io.Writer) {
 // PrettyPrintConfig.TerminalPrefix precedes terminal, i.e. Command structs which don't have sub-commands
 // PrettyPrintConfig.OuterLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
 // command root. The Command root is at Level 0.
-func (s *CmdLineOption) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
+func (s *Parser) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		if kv.Value.TopLevel {
 			kv.Value.Visit(func(cmd *Command, level int) bool {

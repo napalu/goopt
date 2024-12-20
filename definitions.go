@@ -2,10 +2,11 @@ package goopt
 
 import (
 	"errors"
-	"github.com/napalu/goopt/types/orderedmap"
-	"github.com/napalu/goopt/types/queue"
 	"regexp"
 	"time"
+
+	"github.com/napalu/goopt/types/orderedmap"
+	"github.com/napalu/goopt/types/queue"
 )
 
 type Bindable interface {
@@ -31,14 +32,14 @@ type PrettyPrintConfig struct {
 }
 
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
-type RequiredIfFunc func(cmdLine *CmdLineOption, optionName string) (bool, string)
+type RequiredIfFunc func(cmdLine *Parser, optionName string) (bool, string)
 
 // ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
 
 // ConfigureCmdLineFunc is used when defining CommandLineOption options
-type ConfigureCmdLineFunc func(cmdLine *CmdLineOption, err *error)
+type ConfigureCmdLineFunc func(cmdLine *Parser, err *error)
 
 // ConfigureArgumentFunc is used when defining Flag arguments
 type ConfigureArgumentFunc func(argument *Argument, err *error)
@@ -50,7 +51,7 @@ type ConfigureCommandFunc func(command *Command)
 type FilterFunc func(string) string
 
 // CommandFunc callback - optionally specified as part of the Command structure gets called when matched on Parse()
-type CommandFunc func(cmdLine *CmdLineOption, command *Command) error
+type CommandFunc func(cmdLine *Parser, command *Command) error
 
 // ValueSetFunc callback - optionally specified as part of the Argument structure to 'bind' variables to a Flag
 // Used to set the value of a Flag to a custom structure.
@@ -155,8 +156,8 @@ type FlagInfo struct {
 	CommandPath string // The path of the command that owns this flag
 }
 
-// CmdLineOption opaque struct used in all Flag/Command manipulation
-type CmdLineOption struct {
+// Parser opaque struct used in all Flag/Command manipulation
+type Parser struct {
 	posixCompatible    bool
 	prefixes           []rune
 	listFunc           ListDelimiterFunc
@@ -176,6 +177,11 @@ type CmdLineOption struct {
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 	envFilter          EnvFunc
 }
+
+// CmdLineOption is an alias for Parser.
+//
+// Deprecated: Use Parser instead. This type will be removed in v2.0.0.
+type CmdLineOption = Parser
 
 var (
 	ErrUnsupportedTypeConversion = errors.New("unsupported type conversion")

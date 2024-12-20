@@ -1,6 +1,8 @@
 package queue
 
 // Q is a generic stack/queue structure that supports both stack and queue operations.
+// Stack operations (Push/Pop) are O(1)
+// Queue operations (Enqueue/Dequeue) are O(1) amortized for Enqueue, O(n) for Dequeue
 type Q[T any] struct {
 	items []T
 }

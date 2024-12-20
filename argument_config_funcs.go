@@ -104,36 +104,43 @@ func WithDependentValueFlags(dependencies, values []string) ConfigureArgumentFun
 	}
 }
 
+// SetSecure sets the secure flag to true or false
 func SetSecure(secure bool) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Secure.IsSecure = secure
 	}
 }
 
+// SetSecurePrompt sets the prompt for the secure flag
 func SetSecurePrompt(prompt string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Secure.Prompt = prompt
 	}
 }
 
+// WithDefaultValue sets the default value for the argument
 func WithDefaultValue(defaultValue string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.DefaultValue = defaultValue
 	}
 }
 
+// WithPreValidationFilter sets the pre-validation filter for the argument
 func WithPreValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.PreFilter = filter
 	}
 }
 
+// WithPostValidationFilter sets the post-validation filter for the argument
 func WithPostValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.PostFilter = filter
 	}
 }
 
+// WithAcceptedValues sets the accepted values for the argument. The values can be either literal strings or regular expressions.
+// Each value can optionally have a description that will be shown in help text.
 func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		if argument.AcceptedValues == nil {
@@ -141,8 +148,8 @@ func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
 		}
 
 		for i := 0; i < len(values); i++ {
-			err = argument.accept(values[i])
-			if err != nil {
+			if e := argument.accept(values[i]); e != nil {
+				*err = *e
 				return
 			}
 		}

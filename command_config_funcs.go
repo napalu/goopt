@@ -18,6 +18,7 @@ func NewCommand(configs ...ConfigureCommandFunc) *Command {
 	return cmd
 }
 
+// Set is a helper config function that allows setting multiple configuration functions on a command.
 func (c *Command) Set(configs ...ConfigureCommandFunc) {
 	for _, config := range configs {
 		config(c)
@@ -53,7 +54,7 @@ func SetCommandRequired(required bool) ConfigureCommandFunc {
 	}
 }
 
-// WithSubcommands function takes a list of subcommands and associates them with a command
+// WithSubcommands function takes a list of subcommands and associates them with a command.
 func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {
 		for i := 0; i < len(subcommands); i++ {
@@ -62,6 +63,7 @@ func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	}
 }
 
+// WithOverwriteSubcommands allows replacing a Command's subcommands.
 func WithOverwriteSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {
 		command.Subcommands = command.Subcommands[:0]
