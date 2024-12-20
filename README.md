@@ -53,14 +53,14 @@ type Options struct {
 
 func main() {
     opts := &Options{}
-    cmdLine, err := goopt.NewCmdLineFromStruct(opts)
+    parser, err := goopt.NewParserFromStruct(opts)
     if err != nil {
         fmt.Println("Error:", err)
         return
     }
 
-	if !cmdLine.Parse(os.Args) {
-		cmdLine.PrintUsageWithGroups(os.Stdout)
+	if !parser.Parse(os.Args) {
+		parser.PrintUsageWithGroups(os.Stdout)
 		return
 	}
 
@@ -80,10 +80,10 @@ import (
 )
 
 func main() {
-	cmdLine := goopt.NewCmdLineOption()
+	parser := goopt.NewParser()
 
 	// Define flags
-	cmdLine.AddFlag("output", goopt.NewArgument("Output file", goopt.Single, true))
+	parser.AddFlag("output", goopt.NewArgument("Output file", goopt.Single, true))
 
 	// Define commands and subcommands
 	createCmd := &goopt.Command{
@@ -94,20 +94,20 @@ func main() {
 		},
 	}
 
-	cmdLine.AddCommand(createCmd)
+	parser.AddCommand(createCmd)
 
 	// Parse the command-line arguments
-	if !cmdLine.Parse(os.Args) {
-		cmdLine.PrintUsage(os.Stdout)
+	if !parser.Parse(os.Args) {
+		parser.PrintUsage(os.Stdout)
 		return
 	}
 
 	// Access parsed flags
-	output, _ := cmdLine.Get("output")
+	output, _ := parser.Get("output")
 	fmt.Println("Output:", output)
 
 	// Access parsed commands
-	cmdValue, _ := cmdLine.GetCommandValue("create user")
+	cmdValue, _ := parser.GetCommandValue("create user")
 	fmt.Println("Command value:", cmdValue)
 }
 ```
@@ -129,17 +129,17 @@ import (
 )
 
 func main() {
-	cmdLine := goopt.NewCmdLineOption()
+	parser := goopt.NewParser()
 
 	// Define a secure flag
-	cmdLine.AddFlag("password", goopt.NewArgument("p", "password for app", goopt.Single, true, goopt.Secure{IsSecure: true, Prompt: "Password: "}, ""))
+	parser.AddFlag("password", goopt.NewArgument("p", "password for app", goopt.Single, true, goopt.Secure{IsSecure: true, Prompt: "Password: "}, ""))
 
 	// Parse the arguments
-	if cmdLine.Parse(os.Args) {
-		password, _ := cmdLine.Get("password")
+	if parser.Parse(os.Args) {
+		password, _ := parser.Get("password")
 		fmt.Println("Password received (but not echoed):", password)
 	} else {
-		cmdLine.PrintUsage(os.Stdout)
+		parser.PrintUsage(os.Stdout)
 	}
 }
 ```
@@ -159,24 +159,24 @@ import (
 )
 
 func main() {
-    cmdLine := g.NewCmdLineOption()
+    parser := g.NewParser()
     
     // Define flags
-    cmdLine.AddFlag("notify", g.NewArg( 
+    parser.AddFlag("notify", g.NewArg( 
         g.WithDescription("Enable email notifications"), 
         g.WithType(g.Standalone))
-    cmdLine.AddFlag("email", g.NewArg(
+    parser.AddFlag("email", g.NewArg(
         g.WithDescription("Email address for notifications"), 
         g.WithType(g.Single))
     
     // Set flag dependencies
-    cmdLine.DependsOnFlagValue("email", "notify", "true")
+    parser.DependsOnFlagValue("email", "notify", "true")
     
     // Parse the arguments
-    if !cmdLine.Parse(os.Args) {
-        cmdLine.PrintUsage(os.Stdout)
+    if !parser.Parse(os.Args) {
+        parser.PrintUsage(os.Stdout)
     } else {
-        email, _ := cmdLine.Get("email")
+        email, _ := parser.Get("email")
         fmt.Println("Email notifications enabled for:", email)
     }
 }
@@ -197,10 +197,10 @@ import (
 )
 
 func main() {
-	cmdLine := goopt.NewCmdLineOption()
+	parser := goopt.NewParser()
 
 	// Define commands
-	cmdLine.AddCommand(&goopt.Command{
+	parser.AddCommand(&goopt.Command{
 		Name: "create",
 		Subcommands: []goopt.Command{
 			{Name: "user"},
@@ -209,13 +209,13 @@ func main() {
 	})
 
 	// Define flags for specific commands
-	cmdLine.AddFlag("username", goopt.NewArgument("Username for user creation", goopt.Single), "create user")
-	cmdLine.AddFlag("email", goopt.NewArgument("Email address for user creation", goopt.Single), "create user")
+	parser.AddFlag("username", goopt.NewArgument("Username for user creation", goopt.Single), "create user")
+	parser.AddFlag("email", goopt.NewArgument("Email address for user creation", goopt.Single), "create user")
 
 	// Parse the command-line arguments
-	if cmdLine.Parse(os.Args) {
-		username, _ := cmdLine.Get("username")
-		email, _ := cmdLine.Get("email")
+	if parser.Parse(os.Args) {
+		username, _ := parser.Get("username")
+		email, _ := parser.Get("email")
 		fmt.Println("Creating user with username:", username)
 		fmt.Println("Email address:", email)
 	}
@@ -235,14 +235,14 @@ import (
 )
 
 func main() {
-	cmdLine, _ := goopt.NewCmdLine(
+	parser, _ := goopt.NewParser(
 		goopt.WithFlag("testFlag", goopt.NewArg(goopt.WithType(goopt.Single))),
 		goopt.WithCommand(
 			goopt.NewCommand(goopt.WithName("testCommand")),
 		),
 	)
 
-	cmdLine.Parse(os.Args)
+	parser.Parse(os.Args)
 }
 ```
 This interface allows for dynamic and flexible construction of command-line parsers.
@@ -254,13 +254,13 @@ This interface allows for dynamic and flexible construction of command-line pars
 `goopt` automatically generates usage documentation based on defined commands and flags. To print the usage:
 
 ```go
-cmdLine.PrintUsage(os.Stdout)
+parser.PrintUsage(os.Stdout)
 ```
 
 To print the usage grouped by command:
 
 ```go
-cmdLine.PrintUsageWithGroups(os.Stdout)
+parser.PrintUsageWithGroups(os.Stdout)
 ```
 
 ---
