@@ -151,6 +151,7 @@ type Command struct {
 	Path        string
 }
 
+// FlagInfo is used to store information about a flag
 type FlagInfo struct {
 	Argument    *Argument
 	CommandPath string // The path of the command that owns this flag
@@ -182,6 +183,16 @@ type Parser struct {
 //
 // Deprecated: Use Parser instead. This type will be removed in v2.0.0.
 type CmdLineOption = Parser
+
+// CompletionData is used to store information for command line completion
+type CompletionData struct {
+	Commands            []string                    // Available commands
+	Flags               []string                    // Global flags
+	CommandFlags        map[string][]string         // Flags per command
+	Descriptions        map[string]string           // Descriptions for commands/flags
+	FlagValues          map[string][]CompletionData // Values for flags
+	CommandDescriptions map[string]string           // Descriptions specific to commands
+}
 
 var (
 	ErrUnsupportedTypeConversion = errors.New("unsupported type conversion")

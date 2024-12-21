@@ -81,6 +81,7 @@ func (q *Q[T]) Iterate(callback func(item T, index int) bool) {
 	}
 }
 
+// Clear removes all items
 func (q *Q[T]) Clear() {
 	q.items = q.items[:0]
 }

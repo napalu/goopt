@@ -1549,3 +1549,13 @@ func describeRequired(argument *Argument) string {
 
 	return requiredOrOptional
 }
+
+func formatFlagDescription(arg *Argument) string {
+	status := ""
+	if arg.Required {
+		status = "(required) "
+	} else if len(arg.DependsOn) > 0 {
+		status = "(conditional) "
+	}
+	return status + arg.Description
+}

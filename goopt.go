@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
@@ -1101,6 +1102,79 @@ func (s *Parser) GetErrors() []error {
 // GetErrorCount is greater than zero when errors were encountered during Parse.
 func (s *Parser) GetErrorCount() int {
 	return len(s.errors)
+}
+
+// GetCompletionData populates a CompletionData struct containing information for command line completion
+func (p *Parser) GetCompletionData() completion.CompletionData {
+	data := completion.CompletionData{
+		Commands:            make([]string, 0),
+		Flags:               make([]string, 0),
+		CommandFlags:        make(map[string][]string),
+		Descriptions:        make(map[string]string),
+		FlagValues:          make(map[string][]completion.CompletionValue),
+		CommandDescriptions: make(map[string]string),
+	}
+
+	// Process flags
+	for iter := p.acceptedFlags.Front(); iter != nil; iter = iter.Next() {
+		flag := *iter.Key
+		flagParts := splitPathFlag(flag)
+		if len(flagParts) == 1 {
+			data.Flags = append(data.Flags, flag)
+		} else {
+			data.CommandFlags[flagParts[0]] = append(data.CommandFlags[flagParts[0]], flagParts[1])
+		}
+		if flagInfo := iter.Value; flagInfo != nil {
+			data.Descriptions[flag] = formatFlagDescription(flagInfo.Argument)
+			if len(flagInfo.Argument.AcceptedValues) > 0 {
+				values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
+				for i, v := range flagInfo.Argument.AcceptedValues {
+					values[i] = completion.CompletionValue{
+						Pattern:     v.value.String(),
+						Description: v.explain,
+					}
+				}
+				data.FlagValues[flag] = values
+			}
+		}
+	}
+
+	// Process commands
+	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		cmd := kv.Value
+		if cmd != nil {
+			data.Commands = append(data.Commands, cmd.Path)
+			data.CommandDescriptions[cmd.Path] = cmd.Description
+		}
+	}
+
+	return data
+}
+
+// GenerateCompletion generates completion scripts for the given shell and program name
+func (p *Parser) GenerateCompletion(shell, programName string) string {
+	generator := completion.GetGenerator(shell)
+	return generator.Generate(programName, p.GetCompletionData())
+}
+
+// GenerateBashCompletion generates completion scripts for bash
+func (p *Parser) GenerateBashCompletion(programName string) string {
+	return p.GenerateCompletion("bash", programName)
+}
+
+// GenerateZshCompletion generates completion scripts for zsh
+func (p *Parser) GenerateZshCompletion(programName string) string {
+	return p.GenerateCompletion("zsh", programName)
+}
+
+// GenerateFishCompletion generates completion scripts for fish
+func (p *Parser) GenerateFishCompletion(programName string) string {
+	return p.GenerateCompletion("fish", programName)
+}
+
+// GeneratePowerShellCompletion generates completion scripts for powershell
+func (p *Parser) GeneratePowerShellCompletion(programName string) string {
+	return p.GenerateCompletion("powershell", programName)
 }
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.

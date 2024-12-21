@@ -28,7 +28,7 @@ func (writer arrayWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestCmdLineOption_AcceptPattern(t *testing.T) {
+func Parser_AcceptPattern(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("test2", NewArgument("t2", "", Single, false, Secure{}, ""))
@@ -38,7 +38,7 @@ func TestCmdLineOption_AcceptPattern(t *testing.T) {
 	assert.True(t, opts.Parse([]string{"--test2", "12344"}), "test2 should accept values which match whole integer patterns")
 }
 
-func TestCmdLineOption_AcceptPatterns(t *testing.T) {
+func Parser_AcceptPatterns(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -57,7 +57,7 @@ func TestCmdLineOption_AcceptPatterns(t *testing.T) {
 	}
 }
 
-func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
+func Parser_AddPreValidationFilter(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -72,7 +72,7 @@ func TestCmdLineOption_AddPreValidationFilter(t *testing.T) {
 	assert.Equal(t, "LOWERCASE", value, "the value of flag upper should be transformed to uppercase")
 }
 
-func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
+func Parser_AddPostValidationFilter(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("status", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -98,7 +98,7 @@ func TestCmdLineOption_AddPostValidationFilter(t *testing.T) {
 	assert.Equal(t, "-1", value, "the value of flag status should have been transformed to -1 after PatternValue validation")
 }
 
-func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
+func Parser_DependsOnFlagValue(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
@@ -133,7 +133,7 @@ func TestCmdLineOption_DependsOnFlagValue(t *testing.T) {
 	assert.Equal(t, len(opts.GetWarnings()), 0, "should not warn as the dependent variable has one of the expected values")
 }
 
-func TestCmdLineOption_AddCommand(t *testing.T) {
+func Parser_AddCommand(t *testing.T) {
 	opts := NewParser()
 
 	cmd := &Command{
@@ -163,7 +163,7 @@ func TestCmdLineOption_AddCommand(t *testing.T) {
 	assert.True(t, opts.ParseString("create user type author"), "should parse command with nested subcommands properly")
 }
 
-func TestCmdLineOption_RegisterCommand(t *testing.T) {
+func Parser_RegisterCommand(t *testing.T) {
 	opts := NewParser()
 
 	cmd := &Command{
@@ -193,7 +193,7 @@ func TestCmdLineOption_RegisterCommand(t *testing.T) {
 	assert.Equal(t, "john", value, "value of nested sub-command should be that supplied via command line")
 }
 
-func TestCmdLineOption_GetCommandValues(t *testing.T) {
+func Parser_GetCommandValues(t *testing.T) {
 	opts, _ := NewParserWith(
 		WithCommand(
 			NewCommand(
@@ -250,7 +250,7 @@ func TestCmdLineOption_GetCommandValues(t *testing.T) {
 	}
 }
 
-func TestCmdLineOption_ValueCallback(t *testing.T) {
+func Parser_ValueCallback(t *testing.T) {
 	opts := NewParser()
 
 	shouldBeEqualToOneAfterExecute := 0
@@ -276,7 +276,7 @@ func TestCmdLineOption_ValueCallback(t *testing.T) {
 	assert.Equal(t, 1, shouldBeEqualToOneAfterExecute, "should call subcommand callback after parse")
 }
 
-func TestCmdLineOption_WithBindFlag(t *testing.T) {
+func Parser_WithBindFlag(t *testing.T) {
 	var s string
 	var i int
 	var ts []string
@@ -302,7 +302,7 @@ func TestCmdLineOption_WithBindFlag(t *testing.T) {
 	assert.Equal(t, 12334, i, "should not fail to assign command line integer argument to variable")
 }
 
-func TestCmdLineOption_BindFlag(t *testing.T) {
+func Parser_BindFlag(t *testing.T) {
 	var s string
 	var i int
 
@@ -348,7 +348,7 @@ func TestCmdLineOption_BindFlag(t *testing.T) {
 	assert.NotNil(t, err, "should error when adding duplicate field")
 }
 
-func TestCmdLineOption_FileFlag(t *testing.T) {
+func Parser_FileFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewParserWith(
 		WithBindFlag("test", &s,
@@ -389,7 +389,7 @@ type TestOptNok struct {
 	IsTest bool
 }
 
-func TestCmdLineOption_NewCmdLineFromStruct(t *testing.T) {
+func Parser_NewCmdLineFromStruct(t *testing.T) {
 	testOpt := TestOptOk{}
 	cmd, err := NewParserFromStruct(&testOpt)
 	assert.Nil(t, err)
@@ -423,7 +423,7 @@ type UserProfile struct {
 	Addresses []Address `long:"address"`
 }
 
-func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
+func Parser_NewCmdLineRecursion(t *testing.T) {
 	profile := &UserProfile{
 		Addresses: make([]Address, 1),
 	}
@@ -436,7 +436,7 @@ func TestCmdLineOption_NewCmdLineRecursion(t *testing.T) {
 	assert.Equal(t, "10", cmd.GetOrDefault("age", ""))
 }
 
-func TestCmdLineOption_CommandSpecificFlags(t *testing.T) {
+func Parser_CommandSpecificFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands and associated flags
@@ -475,7 +475,7 @@ func TestCmdLineOption_CommandSpecificFlags(t *testing.T) {
 	assert.False(t, opts.ParseString("create user --username john_doe"), "should not parse flag not associated with the command Path")
 }
 
-func TestCmdLineOption_GlobalFlags(t *testing.T) {
+func Parser_GlobalFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -506,7 +506,7 @@ func TestCmdLineOption_GlobalFlags(t *testing.T) {
 	assert.True(t, opts.HasFlag("verbose"), "global flag should be recognized")
 }
 
-func TestCmdLineOption_SharedFlags(t *testing.T) {
+func Parser_SharedFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -548,7 +548,7 @@ func TestCmdLineOption_SharedFlags(t *testing.T) {
 	assert.Equal(t, "group_value", opts.GetOrDefault("sharedFlag", "", "create group"), "flag should be parsed correctly in group command")
 }
 
-func TestCmdLineOption_EnvToFlag(t *testing.T) {
+func Parser_EnvToFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewParserWith(
 		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
@@ -589,7 +589,7 @@ func TestCmdLineOption_EnvToFlag(t *testing.T) {
 
 }
 
-func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
+func Parser_GlobalAndCommandEnvVars(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -619,7 +619,7 @@ func TestCmdLineOption_GlobalAndCommandEnvVars(t *testing.T) {
 	assert.Equal(t, "1234", opts.GetOrDefault("idTest@create", ""), "ID should be parsed from env var")
 }
 
-func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
+func Parser_MixedFlagsWithEnvVars(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -649,7 +649,7 @@ func TestCmdLineOption_MixedFlagsWithEnvVars(t *testing.T) {
 	assert.Equal(t, "/my/config", opts.GetOrDefault("config@create", ""), "config flag should be parsed from command")
 }
 
-func TestCmdLineOption_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
+func Parser_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
 	opts := NewParser()
 	opts.SetExecOnParse(true)
 	idx := 0
@@ -707,7 +707,7 @@ func TestParse_PosixFlagsWithEnvVars(t *testing.T) {
 	assert.Equal(t, "2", opts.GetOrDefault("opt", "", "build"), "optimization should be '2' from env var")
 }
 
-func TestCmdLineOption_VarInFileFlag(t *testing.T) {
+func Parser_VarInFileFlag(t *testing.T) {
 	uname := fmt.Sprintf("%x", md5.Sum([]byte(time.Now().Format(time.RFC3339Nano))))
 	var s string
 	cmdLine, err := NewParserWith(
@@ -748,7 +748,7 @@ func TestNewCmdLineOption_BindNil(t *testing.T) {
 	assert.NotNil(t, err, "should not be able to custom bind a nil pointer")
 }
 
-func TestCmdLineOption_CustomBindFlag(t *testing.T) {
+func Parser_CustomBindFlag(t *testing.T) {
 	type tester struct {
 		TestStr string
 		testInt int
@@ -772,7 +772,7 @@ func TestCmdLineOption_CustomBindFlag(t *testing.T) {
 	assert.True(t, opts.ParseString("--test1 2"), "should parse a command line argument when given a bound variable")
 }
 
-func TestCmdLineOption_WithCustomBindFlag(t *testing.T) {
+func Parser_WithCustomBindFlag(t *testing.T) {
 	type tester struct {
 		TestStr string
 		testInt int
@@ -801,7 +801,7 @@ func TestCmdLineOption_WithCustomBindFlag(t *testing.T) {
 	assert.Equal(t, 123344, test.testInt, "should be able to reference anonymous type through interface assignment in callback")
 }
 
-func TestCmdLineOption_Parsing(t *testing.T) {
+func Parser_Parsing(t *testing.T) {
 	cmdLine, err := NewParserWith(
 		WithFlag("flagWithValue",
 			NewArg(
@@ -893,7 +893,7 @@ func TestCmdLineOption_Parsing(t *testing.T) {
 		" we expect it to have the given value")
 }
 
-func TestCmdLineOption_PrintUsage(t *testing.T) {
+func Parser_PrintUsage(t *testing.T) {
 	opts := NewParser()
 
 	err := opts.AddCommand(&Command{
@@ -1051,7 +1051,7 @@ func TestMuCompatibleFlags(t *testing.T) {
 	assert.Equal(t, "23", valT)
 }
 
-func TestCmdLineOption_FunctionOptionConfigurationOfCommands(t *testing.T) {
+func Parser_FunctionOptionConfigurationOfCommands(t *testing.T) {
 	opts := NewParser()
 
 	var valueReceived string
@@ -1091,7 +1091,7 @@ func TestCmdLineOption_FunctionOptionConfigurationOfCommands(t *testing.T) {
 
 }
 
-func TestCmdLineOption_ParseWithDefaults(t *testing.T) {
+func Parser_ParseWithDefaults(t *testing.T) {
 	defaults := map[string]string{"flagWithValue": "valueA"}
 
 	cmdLine, _ := NewParserWith(
@@ -1123,7 +1123,7 @@ func TestCmdLineOption_ParseWithDefaults(t *testing.T) {
 
 }
 
-func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
+func Parser_StandaloneFlagWithExplicitValue(t *testing.T) {
 	cmdLine, _ := NewParserWith(
 		WithFlag("flagA",
 			NewArg(
@@ -1148,7 +1148,7 @@ func TestCmdLineOption_StandaloneFlagWithExplicitValue(t *testing.T) {
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
 }
 
-func TestCmdLineOption_PrintUsageWithGroups(t *testing.T) {
+func Parser_PrintUsageWithGroups(t *testing.T) {
 	opts := NewParser()
 
 	// Add global flags
@@ -1225,7 +1225,7 @@ Commands:
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly")
 }
 
-func TestCmdLineOption_PrintUsageWithCustomGroups(t *testing.T) {
+func Parser_PrintUsageWithCustomGroups(t *testing.T) {
 	opts := NewParser()
 
 	// Add global flags
@@ -1297,6 +1297,52 @@ func TestCmdLineOption_PrintUsageWithCustomGroups(t *testing.T) {
 	// Check that the printed output matches the expected structure
 	output := strings.Join(*writer.data, "")
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
+}
+
+func Parser_TestGenerateCompletion(t *testing.T) {
+	p := NewParser()
+
+	// Add global flags
+	p.AddFlag("global-flag", NewArgument("g", "A global flag", Single, false, Secure{}, ""))
+	p.AddFlag("verbose", NewArgument("v", "Verbose output", Standalone, false, Secure{}, ""))
+
+	// Add command with flags
+	cmd := &Command{
+		Name:        "test",
+		Description: "Test command",
+	}
+	p.AddCommand(cmd)
+	p.AddFlag("test-flag", NewArgument("t", "A test flag", Single, false, Secure{}, ""), "test")
+
+	shells := []string{"bash", "zsh", "fish", "powershell"}
+	for _, shell := range shells {
+		t.Run(shell, func(t *testing.T) {
+			result := p.GenerateCompletion(shell, "testapp")
+			if result == "" {
+				t.Errorf("GenerateCompletion(%q) returned empty string", shell)
+			}
+
+			// Basic validation that the output contains shell-specific content
+			switch shell {
+			case "bash":
+				if !strings.Contains(result, "function __testapp_completion") {
+					t.Error("Bash completion missing expected content")
+				}
+			case "zsh":
+				if !strings.Contains(result, "#compdef testapp") {
+					t.Error("Zsh completion missing expected content")
+				}
+			case "fish":
+				if !strings.Contains(result, "function __testapp_complete") {
+					t.Error("Fish completion missing expected content")
+				}
+			case "powershell":
+				if !strings.Contains(result, "Register-ArgumentCompleter") {
+					t.Error("PowerShell completion missing expected content")
+				}
+			}
+		})
+	}
 }
 
 func TestMain(m *testing.M) {
