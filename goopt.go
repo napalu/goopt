@@ -269,7 +269,7 @@ func (s *Parser) Parse(args []string) bool {
 	pruneExecPathFromArgs(&args)
 
 	var (
-		envFlagsByCommand  = s.preSplitEnvVarsByCommand() // Get env flags split by command
+		envFlagsByCommand  = s.groupEnvVarsByCommand() // Get env flags split by command
 		envInserted        = make(map[string]int)
 		lastCommandPath    string
 		cmdQueue           = queue.New[*Command]()

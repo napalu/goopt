@@ -342,7 +342,7 @@ func (s *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 			cmdQueue.Clear()
 			terminating = true
 		} else {
-			cmdQueue.Push(cmd) // Add subcommands to queue
+			cmdQueue.Push(cmd)
 		}
 
 		// Queue the command callback (if any) after the command is fully recognized
@@ -695,20 +695,17 @@ func (s *Parser) walkCommands() {
 }
 
 func (s *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visited map[string]bool, depth int) {
-	// Set a max depth to avoid too deep recursion
 	const maxDepth = 10
 	if depth > maxDepth {
 		s.addError(fmt.Errorf("maximum dependency depth exceeded for flag '%s'", mainKey))
 		return
 	}
 
-	// Circular dependency check
 	if visited[mainKey] {
 		s.addError(fmt.Errorf("circular dependency detected: flag '%s' is involved in a circular chain of dependencies", mainKey))
 		return
 	}
 
-	// Mark the current flag as visited
 	visited[mainKey] = true
 
 	// Process the dependencies of the current flag
@@ -793,7 +790,7 @@ func (s *Parser) getListDelimiterFunc() ListDelimiterFunc {
 	return matchChainedSeparators
 }
 
-func (s *Parser) preSplitEnvVarsByCommand() map[string][]string {
+func (s *Parser) groupEnvVarsByCommand() map[string][]string {
 	commandEnvVars := make(map[string][]string)
 	if s.envFilter == nil {
 		return commandEnvVars
@@ -1169,7 +1166,6 @@ func (s *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	return nil
 }
 
-// unmarshalTagsToArgument populates the Argument struct based on struct tags
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt", "path"}
 
@@ -1219,7 +1215,6 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 }
 
 func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, error) {
-	// Split the path into segments (commands)
 	commandNames := strings.Split(commandPath, " ")
 
 	var topParent = parent
@@ -1248,7 +1243,6 @@ func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, er
 			if cmdName == parent.Name {
 				continue
 			}
-			// Look for the command as a subcommand of the parent
 			for idx, subCmd := range parent.Subcommands {
 				if subCmd.Name == cmdName {
 					currentCommand = &parent.Subcommands[idx] // Use the existing subcommand
@@ -1257,7 +1251,6 @@ func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, er
 				}
 			}
 
-			// If not found, add a new subcommand to the parent immediately
 			if !found {
 				newCommand := Command{
 					Name:        cmdName,
@@ -1320,13 +1313,11 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 
 		fieldValue := structValue.Field(i)
 		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
-			continue // Skip unexported fields
+			continue
 		}
 
-		// Get the 'long' tag for the flag name
 		longName, ok := field.Tag.Lookup("long")
 		if !ok {
-			// If no 'long' tag is provided, use the field name in lower camel case
 			longName = strcase.ToLowerCamel(field.Name)
 		}
 
@@ -1336,7 +1327,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			fieldPath = fmt.Sprintf("%s.%s", prefix, longName)
 		}
 
-		// Handle slice of structs
 		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
 			if err := processSliceField(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
 				c.addError(fmt.Errorf("error processing slice field %s: %w", fieldPath, err))
@@ -1344,7 +1334,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			continue
 		}
 
-		// Handle nested structs
 		if field.Type.Kind() == reflect.Struct {
 			if err := processNestedStruct(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
 				c.addError(fmt.Errorf("error processing nested struct %s: %w", fieldPath, err))
@@ -1352,7 +1341,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			continue
 		}
 
-		// Regular field handling
 		arg := &Argument{}
 		err = unmarshalTagsToArgument(field, arg)
 		if err != nil {
@@ -1373,7 +1361,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		// Process the path tag to associate the flag with commands or global
 		pathTag := field.Tag.Get("path")
 		if pathTag != "" {
-			// Inside the loop for processing path tags
 			paths := strings.Split(pathTag, ",")
 			for _, cmdPath := range paths {
 				cmdPathComponents := strings.Split(cmdPath, " ")
@@ -1444,7 +1431,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth int) error {
 	typ := val.Type()
 
-	// Check for nesting limit
 	if currentDepth > maxDepth {
 		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
 	}
@@ -1460,7 +1446,6 @@ func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth
 			continue
 		}
 
-		// Check if the field is a Command
 		if fieldType.Type == reflect.TypeOf(Command{}) {
 			cmd := field.Interface().(Command)
 			_, err := s.buildCommand(cmd.Path, &cmd)
@@ -1468,7 +1453,6 @@ func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth
 				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.Path, err)
 			}
 		} else if field.Kind() == reflect.Struct {
-			// Recursively process nested structs if the field is a struct
 			if err := s.processStructCommands(field, currentDepth+1, maxDepth); err != nil {
 				return fmt.Errorf("error processing nested struct %s: %w", fieldType.Name, err)
 			}
@@ -1489,7 +1473,6 @@ func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, curren
 		// Create full path with the slice index
 		elemPrefix := fmt.Sprintf("%s.%d", prefix, idx)
 
-		// Recursively process the element with the new non-generic helper
 		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, maxDepth, currentDepth+1)
 		if err != nil {
 			return fmt.Errorf("error processing slice element %s[%d]: %w", prefix, idx, err)
@@ -1503,9 +1486,7 @@ func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, curren
 	return nil
 }
 
-// Adjusted function to process nested structs
 func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
-	// Recursively process the nested struct with the new non-generic helper
 	nestedCmdLine, err := newParserFromReflectValue(fieldValue.Addr(), prefix, maxDepth, currentDepth+1)
 	if err != nil {
 		return fmt.Errorf("error processing nested struct %s: %w", prefix, err)

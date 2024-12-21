@@ -20,8 +20,9 @@ Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
     if ($wordToComplete -eq '') {
         @(`, programName))
 
-	// Add command completions
-	for cmd, desc := range data.CommandDescriptions {
+	// Add command completions in original order
+	for _, cmd := range data.Commands {
+		desc := data.CommandDescriptions[cmd]
 		script.WriteString(fmt.Sprintf(`
             [CompletionResult]::new('%[1]s', '%[2]s', [CompletionResultType]::Command, '%[3]s')`,
 			cmd, strings.TrimPrefix(cmd, "--"), escapePowerShell(desc)))
@@ -34,21 +35,23 @@ Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
 
     # Handle flag values`)
 
-	// Add flag value completions
-	for flag, values := range data.FlagValues {
-		script.WriteString(fmt.Sprintf(`
+	// Add flag value completions in order
+	for _, flag := range data.Flags {
+		if values, ok := data.FlagValues[flag]; ok {
+			script.WriteString(fmt.Sprintf(`
 
     if ($wordToComplete -eq '%s') {
         @(`, flag))
-		for _, v := range values {
-			script.WriteString(fmt.Sprintf(`
+			for _, v := range values {
+				script.WriteString(fmt.Sprintf(`
             [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
-				v.Pattern, v.Pattern, escapePowerShell(v.Description)))
-		}
-		script.WriteString(`
+					v.Pattern, v.Pattern, escapePowerShell(v.Description)))
+			}
+			script.WriteString(`
         )
         return
     }`)
+		}
 	}
 
 	script.WriteString(`
@@ -66,7 +69,7 @@ Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
     if ($wordToComplete.StartsWith('-')) {
         @(`)
 
-	// Add global flags
+	// Add global flags in order
 	for _, flag := range data.Flags {
 		desc := data.Descriptions[flag]
 		script.WriteString(fmt.Sprintf(`
@@ -74,15 +77,15 @@ Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
 			flag, strings.TrimPrefix(flag, "--"), escapePowerShell(desc)))
 	}
 
-	// Add command-specific flags
+	// Add command-specific flags in order
 	if len(data.CommandFlags) > 0 {
 		script.WriteString(`
 
         # Add command-specific flags
         switch ($cmd) {`)
 
-		for cmd, flags := range data.CommandFlags {
-			if len(flags) > 0 {
+		for _, cmd := range data.Commands {
+			if flags, ok := data.CommandFlags[cmd]; ok && len(flags) > 0 {
 				script.WriteString(fmt.Sprintf(`
             '%s' {`, cmd))
 				for _, flag := range flags {
