@@ -23,7 +23,7 @@ func TestGetCompletionPaths(t *testing.T) {
 				if !filepath.IsAbs(paths.Primary) {
 					t.Error("Primary path should be absolute")
 				}
-				if !strings.Contains(paths.Primary, "bash-completion/completions") {
+				if !strings.Contains(paths.Primary, filepath.Join("bash-completion", "completions")) {
 					t.Error("Expected bash completion path")
 				}
 			},
