@@ -2,6 +2,7 @@ package parse
 
 import (
 	"errors"
+
 	"github.com/napalu/goopt/util"
 )
 
@@ -23,7 +24,6 @@ var InvalidPositionError = errors.New("invalid position")
 type DefaultState struct {
 	pos  int
 	args []string
-	init bool
 }
 
 func NewState(args []string) *DefaultState {

@@ -13,10 +13,17 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 	// Process global flags in order
 	for _, flag := range data.Flags {
 		desc := data.Descriptions[flag]
-		script.WriteString(fmt.Sprintf("complete -c %s -l %s -d '%s'\n",
-			programName,
-			strings.TrimPrefix(flag, "--"),
-			escapeFish(desc)))
+		if strings.HasPrefix(flag, "--") {
+			script.WriteString(fmt.Sprintf("complete -c %s -l %s -d '%s'\n",
+				programName,
+				strings.TrimPrefix(flag, "--"),
+				escapeFish(desc)))
+		} else if strings.HasPrefix(flag, "-") {
+			script.WriteString(fmt.Sprintf("complete -c %s -s %s -d '%s'\n",
+				programName,
+				strings.TrimPrefix(flag, "-"),
+				escapeFish(desc)))
+		}
 	}
 
 	// Process main commands in order
@@ -48,12 +55,25 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 	for _, flag := range data.Flags {
 		if values, ok := data.FlagValues[flag]; ok {
 			flagName := strings.TrimPrefix(flag, "--")
-			for _, v := range values {
-				script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_argument -l %s' -a '%s' -d '%s'\n",
-					programName,
-					flagName,
-					v.Pattern,
-					escapeFish(v.Description)))
+			if strings.HasPrefix(flag, "-") && !strings.HasPrefix(flag, "--") {
+				// Short flag
+				flagName = strings.TrimPrefix(flag, "-")
+				for _, v := range values {
+					script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_argument -s %s' -a '%s' -d '%s'\n",
+						programName,
+						flagName,
+						v.Pattern,
+						escapeFish(v.Description)))
+				}
+			} else {
+				// Long flag
+				for _, v := range values {
+					script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_argument -l %s' -a '%s' -d '%s'\n",
+						programName,
+						flagName,
+						v.Pattern,
+						escapeFish(v.Description)))
+				}
 			}
 		}
 	}
@@ -63,11 +83,19 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		if flags, ok := data.CommandFlags[cmd]; ok {
 			for _, flag := range flags {
 				desc := data.Descriptions[cmd+"@"+flag]
-				script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_subcommand_from %s' -l %s -d '%s'\n",
-					programName,
-					cmd,
-					strings.TrimPrefix(flag, "--"),
-					escapeFish(desc)))
+				if strings.HasPrefix(flag, "--") {
+					script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_subcommand_from %s' -l %s -d '%s'\n",
+						programName,
+						cmd,
+						strings.TrimPrefix(flag, "--"),
+						escapeFish(desc)))
+				} else if strings.HasPrefix(flag, "-") {
+					script.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_seen_subcommand_from %s' -s %s -d '%s'\n",
+						programName,
+						cmd,
+						strings.TrimPrefix(flag, "-"),
+						escapeFish(desc)))
+				}
 			}
 		}
 	}
