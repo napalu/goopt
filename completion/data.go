@@ -1,20 +1,41 @@
 // completion/data.go
 package completion
 
-// CompletionValue is used to store the flag values for a given flag
+// CompletionValue represents a possible value for a flag with its description
 type CompletionValue struct {
 	Pattern     string // The regex pattern
 	Description string // Human-readable description
 }
 
-// CompletionData is used to store the completion data for all configured flags and commands
+// FlagType mirrors goopt.OptionType but keeps packages decoupled
+type FlagType int
+
+const (
+	// Single denotes a flag accepting a string value
+	FlagTypeSingle FlagType = 0
+	// Chained denotes a flag accepting a string value which should be evaluated as a list
+	FlagTypeChained FlagType = 1
+	// Standalone denotes a boolean flag (does not accept a value)
+	FlagTypeStandalone FlagType = 2
+	// File denotes a flag which is evaluated as a path
+	FlagTypeFile FlagType = 3
+)
+
+// FlagPair represents a short and long version of the same flag
+type FlagPair struct {
+	Short       string
+	Long        string
+	Description string
+	Type        FlagType
+}
+
+// CompletionData holds all the data needed for shell completion
 type CompletionData struct {
 	Commands            []string
-	Flags               []string
-	CommandFlags        map[string][]string
-	Descriptions        map[string]string
-	CommandDescriptions map[string]string
+	Flags               []FlagPair
+	CommandFlags        map[string][]FlagPair
 	FlagValues          map[string][]CompletionValue
+	CommandDescriptions map[string]string
 }
 
 // CompletionPaths holds information about completion script locations

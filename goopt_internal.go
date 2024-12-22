@@ -13,6 +13,7 @@ import (
 
 	"github.com/araddon/dateparse"
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
@@ -1539,4 +1540,48 @@ func formatFlagDescription(arg *Argument) string {
 		status = "(conditional) "
 	}
 	return status + arg.Description
+}
+
+func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo) {
+	if flagInfo == nil || flagInfo.Argument == nil {
+		return
+	}
+
+	// Create flag pair with type conversion
+	pair := completion.FlagPair{
+		Long:        flagName,
+		Short:       flagInfo.Argument.Short,
+		Description: formatFlagDescription(flagInfo.Argument),
+		Type:        completion.FlagType(flagInfo.Argument.TypeOf),
+	}
+
+	// Add to appropriate flag list
+	if cmd == "" {
+		data.Flags = append(data.Flags, pair)
+	} else {
+		data.CommandFlags[cmd] = append(data.CommandFlags[cmd], pair)
+	}
+
+	// Handle flag values
+	if len(flagInfo.Argument.AcceptedValues) > 0 {
+		values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
+		for i, v := range flagInfo.Argument.AcceptedValues {
+			values[i] = completion.CompletionValue{
+				Pattern:     v.value.String(),
+				Description: v.explain,
+			}
+		}
+
+		// Add values for both forms if short exists
+		if flagInfo.Argument.Short != "" {
+			shortKey := pair.Short
+			longKey := pair.Long
+			if cmd != "" {
+				shortKey = cmd + "@" + shortKey
+				longKey = cmd + "@" + longKey
+			}
+			data.FlagValues[shortKey] = values
+			data.FlagValues[longKey] = values
+		}
+	}
 }

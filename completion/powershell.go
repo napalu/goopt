@@ -12,20 +12,73 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	var script strings.Builder
 
 	script.WriteString(fmt.Sprintf(`
-Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
-    param($commandName, $wordToComplete, $cursorPosition)
-    $commandElements = $wordToComplete -split "\s+"
+Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
     
-    # Handle empty word completion
-    if ($wordToComplete -eq '') {
-        @(`, programName))
+    $tokens = $commandAst.CommandElements
+    $currentToken = $tokens | Where-Object { $_.Extent.StartOffset -le $cursorPosition } | Select-Object -Last 1
 
-	// Add command completions in original order
+    # Handle parameter value completion
+    if ($currentToken -is [System.Management.Automation.Language.CommandParameterAst]) {
+        switch ($currentToken.ParameterName) {`, programName))
+
+	// Add flag value completions
+	for flagName, values := range data.FlagValues {
+		// Find the corresponding flag to get its short form
+		var shortForm string
+		for _, flag := range data.Flags {
+			if flag.Long == flagName {
+				shortForm = flag.Short
+				break
+			}
+		}
+
+		// Handle both long and short forms
+		if shortForm != "" {
+			script.WriteString(fmt.Sprintf(`
+            '%s' { # --%s or -%s`, flagName, flagName, shortForm))
+		} else {
+			script.WriteString(fmt.Sprintf(`
+            '%s' { # --%s`, flagName, flagName))
+		}
+		for _, val := range values {
+			script.WriteString(fmt.Sprintf(`
+                [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
+				val.Pattern, val.Pattern, escapePowerShell(val.Description)))
+		}
+		script.WriteString(`
+            }`)
+
+		if shortForm != "" {
+			script.WriteString(fmt.Sprintf(`
+            '%s' { # Short form`, shortForm))
+			for _, val := range values {
+				script.WriteString(fmt.Sprintf(`
+                [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
+					val.Pattern, val.Pattern, escapePowerShell(val.Description)))
+			}
+			script.WriteString(`
+            }`)
+		}
+	}
+
+	script.WriteString(`
+        }
+        return
+    }
+
+    # Handle command completion
+    if ($tokens.Count -eq 1) {
+        @(`)
+
+	// Add top-level commands
 	for _, cmd := range data.Commands {
-		desc := data.CommandDescriptions[cmd]
-		script.WriteString(fmt.Sprintf(`
-            [CompletionResult]::new('%[1]s', '%[2]s', [CompletionResultType]::Command, '%[3]s')`,
-			cmd, strings.TrimPrefix(cmd, "--"), escapePowerShell(desc)))
+		if !strings.Contains(cmd, " ") {
+			desc := data.CommandDescriptions[cmd]
+			script.WriteString(fmt.Sprintf(`
+            [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
+				cmd, cmd, escapePowerShell(desc)))
+		}
 	}
 
 	script.WriteString(`
@@ -33,80 +86,81 @@ Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
         return
     }
 
-    # Handle flag values`)
+    # Handle subcommand completion
+    if ($tokens.Count -gt 1) {
+        switch ($tokens[1].Value) {`)
 
-	// Add flag value completions in order
-	for _, flag := range data.Flags {
-		if values, ok := data.FlagValues[flag]; ok {
-			script.WriteString(fmt.Sprintf(`
-
-    if ($wordToComplete -eq '%s') {
-        @(`, flag))
-			for _, v := range values {
-				script.WriteString(fmt.Sprintf(`
-            [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
-					v.Pattern, v.Pattern, escapePowerShell(v.Description)))
-			}
-			script.WriteString(`
-        )
-        return
-    }`)
+	// Group subcommands by their parent command
+	commandGroups := make(map[string][]string)
+	for _, cmd := range data.Commands {
+		parts := strings.Split(cmd, " ")
+		if len(parts) > 1 {
+			parent := parts[0]
+			sub := parts[1]
+			commandGroups[parent] = append(commandGroups[parent], sub)
 		}
 	}
 
-	script.WriteString(`
+	// Add subcommand completions
+	for parentCmd, subCmds := range commandGroups {
+		script.WriteString(fmt.Sprintf(`
+            '%s' {
+                @(`, parentCmd))
+		for _, subCmd := range subCmds {
+			fullCmd := parentCmd + " " + subCmd
+			desc := data.CommandDescriptions[fullCmd]
+			script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
+				subCmd, subCmd, escapePowerShell(desc)))
+		}
+		script.WriteString(`
+                )
+                return
+            }`)
+	}
 
-    # Get current command
-    $cmd = ""
-    for ($i = 1; $i -lt $commandElements.Count; $i++) {
-        if (!$commandElements[$i].StartsWith('-')) {
-            $cmd = $commandElements[$i]
-            break
+	// Add command-specific flags
+	for cmd, flags := range data.CommandFlags {
+		script.WriteString(fmt.Sprintf(`
+            '%s' {
+                @(`, cmd))
+		for _, flag := range flags {
+			script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+				flag.Long, flag.Long, escapePowerShell(flag.Description)))
+			if flag.Short != "" {
+				script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+					flag.Short, flag.Short, escapePowerShell(flag.Description)))
+			}
+		}
+		script.WriteString(`
+                )
+                return
+            }`)
+	}
+
+	script.WriteString(`
         }
     }
 
-    # Handle flags
-    if ($wordToComplete.StartsWith('-')) {
-        @(`)
+    # Handle global flags
+    @(`)
 
-	// Add global flags in order
+	// Add global flags
 	for _, flag := range data.Flags {
-		desc := data.Descriptions[flag]
 		script.WriteString(fmt.Sprintf(`
-            [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-			flag, strings.TrimPrefix(flag, "--"), escapePowerShell(desc)))
-	}
-
-	// Add command-specific flags in order
-	if len(data.CommandFlags) > 0 {
-		script.WriteString(`
-
-        # Add command-specific flags
-        switch ($cmd) {`)
-
-		for _, cmd := range data.Commands {
-			if flags, ok := data.CommandFlags[cmd]; ok && len(flags) > 0 {
-				script.WriteString(fmt.Sprintf(`
-            '%s' {`, cmd))
-				for _, flag := range flags {
-					desc := data.Descriptions[cmd+"@"+flag]
-					script.WriteString(fmt.Sprintf(`
-                [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-						flag, strings.TrimPrefix(flag, "--"), escapePowerShell(desc)))
-				}
-				script.WriteString(`
-            }`)
-			}
+        [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+			flag.Long, flag.Long, escapePowerShell(flag.Description)))
+		if flag.Short != "" {
+			script.WriteString(fmt.Sprintf(`
+        [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+				flag.Short, flag.Short, escapePowerShell(flag.Description)))
 		}
-
-		script.WriteString(`
-        }`)
 	}
 
 	script.WriteString(`
-        )
-        return
-    }
+    )
 }`)
 
 	return script.String()

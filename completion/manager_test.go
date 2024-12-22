@@ -19,27 +19,43 @@ func TestCompletionManager_Accept(t *testing.T) {
 			shell:       "bash",
 			programName: "mytool",
 			data: CompletionData{
-				Commands: []string{"test"},
-				Flags:    []string{"-v", "--verbose", "-o", "--output"},
-				Descriptions: map[string]string{
-					"-v":        "Enable verbose output (short)",
-					"--verbose": "Enable verbose output (long)",
-					"-o":        "Output file (short)",
-					"--output":  "Output file (long)",
+				Commands: []string{"test", "test sub"},
+				Flags: []FlagPair{
+					{Long: "verbose", Short: "v", Description: "Enable verbose output", Type: FlagTypeStandalone},
+					{Long: "output", Short: "o", Description: "Output file", Type: FlagTypeFile},
+				},
+				CommandFlags: map[string][]FlagPair{
+					"test": {
+						{Long: "test-flag", Short: "t", Description: "Test flag", Type: FlagTypeStandalone},
+					},
+				},
+				FlagValues: map[string][]CompletionValue{
+					"output": {{Pattern: "file.txt", Description: "Text file"}},
+					"o":      {{Pattern: "file.txt", Description: "Text file"}},
+				},
+				CommandDescriptions: map[string]string{
+					"test":     "Test command",
+					"test sub": "Test subcommand",
 				},
 			},
 			checkScript: func(t *testing.T, script string) {
-				if !strings.Contains(script, "mytool") {
-					t.Error("Script should contain program name")
+				checks := []struct {
+					name    string
+					content string
+				}{
+					{"file completion", "_filedir"}, // Changed to expect _filedir
+					{"global short flag", "-v"},
+					{"global long flag", "--verbose"},
+					{"command short flag", "-t"},
+					{"command long flag", "--test-flag"},
+					{"subcommand", "test\\ sub"},
+					{"command", "test"},
 				}
-				if !strings.Contains(script, "-v") {
-					t.Error("Script should contain short flags")
-				}
-				if !strings.Contains(script, "--verbose") {
-					t.Error("Script should contain long flags")
-				}
-				if !strings.Contains(script, "Enable verbose output") {
-					t.Error("Script should contain flag descriptions")
+
+				for _, check := range checks {
+					if !strings.Contains(script, check.content) {
+						t.Errorf("Missing %s: should contain %q", check.name, check.content)
+					}
 				}
 			},
 		},
@@ -48,24 +64,38 @@ func TestCompletionManager_Accept(t *testing.T) {
 			shell:       "zsh",
 			programName: "mytool",
 			data: CompletionData{
-				Commands: []string{"test"},
-				Flags:    []string{"-v", "--verbose", "-o", "--output"},
-				Descriptions: map[string]string{
-					"-v":        "Enable verbose output (short)",
-					"--verbose": "Enable verbose output (long)",
-					"-o":        "Output file (short)",
-					"--output":  "Output file (long)",
+				Commands: []string{"test", "test sub"},
+				Flags: []FlagPair{
+					{Long: "verbose", Short: "v", Description: "Enable verbose output"},
+					{Long: "output", Short: "o", Description: "Output file", Type: FlagTypeFile},
+				},
+				CommandFlags: map[string][]FlagPair{
+					"test": {
+						{Long: "test-flag", Short: "t", Description: "Test flag"},
+					},
+				},
+				CommandDescriptions: map[string]string{
+					"test":     "Test command",
+					"test sub": "Test subcommand",
 				},
 			},
 			checkScript: func(t *testing.T, script string) {
-				if !strings.Contains(script, "#compdef mytool") {
-					t.Error("ZSH script should start with #compdef")
+				checks := []struct {
+					name    string
+					content string
+				}{
+					{"command with description", `"test:Test command"`},
+					{"subcommand with description", `"test:(sub:Test subcommand)"`},
+					{"global flag with short form", `"(-v --verbose)"{-v,--verbose}"[Enable verbose output]"`},
+					{"file flag", `"(-o --output)"{-o,--output}"[Output file]":_files`},
+					{"command flag", `"(-t --test-flag)"{-t,--test-flag}"[Test flag]"`},
+					{"zsh compdef", "#compdef mytool"},
 				}
-				if !strings.Contains(script, "-v") {
-					t.Error("Script should contain short flags")
-				}
-				if !strings.Contains(script, "--verbose") {
-					t.Error("Script should contain long flags")
+
+				for _, check := range checks {
+					if !strings.Contains(script, check.content) {
+						t.Errorf("Missing %s: should contain %q", check.name, check.content)
+					}
 				}
 			},
 		},
@@ -75,45 +105,35 @@ func TestCompletionManager_Accept(t *testing.T) {
 			programName: "mytool",
 			data: CompletionData{
 				Commands: []string{"test", "test sub"},
-				Flags:    []string{"-v", "--verbose", "-o", "--output"},
-				CommandFlags: map[string][]string{
-					"test": {"-t", "--test-flag"},
+				Flags: []FlagPair{
+					{Long: "verbose", Short: "v", Description: "Enable verbose output", Type: FlagTypeStandalone},
+					{Long: "output", Short: "o", Description: "Output file", Type: FlagTypeFile},
 				},
-				Descriptions: map[string]string{
-					"-v":               "Enable verbose output (short)",
-					"--verbose":        "Enable verbose output (long)",
-					"-o":               "Output file (short)",
-					"--output":         "Output file (long)",
-					"test@-t":          "Test flag (short)",
-					"test@--test-flag": "Test flag (long)",
+				CommandFlags: map[string][]FlagPair{
+					"test": {
+						{Long: "test-flag", Short: "t", Description: "Test flag", Type: FlagTypeStandalone},
+					},
+				},
+				FlagValues: map[string][]CompletionValue{
+					"output": {{Pattern: "file.txt", Description: "Text file"}},
+					"o":      {{Pattern: "file.txt", Description: "Text file"}},
 				},
 				CommandDescriptions: map[string]string{
 					"test":     "Test command",
 					"test sub": "Test subcommand",
 				},
-				FlagValues: map[string][]CompletionValue{
-					"--output": {
-						{Pattern: "file.txt", Description: "Text file"},
-					},
-					"-o": {
-						{Pattern: "file.txt", Description: "Text file"},
-					},
-				},
 			},
 			checkScript: func(t *testing.T, script string) {
-				t.Logf("Generated fish script:\n%s", script)
 				checks := []struct {
 					name    string
 					content string
 				}{
-					{"global short flag", "-s v -d 'Enable verbose output"},
-					{"global long flag", "-l verbose -d 'Enable verbose output"},
-					{"main command", "__fish_use_subcommand' -a 'test' -d 'Test command"},
-					{"subcommand", "__fish_seen_subcommand_from test' -a 'sub' -d 'Test subcommand"},
-					{"command short flag", "__fish_seen_subcommand_from test' -s t -d 'Test flag"},
-					{"command long flag", "__fish_seen_subcommand_from test' -l test-flag -d 'Test flag"},
-					{"short flag value", "__fish_seen_argument -s o' -a 'file.txt' -d 'Text file"},
-					{"long flag value", "__fish_seen_argument -l output' -a 'file.txt' -d 'Text file"},
+					{"global flag", "-l verbose -s v -d 'Enable verbose output'"},
+					{"file flag", "-l output -s o -d 'Output file'"},
+					{"command flag", "-l test-flag -s t -d 'Test flag'"},
+					{"file completion", "-n '__fish_seen_argument -l output -s o' -a 'file.txt' -d 'Text file'"},
+					{"main command", "-n '__fish_use_subcommand' -a 'test' -d 'Test command'"},
+					{"subcommand", "-n '__fish_seen_subcommand_from test' -a 'sub' -d 'Test subcommand'"},
 				}
 
 				for _, check := range checks {
@@ -128,24 +148,45 @@ func TestCompletionManager_Accept(t *testing.T) {
 			shell:       "powershell",
 			programName: "mytool",
 			data: CompletionData{
-				Commands: []string{"test"},
-				Flags:    []string{"-v", "--verbose", "-o", "--output"},
-				Descriptions: map[string]string{
-					"-v":        "Enable verbose output (short)",
-					"--verbose": "Enable verbose output (long)",
-					"-o":        "Output file (short)",
-					"--output":  "Output file (long)",
+				Commands: []string{"test", "test sub"},
+				Flags: []FlagPair{
+					{Long: "verbose", Short: "v", Description: "Enable verbose output"},
+					{Long: "output", Short: "o", Description: "Output file"},
+				},
+				CommandFlags: map[string][]FlagPair{
+					"test": {
+						{Long: "test-flag", Short: "t", Description: "Test flag"},
+					},
+				},
+				FlagValues: map[string][]CompletionValue{
+					"output": {{Pattern: "file.txt", Description: "Text file"}},
+					"o":      {{Pattern: "file.txt", Description: "Text file"}},
+				},
+				CommandDescriptions: map[string]string{
+					"test":     "Test command",
+					"test sub": "Test subcommand",
 				},
 			},
 			checkScript: func(t *testing.T, script string) {
-				if !strings.Contains(script, "Register-ArgumentCompleter") {
-					t.Error("PowerShell script should use Register-ArgumentCompleter")
+				checks := []struct {
+					name    string
+					content string
+				}{
+					{"registration", "Register-ArgumentCompleter"},
+					{"global short flag", "-v"},
+					{"global long flag", "--verbose"},
+					{"command short flag", "-t"},
+					{"command long flag", "--test-flag"},
+					{"flag description", "Enable verbose output"},
+					{"command", "[CompletionResult]::new('test'"},
+					{"subcommand", "[CompletionResult]::new('sub', 'sub', [CompletionResultType]::Command, 'Test subcommand')"},
+					{"flag value", "[CompletionResult]::new('file.txt', 'file.txt', [CompletionResultType]::ParameterValue,"},
 				}
-				if !strings.Contains(script, "-v") {
-					t.Error("Script should contain short flags")
-				}
-				if !strings.Contains(script, "--verbose") {
-					t.Error("Script should contain long flags")
+
+				for _, check := range checks {
+					if !strings.Contains(script, check.content) {
+						t.Errorf("Missing %s: should contain %q", check.name, check.content)
+					}
 				}
 			},
 		},
@@ -164,19 +205,18 @@ func TestCompletionManager_Accept(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := NewCompletionManager(tt.shell, tt.programName)
-			if err != nil {
-				t.Fatalf("Failed to create manager: %v", err)
+			generator := GetGenerator(tt.shell)
+			if generator == nil {
+				t.Fatalf("Failed to get generator for shell: %s", tt.shell)
 			}
 
-			manager.Accept(tt.data)
-
-			if manager.script == "" {
-				t.Error("Accept() did not generate a script")
+			script := generator.Generate(tt.programName, tt.data)
+			if script == "" {
+				t.Error("Generate() returned empty script")
 			}
 
 			if tt.checkScript != nil {
-				tt.checkScript(t, manager.script)
+				tt.checkScript(t, script)
 			}
 		})
 	}
@@ -234,7 +274,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			shell:       "bash",
 			programName: "mytool",
 			setup: func(cm *CompletionManager) {
-				cm.Accept(CompletionData{Commands: []string{"test"}})
+				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
 				if !strings.HasSuffix(path, "mytool") {
@@ -247,7 +287,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			shell:       "zsh",
 			programName: "mytool",
 			setup: func(cm *CompletionManager) {
-				cm.Accept(CompletionData{Commands: []string{"test"}})
+				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
 				if !strings.HasPrefix(filepath.Base(path), "_") {
@@ -260,7 +300,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			shell:       "fish",
 			programName: "mytool",
 			setup: func(cm *CompletionManager) {
-				cm.Accept(CompletionData{Commands: []string{"test"}})
+				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
 				if !strings.HasSuffix(path, ".fish") {
@@ -273,7 +313,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			shell:       "powershell",
 			programName: "mytool",
 			setup: func(cm *CompletionManager) {
-				cm.Accept(CompletionData{Commands: []string{"test"}})
+				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
 				if !strings.HasSuffix(path, ".ps1") {

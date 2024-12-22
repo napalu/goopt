@@ -4,11 +4,12 @@
 
 // Package goopt provides support for command-line processing.
 //
-// It supports 3 types of flags:
+// It supports 4 types of flags:
 //
 //	Single - a flag which expects a value
 //	Chained - flag which expects a delimited value representing elements in a list (and is evaluated as a list)
 //	Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
+//	File - a flag which expects a file path
 //
 // Additionally, commands and sub-commands (Command) are supported. Commands can be nested to represent sub-commands. Unlike
 // the official go.Flag package commands and sub-commands may be placed before, after or mixed in with flags.
@@ -1108,9 +1109,8 @@ func (s *Parser) GetErrorCount() int {
 func (p *Parser) GetCompletionData() completion.CompletionData {
 	data := completion.CompletionData{
 		Commands:            make([]string, 0),
-		Flags:               make([]string, 0),
-		CommandFlags:        make(map[string][]string),
-		Descriptions:        make(map[string]string),
+		Flags:               make([]completion.FlagPair, 0),
+		CommandFlags:        make(map[string][]completion.FlagPair),
 		FlagValues:          make(map[string][]completion.CompletionValue),
 		CommandDescriptions: make(map[string]string),
 	}
@@ -1118,25 +1118,17 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 	// Process flags
 	for iter := p.acceptedFlags.Front(); iter != nil; iter = iter.Next() {
 		flag := *iter.Key
+		flagInfo := iter.Value
 		flagParts := splitPathFlag(flag)
-		if len(flagParts) == 1 {
-			data.Flags = append(data.Flags, flag)
-		} else {
-			data.CommandFlags[flagParts[0]] = append(data.CommandFlags[flagParts[0]], flagParts[1])
+
+		cmd := ""
+		flagName := flag
+		if len(flagParts) > 1 {
+			cmd = flagParts[0]
+			flagName = flagParts[1]
 		}
-		if flagInfo := iter.Value; flagInfo != nil {
-			data.Descriptions[flag] = formatFlagDescription(flagInfo.Argument)
-			if len(flagInfo.Argument.AcceptedValues) > 0 {
-				values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
-				for i, v := range flagInfo.Argument.AcceptedValues {
-					values[i] = completion.CompletionValue{
-						Pattern:     v.value.String(),
-						Description: v.explain,
-					}
-				}
-				data.FlagValues[flag] = values
-			}
-		}
+
+		addFlagToCompletionData(&data, cmd, flagName, flagInfo)
 	}
 
 	// Process commands
