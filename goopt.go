@@ -28,6 +28,7 @@ import (
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
+	"github.com/napalu/goopt/util"
 )
 
 // NewParser convenience initialization method. Use NewCmdLine to
@@ -48,6 +49,8 @@ func NewParser() *Parser {
 		callbackResults:    map[string]error{},
 		secureArguments:    orderedmap.NewOrderedMap[string, *Secure](),
 		prefixes:           []rune{'-'},
+		stderr:             os.Stderr,
+		stdout:             os.Stdout,
 	}
 }
 
@@ -363,6 +366,7 @@ func (s *Parser) Parse(args []string) bool {
 		for f := s.secureArguments.Front(); f != nil; f = f.Next() {
 			s.processSecureFlag(*f.Key, f.Value)
 		}
+		success = len(s.errors) == 0
 	}
 	s.secureArguments = nil
 
@@ -533,7 +537,7 @@ func (s *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	listDelimFunc := s.getListDelimiterFunc()
 	if err == nil {
 		if arg.TypeOf == Chained {
-			value, success := s.Get(flag)
+			value, success := s.Get(flag, commandPath...)
 			if !success {
 				return []string{}, fmt.Errorf("failed to retrieve value for flag '%s'", flag)
 			}
@@ -547,7 +551,7 @@ func (s *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	return []string{}, err
 }
 
-// SetListDelimiterFunc TODO explain
+// SetListDelimiterFunc sets the value delimiter function for Chained flags
 func (s *Parser) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) error {
 	if delimiterFunc != nil {
 		s.listFunc = delimiterFunc
@@ -558,6 +562,7 @@ func (s *Parser) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) error {
 	return fmt.Errorf("invalid ListDelimiterFunc (should not be null)")
 }
 
+// SetArgumentPrefixes sets the flag argument prefixes
 func (s *Parser) SetArgumentPrefixes(prefixes []rune) error {
 	prefixesLen := len(prefixes)
 	if prefixesLen == 0 {
@@ -599,37 +604,27 @@ func (s *Parser) GetWarnings() []string {
 		if !found {
 			continue
 		}
-		if len(flagInfo.Argument.DependsOn) == 0 {
+
+		dependentFlags := s.getDependentFlags(flagInfo.Argument)
+		if len(dependentFlags) == 0 {
 			continue
 		}
-		for _, k := range flagInfo.Argument.DependsOn {
-			dependKey := s.flagOrShortFlag(k)
-			_, hasKey := s.options[dependKey]
+
+		for _, depFlag := range dependentFlags {
+			dependKey := s.flagOrShortFlag(depFlag)
+			dependValue, hasKey := s.options[dependKey]
+
 			if !hasKey {
 				warnings = append(warnings,
-					fmt.Sprintf("Flag '%s' depends on '%s' which was not specified.", mainKey, k))
-			}
-
-			if len(flagInfo.Argument.OfValue) == 0 {
-				continue
-			}
-			dependValue, found := s.Get(dependKey)
-			if !found {
+					fmt.Sprintf("Flag '%s' depends on '%s' which was not specified.", mainKey, depFlag))
 				continue
 			}
 
-			valueFound := false
-			for i := 0; i < len(flagInfo.Argument.OfValue); i++ {
-				if strings.EqualFold(flagInfo.Argument.OfValue[i], dependValue) {
-					valueFound = true
-					break
-				}
-			}
-
-			if !valueFound {
+			matches, allowedValues := s.checkDependencyValue(flagInfo.Argument, depFlag, dependValue)
+			if !matches && len(allowedValues) > 0 {
 				warnings = append(warnings, fmt.Sprintf(
 					"Flag '%s' depends on '%s' with value %s which was not specified. (got '%s')",
-					mainKey, dependKey, showDependencies(flagInfo.Argument.OfValue), dependValue))
+					mainKey, dependKey, showDependencies(allowedValues), dependValue))
 			}
 		}
 	}
@@ -1043,56 +1038,89 @@ func (s *Parser) Remove(flag string, commandPath ...string) bool {
 	return false
 }
 
-// DependsOnFlag same as DependsOnFlagValue but does not specify that the Flag it depends on must have a particular value
-// to be valid.
+// DependsOnFlag adds a dependency without value constraints
 func (s *Parser) DependsOnFlag(flag, dependsOn string, commandPath ...string) error {
+	return s.AddDependency(flag, dependsOn, commandPath...)
+}
+
+// DependsOnFlagValue adds a dependency with specific value constraints
+func (s *Parser) DependsOnFlagValue(flag, dependsOn, ofValue string, commandPath ...string) error {
+	return s.AddDependencyValue(flag, dependsOn, []string{ofValue}, commandPath...)
+}
+
+// AddDependency adds a dependency without value constraints
+func (s *Parser) AddDependency(flag, dependsOn string, commandPath ...string) error {
 	if flag == "" {
 		return fmt.Errorf("can't set dependency on empty flag")
 	}
 
 	mainKey := s.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := s.acceptedFlags.Get(mainKey)
-	if found {
-		flagInfo.Argument.DependsOn = append(flagInfo.Argument.DependsOn, dependsOn)
-
-		return nil
+	if !found {
+		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 	}
 
-	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	// Initialize DependencyMap if needed
+	if flagInfo.Argument.DependencyMap == nil {
+		flagInfo.Argument.DependencyMap = make(map[string][]string)
+	}
+
+	dependsOnKey := s.flagOrShortFlag(dependsOn, commandPath...)
+	// Empty slice means the flag just needs to be present
+	flagInfo.Argument.DependencyMap[dependsOnKey] = nil
+	return nil
+}
+
+// AddDependencyValue adds or updates a dependency with specific allowed values
+func (s *Parser) AddDependencyValue(flag, dependsOn string, allowedValues []string, commandPath ...string) error {
+	if flag == "" {
+		return fmt.Errorf("can't set dependency on empty flag")
+	}
+
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
+	flagInfo, found := s.acceptedFlags.Get(mainKey)
+	if !found {
+		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	}
+
+	// Initialize DependencyMap if needed
+	if flagInfo.Argument.DependencyMap == nil {
+		flagInfo.Argument.DependencyMap = make(map[string][]string)
+	}
+
+	dependsOnKey := s.flagOrShortFlag(dependsOn, commandPath...)
+	// Update or add the dependency values
+	if existing, exists := flagInfo.Argument.DependencyMap[dependsOnKey]; exists {
+		// Append new values to existing ones
+		flagInfo.Argument.DependencyMap[dependsOnKey] = append(existing, allowedValues...)
+	} else {
+		flagInfo.Argument.DependencyMap[dependsOnKey] = allowedValues
+	}
+	return nil
+}
+
+// RemoveDependency removes a dependency
+func (s *Parser) RemoveDependency(flag, dependsOn string, commandPath ...string) error {
+	if flag == "" {
+		return fmt.Errorf("can't remove dependency from empty flag")
+	}
+
+	mainKey := s.flagOrShortFlag(flag, commandPath...)
+	flagInfo, found := s.acceptedFlags.Get(mainKey)
+	if !found {
+		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	}
+
+	dependsOnKey := s.flagOrShortFlag(dependsOn, commandPath...)
+	if flagInfo.Argument.DependencyMap != nil {
+		delete(flagInfo.Argument.DependencyMap, dependsOnKey)
+	}
+	return nil
 }
 
 // FlagPath returns the command part of a Flag or an empty string when not.
 func (s *Parser) FlagPath(flag string) string {
 	return getFlagPath(flag)
-}
-
-// DependsOnFlagValue is used to describe flag dependencies. For example, a '--modify' flag could be specified to
-// depend on a '--group' Flag with a value of 'users'. If the '--group' Flag is not specified with a value of
-// 'users' on the command line a warning will be set during Parse.
-func (s *Parser) DependsOnFlagValue(flag, dependsOn, ofValue string) error {
-	if flag == "" {
-		return fmt.Errorf("can't set dependency on empty flag")
-	}
-
-	if ofValue == "" {
-		return fmt.Errorf("can't set dependency when value is empty")
-	}
-
-	mainKey := s.flagOrShortFlag(flag)
-	flagInfo, found := s.acceptedFlags.Get(mainKey)
-	if found {
-		flagInfo.Argument.DependsOn = append(flagInfo.Argument.DependsOn, dependsOn)
-		if len(flagInfo.Argument.OfValue) == 0 {
-			flagInfo.Argument.OfValue = make([]string, 1, 5)
-			flagInfo.Argument.OfValue[0] = ofValue
-		} else {
-			flagInfo.Argument.OfValue = append(flagInfo.Argument.OfValue, ofValue)
-		}
-
-		return nil
-	}
-
-	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
 }
 
 // GetErrors returns a list of the errors encountered during Parse
@@ -1147,26 +1175,6 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 func (p *Parser) GenerateCompletion(shell, programName string) string {
 	generator := completion.GetGenerator(shell)
 	return generator.Generate(programName, p.GetCompletionData())
-}
-
-// GenerateBashCompletion generates completion scripts for bash
-func (p *Parser) GenerateBashCompletion(programName string) string {
-	return p.GenerateCompletion("bash", programName)
-}
-
-// GenerateZshCompletion generates completion scripts for zsh
-func (p *Parser) GenerateZshCompletion(programName string) string {
-	return p.GenerateCompletion("zsh", programName)
-}
-
-// GenerateFishCompletion generates completion scripts for fish
-func (p *Parser) GenerateFishCompletion(programName string) string {
-	return p.GenerateCompletion("fish", programName)
-}
-
-// GeneratePowerShellCompletion generates completion scripts for powershell
-func (p *Parser) GeneratePowerShellCompletion(programName string) string {
-	return p.GenerateCompletion("powershell", programName)
 }
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
@@ -1342,4 +1350,48 @@ func (r *LiterateRegex) Describe() string {
 	}
 
 	return r.value.String()
+}
+
+// SetTerminalReader sets the terminal reader for secure input (by default, the terminal reader is the real terminal)
+// this is useful for testing or mocking the terminal reader or for setting a custom terminal reader
+// the returned value is the old terminal reader, so it can be restored later
+// this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
+func (s *Parser) SetTerminalReader(t util.TerminalReader) util.TerminalReader {
+	current := s.terminalReader
+	s.terminalReader = t
+	return current
+}
+
+// GetTerminalReader returns the current terminal reader
+// this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
+func (s *Parser) GetTerminalReader() util.TerminalReader {
+	return s.terminalReader
+}
+
+// SetStderr sets the stderr writer and returns the old writer
+// this is a low-level function and should not be used by most users - by default stderr is os.Stderr
+func (s *Parser) SetStderr(w io.Writer) io.Writer {
+	current := s.stderr
+	s.stderr = w
+	return current
+}
+
+// GetStderr returns the current stderr writer
+// this is a low-level function and should not be used by most users - by default stderr is os.Stderr
+func (s *Parser) GetStderr() io.Writer {
+	return s.stderr
+}
+
+// SetStdout sets the stdout writer and returns the old writer
+// this is a low-level function and should not be used by most users - by default stdout is os.Stdout
+func (s *Parser) SetStdout(w io.Writer) io.Writer {
+	current := s.stdout
+	s.stdout = w
+	return current
+}
+
+// GetStdout returns the current stdout writer
+// this is a low-level function and should not be used by most users - by default stdout is os.Stdout
+func (s *Parser) GetStdout() io.Writer {
+	return s.stdout
 }

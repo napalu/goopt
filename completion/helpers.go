@@ -30,3 +30,33 @@ func escapeZsh(s string) string {
 	s = strings.ReplaceAll(s, "\"", "\\\"")
 	return s
 }
+
+func escapePatternBash(pattern string) string {
+	// Only escape characters that are special in both bash and regex
+	specialChars := []string{"\\", "*", "?", "[", "]", "(", ")", "|", "$", "."}
+	escaped := pattern
+	for _, char := range specialChars {
+		escaped = strings.ReplaceAll(escaped, char, "\\"+char)
+	}
+	return escaped
+}
+
+func escapePatternZsh(pattern string) string {
+	// Zsh regex metacharacters - similar to bash but includes {}
+	specialChars := []string{"\\", "*", "?", "[", "]", "(", ")", "|", "$", ".", "{", "}"}
+	escaped := pattern
+	for _, char := range specialChars {
+		escaped = strings.ReplaceAll(escaped, char, "\\"+char)
+	}
+	return escaped
+}
+
+func escapePatternPowershell(pattern string) string {
+	// PowerShell special characters that need escaping in paths/filenames
+	specialChars := []string{"`", "$", "[", "]", "(", ")", "{", "}", "*", "?", "+", "|"}
+	escaped := pattern
+	for _, char := range specialChars {
+		escaped = strings.ReplaceAll(escaped, char, "`"+char)
+	}
+	return escaped
+}

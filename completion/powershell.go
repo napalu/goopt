@@ -44,7 +44,7 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
 		for _, val := range values {
 			script.WriteString(fmt.Sprintf(`
                 [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
-				val.Pattern, val.Pattern, escapePowerShell(val.Description)))
+				escapePatternPowershell(val.Pattern), escapePatternPowershell(val.Pattern), escapePowerShell(val.Description)))
 		}
 		script.WriteString(`
             }`)
@@ -55,7 +55,7 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
 			for _, val := range values {
 				script.WriteString(fmt.Sprintf(`
                 [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
-					val.Pattern, val.Pattern, escapePowerShell(val.Description)))
+					escapePatternPowershell(val.Pattern), escapePatternPowershell(val.Pattern), escapePowerShell(val.Description)))
 			}
 			script.WriteString(`
             }`)

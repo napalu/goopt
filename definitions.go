@@ -2,11 +2,13 @@ package goopt
 
 import (
 	"errors"
+	"io"
 	"regexp"
 	"time"
 
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
+	"github.com/napalu/goopt/util"
 )
 
 type Bindable interface {
@@ -133,8 +135,9 @@ type Argument struct {
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
 	AcceptedValues []LiterateRegex
-	DependsOn      []string
-	OfValue        []string
+	DependsOn      []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
+	OfValue        []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
+	DependencyMap  map[string][]string
 	Secure         Secure
 	Short          string
 	DefaultValue   string
@@ -177,6 +180,9 @@ type Parser struct {
 	callbackOnParse    bool
 	secureArguments    *orderedmap.OrderedMap[string, *Secure]
 	envFilter          EnvFunc
+	terminalReader     util.TerminalReader
+	stderr             io.Writer
+	stdout             io.Writer
 }
 
 // CmdLineOption is an alias for Parser.

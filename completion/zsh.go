@@ -74,7 +74,7 @@ function _%s() {
 			if values, ok := data.FlagValues[flag.Long]; ok {
 				var valueStrs []string
 				for _, v := range values {
-					valueStrs = append(valueStrs, fmt.Sprintf("%s\\:\"%s\"", v.Pattern, escapeZsh(v.Description)))
+					valueStrs = append(valueStrs, fmt.Sprintf("%s\\:\"%s\"", escapePatternZsh(v.Pattern), escapeZsh(v.Description)))
 				}
 				script.WriteString(fmt.Sprintf(`:(%s)`, strings.Join(valueStrs, " ")))
 			} else if flag.Type == FlagTypeFile {
@@ -89,7 +89,7 @@ function _%s() {
 			if values, ok := data.FlagValues[flag.Long]; ok {
 				var valueStrs []string
 				for _, v := range values {
-					valueStrs = append(valueStrs, fmt.Sprintf("%s\\:\"%s\"", v.Pattern, escapeZsh(v.Description)))
+					valueStrs = append(valueStrs, fmt.Sprintf("%s\\:\"%s\"", escapePatternZsh(v.Pattern), escapeZsh(v.Description)))
 				}
 				script.WriteString(fmt.Sprintf(`:(%s)`, strings.Join(valueStrs, " ")))
 			} else if flag.Type == FlagTypeFile {

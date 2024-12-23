@@ -135,7 +135,6 @@ func TestCompletionManager_Accept(t *testing.T) {
 					{"main command", "-n '__fish_use_subcommand' -a 'test' -d 'Test command'"},
 					{"subcommand", "-n '__fish_seen_subcommand_from test' -a 'sub' -d 'Test subcommand'"},
 				}
-
 				for _, check := range checks {
 					if !strings.Contains(script, check.content) {
 						t.Errorf("Missing %s: should contain %q", check.name, check.content)
@@ -182,7 +181,6 @@ func TestCompletionManager_Accept(t *testing.T) {
 					{"subcommand", "[CompletionResult]::new('sub', 'sub', [CompletionResultType]::Command, 'Test subcommand')"},
 					{"flag value", "[CompletionResult]::new('file.txt', 'file.txt', [CompletionResultType]::ParameterValue,"},
 				}
-
 				for _, check := range checks {
 					if !strings.Contains(script, check.content) {
 						t.Errorf("Missing %s: should contain %q", check.name, check.content)
@@ -238,9 +236,9 @@ func TestCompletionManager_getShellFileConventions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.shell, func(t *testing.T) {
-			manager, err := NewCompletionManager(tt.shell, "mytool")
+			manager, err := NewManager(tt.shell, "mytool")
 			if (err != nil) != tt.wantErr {
-				t.Errorf("NewCompletionManager() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewManager() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantErr {
@@ -265,7 +263,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 		name        string
 		shell       string
 		programName string
-		setup       func(*CompletionManager)
+		setup       func(*Manager)
 		checkFile   func(*testing.T, string)
 		wantErr     bool
 	}{
@@ -273,7 +271,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			name:        "bash save",
 			shell:       "bash",
 			programName: "mytool",
-			setup: func(cm *CompletionManager) {
+			setup: func(cm *Manager) {
 				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
@@ -286,7 +284,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			name:        "zsh save",
 			shell:       "zsh",
 			programName: "mytool",
-			setup: func(cm *CompletionManager) {
+			setup: func(cm *Manager) {
 				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
@@ -299,7 +297,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			name:        "fish save",
 			shell:       "fish",
 			programName: "mytool",
-			setup: func(cm *CompletionManager) {
+			setup: func(cm *Manager) {
 				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
@@ -312,7 +310,7 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 			name:        "powershell save",
 			shell:       "powershell",
 			programName: "mytool",
-			setup: func(cm *CompletionManager) {
+			setup: func(cm *Manager) {
 				cm.script = "test script"
 			},
 			checkFile: func(t *testing.T, path string) {
@@ -331,12 +329,11 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := NewCompletionManager(tt.shell, tt.programName)
+			manager, err := NewManager(tt.shell, tt.programName)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Override paths for testing
 			manager.Paths.Primary = filepath.Join(tmpDir, tt.name)
 			manager.Paths.Fallback = filepath.Join(tmpDir, tt.name+"_fallback")
 
