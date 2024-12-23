@@ -169,8 +169,16 @@ func main() {
         g.WithDescription("Email address for notifications"), 
         g.WithType(g.Single))
     
-    // Set flag dependencies
-    parser.DependsOnFlagValue("email", "notify", "true")
+    // Set flag dependencies - new style
+    parser.AddDependencyValue("email", "notify", []string{"true"})
+    
+    // Or using WithDependencyMap in flag definition
+    parser.AddFlag("email", g.NewArg(
+        g.WithDescription("Email address for notifications"),
+        g.WithType(g.Single),
+        g.WithDependencyMap(map[string][]string{
+            "notify": {"true"},
+        })))
     
     // Parse the arguments
     if !parser.Parse(os.Args) {

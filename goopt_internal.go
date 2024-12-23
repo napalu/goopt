@@ -199,6 +199,12 @@ func (s *Parser) ensureInit() {
 	if s.secureArguments == nil {
 		s.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
 	}
+	if s.stderr == nil {
+		s.stderr = os.Stderr
+	}
+	if s.stdout == nil {
+		s.stdout = os.Stdout
+	}
 }
 
 func (a *Argument) ensureInit() {
@@ -308,6 +314,7 @@ func (s *Parser) queueSecureArgument(name string, argument *Argument) {
 		s.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
 	}
 
+	s.rawArgs[name] = name
 	s.secureArguments.Set(name, &argument.Secure)
 }
 
@@ -482,10 +489,20 @@ func (s *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	if len(argument.AcceptedValues) > 0 {
 		processed = s.processSingleValue(next, currentArg, argument)
 	} else {
+		haveFilters := argument.PreFilter != nil || argument.PostFilter != nil
 		if argument.PreFilter != nil {
 			processed = argument.PreFilter(next)
 			s.registerFlagValue(currentArg, processed, next)
-		} else {
+		}
+		if argument.PostFilter != nil {
+			if processed != "" {
+				processed = argument.PostFilter(processed)
+			} else {
+				processed = argument.PostFilter(next)
+			}
+			s.registerFlagValue(currentArg, processed, next)
+		}
+		if !haveFilters {
 			processed = next
 		}
 	}
@@ -506,13 +523,13 @@ func (s *Parser) processSecureFlag(name string, config *Secure) {
 	} else {
 		prompt = config.Prompt
 	}
-	if pass, err := util.GetSecureString(prompt, os.Stderr); err == nil {
+	if pass, err := util.GetSecureString(prompt, s.GetStderr(), s.GetTerminalReader()); err == nil {
 		err = s.registerSecureValue(name, pass)
 		if err != nil {
 			s.addError(fmt.Errorf("failed to process flag '%s' secure value: %s", name, err))
 		}
 	} else {
-		s.addError(fmt.Errorf("flag IsSecure '%s' expects a value but we failed to obtain one: %s", name, err))
+		s.addError(fmt.Errorf("secure flag '%s' expects a value but we failed to obtain one: %s", name, err))
 	}
 }
 
@@ -709,28 +726,24 @@ func (s *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visite
 
 	visited[mainKey] = true
 
-	// Process the dependencies of the current flag
-	for _, depends := range flagInfo.Argument.DependsOn {
-		// First, check if the dependent flag exists in the same command path
+	for _, depends := range s.getDependentFlags(flagInfo.Argument) {
 		dependentFlag, found := s.getFlagInCommandPath(depends, flagInfo.CommandPath)
 		if !found {
-			s.addError(fmt.Errorf("flag '%s' depends on '%s', but it is missing from command group '%s' or global flags", mainKey, depends, flagInfo.CommandPath))
+			s.addError(fmt.Errorf("flag '%s' depends on '%s', but it is missing from command group '%s' or global flags",
+				mainKey, depends, flagInfo.CommandPath))
 			continue
 		}
 
-		// Check specific flag values (OfValue)
 		dependKey := s.options[depends]
-		for _, k := range dependentFlag.Argument.OfValue {
-			if strings.EqualFold(dependKey, k) {
-				s.addError(fmt.Errorf("flag '%s' requires flag '%s' to be present with value '%s'", mainKey, depends, k))
-			}
+		matches, allowedValues := s.checkDependencyValue(flagInfo.Argument, depends, dependKey)
+		if !matches {
+			s.addError(fmt.Errorf("flag '%s' requires flag '%s' to have one of these values: %v (got '%s')",
+				mainKey, depends, allowedValues, dependKey))
 		}
 
-		// Recursively validate the dependencies of the dependent flag, while tracking visited flags and depth
 		s.validateDependencies(dependentFlag, depends, visited, depth+1)
 	}
 
-	// Unmark the flag as visited to allow other validation chains to proceed
 	visited[mainKey] = false
 }
 
@@ -1461,6 +1474,38 @@ func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth
 	}
 
 	return nil
+}
+
+// checkDependencyValue checks if the provided value matches any of the required values
+// for a given dependency
+func (s *Parser) checkDependencyValue(arg *Argument, dependentFlag string, actualValue string) (bool, []string) {
+	allowedValues, exists := arg.DependencyMap[dependentFlag]
+	if !exists {
+		// Flag not in dependency map means no dependency
+		return true, nil
+	}
+
+	// nil or empty slice means any value is acceptable (flag just needs to be present)
+	if len(allowedValues) == 0 {
+		return true, nil
+	}
+
+	// Check if actual value matches any allowed value
+	for _, allowed := range allowedValues {
+		if strings.EqualFold(actualValue, allowed) {
+			return true, allowedValues
+		}
+	}
+	return false, allowedValues
+}
+
+// getDependentFlags returns all flags that this argument depends on
+func (s *Parser) getDependentFlags(arg *Argument) []string {
+	deps := make([]string, 0, len(arg.DependencyMap))
+	for dep := range arg.DependencyMap {
+		deps = append(deps, dep)
+	}
+	return deps
 }
 
 func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {

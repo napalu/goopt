@@ -6,22 +6,23 @@ import (
 	"path/filepath"
 )
 
-type CompletionManager struct {
-	Shell       string
-	ProgramName string
-	Paths       CompletionPaths
-	generator   Generator
-	script      string
+// Manager is used to manage and save completion scripts for a given shell
+type Manager struct {
+	Shell       string          // The shell to generate completion for
+	ProgramName string          // The name of the program to generate completion for
+	Paths       CompletionPaths // The paths where the completion script will be saved
+	generator   Generator       // The generator to use to generate the completion script
+	script      string          // The generated completion script
 }
 
-// NewCompletionManager creates a completion manager which can be used to manage and save completion scripts for a given shell
-func NewCompletionManager(shell, programName string) (*CompletionManager, error) {
+// NewManager creates a completion manager which can be used to manage and save completion scripts for a given shell
+func NewManager(shell, programName string) (*Manager, error) {
 	paths, err := getCompletionPaths(shell)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion paths: %w", err)
 	}
 
-	return &CompletionManager{
+	return &Manager{
 		Shell:       shell,
 		ProgramName: filepath.Base(programName),
 		Paths:       paths,
@@ -30,12 +31,12 @@ func NewCompletionManager(shell, programName string) (*CompletionManager, error)
 }
 
 // Accept generates and stores the completion script from the provided data
-func (cm *CompletionManager) Accept(data CompletionData) {
+func (cm *Manager) Accept(data CompletionData) {
 	cm.script = cm.generator.Generate(cm.ProgramName, data)
 }
 
 // SaveCompletion saves the previously generated completion script
-func (cm *CompletionManager) SaveCompletion() error {
+func (cm *Manager) SaveCompletion() error {
 	if cm.script == "" {
 		return fmt.Errorf("no completion script generated")
 	}
@@ -44,15 +45,15 @@ func (cm *CompletionManager) SaveCompletion() error {
 		return err
 	}
 
-	filepath := cm.getCompletionFilePath()
-	if err := os.WriteFile(filepath, []byte(cm.script), 0644); err != nil {
+	path := cm.getCompletionFilePath()
+	if err := os.WriteFile(path, []byte(cm.script), 0644); err != nil {
 		return fmt.Errorf("failed to write completion file: %w", err)
 	}
 
-	return ensurePermission(filepath, 0644)
+	return ensurePermission(path, 0644)
 }
 
-func (cm *CompletionManager) ensureCompletionPath() error {
+func (cm *Manager) ensureCompletionPath() error {
 	perm := os.FileMode(0755)
 	err := os.MkdirAll(cm.Paths.Primary, perm)
 	if err != nil {
@@ -75,7 +76,7 @@ func (cm *CompletionManager) ensureCompletionPath() error {
 	return fmt.Errorf("failed to create completion directories: %w", err)
 }
 
-func (cm *CompletionManager) getShellFileConventions() CompletionFileInfo {
+func (cm *Manager) getShellFileConventions() CompletionFileInfo {
 	switch cm.Shell {
 	case "bash":
 		return CompletionFileInfo{
@@ -106,7 +107,7 @@ func (cm *CompletionManager) getShellFileConventions() CompletionFileInfo {
 	}
 }
 
-func (cm *CompletionManager) getCompletionFilePath() string {
+func (cm *Manager) getCompletionFilePath() string {
 	conventions := cm.getShellFileConventions()
 	filename := conventions.Prefix + cm.ProgramName + conventions.Extension
 	return filepath.Join(cm.Paths.Primary, filename)

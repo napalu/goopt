@@ -85,22 +85,46 @@ func SetRequiredIf(requiredIf RequiredIfFunc) ConfigureArgumentFunc {
 }
 
 // WithDependentFlags accepts an array of string denoting flags on which an argument depends.
-// Results in a warning being emitted in GetWarnings() when the dependent flags are not specified on the command-line.
+// Results in a warning being emitted in GetWarnings() when the dependent flags are not specified.
 func WithDependentFlags(dependencies []string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
-		argument.DependsOn = dependencies
+		if argument.DependencyMap == nil {
+			argument.DependencyMap = make(map[string][]string)
+		}
+		for _, dep := range dependencies {
+			// Empty slice means flag just needs to be present
+			argument.DependencyMap[dep] = nil
+		}
 	}
 }
 
-// WithDependentValueFlags accepts an array of string denoting flags and flag values  on which an argument depends.
-// Results in a warning being emitted in GetWarnings() when the dependent flags are not specified on the command-line.
-// For example - to specify a dependency on flagA with values 'b' or 'c':
-//
-//	WithDependentValueFlags([]string{"flagA", "flagA"}, []string{"b", "c"})
+// WithDependencyMap specifies flag dependencies using a map of flag names to accepted values
+func WithDependencyMap(dependencies map[string][]string) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		if argument.DependencyMap == nil {
+			argument.DependencyMap = make(map[string][]string)
+		}
+		for k, v := range dependencies {
+			argument.DependencyMap[k] = v
+		}
+	}
+}
+
+// WithDependentValueFlags specifies flag dependencies with their accepted values
+// Deprecated: Use WithDependencyMap instead
 func WithDependentValueFlags(dependencies, values []string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.DependsOn = dependencies
 		argument.OfValue = values
+		if argument.DependencyMap == nil {
+			argument.DependencyMap = make(map[string][]string)
+		}
+		// Also populate the new format for forward compatibility
+		for i, dep := range dependencies {
+			if i < len(values) {
+				argument.DependencyMap[dep] = []string{values[i]}
+			}
+		}
 	}
 }
 

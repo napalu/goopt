@@ -28,7 +28,7 @@ func (writer arrayWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func Parser_AcceptPattern(t *testing.T) {
+func TestParser_AcceptPattern(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("test2", NewArgument("t2", "", Single, false, Secure{}, ""))
@@ -38,7 +38,7 @@ func Parser_AcceptPattern(t *testing.T) {
 	assert.True(t, opts.Parse([]string{"--test2", "12344"}), "test2 should accept values which match whole integer patterns")
 }
 
-func Parser_AcceptPatterns(t *testing.T) {
+func TestParser_AcceptPatterns(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -57,7 +57,7 @@ func Parser_AcceptPatterns(t *testing.T) {
 	}
 }
 
-func Parser_AddPreValidationFilter(t *testing.T) {
+func TestParser_AddPreValidationFilter(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("upper", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -72,7 +72,7 @@ func Parser_AddPreValidationFilter(t *testing.T) {
 	assert.Equal(t, "LOWERCASE", value, "the value of flag upper should be transformed to uppercase")
 }
 
-func Parser_AddPostValidationFilter(t *testing.T) {
+func TestParser_AddPostValidationFilter(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("status", NewArgument("t", "", Single, false, Secure{}, ""))
@@ -98,7 +98,7 @@ func Parser_AddPostValidationFilter(t *testing.T) {
 	assert.Equal(t, "-1", value, "the value of flag status should have been transformed to -1 after PatternValue validation")
 }
 
-func Parser_DependsOnFlagValue(t *testing.T) {
+func TestParser_DependsOnFlagValue(t *testing.T) {
 	opts := NewParser()
 
 	_ = opts.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
@@ -122,7 +122,6 @@ func Parser_DependsOnFlagValue(t *testing.T) {
 
 	err = opts.DependsOnFlagValue("d", "m", "aee12ew4eee")
 	assert.Nil(t, err, "should set dependent value on short flag")
-
 	_ = opts.ParseString("-d test -m not")
 	for _, wrn := range opts.GetWarnings() {
 		assert.Contains(t, wrn, "depends on", "should warn of missing dependency because the value of the dependent flag does not match one of the expected values")
@@ -133,7 +132,7 @@ func Parser_DependsOnFlagValue(t *testing.T) {
 	assert.Equal(t, len(opts.GetWarnings()), 0, "should not warn as the dependent variable has one of the expected values")
 }
 
-func Parser_AddCommand(t *testing.T) {
+func TestParser_AddCommand(t *testing.T) {
 	opts := NewParser()
 
 	cmd := &Command{
@@ -163,7 +162,7 @@ func Parser_AddCommand(t *testing.T) {
 	assert.True(t, opts.ParseString("create user type author"), "should parse command with nested subcommands properly")
 }
 
-func Parser_RegisterCommand(t *testing.T) {
+func TestParser_RegisterCommand(t *testing.T) {
 	opts := NewParser()
 
 	cmd := &Command{
@@ -193,7 +192,7 @@ func Parser_RegisterCommand(t *testing.T) {
 	assert.Equal(t, "john", value, "value of nested sub-command should be that supplied via command line")
 }
 
-func Parser_GetCommandValues(t *testing.T) {
+func TestParser_GetCommandValues(t *testing.T) {
 	opts, _ := NewParserWith(
 		WithCommand(
 			NewCommand(
@@ -250,7 +249,7 @@ func Parser_GetCommandValues(t *testing.T) {
 	}
 }
 
-func Parser_ValueCallback(t *testing.T) {
+func TestParser_ValueCallback(t *testing.T) {
 	opts := NewParser()
 
 	shouldBeEqualToOneAfterExecute := 0
@@ -276,7 +275,7 @@ func Parser_ValueCallback(t *testing.T) {
 	assert.Equal(t, 1, shouldBeEqualToOneAfterExecute, "should call subcommand callback after parse")
 }
 
-func Parser_WithBindFlag(t *testing.T) {
+func TestParser_WithBindFlag(t *testing.T) {
 	var s string
 	var i int
 	var ts []string
@@ -302,7 +301,7 @@ func Parser_WithBindFlag(t *testing.T) {
 	assert.Equal(t, 12334, i, "should not fail to assign command line integer argument to variable")
 }
 
-func Parser_BindFlag(t *testing.T) {
+func TestParser_BindFlag(t *testing.T) {
 	var s string
 	var i int
 
@@ -348,7 +347,7 @@ func Parser_BindFlag(t *testing.T) {
 	assert.NotNil(t, err, "should error when adding duplicate field")
 }
 
-func Parser_FileFlag(t *testing.T) {
+func TestParser_FileFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewParserWith(
 		WithBindFlag("test", &s,
@@ -389,7 +388,7 @@ type TestOptNok struct {
 	IsTest bool
 }
 
-func Parser_NewCmdLineFromStruct(t *testing.T) {
+func TestParser_NewCmdLineFromStruct(t *testing.T) {
 	testOpt := TestOptOk{}
 	cmd, err := NewParserFromStruct(&testOpt)
 	assert.Nil(t, err)
@@ -423,7 +422,7 @@ type UserProfile struct {
 	Addresses []Address `long:"address"`
 }
 
-func Parser_NewCmdLineRecursion(t *testing.T) {
+func TestParser_NewCmdLineRecursion(t *testing.T) {
 	profile := &UserProfile{
 		Addresses: make([]Address, 1),
 	}
@@ -436,7 +435,7 @@ func Parser_NewCmdLineRecursion(t *testing.T) {
 	assert.Equal(t, "10", cmd.GetOrDefault("age", ""))
 }
 
-func Parser_CommandSpecificFlags(t *testing.T) {
+func TestParser_CommandSpecificFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands and associated flags
@@ -475,7 +474,7 @@ func Parser_CommandSpecificFlags(t *testing.T) {
 	assert.False(t, opts.ParseString("create user --username john_doe"), "should not parse flag not associated with the command Path")
 }
 
-func Parser_GlobalFlags(t *testing.T) {
+func TestParser_GlobalFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -506,7 +505,7 @@ func Parser_GlobalFlags(t *testing.T) {
 	assert.True(t, opts.HasFlag("verbose"), "global flag should be recognized")
 }
 
-func Parser_SharedFlags(t *testing.T) {
+func TestParser_SharedFlags(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -548,7 +547,7 @@ func Parser_SharedFlags(t *testing.T) {
 	assert.Equal(t, "group_value", opts.GetOrDefault("sharedFlag", "", "create group"), "flag should be parsed correctly in group command")
 }
 
-func Parser_EnvToFlag(t *testing.T) {
+func TestParser_EnvToFlag(t *testing.T) {
 	var s string
 	cmdLine, err := NewParserWith(
 		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
@@ -589,7 +588,7 @@ func Parser_EnvToFlag(t *testing.T) {
 
 }
 
-func Parser_GlobalAndCommandEnvVars(t *testing.T) {
+func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -619,7 +618,7 @@ func Parser_GlobalAndCommandEnvVars(t *testing.T) {
 	assert.Equal(t, "1234", opts.GetOrDefault("idTest@create", ""), "ID should be parsed from env var")
 }
 
-func Parser_MixedFlagsWithEnvVars(t *testing.T) {
+func TestParser_MixedFlagsWithEnvVars(t *testing.T) {
 	opts := NewParser()
 
 	// Define commands
@@ -649,7 +648,7 @@ func Parser_MixedFlagsWithEnvVars(t *testing.T) {
 	assert.Equal(t, "/my/config", opts.GetOrDefault("config@create", ""), "config flag should be parsed from command")
 }
 
-func Parser_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
+func TestParser_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
 	opts := NewParser()
 	opts.SetExecOnParse(true)
 	idx := 0
@@ -687,7 +686,7 @@ func upperSnakeToCamelCase(s string) string {
 	return strcase.ToLowerCamel(s)
 }
 
-func TestParse_PosixFlagsWithEnvVars(t *testing.T) {
+func TestParser_PosixFlagsWithEnvVars(t *testing.T) {
 	opts := NewParser()
 	opts.SetPosix(true)
 
@@ -707,7 +706,7 @@ func TestParse_PosixFlagsWithEnvVars(t *testing.T) {
 	assert.Equal(t, "2", opts.GetOrDefault("opt", "", "build"), "optimization should be '2' from env var")
 }
 
-func Parser_VarInFileFlag(t *testing.T) {
+func TestParser_VarInFileFlag(t *testing.T) {
 	uname := fmt.Sprintf("%x", md5.Sum([]byte(time.Now().Format(time.RFC3339Nano))))
 	var s string
 	cmdLine, err := NewParserWith(
@@ -733,7 +732,7 @@ func Parser_VarInFileFlag(t *testing.T) {
 	os.RemoveAll(filepath.Join(execDir, uname))
 }
 
-func TestNewCmdLineOption_BindNil(t *testing.T) {
+func TestParser_BindNil(t *testing.T) {
 	opts := NewParser()
 
 	type tester struct {
@@ -748,7 +747,7 @@ func TestNewCmdLineOption_BindNil(t *testing.T) {
 	assert.NotNil(t, err, "should not be able to custom bind a nil pointer")
 }
 
-func Parser_CustomBindFlag(t *testing.T) {
+func TestParser_CustomBindFlag(t *testing.T) {
 	type tester struct {
 		TestStr string
 		testInt int
@@ -772,7 +771,7 @@ func Parser_CustomBindFlag(t *testing.T) {
 	assert.True(t, opts.ParseString("--test1 2"), "should parse a command line argument when given a bound variable")
 }
 
-func Parser_WithCustomBindFlag(t *testing.T) {
+func TestParser_WithCustomBindFlag(t *testing.T) {
 	type tester struct {
 		TestStr string
 		testInt int
@@ -801,7 +800,7 @@ func Parser_WithCustomBindFlag(t *testing.T) {
 	assert.Equal(t, 123344, test.testInt, "should be able to reference anonymous type through interface assignment in callback")
 }
 
-func Parser_Parsing(t *testing.T) {
+func TestParser_Parsing(t *testing.T) {
 	cmdLine, err := NewParserWith(
 		WithFlag("flagWithValue",
 			NewArg(
@@ -893,7 +892,7 @@ func Parser_Parsing(t *testing.T) {
 		" we expect it to have the given value")
 }
 
-func Parser_PrintUsage(t *testing.T) {
+func TestParser_PrintUsage(t *testing.T) {
 	opts := NewParser()
 
 	err := opts.AddCommand(&Command{
@@ -979,7 +978,7 @@ func Parser_PrintUsage(t *testing.T) {
 
 }
 
-func TestMuCompatibleFlags(t *testing.T) {
+func TestParser_PosixCompatibleFlags(t *testing.T) {
 	opts := NewParser()
 	opts.SetPosix(true)
 	err := opts.AddFlag("alongflag", &Argument{
@@ -1051,7 +1050,7 @@ func TestMuCompatibleFlags(t *testing.T) {
 	assert.Equal(t, "23", valT)
 }
 
-func Parser_FunctionOptionConfigurationOfCommands(t *testing.T) {
+func TestParser_CommandCallbacks(t *testing.T) {
 	opts := NewParser()
 
 	var valueReceived string
@@ -1091,7 +1090,7 @@ func Parser_FunctionOptionConfigurationOfCommands(t *testing.T) {
 
 }
 
-func Parser_ParseWithDefaults(t *testing.T) {
+func TestParser_ParseWithDefaults(t *testing.T) {
 	defaults := map[string]string{"flagWithValue": "valueA"}
 
 	cmdLine, _ := NewParserWith(
@@ -1123,7 +1122,7 @@ func Parser_ParseWithDefaults(t *testing.T) {
 
 }
 
-func Parser_StandaloneFlagWithExplicitValue(t *testing.T) {
+func TestParser_StandaloneFlagWithExplicitValue(t *testing.T) {
 	cmdLine, _ := NewParserWith(
 		WithFlag("flagA",
 			NewArg(
@@ -1148,7 +1147,7 @@ func Parser_StandaloneFlagWithExplicitValue(t *testing.T) {
 	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
 }
 
-func Parser_PrintUsageWithGroups(t *testing.T) {
+func TestParser_PrintUsageWithGroups(t *testing.T) {
 	opts := NewParser()
 
 	// Add global flags
@@ -1225,7 +1224,7 @@ Commands:
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly")
 }
 
-func Parser_PrintUsageWithCustomGroups(t *testing.T) {
+func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	opts := NewParser()
 
 	// Add global flags
@@ -1299,7 +1298,7 @@ func Parser_PrintUsageWithCustomGroups(t *testing.T) {
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
 }
 
-func Parser_TestGenerateCompletion(t *testing.T) {
+func TestParser_GenerateCompletion(t *testing.T) {
 	p := NewParser()
 
 	// Add global flags
@@ -1333,13 +1332,619 @@ func Parser_TestGenerateCompletion(t *testing.T) {
 					t.Error("Zsh completion missing expected content")
 				}
 			case "fish":
-				if !strings.Contains(result, "function __testapp_complete") {
+				if !strings.Contains(result, "complete -c testapp") {
 					t.Error("Fish completion missing expected content")
 				}
 			case "powershell":
 				if !strings.Contains(result, "Register-ArgumentCompleter") {
 					t.Error("PowerShell completion missing expected content")
 				}
+			}
+		})
+	}
+}
+
+func TestParser_GetNumericTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupValue   string
+		wantInt      int
+		wantFloat    float64
+		wantIntErr   bool
+		wantFloatErr bool
+	}{
+		{
+			name:       "valid integer",
+			setupValue: "42",
+			wantInt:    42,
+			wantFloat:  42.0,
+		},
+		{
+			name:       "valid float",
+			setupValue: "42.5",
+			wantInt:    0,
+			wantFloat:  42.5,
+			wantIntErr: true,
+		},
+		{
+			name:         "invalid number",
+			setupValue:   "not_a_number",
+			wantIntErr:   true,
+			wantFloatErr: true,
+		},
+		{
+			name:       "zero value",
+			setupValue: "0",
+			wantInt:    0,
+			wantFloat:  0.0,
+		},
+		{
+			name:       "negative integer",
+			setupValue: "-123",
+			wantInt:    -123,
+			wantFloat:  -123.0,
+		},
+		{
+			name:       "negative float",
+			setupValue: "-123.45",
+			wantInt:    0,
+			wantFloat:  -123.45,
+			wantIntErr: true,
+		},
+		{
+			name:       "large number",
+			setupValue: "9999999",
+			wantInt:    9999999,
+			wantFloat:  9999999.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+			err := opts.AddFlag("number", NewArgument("n", "", Single, false, Secure{}, ""))
+			assert.Nil(t, err, "should add flag without error")
+
+			assert.True(t, opts.ParseString(fmt.Sprintf("--number %s", tt.setupValue)))
+
+			// Test GetInt
+			gotInt, err := opts.GetInt("number", 64)
+			if tt.wantIntErr {
+				assert.NotNil(t, err, "GetInt should return error for %s", tt.setupValue)
+			} else {
+				assert.Nil(t, err, "GetInt should not return error for %s", tt.setupValue)
+				assert.Equal(t, tt.wantInt, int(gotInt), "GetInt value mismatch")
+			}
+
+			// Test GetFloat
+			gotFloat, err := opts.GetFloat("number", 64)
+			if tt.wantFloatErr {
+				assert.NotNil(t, err, "GetFloat should return error for %s", tt.setupValue)
+			} else {
+				assert.Nil(t, err, "GetFloat should not return error for %s", tt.setupValue)
+				assert.Equal(t, tt.wantFloat, gotFloat, "GetFloat value mismatch")
+			}
+		})
+	}
+}
+
+func TestParser_GetNumericTypesWithPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupValue   string
+		cmdPath      string
+		wantInt      int
+		wantFloat    float64
+		wantIntErr   bool
+		wantFloatErr bool
+	}{
+		{
+			name:       "valid integer with path",
+			setupValue: "42",
+			cmdPath:    "create user",
+			wantInt:    42,
+			wantFloat:  42.0,
+		},
+		{
+			name:         "invalid path",
+			setupValue:   "42",
+			cmdPath:      "invalid path",
+			wantIntErr:   true,
+			wantFloatErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+
+			// Add command
+			cmd := &Command{
+				Name: "create",
+				Subcommands: []Command{{
+					Name: "user",
+				}},
+			}
+			err := opts.AddCommand(cmd)
+			assert.Nil(t, err, "should add command without error")
+
+			// Add flag to specific command path
+			err = opts.AddFlag("number", NewArgument("n", "", Single, false, Secure{}, ""), "create user")
+			assert.Nil(t, err, "should add flag without error")
+
+			assert.True(t, opts.ParseString(fmt.Sprintf("create user --number %s", tt.setupValue)))
+
+			// Test GetInt with path
+			gotInt, err := opts.GetInt("number", 64, tt.cmdPath)
+			if tt.wantIntErr {
+				assert.NotNil(t, err, "GetInt should return error for path %s", tt.cmdPath)
+			} else {
+				assert.Nil(t, err, "GetInt should not return error for path %s", tt.cmdPath)
+				assert.Equal(t, tt.wantInt, int(gotInt), "GetInt value mismatch")
+			}
+
+			// Test GetFloat with path
+			gotFloat, err := opts.GetFloat("number", 64, tt.cmdPath)
+			if tt.wantFloatErr {
+				assert.NotNil(t, err, "GetFloat should return error for path %s", tt.cmdPath)
+			} else {
+				assert.Nil(t, err, "GetFloat should not return error for path %s", tt.cmdPath)
+				assert.Equal(t, tt.wantFloat, gotFloat, "GetFloat value mismatch")
+			}
+		})
+	}
+}
+
+func TestParser_GetListErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		flagType   OptionType
+		setupValue string
+
+		wantErr bool
+	}{
+		{
+			name:       "non-chained flag",
+			flagType:   Single,
+			setupValue: "item1,item2",
+			wantErr:    true,
+		},
+		{
+			name:       "non-existent flag",
+			flagType:   Chained,
+			setupValue: "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+
+			if tt.flagType != Chained {
+				// Add a non-chained flag
+				err := opts.AddFlag("list", NewArgument("l", "", tt.flagType, false, Secure{}, ""))
+				assert.Nil(t, err, "should add flag without error")
+				assert.True(t, opts.ParseString("--list "+tt.setupValue))
+			}
+
+			// Try to get list from non-existent or non-chained flag
+			got, err := opts.GetList("list")
+			assert.NotNil(t, err)
+			assert.Empty(t, got)
+		})
+	}
+}
+
+func TestParser_GetListWithCustomDelimiter(t *testing.T) {
+	opts := NewParser()
+
+	// Set custom delimiter function
+	customDelim := func(r rune) bool {
+		return r == ';' || r == '#'
+	}
+	err := opts.SetListDelimiterFunc(customDelim)
+	assert.Nil(t, err)
+
+	// Add chained flag
+	err = opts.AddFlag("list", NewArgument("l", "", Chained, false, Secure{}, ""))
+	assert.Nil(t, err)
+
+	// Test with custom delimiters
+	assert.True(t, opts.ParseString("--list \"item1;item2#item3\""))
+	got, err := opts.GetList("list")
+	assert.Nil(t, err)
+	assert.Equal(t, []string{"item1", "item2", "item3"}, got)
+}
+
+func TestParser_GetListDefaultDelimiters(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupValue string
+		want       []string
+	}{
+		{
+			name:       "all default delimiters",
+			setupValue: "\"item1,item2|item3 item4|\"",
+			want:       []string{"item1", "item2", "item3", "item4"},
+		},
+		{
+			name:       "consecutive delimiters",
+			setupValue: "\"item1,,item2||item3  item4\"",
+			want:       []string{"item1", "item2", "item3", "item4"},
+		},
+		{
+			name:       "mixed delimiter patterns",
+			setupValue: "\"item1, item2|item3,item4 item5\"",
+			want:       []string{"item1", "item2", "item3", "item4", "item5"},
+		},
+		{
+			name:       "single value with delimiters",
+			setupValue: "item1",
+			want:       []string{"item1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+
+			err := opts.AddFlag("list", NewArgument("l", "", Chained, false, Secure{}, ""))
+			assert.Nil(t, err, "should add flag without error")
+
+			assert.True(t, opts.ParseString("--list "+tt.setupValue))
+
+			got, err := opts.GetList("list")
+			assert.Nil(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParser_GetListWithCommandPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupValue    string
+		cmdPath       []string
+		want          []string
+		wantErr       bool
+		shouldNotFail bool
+	}{
+		{
+			name:          "valid command path",
+			setupValue:    "item1,item2",
+			cmdPath:       []string{"cmd", "subcmd"},
+			want:          []string{"item1", "item2"},
+			shouldNotFail: true,
+		},
+		{
+			name:          "invalid command path",
+			setupValue:    "item1,item2",
+			cmdPath:       []string{"invalid", "path"},
+			wantErr:       true,
+			shouldNotFail: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+
+			cmd := &Command{
+				Name: "cmd",
+				Subcommands: []Command{{
+					Name: "subcmd",
+				}},
+			}
+			err := opts.AddCommand(cmd)
+			assert.Nil(t, err, "should add command without error")
+
+			err = opts.AddFlag("list", NewArgument("l", "", Chained, false, Secure{}, ""), tt.cmdPath...)
+			assert.Nil(t, err, "should add flag without error")
+
+			cmdLine := strings.Join(tt.cmdPath, " ") + " --list " + tt.setupValue
+			assert.Equal(t, tt.shouldNotFail, opts.ParseString(cmdLine))
+
+			got, err := opts.GetList("list", tt.cmdPath...)
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				return
+			}
+			assert.Nil(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParser_ValidationFilters(t *testing.T) {
+	tests := []struct {
+		name       string
+		preFilter  FilterFunc
+		postFilter FilterFunc
+		input      string
+		want       string
+	}{
+		{
+			name: "pre-validation filter",
+			preFilter: func(s string) string {
+				return strings.ToUpper(s)
+			},
+			input: "test",
+			want:  "TEST",
+		},
+		{
+			name: "post-validation filter",
+			postFilter: func(s string) string {
+				return strings.TrimSpace(s)
+			},
+			input: " test ",
+			want:  "test",
+		},
+		{
+			name: "both filters",
+			preFilter: func(s string) string {
+				return strings.ToUpper(s)
+			},
+			postFilter: func(s string) string {
+				return strings.TrimSpace(s)
+			},
+			input: " test ",
+			want:  "TEST",
+		},
+		{
+			name: "filter returning empty string",
+			preFilter: func(s string) string {
+				return ""
+			},
+			input: "test",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+			err := opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
+			assert.Nil(t, err)
+
+			if tt.preFilter != nil {
+				err = opts.AddFlagPreValidationFilter("test", tt.preFilter)
+				assert.Nil(t, err)
+			}
+
+			if tt.postFilter != nil {
+				err = opts.AddFlagPostValidationFilter("test", tt.postFilter)
+				assert.Nil(t, err)
+			}
+
+			assert.True(t, opts.ParseString(fmt.Sprintf("--test %s", tt.input)))
+
+			got, ok := opts.Get("test")
+			assert.True(t, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParser_AcceptedValues(t *testing.T) {
+	tests := []struct {
+		name           string
+		acceptedValues []PatternValue
+		input          string
+		wantOk         bool
+		wantParse      bool
+		want           string
+	}{
+		{
+			name:           "valid value",
+			acceptedValues: []PatternValue{{Pattern: `^one$`, Description: "one"}, {Pattern: `^two$`, Description: "two"}, {Pattern: `^three$`, Description: "three"}},
+			input:          "two",
+			wantOk:         true,
+			wantParse:      true,
+			want:           "two",
+		},
+		{
+			name:           "invalid value",
+			acceptedValues: []PatternValue{{Pattern: `^one$`, Description: "one"}, {Pattern: `^two$`, Description: "two"}, {Pattern: `^three$`, Description: "three"}},
+			input:          "four",
+			wantOk:         true,
+			wantParse:      false,
+			want:           "four", // parse should be false but the value should still be set
+		},
+		{
+			name:           "empty accepted values",
+			acceptedValues: []PatternValue{},
+			input:          "anything",
+			wantOk:         true,
+			wantParse:      true,
+			want:           "anything",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+			err := opts.AddFlag("test", NewArgument("t", "", Single, false, Secure{}, ""))
+			assert.Nil(t, err)
+
+			if len(tt.acceptedValues) > 0 {
+				err = opts.AcceptPatterns("test", tt.acceptedValues)
+				assert.Nil(t, err)
+			}
+
+			assert.Equal(t, tt.wantParse, opts.ParseString(fmt.Sprintf("--test %s", tt.input)))
+
+			got, ok := opts.Get("test")
+			assert.Equal(t, tt.wantOk, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParser_RequiredIfFlags(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupFunc func(*Parser) error
+		input     string
+		wantParse bool
+	}{
+		{
+			name: "required if other flag present",
+			setupFunc: func(p *Parser) error {
+				err := p.AddFlag("flag1", NewArgument("f1", "", Single, false, Secure{}, ""))
+				if err != nil {
+					return err
+				}
+				err = p.AddFlag("flag2", NewArgument("f2", "", Single, false, Secure{}, ""))
+				if err != nil {
+					return err
+				}
+
+				return p.SetArgument("flag2", nil, SetRequiredIf(func(cmdLine *Parser, optionName string) (bool, string) {
+					return cmdLine.HasFlag("flag1") && optionName == "flag2", "flag2 is required when flag1 is present"
+				}))
+			},
+			input:     "--flag1 value1", // should fail because flag2 is required when flag1 is present
+			wantParse: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+			err := tt.setupFunc(opts)
+			assert.Nil(t, err)
+
+			assert.Equal(t, tt.wantParse, opts.ParseString(tt.input))
+		})
+	}
+}
+
+func TestParser_Dependencies(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupFunc func(*Parser) error
+		input     string
+		wantParse bool
+		wantWarns []string
+	}{
+		{
+			name: "simple dependency",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("dependent", NewArgument("d", "", Single, false, Secure{}, ""))
+				return p.AddDependency("dependent", "main")
+			},
+			input:     "--dependent test",
+			wantParse: true,
+			wantWarns: []string{"Flag 'dependent' depends on 'main' which was not specified."},
+		},
+		{
+			name: "value dependency - single value",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("mode", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("debug", NewArgument("d", "", Single, false, Secure{}, ""))
+				return p.AddDependencyValue("debug", "mode", []string{"development"})
+			},
+			input:     "--mode production --debug true",
+			wantParse: true,
+			wantWarns: []string{"Flag 'debug' depends on 'mode' with value 'development' which was not specified. (got 'production')"},
+		},
+		{
+			name: "value dependency - multiple values",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("mode", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("debug", NewArgument("d", "", Single, false, Secure{}, ""))
+				return p.AddDependencyValue("debug", "mode", []string{"development", "testing"})
+			},
+			input:     "--mode development --debug true",
+			wantParse: true,
+			wantWarns: nil,
+		},
+		{
+			name: "command-specific dependency",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddCommand(NewCommand(WithName("cmd"), WithCommandDescription("test command"), WithSubcommands(NewCommand(WithName("subcmd")))))
+				_ = p.AddFlag("cmdMain", NewArgument("m", "", Single, false, Secure{}, "cmd"))
+				_ = p.AddFlag("cmdDependent", NewArgument("d", "", Single, false, Secure{}, "cmd"))
+				return p.AddDependency("cmdDependent", "cmdMain", "cmd")
+			},
+			input:     "cmd --cmdDependent test",
+			wantParse: true,
+			wantWarns: []string{"Flag 'cmdDependent' depends on 'cmdMain' which was not specified."},
+		},
+		{
+			name: "dependency using short form",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("dependent", NewArgument("d", "", Single, false, Secure{}, ""))
+				return p.AddDependency("d", "m") // using short forms
+			},
+			input:     "-d test",
+			wantParse: true,
+			wantWarns: []string{"Flag 'dependent' depends on 'main' which was not specified."},
+		},
+		{
+			name: "mixed form dependencies",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("dependent", NewArgument("d", "", Single, false, Secure{}, ""))
+				err := p.AddDependency("dependent", "m") // long depends on short
+				if err != nil {
+					return err
+				}
+				return p.AddDependencyValue("d", "main", []string{"value"}) // short depends on long
+			},
+			input:     "--dependent test",
+			wantParse: true,
+			wantWarns: []string{"Flag 'dependent' depends on 'main' which was not specified."},
+		},
+		{
+			name: "remove dependency - short form",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				_ = p.AddFlag("dependent", NewArgument("d", "", Single, false, Secure{}, ""))
+				err := p.AddDependency("dependent", "main")
+				if err != nil {
+					return err
+				}
+				return p.RemoveDependency("d", "m") // remove using short forms
+			},
+			input:     "--dependent test",
+			wantParse: true,
+			wantWarns: nil, // dependency was removed
+		},
+		{
+			name: "command dependency with short forms",
+			setupFunc: func(p *Parser) error {
+				_ = p.AddCommand(NewCommand(
+					WithName("cmd"),
+					WithCommandDescription("test command"),
+					WithSubcommands(NewCommand(WithName("subcmd"))),
+				))
+				_ = p.AddFlag("cmdMain", NewArgument("m", "", Single, false, Secure{}, "cmd"))
+				_ = p.AddFlag("cmdDependent", NewArgument("d", "", Single, false, Secure{}, "cmd"))
+				return p.AddDependency("d", "m", "cmd") // using short forms with command
+			},
+			input:     "cmd -d test",
+			wantParse: true,
+			wantWarns: []string{"Flag 'cmdDependent' depends on 'cmdMain' which was not specified."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewParser()
+			err := tt.setupFunc(opts)
+			assert.Nil(t, err)
+
+			assert.Equal(t, tt.wantParse, opts.ParseString(tt.input))
+
+			warnings := opts.GetWarnings()
+			if len(tt.wantWarns) == 0 {
+				assert.Empty(t, warnings)
+			} else {
+				assert.Equal(t, tt.wantWarns, warnings)
 			}
 		})
 	}

@@ -168,7 +168,7 @@ complete -o default -F __%s_completion %s`, programName, programName))
 func getValueStrings(values []CompletionValue) []string {
 	result := make([]string, len(values))
 	for i, v := range values {
-		result[i] = v.Pattern
+		result[i] = escapePatternBash(v.Pattern)
 	}
 	return result
 }
