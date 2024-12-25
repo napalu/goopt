@@ -449,17 +449,18 @@ func (s *Parser) SetPosix(posixCompatible bool) bool {
 	return oldValue
 }
 
-// GetPositionalArgs TODO explain
+// GetPositionalArgs returns the list of positional arguments - a positional argument is a command line argument that is
+// neither a flag, a flag value, nor a command
 func (s *Parser) GetPositionalArgs() []PositionalArgument {
 	return s.positionalArgs
 }
 
-// GetPositionalArgCount TODO explain
+// GetPositionalArgCount returns the number of positional arguments
 func (s *Parser) GetPositionalArgCount() int {
 	return len(s.positionalArgs)
 }
 
-// HasPositionalArgs TODO explain
+// HasPositionalArgs returns true if there are positional arguments
 func (s *Parser) HasPositionalArgs() bool {
 	return s.GetPositionalArgCount() > 0
 }
@@ -554,13 +555,14 @@ func (s *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (floa
 // by default the value is split on '|', ',' or ' ' delimiters
 func (s *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	arg, err := s.GetArgument(flag, commandPath...)
-	listDelimFunc := s.getListDelimiterFunc()
 	if err == nil {
 		if arg.TypeOf == Chained {
 			value, success := s.Get(flag, commandPath...)
 			if !success {
 				return []string{}, fmt.Errorf("failed to retrieve value for flag '%s'", flag)
 			}
+
+			listDelimFunc := s.getListDelimiterFunc()
 
 			return strings.FieldsFunc(value, listDelimFunc), nil
 		}
