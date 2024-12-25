@@ -233,7 +233,7 @@ func TestParser_GetCommandValues(t *testing.T) {
 				),
 			)))
 
-	// current behavior: last command overwrites a previous one with the same path - TODO check if this is the desired behaviour
+	// current behavior: last command overwrites a previous one with the same path
 	assert.True(t, opts.ParseString("test blobs copy test repos copy test roles copy test blobs copy blob_name"), "should parse well-formed commands")
 	paths := opts.GetCommands()
 	assert.Len(t, paths, 3, "should have parsed 3 commands")
