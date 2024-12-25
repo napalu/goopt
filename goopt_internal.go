@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/araddon/dateparse"
-	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types/orderedmap"
@@ -205,6 +204,12 @@ func (s *Parser) ensureInit() {
 	if s.stdout == nil {
 		s.stdout = os.Stdout
 	}
+	if s.flagNameConverter == nil {
+		s.flagNameConverter = DefaultFlagNameConverter
+	}
+	if s.commandNameConverter == nil {
+		s.commandNameConverter = DefaultCommandNameConverter
+	}
 }
 
 func (a *Argument) ensureInit() {
@@ -213,6 +218,12 @@ func (a *Argument) ensureInit() {
 	}
 	if a.OfValue == nil {
 		a.OfValue = []string{}
+	}
+	if a.AcceptedValues == nil {
+		a.AcceptedValues = []PatternValue{}
+	}
+	if a.DependencyMap == nil {
+		a.DependencyMap = map[string][]string{}
 	}
 }
 
@@ -460,28 +471,6 @@ func (s *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 	}
 
 	return false, nil
-}
-
-func (a *Argument) accept(val PatternValue) *error {
-	re, err := regexp.Compile(val.Pattern)
-	if err != nil {
-		return &err
-	}
-
-	if a.AcceptedValues == nil {
-		a.AcceptedValues = make([]LiterateRegex, 1, 5)
-		a.AcceptedValues[0] = LiterateRegex{
-			value:   re,
-			explain: val.Description,
-		}
-	} else {
-		a.AcceptedValues = append(a.AcceptedValues, LiterateRegex{
-			value:   re,
-			explain: val.Description,
-		})
-	}
-
-	return nil
 }
 
 func (s *Parser) processValueFlag(currentArg string, next string, argument *Argument) error {
@@ -806,12 +795,12 @@ func (s *Parser) getListDelimiterFunc() ListDelimiterFunc {
 
 func (s *Parser) groupEnvVarsByCommand() map[string][]string {
 	commandEnvVars := make(map[string][]string)
-	if s.envFilter == nil {
+	if s.envNameConverter == nil {
 		return commandEnvVars
 	}
 	for _, env := range os.Environ() {
 		kv := strings.Split(env, "=")
-		v := s.envFilter(kv[0])
+		v := s.envNameConverter(kv[0])
 		if v == "" {
 			continue
 		}
@@ -1151,9 +1140,9 @@ func typeOfFlagFromString(s string) OptionType {
 	case "FILE":
 		return File
 	case "SINGLE":
-		fallthrough
-	default:
 		return Single
+	default:
+		return Empty
 	}
 }
 
@@ -1180,8 +1169,15 @@ func (s *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	return nil
 }
 
-func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
-	tagNames := []string{"long", "short", "description", "required", "type", "default", "secure", "prompt", "path"}
+func legacyUnmarshalTagFormat(field reflect.StructField) (*tagConfig, error) {
+	config := &tagConfig{
+		kind: kindFlag,
+	}
+
+	tagNames := []string{
+		"long", "short", "description", "required", "type", "default",
+		"secure", "prompt", "path", "accepted", "depends",
+	}
 
 	for _, tag := range tagNames {
 		value, ok := field.Tag.Lookup(tag)
@@ -1191,41 +1187,195 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) error {
 
 		switch tag {
 		case "long":
-			// This will be handled separately
+			config.name = value
 		case "short":
-			arg.Short = value
+			config.short = value
 		case "description":
-			arg.Description = value
+			config.description = value
 		case "type":
-			arg.TypeOf = typeOfFlagFromString(value)
+			config.typeOf = typeOfFlagFromString(value)
 		case "default":
-			arg.DefaultValue = value
+			config.default_ = value
 		case "required":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+				return nil, fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
 			}
-			arg.Required = boolVal
+			config.required = boolVal
 		case "secure":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+				return nil, fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
 			}
 			if boolVal {
-				arg.Secure = Secure{IsSecure: boolVal}
+				config.secure = Secure{IsSecure: boolVal}
 			}
 		case "prompt":
-			if arg.Secure.IsSecure {
-				arg.Secure.Prompt = value
+			if config.secure.IsSecure {
+				config.secure.Prompt = value
 			}
 		case "path":
-			// Path is handled separately.
+			config.path = value
+		case "accepted":
+			patterns, err := parse.PatternValues(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'accepted' tag value for field %s: %w", field.Name, err)
+			}
+			// Convert to PatternValue
+			config.acceptedValues = make([]PatternValue, len(patterns))
+			for i, p := range patterns {
+				config.acceptedValues[i] = PatternValue{
+					Pattern:     p.Pattern,
+					Description: p.Description,
+				}
+			}
+		case "depends":
+			deps, err := parse.Dependencies(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'depends' tag value for field %s: %w", field.Name, err)
+			}
+			config.dependsOn = deps
 		default:
-			return fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+			return nil, fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
 		}
 	}
 
-	return nil
+	// Validate type if specified
+	if typeStr, ok := field.Tag.Lookup("type"); ok {
+		switch typeStr {
+		case "single", "standalone", "chained", "file":
+			config.typeOf = typeOfFlagFromString(typeStr)
+		default:
+			return nil, fmt.Errorf("invalid type value: %s", typeStr)
+		}
+	}
+
+	return config, nil
+}
+
+func unmarshalTagFormat(tag string, field reflect.StructField) (*tagConfig, error) {
+	config := &tagConfig{}
+	parts := strings.Split(tag, ";")
+
+	for _, part := range parts {
+		key, value, found := strings.Cut(part, ":")
+		if !found {
+			return nil, fmt.Errorf("invalid tag format in field %s: %s", field.Name, part)
+		}
+
+		switch key {
+		case "kind":
+			switch kind(value) {
+			case kindFlag, kindCommand, kindEmpty:
+				config.kind = kind(value)
+			default:
+				return nil, fmt.Errorf("invalid kind in field %s: %s (must be 'command', 'flag', or empty)",
+					field.Name, value)
+			}
+		case "name":
+			config.name = value
+		case "short":
+			config.short = value
+		case "type":
+			config.typeOf = typeOfFlagFromString(value)
+		case "desc":
+			config.description = value
+		case "default":
+			config.default_ = value
+		case "required":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'required' value in field %s: %w", field.Name, err)
+			}
+			config.required = boolVal
+		case "secure":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'secure' value in field %s: %w", field.Name, err)
+			}
+			if boolVal {
+				config.secure = Secure{IsSecure: boolVal}
+			}
+		case "prompt":
+			if config.secure.IsSecure {
+				config.secure.Prompt = value
+			}
+		case "path":
+			config.path = value
+		case "accepted":
+			patterns, err := parse.PatternValues(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
+			}
+			// Convert to PatternValue
+			config.acceptedValues = make([]PatternValue, len(patterns))
+			for i, p := range patterns {
+				config.acceptedValues[i] = PatternValue{
+					Pattern:     p.Pattern,
+					Description: p.Description,
+				}
+			}
+		case "depends":
+			deps, err := parse.Dependencies(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'depends' value in field %s: %w", field.Name, err)
+			}
+			config.dependsOn = deps
+		default:
+			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
+		}
+	}
+
+	// If kind is empty, treat as flag
+	if config.kind == kindEmpty {
+		config.kind = kindFlag
+	}
+
+	// Validate type if specified
+	if typeStr, ok := field.Tag.Lookup("type"); ok {
+		switch typeStr {
+		case "single", "standalone", "chained", "file":
+			config.typeOf = typeOfFlagFromString(typeStr)
+		default:
+			return nil, fmt.Errorf("invalid type value: %s", typeStr)
+		}
+	}
+
+	return config, nil
+}
+
+func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) (name string, path string, err error) {
+	// Try new format first
+	if tag, ok := field.Tag.Lookup("goopt"); ok && strings.Contains(tag, ":") {
+		config, err := unmarshalTagFormat(tag, field)
+		if err != nil {
+			return "", "", err
+		}
+		*arg = *config.toArgument()
+		return config.name, config.path, nil
+	}
+
+	// Legacy format handling
+	config, err := legacyUnmarshalTagFormat(field)
+	if err != nil {
+		return "", "", err
+	}
+	*arg = *config.toArgument()
+
+	return config.name, config.path, nil
+}
+
+func (c tagConfig) toArgument() *Argument {
+	return &Argument{
+		Short:          c.short,
+		Description:    c.description,
+		TypeOf:         c.typeOf,
+		DefaultValue:   c.default_,
+		Required:       c.required,
+		Secure:         c.secure,
+		AcceptedValues: c.acceptedValues,
+		DependencyMap:  c.dependsOn,
+	}
 }
 
 func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, error) {
@@ -1313,7 +1463,7 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
-	err := c.processStructCommands(structValue, 0, maxDepth)
+	err := c.processStructCommands(structValue, "", 0, maxDepth)
 	if err != nil {
 		c.addError(err)
 	}
@@ -1330,9 +1480,24 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			continue
 		}
 
-		longName, ok := field.Tag.Lookup("long")
-		if !ok {
-			longName = strcase.ToLowerCamel(field.Name)
+		var (
+			longName string
+			pathTag  string
+		)
+		arg := &Argument{}
+		longName, pathTag, err = unmarshalTagsToArgument(field, arg)
+		if err != nil {
+			if prefix != "" {
+				c.addError(fmt.Errorf("error processing field %s.%s: %w", prefix, field.Name, err))
+			} else {
+				c.addError(fmt.Errorf("error processing field %s: %w", field.Name, err))
+			}
+			continue
+		}
+
+		// Fallback to field name if no tag found
+		if longName == "" {
+			longName = c.flagNameConverter(field.Name)
 		}
 
 		// Create a new prefix for nested fields
@@ -1355,12 +1520,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			continue
 		}
 
-		arg := &Argument{}
-		err = unmarshalTagsToArgument(field, arg)
-		if err != nil {
-			c.addError(fmt.Errorf("error processing field %s: %w", fieldPath, err))
-		}
-
 		if reflect.DeepEqual(*arg, Argument{}) {
 			countZeroTags++
 			continue
@@ -1373,7 +1532,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		}
 
 		// Process the path tag to associate the flag with commands or global
-		pathTag := field.Tag.Get("path")
 		if pathTag != "" {
 			paths := strings.Split(pathTag, ",")
 			for _, cmdPath := range paths {
@@ -1442,7 +1600,7 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 	return c, nil
 }
 
-func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth int) error {
+func (s *Parser) processStructCommands(val reflect.Value, currentPath string, currentDepth, maxDepth int) error {
 	typ := val.Type()
 
 	if currentDepth > maxDepth {
@@ -1452,11 +1610,7 @@ func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
-		if _, ok := fieldType.Tag.Lookup("ignore"); ok {
-			continue
-		}
-
-		if !fieldType.IsExported() {
+		if !fieldType.IsExported() || fieldType.Tag.Get("ignore") != "" {
 			continue
 		}
 
@@ -1466,9 +1620,40 @@ func (s *Parser) processStructCommands(val reflect.Value, currentDepth, maxDepth
 			if err != nil {
 				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.Path, err)
 			}
+			continue
 		} else if field.Kind() == reflect.Struct {
-			if err := s.processStructCommands(field, currentDepth+1, maxDepth); err != nil {
-				return fmt.Errorf("error processing nested struct %s: %w", fieldType.Name, err)
+			config, err := unmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
+			if err != nil {
+				return err
+			}
+
+			// If it's marked as a command, create it
+			if config.kind == kindCommand {
+				cmdName := config.name
+				if cmdName == "" {
+					cmdName = s.commandNameConverter(fieldType.Name)
+				}
+
+				cmdPath := cmdName
+				if currentPath != "" {
+					cmdPath = currentPath + " " + cmdName
+				}
+
+				cmd := &Command{
+					Name:        cmdName,
+					Description: config.description,
+					Path:        cmdPath,
+				}
+
+				if _, err := s.buildCommand(cmdPath, cmd); err != nil {
+					return fmt.Errorf("error processing struct command %s: %w", cmdPath, err)
+				}
+
+				currentPath = cmdPath
+			}
+
+			if err := s.processStructCommands(field, currentPath, currentDepth+1, maxDepth); err != nil {
+				return err
 			}
 		}
 	}
@@ -1612,8 +1797,8 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 		values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
 		for i, v := range flagInfo.Argument.AcceptedValues {
 			values[i] = completion.CompletionValue{
-				Pattern:     v.value.String(),
-				Description: v.explain,
+				Pattern:     v.Pattern,
+				Description: v.Description,
 			}
 		}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -555,7 +556,7 @@ func TestParser_EnvToFlag(t *testing.T) {
 			NewArg(WithShortFlag("t"),
 				WithType(Single))))
 	assert.Nil(t, err)
-	flagFunc := cmdLine.SetEnvFilter(func(s string) string {
+	flagFunc := cmdLine.SetEnvNameConverter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
@@ -574,7 +575,7 @@ func TestParser_EnvToFlag(t *testing.T) {
 			NewArg(WithShortFlag("t"),
 				WithType(Single)), "command test"))
 	assert.Nil(t, err)
-	_ = cmdLine.SetEnvFilter(func(s string) string {
+	_ = cmdLine.SetEnvNameConverter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 
@@ -599,7 +600,7 @@ func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
 	_ = opts.AddFlag("verboseTest", &Argument{Description: "Verbose output", TypeOf: Standalone})
 	_ = opts.AddFlag("configTest", &Argument{Description: "Config file", TypeOf: Single}, "create")
 	_ = opts.AddFlag("idTest", &Argument{Description: "User ID", TypeOf: Single}, "create")
-	flagFunc := opts.SetEnvFilter(func(s string) string {
+	flagFunc := opts.SetEnvNameConverter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
@@ -629,7 +630,7 @@ func TestParser_MixedFlagsWithEnvVars(t *testing.T) {
 	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: Standalone})
 	_ = opts.AddFlag("config", &Argument{Description: "Config file", TypeOf: Single}, "create")
 	_ = opts.AddFlag("force", &Argument{Description: "Force deletion", TypeOf: Standalone}, "delete")
-	flagFunc := opts.SetEnvFilter(func(s string) string {
+	flagFunc := opts.SetEnvNameConverter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
@@ -694,7 +695,7 @@ func TestParser_PosixFlagsWithEnvVars(t *testing.T) {
 	_ = opts.AddCommand(&Command{Name: "build"})
 	_ = opts.AddFlag("output", &Argument{Description: "Output file", Short: "o", TypeOf: Single}, "build")
 	_ = opts.AddFlag("opt", &Argument{Description: "Optimization level", Short: "p", TypeOf: Single}, "build")
-	flagFunc := opts.SetEnvFilter(func(s string) string {
+	flagFunc := opts.SetEnvNameConverter(func(s string) string {
 		return upperSnakeToCamelCase(s)
 	})
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
@@ -1945,6 +1946,208 @@ func TestParser_Dependencies(t *testing.T) {
 				assert.Empty(t, warnings)
 			} else {
 				assert.Equal(t, tt.wantWarns, warnings)
+			}
+		})
+	}
+}
+
+type testField struct {
+	Name     string
+	Tag      string
+	WantName string
+	WantPath string
+	WantArg  Argument
+	WantErr  bool
+}
+
+func TestParser_UnmarshalTagsToArgument(t *testing.T) {
+	tests := []struct {
+		name  string
+		field testField
+	}{
+		{
+			name: "legacy format",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `long:"test" short:"t" description:"test desc" path:"cmd subcmd"`,
+				WantName: "test",
+				WantPath: "cmd subcmd",
+				WantArg: Argument{
+					Short:       "t",
+					Description: "test desc",
+				},
+			},
+		},
+		{
+			name: "new format",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test;short:t;desc:test desc;path:cmd subcmd"`,
+				WantName: "test",
+				WantPath: "cmd subcmd",
+				WantArg: Argument{
+					Short:       "t",
+					Description: "test desc",
+				},
+			},
+		},
+		{
+			name: "fallback to field name",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"short:t;desc:test desc"`,
+				WantName: "",
+				WantPath: "",
+				WantArg: Argument{
+					Short:       "t",
+					Description: "test desc",
+				},
+			},
+		},
+		{
+			name: "multiple paths",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test;short:t;desc:test desc;path:cmd1 subcmd1,cmd2 subcmd2"`,
+				WantName: "test",
+				WantPath: "cmd1 subcmd1,cmd2 subcmd2",
+				WantArg: Argument{
+					Short:       "t",
+					Description: "test desc",
+				},
+			},
+		},
+		{
+			name: "legacy format with all options",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `long:"test" short:"t" description:"test desc" path:"cmd subcmd" required:"true" type:"single" default:"defaultValue"`,
+				WantName: "test",
+				WantPath: "cmd subcmd",
+				WantArg: Argument{
+					Short:        "t",
+					Description:  "test desc",
+					Required:     true,
+					TypeOf:       Single,
+					DefaultValue: "defaultValue",
+				},
+			},
+		},
+		{
+			name: "new format with all options",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test;short:t;desc:test desc;path:cmd subcmd;required:true;type:single;default:defaultValue"`,
+				WantName: "test",
+				WantPath: "cmd subcmd",
+				WantArg: Argument{
+					Short:        "t",
+					Description:  "test desc",
+					Required:     true,
+					TypeOf:       Single,
+					DefaultValue: "defaultValue",
+				},
+			},
+		},
+		{
+			name: "secure flag legacy",
+			field: testField{
+				Name:     "Password",
+				Tag:      `long:"password" short:"p" description:"secure input" secure:"true"`,
+				WantName: "password",
+				WantPath: "",
+				WantArg: Argument{
+					Short:       "p",
+					Description: "secure input",
+					Secure:      Secure{IsSecure: true},
+				},
+			},
+		},
+		{
+			name: "secure flag new format",
+			field: testField{
+				Name:     "Password",
+				Tag:      `goopt:"name:password;short:p;desc:secure input;secure:true"`,
+				WantName: "password",
+				WantPath: "",
+				WantArg: Argument{
+					Short:       "p",
+					Description: "secure input",
+					Secure:      Secure{IsSecure: true},
+				},
+			},
+		},
+		{
+			name: "invalid type value",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test;type:invalid"`,
+				WantName: "test",
+				WantPath: "",
+				WantArg: Argument{
+					TypeOf: Empty,
+				},
+			},
+		},
+		{
+			name: "empty path segments",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test;path:cmd  subcmd"`, // double space
+				WantName: "test",
+				WantPath: "cmd  subcmd", // preserved as-is for later processing
+				WantArg:  Argument{},
+			},
+		},
+		{
+			name: "mixed format (should use goopt)",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `long:"ignored" goopt:"name:test;short:t" description:"ignored"`,
+				WantName: "test",
+				WantPath: "",
+				WantArg: Argument{
+					Short: "t",
+				},
+			},
+		},
+		{
+			name: "file type",
+			field: testField{
+				Name:     "ConfigFile",
+				Tag:      `goopt:"name:config;type:file;desc:configuration file"`,
+				WantName: "config",
+				WantPath: "",
+				WantArg: Argument{
+					Description: "configuration file",
+					TypeOf:      File,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Convert to reflect.StructField for testing
+			structField := reflect.StructField{
+				Name: tt.field.Name,
+				Tag:  reflect.StructTag(tt.field.Tag),
+			}
+
+			arg := &Argument{}
+			gotName, gotPath, err := unmarshalTagsToArgument(structField, arg)
+			if (err != nil) != tt.field.WantErr {
+				t.Errorf("unmarshalTagsToArgument() error = %v, wantErr %v", err, tt.field.WantErr)
+				return
+			}
+			if gotName != tt.field.WantName {
+				t.Errorf("unmarshalTagsToArgument() name = %v, want %v", gotName, tt.field.WantName)
+			}
+			if gotPath != tt.field.WantPath {
+				t.Errorf("unmarshalTagsToArgument() path = %v, want %v", gotPath, tt.field.WantPath)
+			}
+			if !reflect.DeepEqual(*arg, tt.field.WantArg) {
+				t.Errorf("unmarshalTagsToArgument() arg = %v, want %v", *arg, tt.field.WantArg)
 			}
 		})
 	}

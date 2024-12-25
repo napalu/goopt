@@ -21,11 +21,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/parse"
+
+	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -35,22 +37,24 @@ import (
 // configure CmdLineOption using option functions.
 func NewParser() *Parser {
 	return &Parser{
-		acceptedFlags:      orderedmap.NewOrderedMap[string, *FlagInfo](),
-		lookup:             map[string]string{},
-		options:            map[string]string{},
-		errors:             []error{},
-		bind:               make(map[string]interface{}, 1),
-		customBind:         map[string]ValueSetFunc{},
-		registeredCommands: orderedmap.NewOrderedMap[string, *Command](),
-		commandOptions:     orderedmap.NewOrderedMap[string, bool](),
-		positionalArgs:     []PositionalArgument{},
-		listFunc:           matchChainedSeparators,
-		callbackQueue:      queue.New[commandCallback](),
-		callbackResults:    map[string]error{},
-		secureArguments:    orderedmap.NewOrderedMap[string, *Secure](),
-		prefixes:           []rune{'-'},
-		stderr:             os.Stderr,
-		stdout:             os.Stdout,
+		acceptedFlags:        orderedmap.NewOrderedMap[string, *FlagInfo](),
+		lookup:               map[string]string{},
+		options:              map[string]string{},
+		errors:               []error{},
+		bind:                 make(map[string]interface{}, 1),
+		customBind:           map[string]ValueSetFunc{},
+		registeredCommands:   orderedmap.NewOrderedMap[string, *Command](),
+		commandOptions:       orderedmap.NewOrderedMap[string, bool](),
+		positionalArgs:       []PositionalArgument{},
+		listFunc:             matchChainedSeparators,
+		callbackQueue:        queue.New[commandCallback](),
+		callbackResults:      map[string]error{},
+		secureArguments:      orderedmap.NewOrderedMap[string, *Secure](),
+		prefixes:             []rune{'-'},
+		stderr:               os.Stderr,
+		stdout:               os.Stdout,
+		flagNameConverter:    DefaultFlagNameConverter,
+		commandNameConverter: DefaultCommandNameConverter,
 	}
 }
 
@@ -104,13 +108,29 @@ func (s *Parser) SetExecOnParse(value bool) {
 	s.callbackOnParse = value
 }
 
-// SetEnvFilter allows setting an environment name lookup function
-// If set and the environment variable exists, it will be prepended to the args array
-func (s *Parser) SetEnvFilter(env EnvFunc) EnvFunc {
-	oldFilter := s.envFilter
-	s.envFilter = env
+// SetCommandNameConverter allows setting a custom name converter for command names
+func (s *Parser) SetCommandNameConverter(converter NameConversionFunc) NameConversionFunc {
+	oldConverter := s.commandNameConverter
+	s.commandNameConverter = converter
 
-	return oldFilter
+	return oldConverter
+}
+
+// SetFlagNameConverter allows setting a custom name converter for flag names
+func (s *Parser) SetFlagNameConverter(converter NameConversionFunc) NameConversionFunc {
+	oldConverter := s.flagNameConverter
+	s.flagNameConverter = converter
+
+	return oldConverter
+}
+
+// SetEnvNameConverter allows setting a custom name converter for environment variable names
+// If set and the environment variable exists, it will be prepended to the args array
+func (s *Parser) SetEnvNameConverter(converter NameConversionFunc) NameConversionFunc {
+	oldConverter := s.envNameConverter
+	s.envNameConverter = converter
+
+	return oldConverter
 }
 
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.
@@ -789,28 +809,28 @@ func (s *Parser) AcceptPatterns(flag string, acceptVal []PatternValue, commandPa
 	}
 
 	lenValues := len(acceptVal)
-	if arg.AcceptedValues == nil {
-		arg.AcceptedValues = make([]LiterateRegex, 0, lenValues)
-	}
+	arg.AcceptedValues = acceptVal
 
 	for i := 0; i < lenValues; i++ {
-		if err := arg.accept(acceptVal[i]); err != nil {
-			return *err
+		re, err := regexp.Compile(acceptVal[i].Pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile pattern %s: %w", acceptVal[i].Pattern, err)
 		}
+		acceptVal[i].value = re
 	}
 
 	return nil
 }
 
 // GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
-func (s *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]LiterateRegex, error) {
+func (s *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]PatternValue, error) {
 	arg, err := s.GetArgument(flag, commandPath...)
 	if err != nil {
-		return []LiterateRegex{}, err
+		return []PatternValue{}, err
 	}
 
 	if arg.AcceptedValues == nil {
-		return []LiterateRegex{}, nil
+		return []PatternValue{}, nil
 	}
 
 	return arg.AcceptedValues, nil
@@ -1344,12 +1364,12 @@ func (c *Command) Visit(visitor func(cmd *Command, level int) bool, level int) {
 }
 
 // Describe a LiterateRegex (regular expression with a human-readable explanation of the pattern)
-func (r *LiterateRegex) Describe() string {
-	if len(r.explain) > 0 {
-		return r.explain
+func (r *PatternValue) Describe() string {
+	if len(r.Description) > 0 {
+		return r.Description
 	}
 
-	return r.value.String()
+	return r.Pattern
 }
 
 // SetTerminalReader sets the terminal reader for secure input (by default, the terminal reader is the real terminal)

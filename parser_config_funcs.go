@@ -58,14 +58,6 @@ func WithFlag(flag string, argument *Argument) ConfigureCmdLineFunc {
 	}
 }
 
-// WithEnvFilter accepts a func(flag string) string callback - if a non-empty string is returned
-// and a matching environment variable is found it will be prepended  to command args
-func WithEnvFilter(filter EnvFunc) ConfigureCmdLineFunc {
-	return func(cmdLine *Parser, err *error) {
-		cmdLine.envFilter = filter
-	}
-}
-
 // WithBindFlag is a wrapper to BindFlag which is used to bind a pointer to a variable with a flag.
 // If `bindVar` is not a pointer, an error is returned
 // The following variable types are supported:
@@ -129,5 +121,26 @@ func WithArgumentPrefixes(prefixes []rune) ConfigureCmdLineFunc {
 func WithPosix(usePosix bool) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.SetPosix(usePosix)
+	}
+}
+
+// WithCommandNameConverter allows setting a custom name converter for command names
+func WithCommandNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetCommandNameConverter(converter)
+	}
+}
+
+// WithFlagNameConverter allows setting a custom name converter for flag names
+func WithFlagNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetFlagNameConverter(converter)
+	}
+}
+
+// WithEnvNameConverter allows setting a custom name converter for environment variable names
+func WithEnvNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetEnvNameConverter(converter)
 	}
 }

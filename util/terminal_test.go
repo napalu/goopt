@@ -8,9 +8,9 @@ import (
 
 // MockTerminal for testing
 type MockTerminal struct {
-	Password         []byte
-	IsTerminalResult bool
-	Err              error
+	Password    []byte
+	IsATerminal bool
+	Err         error
 }
 
 func (m *MockTerminal) ReadPassword(fd int) ([]byte, error) {
@@ -18,7 +18,7 @@ func (m *MockTerminal) ReadPassword(fd int) ([]byte, error) {
 }
 
 func (m *MockTerminal) IsTerminal(fd int) bool {
-	return m.IsTerminalResult
+	return m.IsATerminal
 }
 
 func TestGetSecureString(t *testing.T) {
@@ -61,9 +61,9 @@ func TestGetSecureString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			mock := &MockTerminal{
-				Password:         tt.mockPassword,
-				IsTerminalResult: tt.isTerminal,
-				Err:              tt.mockErr,
+				Password:    tt.mockPassword,
+				IsATerminal: tt.isTerminal,
+				Err:         tt.mockErr,
 			}
 
 			got, err := GetSecureString(tt.prompt, &buf, mock)

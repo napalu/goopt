@@ -4,8 +4,10 @@ import (
 	"errors"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -59,9 +61,42 @@ type CommandFunc func(cmdLine *Parser, command *Command) error
 // Used to set the value of a Flag to a custom structure.
 type ValueSetFunc func(flag, value string, customStruct interface{})
 
-// EnvFunc callback - Allows mapping environment variables to flags. If EnvFunc is set, the callback will be called
-// on every flag - if a value is returned it will be used to check for an environment variable with the same name.
-type EnvFunc func(flag string) string
+// NameConversionFunc converts a field name to a command/flag name
+type NameConversionFunc func(string) string
+
+// Built-in conversion strategies
+var (
+	// ToKebabCase converts a string to kebab case "my-command-name"
+	ToKebabCase = func(s string) string {
+		return strcase.ToKebab(s)
+	}
+
+	// ToSnakeCase converts a string to snake case "my_command_name"
+	ToSnakeCase = func(s string) string {
+		// convert "MyCommandName" to "my_command_name"
+		return strcase.ToSnake(s)
+	}
+
+	// ToScreamingSnake converts a string to screaming snake case "MY_COMMAND_NAME"
+	ToScreamingSnake = func(s string) string {
+		return strcase.ToScreamingSnake(s)
+	}
+
+	// ToLowerCamel converts a string to lower camel case "myCommandName"
+	ToLowerCamel = func(s string) string {
+		// convert "MyCommandName" to "myCommandName"
+		return strcase.ToLowerCamel(s)
+	}
+
+	// ToLowerCase converts a string to lower case "mycommandname"
+	ToLowerCase = func(s string) string {
+		return strings.ToLower(s)
+	}
+
+	DefaultCommandNameConverter = ToLowerCase
+	DefaultFlagNameConverter    = ToLowerCamel
+	DefaultEnvNameConverter     = ToScreamingSnake
+)
 
 // OptionType used to define Flag types (such as Standalone, Single, Chained)
 type OptionType int
@@ -75,11 +110,16 @@ const (
 	Standalone OptionType = 2
 	// File denotes a Flag which is evaluated as a path (the content of the file is treated as the value)
 	File OptionType = 3
+	// Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
+	Empty OptionType = 4
 )
 
+// PatternValue is used to define an acceptable value for a Flag. The 'pattern' argument is compiled to a regular expression
+// and the description argument is used to provide a human-readable description of the pattern.
 type PatternValue struct {
 	Pattern     string
 	Description string
+	value       *regexp.Regexp
 }
 
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data
@@ -113,12 +153,6 @@ type KeyValue struct {
 	Value string
 }
 
-// LiterateRegex used to provide human descriptions of regular expression
-type LiterateRegex struct {
-	value   *regexp.Regexp
-	explain string
-}
-
 // Secure set to Secure to true to solicit non-echoed user input from stdin.
 // If Prompt is empty a "password :" prompt will be displayed. Set to the desired value to override.
 type Secure struct {
@@ -134,7 +168,7 @@ type Argument struct {
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
-	AcceptedValues []LiterateRegex
+	AcceptedValues []PatternValue
 	DependsOn      []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
 	OfValue        []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
 	DependencyMap  map[string][]string
@@ -162,27 +196,29 @@ type FlagInfo struct {
 
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
-	posixCompatible    bool
-	prefixes           []rune
-	listFunc           ListDelimiterFunc
-	acceptedFlags      *orderedmap.OrderedMap[string, *FlagInfo]
-	lookup             map[string]string
-	options            map[string]string
-	errors             []error
-	bind               map[string]any
-	customBind         map[string]ValueSetFunc
-	registeredCommands *orderedmap.OrderedMap[string, *Command]
-	commandOptions     *orderedmap.OrderedMap[string, bool]
-	positionalArgs     []PositionalArgument
-	rawArgs            map[string]string
-	callbackQueue      *queue.Q[commandCallback]
-	callbackResults    map[string]error
-	callbackOnParse    bool
-	secureArguments    *orderedmap.OrderedMap[string, *Secure]
-	envFilter          EnvFunc
-	terminalReader     util.TerminalReader
-	stderr             io.Writer
-	stdout             io.Writer
+	posixCompatible      bool
+	prefixes             []rune
+	listFunc             ListDelimiterFunc
+	acceptedFlags        *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup               map[string]string
+	options              map[string]string
+	errors               []error
+	bind                 map[string]any
+	customBind           map[string]ValueSetFunc
+	registeredCommands   *orderedmap.OrderedMap[string, *Command]
+	commandOptions       *orderedmap.OrderedMap[string, bool]
+	positionalArgs       []PositionalArgument
+	rawArgs              map[string]string
+	callbackQueue        *queue.Q[commandCallback]
+	callbackResults      map[string]error
+	callbackOnParse      bool
+	secureArguments      *orderedmap.OrderedMap[string, *Secure]
+	envNameConverter     NameConversionFunc
+	commandNameConverter NameConversionFunc
+	flagNameConverter    NameConversionFunc
+	terminalReader       util.TerminalReader
+	stderr               io.Writer
+	stdout               io.Writer
 }
 
 // CmdLineOption is an alias for Parser.
@@ -217,4 +253,26 @@ const (
 type commandCallback struct {
 	callback  CommandFunc
 	arguments []any
+}
+
+type kind string
+
+const (
+	kindFlag    kind = "flag"
+	kindCommand kind = "command"
+	kindEmpty   kind = ""
+)
+
+type tagConfig struct {
+	kind           kind
+	name           string
+	short          string
+	typeOf         OptionType
+	description    string
+	default_       string
+	required       bool
+	secure         Secure
+	path           string
+	acceptedValues []PatternValue
+	dependsOn      map[string][]string
 }

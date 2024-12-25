@@ -1,5 +1,9 @@
 package goopt
 
+import (
+	"regexp"
+)
+
 // NewArg convenience initialization method to configure flags
 func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument := &Argument{}
@@ -167,15 +171,16 @@ func WithPostValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 // Each value can optionally have a description that will be shown in help text.
 func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
-		if argument.AcceptedValues == nil {
-			argument.AcceptedValues = make([]LiterateRegex, 0, len(values))
-		}
+		argument.AcceptedValues = values
 
 		for i := 0; i < len(values); i++ {
-			if e := argument.accept(values[i]); e != nil {
-				*err = *e
+			re, e := regexp.Compile(argument.AcceptedValues[i].Pattern)
+			if e != nil {
+				*err = e
 				return
 			}
+
+			argument.AcceptedValues[i].value = re
 		}
 	}
 }
