@@ -6,26 +6,30 @@ import (
 	"github.com/napalu/goopt/util"
 )
 
+// State represents the current state of the argument parser
 type State interface {
-	CurrentPos() int
-	SetPos(pos int)
-	SkipCurrent()
-	Args() []string
-	InsertArgsAt(pos int, newArgs ...string)
-	ReplaceArgs(newArgs ...string)
-	CurrentArg() string
-	Peek() string
-	Advance() bool // New method for advancing to the next argument
-	Len() int      // Gets the length of the argument list
+	CurrentPos() int                         // Get the current position
+	SetPos(pos int)                          // Set the current position
+	SkipCurrent()                            // Skip the current argument
+	Args() []string                          // Get the entire argument list
+	InsertArgsAt(pos int, newArgs ...string) // Insert new arguments at a specific position
+	ReplaceArgs(newArgs ...string)           // Replace the entire argument list
+	CurrentArg() string                      // Get the current argument
+	Peek() string                            // Peek at the next argument
+	Advance() bool                           // New method for advancing to the next argument
+	Len() int                                // Gets the length of the argument list
 }
 
-var InvalidPositionError = errors.New("invalid position")
+// ErrInvalidPosition is an error that occurs when an invalid position is accessed
+var ErrInvalidPosition = errors.New("invalid position")
 
+// DefaultState is the default implementation of the State interface
 type DefaultState struct {
 	pos  int
 	args []string
 }
 
+// NewState creates a new State instance with the given argument list
 func NewState(args []string) *DefaultState {
 	return &DefaultState{
 		pos:  -1,
@@ -33,34 +37,42 @@ func NewState(args []string) *DefaultState {
 	}
 }
 
+// CurrentPos returns the current position in the argument list
 func (s *DefaultState) CurrentPos() int {
 	return s.pos
 }
 
+// SetPos sets the current position in the argument list
 func (s *DefaultState) SetPos(pos int) {
 	s.pos = pos
 }
 
+// SkipCurrent advances the current position to the next argument
 func (s *DefaultState) SkipCurrent() {
 	s.pos++
 }
 
+// Args returns the entire argument list
 func (s *DefaultState) Args() []string {
 	return s.args
 }
 
+// CurrentArg returns the current argument
 func (s *DefaultState) CurrentArg() string {
 	return s.args[s.pos]
 }
 
+// InsertArgsAt inserts new arguments at a specific position
 func (s *DefaultState) InsertArgsAt(pos int, newArgs ...string) {
 	s.args = util.InsertSlice(s.args, pos, newArgs...)
 }
 
+// ReplaceArgs replaces the entire argument list with new arguments
 func (s *DefaultState) ReplaceArgs(newArgs ...string) {
 	s.args = newArgs
 }
 
+// Advance advances to the next argument, returning true if successful
 func (s *DefaultState) Advance() bool {
 	if s.pos+1 < len(s.args) {
 		s.pos++
@@ -69,6 +81,7 @@ func (s *DefaultState) Advance() bool {
 	return false
 }
 
+// Peek returns the next argument without advancing the current position
 func (s *DefaultState) Peek() string {
 	if s.pos+1 < len(s.args) {
 		return s.args[s.pos+1]
@@ -77,14 +90,16 @@ func (s *DefaultState) Peek() string {
 	return ""
 }
 
+// ArgAt returns the argument at a specific position
 func (s *DefaultState) ArgAt(pos int) (string, error) {
 	if pos < 0 || pos >= len(s.args) {
-		return "", InvalidPositionError
+		return "", ErrInvalidPosition
 	}
 
 	return s.args[pos], nil
 }
 
+// Len returns the length of the argument list
 func (s *DefaultState) Len() int {
 	return len(s.args)
 }

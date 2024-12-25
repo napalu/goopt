@@ -31,36 +31,6 @@ type keyValue[K comparable, V any] struct {
 	value V
 }
 
-func newIterator[K comparable, V any](o *OrderedMap[K, V], forward bool) *Iterator[K, V] {
-	iter := &Iterator[K, V]{
-		forward: forward,
-	}
-
-	if o == nil {
-		return nil
-	}
-
-	if o.keys.Len() == 0 {
-		return nil
-	}
-
-	if forward {
-		iter.ll = o.keys.Front()
-	} else {
-		iter.ll = o.keys.Back()
-	}
-
-	if iter.ll == nil {
-		return nil
-	}
-
-	keyVal := iter.ll.Value.(keyValue[K, V])
-	iter.Key = &keyVal.key
-	iter.Value = keyVal.value
-
-	return iter
-}
-
 // Next gets the next keyValue or nil when no more values can be iterated on
 func (n *Iterator[K, V]) Next() *Iterator[K, V] {
 	if n.ll == nil {
@@ -187,4 +157,34 @@ func (o *OrderedMap[K, V]) Front() *Iterator[K, V] {
 // Back returns an Iterator pointing to the newest (inserted-last) keyValue
 func (o *OrderedMap[K, V]) Back() *Iterator[K, V] {
 	return newIterator[K, V](o, false)
+}
+
+func newIterator[K comparable, V any](o *OrderedMap[K, V], forward bool) *Iterator[K, V] {
+	iter := &Iterator[K, V]{
+		forward: forward,
+	}
+
+	if o == nil {
+		return nil
+	}
+
+	if o.keys.Len() == 0 {
+		return nil
+	}
+
+	if forward {
+		iter.ll = o.keys.Front()
+	} else {
+		iter.ll = o.keys.Back()
+	}
+
+	if iter.ll == nil {
+		return nil
+	}
+
+	keyVal := iter.ll.Value.(keyValue[K, V])
+	iter.Key = &keyVal.key
+	iter.Value = keyVal.value
+
+	return iter
 }
