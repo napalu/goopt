@@ -1309,6 +1309,7 @@ func unmarshalTagFormat(tag string, field reflect.StructField) (*tagConfig, erro
 				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
 			}
 			for i, p := range patterns {
+				config.acceptedValues = make([]PatternValue, len(patterns))
 				pv, err := convertPattern(p, field.Name)
 				if err != nil {
 					return nil, err
