@@ -147,10 +147,10 @@ type PositionalArgument struct {
 	Value    string
 }
 
-// KeyValue denotes Key Value option pairs (used in GetOptions)
-type KeyValue struct {
-	Key   string
-	Value string
+// KeyValue denotes Key Value pairs
+type KeyValue[K, V any] struct {
+	Key   K
+	Value V
 }
 
 // Secure set to Secure to true to solicit non-echoed user input from stdin.

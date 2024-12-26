@@ -187,6 +187,19 @@ func (s *Parser) GetCommandExecutionError(commandName string) error {
 	return fmt.Errorf("%w: %s was not found or has no associated callback", ErrCommandNotFound, commandName)
 }
 
+// GetCommandExecutionErrors returns the errors which occurred during execution of command callbacks
+// after ExecuteCommands has been called. Returns a KeyValue list of command name and error
+func (s *Parser) GetCommandExecutionErrors() []KeyValue[string, error] {
+	errors := []KeyValue[string, error]{}
+	for key, err := range s.callbackResults {
+		if err != nil {
+			errors = append(errors, KeyValue[string, error]{Key: key, Value: err})
+		}
+	}
+
+	return errors
+}
+
 // AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
 // *before* AcceptedValues are checked
 func (s *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, commandPath ...string) error {
@@ -655,8 +668,8 @@ func (s *Parser) GetWarnings() []string {
 }
 
 // GetOptions returns a slice of KeyValue pairs which have been supplied on the command-line.
-func (s *Parser) GetOptions() []KeyValue {
-	keyValues := make([]KeyValue, len(s.options))
+func (s *Parser) GetOptions() []KeyValue[string, string] {
+	keyValues := make([]KeyValue[string, string], len(s.options))
 	i := 0
 	for key, value := range s.options {
 		keyValues[i].Key = key

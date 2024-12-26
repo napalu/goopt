@@ -1224,10 +1224,11 @@ func legacyUnmarshalTagFormat(field reflect.StructField) (*tagConfig, error) {
 			// Convert to PatternValue
 			config.acceptedValues = make([]PatternValue, len(patterns))
 			for i, p := range patterns {
-				config.acceptedValues[i] = PatternValue{
-					Pattern:     p.Pattern,
-					Description: p.Description,
+				pv, err := convertPattern(p, field.Name)
+				if err != nil {
+					return nil, err
 				}
+				config.acceptedValues[i] = *pv
 			}
 		case "depends":
 			deps, err := parse.Dependencies(value)
@@ -1242,7 +1243,7 @@ func legacyUnmarshalTagFormat(field reflect.StructField) (*tagConfig, error) {
 
 	// Validate type if specified
 	if typeStr, ok := field.Tag.Lookup("type"); ok {
-		switch typeStr {
+		switch strings.ToLower(typeStr) {
 		case "single", "standalone", "chained", "file":
 			config.typeOf = typeOfFlagFromString(typeStr)
 		default:
@@ -1307,13 +1308,12 @@ func unmarshalTagFormat(tag string, field reflect.StructField) (*tagConfig, erro
 			if err != nil {
 				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
 			}
-			// Convert to PatternValue
-			config.acceptedValues = make([]PatternValue, len(patterns))
 			for i, p := range patterns {
-				config.acceptedValues[i] = PatternValue{
-					Pattern:     p.Pattern,
-					Description: p.Description,
+				pv, err := convertPattern(p, field.Name)
+				if err != nil {
+					return nil, err
 				}
+				config.acceptedValues[i] = *pv
 			}
 		case "depends":
 			deps, err := parse.Dependencies(value)
@@ -1342,6 +1342,19 @@ func unmarshalTagFormat(tag string, field reflect.StructField) (*tagConfig, erro
 	}
 
 	return config, nil
+}
+
+func convertPattern(p parse.TagPatternValue, fieldName string) (*PatternValue, error) {
+	re, err := regexp.Compile(p.Pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", fieldName, err)
+	}
+
+	return &PatternValue{
+		Pattern:     p.Pattern,
+		Description: p.Description,
+		value:       re,
+	}, nil
 }
 
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) (name string, path string, err error) {
