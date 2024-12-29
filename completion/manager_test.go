@@ -341,14 +341,13 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 				tt.setup(manager)
 			}
 
-			err = manager.SaveCompletion()
+			path, err := manager.Save()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SaveCompletion() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr && tt.checkFile != nil {
-				path := manager.getCompletionFilePath()
 				tt.checkFile(t, path)
 			}
 		})

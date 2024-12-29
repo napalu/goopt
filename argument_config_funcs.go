@@ -115,6 +115,7 @@ func WithDependencyMap(dependencies map[string][]string) ConfigureArgumentFunc {
 }
 
 // WithDependentValueFlags specifies flag dependencies with their accepted values
+//
 // Deprecated: Use WithDependencyMap instead
 func WithDependentValueFlags(dependencies, values []string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {

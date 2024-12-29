@@ -118,8 +118,8 @@ func (s *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 
 func (s *Parser) registerCommandRecursive(cmd *Command) {
 	// Add the current command to the map
-	cmd.TopLevel = strings.Count(cmd.Path, " ") == 0
-	s.registeredCommands.Set(cmd.Path, cmd)
+	cmd.topLevel = strings.Count(cmd.path, " ") == 0
+	s.registeredCommands.Set(cmd.path, cmd)
 
 	// Recursively register all subcommands
 	for i := range cmd.Subcommands {
@@ -145,11 +145,11 @@ func (s *Parser) validateCommand(cmdArg *Command, level, maxDepth int) (bool, er
 	}
 
 	if level == 0 {
-		cmdArg.Path = cmdArg.Name
+		cmdArg.path = cmdArg.Name
 	}
 
 	for i := 0; i < len(cmdArg.Subcommands); i++ {
-		cmdArg.Subcommands[i].Path = cmdArg.Path + " " + cmdArg.Subcommands[i].Name
+		cmdArg.Subcommands[i].path = cmdArg.path + " " + cmdArg.Subcommands[i].Name
 		if ok, err := s.validateCommand(&cmdArg.Subcommands[i], level+1, maxDepth); err != nil {
 			return ok, err
 		}
@@ -209,6 +209,9 @@ func (s *Parser) ensureInit() {
 	}
 	if s.commandNameConverter == nil {
 		s.commandNameConverter = DefaultCommandNameConverter
+	}
+	if s.maxDependencyDepth <= 0 {
+		s.maxDependencyDepth = DefaultMaxDependencyDepth
 	}
 }
 
@@ -311,13 +314,13 @@ func (s *Parser) registerFlagValue(flag, value, rawValue string) {
 }
 
 func (s *Parser) registerCommand(cmd *Command, name string) {
-	if cmd.Path == "" {
+	if cmd.path == "" {
 		return
 	}
 
 	s.rawArgs[name] = name
 
-	s.commandOptions.Set(cmd.Path, len(cmd.Subcommands) == 0)
+	s.commandOptions.Set(cmd.path, len(cmd.Subcommands) == 0)
 }
 
 func (s *Parser) queueSecureArgument(name string, argument *Argument) {
@@ -682,15 +685,10 @@ func (s *Parser) walkCommands() {
 			if i < subCmdLen-1 {
 				match.WriteString(", ")
 			}
-			if _, found := s.commandOptions.Get(sub.Path); found {
+			if _, found := s.commandOptions.Get(sub.path); found {
 				matchedCommands = append(matchedCommands, sub)
 				matches++
 			}
-		}
-
-		if matches == 0 && cmd.Required {
-			s.addError(fmt.Errorf("command '%s' was not given but is expected with one of commands [%s] to be specified",
-				cmd.Name, match.String()))
 		}
 
 		for _, m := range matchedCommands {
@@ -702,8 +700,7 @@ func (s *Parser) walkCommands() {
 }
 
 func (s *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visited map[string]bool, depth int) {
-	const maxDepth = 10
-	if depth > maxDepth {
+	if depth > s.maxDependencyDepth {
 		s.addError(fmt.Errorf("maximum dependency depth exceeded for flag '%s'", mainKey))
 		return
 	}
@@ -1246,8 +1243,10 @@ func legacyUnmarshalTagFormat(field reflect.StructField) (*tagConfig, error) {
 		switch strings.ToLower(typeStr) {
 		case "single", "standalone", "chained", "file":
 			config.typeOf = typeOfFlagFromString(typeStr)
+		case "":
+			config.typeOf = Single
 		default:
-			return nil, fmt.Errorf("invalid type value: %s", typeStr)
+			config.typeOf = Empty
 		}
 	}
 
@@ -1392,7 +1391,7 @@ func (c tagConfig) toArgument() *Argument {
 	}
 }
 
-func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, error) {
+func (s *Parser) buildCommand(commandPath, description string, parent *Command) (*Command, error) {
 	commandNames := strings.Split(commandPath, " ")
 
 	var topParent = parent
@@ -1411,8 +1410,12 @@ func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, er
 				// Create a new top-level command
 				newCommand := &Command{
 					Name:        cmdName,
-					Description: fmt.Sprintf("Auto-generated command for %s", cmdName),
 					Subcommands: []Command{},
+				}
+				if description != "" {
+					newCommand.Description = description
+				} else {
+					newCommand.Description = fmt.Sprintf("Auto-generated command for %s", cmdName)
 				}
 				s.registeredCommands.Set(cmdName, newCommand)
 				currentCommand = newCommand
@@ -1432,8 +1435,13 @@ func (s *Parser) buildCommand(commandPath string, parent *Command) (*Command, er
 			if !found {
 				newCommand := Command{
 					Name:        cmdName,
-					Description: fmt.Sprintf("Auto-generated command for %s", cmdName),
 					Subcommands: []Command{},
+					path:        commandPath,
+				}
+				if description != "" {
+					newCommand.Description = description
+				} else {
+					newCommand.Description = fmt.Sprintf("Auto-generated command for %s", cmdName)
 				}
 				parent.Subcommands = append(parent.Subcommands, newCommand)
 				currentCommand = &parent.Subcommands[len(parent.Subcommands)-1] // Update currentCommand to point to the new subcommand
@@ -1481,7 +1489,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 	if err != nil {
 		c.addError(err)
 	}
-	countZeroTags := 0
 
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
@@ -1534,11 +1541,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 			continue
 		}
 
-		if reflect.DeepEqual(*arg, Argument{}) {
-			countZeroTags++
-			continue
-		}
-
 		// Avoid leading dot if prefix is empty
 		fullFlagName := longName
 		if prefix != "" {
@@ -1567,7 +1569,7 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 					}
 
 					// Ensure the command hierarchy exists up to this point
-					if cmd, err = c.buildCommand(parentCommand, pCmd); err != nil {
+					if cmd, err = c.buildCommand(parentCommand, "", pCmd); err != nil {
 						c.addError(fmt.Errorf("error processing command %s: %w", parentCommand, err))
 					}
 				}
@@ -1607,20 +1609,31 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		}
 	}
 
-	if countZeroTags == st.NumField() {
-		return nil, fmt.Errorf("struct %s is not properly tagged", prefix)
-	}
-
 	return c, nil
 }
 
 func (s *Parser) processStructCommands(val reflect.Value, currentPath string, currentDepth, maxDepth int) error {
-	typ := val.Type()
+	// Handle case where the entire value is a Command type (not a struct containing commands)
+	if val.Type() == reflect.TypeOf(Command{}) {
+		cmd := val.Interface().(Command)
+		_, err := s.buildCommand(cmd.path, cmd.Description, nil)
+		if err != nil {
+			return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.path, err)
+		}
+		err = s.AddCommand(&cmd)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 
+	// Prevent infinite recursion
+	typ := val.Type()
 	if currentDepth > maxDepth {
 		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
 	}
 
+	// Process all fields in the struct
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
@@ -1628,44 +1641,91 @@ func (s *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			continue
 		}
 
+		// Process Command fields first - these are explicit command definitions
 		if fieldType.Type == reflect.TypeOf(Command{}) {
 			cmd := field.Interface().(Command)
-			_, err := s.buildCommand(cmd.Path, &cmd)
-			if err != nil {
-				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.Path, err)
+			// Build path by combining current path with command name
+			cmdPath := cmd.Name
+			if currentPath != "" {
+				cmdPath = currentPath + " " + cmd.Name
 			}
-			continue
-		} else if field.Kind() == reflect.Struct {
+
+			// Find the root parent command (first part of the path)
+			var parent *Command
+			if currentPath != "" {
+				parentPath := strings.Split(currentPath, " ")[0]
+				if p, ok := s.registeredCommands.Get(parentPath); ok {
+					parent = p
+				}
+			}
+
+			// Register the command with its full path
+			buildCmd, err := s.buildCommand(cmdPath, cmd.Description, parent)
+			if err != nil {
+				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmdPath, err)
+			}
+
+			err = s.AddCommand(buildCmd)
+			if err != nil {
+				return err
+			}
+
+			continue // no need to process nested structs since we've already processed the Command hierarchy at this level
+		}
+
+		// Then process struct fields which might contain struct tags defining nested commands
+		if field.Kind() == reflect.Struct {
+			// Parse the goopt tag for command configuration
 			config, err := unmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
 				return err
 			}
 
-			// If it's marked as a command, create it
 			if config.kind == kindCommand {
 				cmdName := config.name
 				if cmdName == "" {
 					cmdName = s.commandNameConverter(fieldType.Name)
 				}
 
+				// Build the command path
 				cmdPath := cmdName
 				if currentPath != "" {
 					cmdPath = currentPath + " " + cmdName
 				}
 
-				cmd := &Command{
-					Name:        cmdName,
-					Description: config.description,
-					Path:        cmdPath,
+				// Handle root-level commands
+				if currentPath == "" {
+					buildCmd, err := s.buildCommand(cmdPath, config.description, nil)
+					if err != nil {
+						return fmt.Errorf("error processing command %s: %w", cmdPath, err)
+					}
+
+					err = s.AddCommand(buildCmd)
+					if err != nil {
+						return err
+					}
+				} else {
+					// Handle nested commands by finding their root parent
+					parentPath := strings.Split(currentPath, " ")[0]
+					if p, ok := s.registeredCommands.Get(parentPath); ok {
+						buildCmd, err := s.buildCommand(cmdPath, config.description, p)
+						if err != nil {
+							return fmt.Errorf("error processing command %s: %w", cmdPath, err)
+						}
+						err = s.AddCommand(buildCmd)
+						if err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("parent command %s not found", parentPath)
+					}
 				}
 
-				if _, err := s.buildCommand(cmdPath, cmd); err != nil {
-					return fmt.Errorf("error processing struct command %s: %w", cmdPath, err)
-				}
-
+				// Update current path for nested processing
 				currentPath = cmdPath
 			}
 
+			// Recursively process nested structs with the updated path
 			if err := s.processStructCommands(field, currentPath, currentDepth+1, maxDepth); err != nil {
 				return err
 			}

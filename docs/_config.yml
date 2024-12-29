@@ -1,0 +1,7 @@
+# Enable multiple color schemes
+color_scheme: light # default scheme
+color_schemes:
+  dark: # your dark theme settings
+    color_scheme: dark
+  light: # your light theme settings
+    color_scheme: light 
