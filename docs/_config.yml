@@ -8,10 +8,7 @@ color_schemes:
     color_scheme: dark
   light: 
     color_scheme: light 
-defaults:
-  -
-    scope:
-      path: "" # All files
-    values:
-      layout: default
-      nav_width: 25% 
+
+nav_width: 264px
+content_width: 900px
+max_content_width: 900px
