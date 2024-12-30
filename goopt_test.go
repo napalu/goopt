@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -385,7 +387,7 @@ type TestOptOk struct {
 	StringOption string `short:"so" description:"test string option" type:"single" default:"1"`
 }
 
-type TestOptNok struct {
+type TestOptDefault struct {
 	IsTest bool
 }
 
@@ -402,8 +404,8 @@ func TestParser_NewCmdLineFromStruct(t *testing.T) {
 		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
 			"should be able to reference by long name when long name is not explicitly set")
 	}
-	_, err = NewParserFromStruct(&TestOptNok{})
-	assert.NotNil(t, err, "should error out on invalid struct")
+	_, err = NewParserFromStruct(&TestOptDefault{})
+	assert.Nil(t, err, "should not error out on default struct")
 	cmd, err = NewParserFromStruct(&testOpt)
 	assert.Nil(t, err)
 	assert.True(t, cmd.ParseString("create user type create group type -t --stringOption"))
@@ -655,16 +657,16 @@ func TestParser_RepeatCommandWithDifferentContextWithCallbacks(t *testing.T) {
 	idx := 0
 
 	_ = opts.AddCommand(&Command{Name: "create", Callback: func(cmdLine *Parser, command *Command) error {
-		assert.True(t, cmdLine.HasFlag("id", command.Path))
-		assert.True(t, cmdLine.HasFlag("group", command.Path))
+		assert.True(t, cmdLine.HasFlag("id", command.path))
+		assert.True(t, cmdLine.HasFlag("group", command.path))
 		if idx == 0 {
-			assert.Equal(t, "1", cmdLine.GetOrDefault("id", "", command.Path))
-			assert.Equal(t, "3", cmdLine.GetOrDefault("group", "", command.Path))
+			assert.Equal(t, "1", cmdLine.GetOrDefault("id", "", command.path))
+			assert.Equal(t, "3", cmdLine.GetOrDefault("group", "", command.path))
 
 		} else if idx == 1 {
-			assert.Equal(t, "2", cmdLine.GetOrDefault("id", "", command.Path))
-			assert.Equal(t, "4", cmdLine.GetOrDefault("group", "", command.Path))
-			assert.Equal(t, "Mike", cmdLine.GetOrDefault("name", "", command.Path))
+			assert.Equal(t, "2", cmdLine.GetOrDefault("id", "", command.path))
+			assert.Equal(t, "4", cmdLine.GetOrDefault("group", "", command.path))
+			assert.Equal(t, "Mike", cmdLine.GetOrDefault("name", "", command.path))
 		}
 
 		idx++
@@ -1963,7 +1965,14 @@ type testField struct {
 func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 	tests := []struct {
 		name  string
-		field testField
+		field struct {
+			Name     string
+			Tag      string
+			WantName string
+			WantPath string
+			WantArg  Argument
+			WantErr  bool
+		}
 	}{
 		{
 			name: "legacy format",
@@ -1985,19 +1994,6 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 				Tag:      `goopt:"name:test;short:t;desc:test desc;path:cmd subcmd"`,
 				WantName: "test",
 				WantPath: "cmd subcmd",
-				WantArg: Argument{
-					Short:       "t",
-					Description: "test desc",
-				},
-			},
-		},
-		{
-			name: "fallback to field name",
-			field: testField{
-				Name:     "TestField",
-				Tag:      `goopt:"short:t;desc:test desc"`,
-				WantName: "",
-				WantPath: "",
 				WantArg: Argument{
 					Short:       "t",
 					Description: "test desc",
@@ -2112,6 +2108,18 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			},
 		},
 		{
+			name: "unspecified type defaults to single",
+			field: testField{
+				Name:     "TestField",
+				Tag:      `goopt:"name:test"`,
+				WantName: "test",
+				WantPath: "",
+				WantArg: Argument{
+					TypeOf: Single,
+				},
+			},
+		},
+		{
 			name: "file type",
 			field: testField{
 				Name:     "ConfigFile",
@@ -2151,6 +2159,1193 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			}
 		})
 	}
+}
+
+type PrecedenceTestOptions struct {
+	Value string `goopt:"name:value;desc:Test value;default:struct_default"`
+}
+
+func TestParser_ConfigurationPrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func() (*Parser, error)
+		cliArgs       []string
+		envVar        string
+		externalValue string
+		defaultValue  string
+		expectedValue string
+		description   string
+		flagName      string
+	}{
+		// Struct-based parser tests
+		{
+			name: "struct: CLI has highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &PrecedenceTestOptions{}
+				return NewParserFromStruct(opts)
+			},
+			cliArgs:       []string{"--value", "cli_value"},
+			envVar:        "VALUE=env_value",
+			externalValue: "external_value",
+			expectedValue: "cli_value",
+			flagName:      "value",
+			description:   "CLI value should override all others",
+		},
+		{
+			name: "struct: External config has second highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &PrecedenceTestOptions{}
+				return NewParserFromStruct(opts)
+			},
+			envVar:        "VALUE=env_value",
+			externalValue: "external_value",
+			expectedValue: "external_value",
+			description:   "External value should override env and default",
+			flagName:      "value",
+		},
+		{
+			name: "struct: ENV has third highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &PrecedenceTestOptions{}
+				return NewParserFromStruct(opts)
+			},
+			envVar:        "VALUE=env_value",
+			expectedValue: "env_value",
+			description:   "ENV value should override default",
+			flagName:      "value",
+		},
+		{
+			name: "struct: Default has lowest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &PrecedenceTestOptions{}
+				return NewParserFromStruct(opts)
+			},
+			expectedValue: "struct_default",
+			description:   "Default value should be used when no others present",
+			flagName:      "value",
+		},
+		{
+			name: "env: snake_case to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValue", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "my_test_value=env_value",
+			expectedValue: "env_value",
+			flagName:      "myTestValue",
+			description:   "snake_case env var should map to camelCase flag",
+		},
+		{
+			name: "env: SCREAMING_SNAKE to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValue", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "MY_TEST_VALUE=env_value",
+			expectedValue: "env_value",
+			description:   "SCREAMING_SNAKE env var should map to camelCase flag",
+			flagName:      "myTestValue",
+		},
+		{
+			name: "env: kebab-case to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValue", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "my-test-value=env_value",
+			expectedValue: "env_value",
+			description:   "kebab-case env var should map to camelCase flag",
+			flagName:      "myTestValue",
+		},
+		{
+			name: "env: PascalCase to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValue", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "MyTestValue=env_value",
+			expectedValue: "env_value",
+			description:   "PascalCase env var should map to camelCase flag",
+			flagName:      "myTestValue",
+		},
+		{
+			name: "env: dotted.case to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValue", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "my.test.value=env_value",
+			expectedValue: "env_value",
+			description:   "dotted.case env var should map to camelCase flag",
+			flagName:      "myTestValue",
+		},
+		{
+			name: "env: mixed_Case.formats-HERE to camelCase",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("myTestValueHere", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("default"),
+				))
+			},
+			envVar:        "my_Test.value-HERE=env_value",
+			expectedValue: "env_value",
+			description:   "mixed case formats should map to camelCase flag",
+			flagName:      "myTestValueHere",
+		},
+		{
+			name: "builder: CLI has highest precedence",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("value", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("builder_default"),
+				))
+			},
+			cliArgs:       []string{"--value", "cli_value"},
+			envVar:        "VALUE=env_value",
+			externalValue: "external_value",
+			expectedValue: "cli_value",
+			flagName:      "value",
+		},
+		{
+			name: "imperative: CLI has highest precedence",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				err := p.AddFlag("value", NewArg(
+					WithDescription("Test value"),
+				))
+				if err != nil {
+					return nil, err
+				}
+				err = p.SetArgument("value", nil, WithDefaultValue("imperative_default"))
+				if err != nil {
+					return nil, err
+				}
+				return p, nil
+			},
+			cliArgs:       []string{"--value", "cli_value"},
+			envVar:        "VALUE=env_value",
+			externalValue: "external_value",
+			expectedValue: "cli_value",
+			flagName:      "value",
+		},
+		{
+			name: "struct: default from tag should not override ENV",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Value string `goopt:"name:value;default:struct_default"`
+				}{}
+				return NewParserFromStruct(opts)
+			},
+			envVar:        "VALUE=env_value",
+			expectedValue: "env_value",
+			description:   "ENV value should have precedence over struct tag default",
+			flagName:      "value",
+		},
+		{
+			name: "builder: default from NewArg should not override ENV",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				return p, p.AddFlag("value", NewArg(
+					WithDescription("Test value"),
+					WithDefaultValue("builder_default"),
+				))
+			},
+			envVar:        "VALUE=env_value",
+			expectedValue: "env_value",
+			description:   "ENV value should have precedence over NewArg default",
+			flagName:      "value",
+		},
+		{
+			name: "imperative: default from SetArgument should not override ENV",
+			setupFunc: func() (*Parser, error) {
+				p := NewParser()
+				err := p.AddFlag("value", NewArg(
+					WithDescription("Test value"),
+				))
+				if err != nil {
+					return nil, err
+				}
+				err = p.SetArgument("value", nil, WithDefaultValue("imperative_default"))
+				if err != nil {
+					return nil, err
+				}
+				return p, nil
+			},
+			envVar:        "VALUE=env_value",
+			expectedValue: "env_value",
+			description:   "ENV value should have precedence over SetArgument default",
+			flagName:      "value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup parser
+			parser, err := tt.setupFunc()
+			assert.NoError(t, err)
+
+			// Setup environment
+			if tt.envVar != "" {
+				key, value, _ := strings.Cut(tt.envVar, "=")
+				os.Setenv(key, value)
+				defer os.Unsetenv(key)
+				parser.SetEnvNameConverter(func(s string) string {
+					return DefaultFlagNameConverter(s)
+				})
+			}
+
+			// Parse with or without defaults
+			var success bool
+			if tt.externalValue != "" {
+				success = parser.ParseWithDefaults(
+					map[string]string{"value": tt.externalValue},
+					tt.cliArgs,
+				)
+			} else {
+				success = parser.Parse(tt.cliArgs)
+			}
+
+			assert.True(t, success, "Parse should succeed")
+
+			// Verify value
+			value, found := parser.Get(tt.flagName)
+			assert.True(t, found, "Value should be found")
+			assert.Equal(t, tt.expectedValue, value, tt.description)
+		})
+	}
+}
+
+func TestParser_NestedConfigurationPrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func() (*Parser, error)
+		cliArgs       []string
+		envVar        string
+		flagName      string
+		externalValue string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "nested struct: CLI has highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Database struct {
+						Connection struct {
+							Host string `goopt:"name:host;default:localhost"`
+						} `goopt:"name:connection"`
+					} `goopt:"name:database"`
+				}{}
+				return NewParserFromStruct(opts)
+			},
+			cliArgs:       []string{"--database.connection.host", "cli_host"},
+			envVar:        "DATABASE_CONNECTION_HOST=env_host",
+			flagName:      "database.connection.host",
+			externalValue: "external_host",
+			expectedValue: "cli_host",
+			description:   "CLI value should override all others in nested structure",
+		},
+		{
+			name: "nested struct: external has second highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Database struct {
+						Connection struct {
+							Host string `goopt:"name:host;default:localhost"`
+						} `goopt:"name:connection"`
+					} `goopt:"name:database"`
+				}{}
+				return NewParserFromStruct(opts)
+			},
+			envVar:        "DATABASE_CONNECTION_HOST=env_host",
+			flagName:      "database.connection.host",
+			externalValue: "external_host",
+			expectedValue: "external_host",
+			description:   "External value should override env and default in nested structure",
+		},
+		{
+			name: "nested struct: ENV has third highest precedence",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Database struct {
+						Connection struct {
+							Host string `goopt:"name:host;default:localhost"`
+						} `goopt:"name:connection"`
+					} `goopt:"name:database"`
+				}{}
+				return NewParserFromStruct(opts)
+			},
+			envVar:        "DATABASE_CONNECTION_HOST=env_host",
+			flagName:      "database.connection.host",
+			expectedValue: "env_host",
+			description:   "ENV value should override default in nested structure",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup parser
+			parser, err := tt.setupFunc()
+			assert.NoError(t, err)
+
+			// Setup environment with custom converter for nested flags
+			if tt.envVar != "" {
+				key, value, _ := strings.Cut(tt.envVar, "=")
+				os.Setenv(key, value)
+				defer os.Unsetenv(key)
+				parser.SetEnvNameConverter(func(s string) string {
+					parts := strings.Split(s, "_")
+					for i, part := range parts {
+						parts[i] = DefaultFlagNameConverter(part)
+					}
+					return strings.Join(parts, ".")
+				})
+			}
+
+			// Parse with or without defaults
+			var success bool
+			if tt.externalValue != "" {
+				success = parser.ParseWithDefaults(
+					map[string]string{tt.flagName: tt.externalValue},
+					tt.cliArgs,
+				)
+			} else {
+				success = parser.Parse(tt.cliArgs)
+			}
+
+			assert.True(t, success, "Parse should succeed")
+
+			// Verify value
+			value, found := parser.Get(tt.flagName)
+			assert.True(t, found, "Value should be found")
+			assert.Equal(t, tt.expectedValue, value, tt.description)
+		})
+	}
+}
+
+func TestParser_SliceFieldProcessing(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func() (*Parser, error)
+		cliArgs       []string
+		flagName      string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "slice of structs",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Servers []struct {
+						Host string `goopt:"name:host"`
+						Port int    `goopt:"name:port"`
+					} `goopt:"name:servers"`
+				}{
+					// Pre-initialize slice
+					Servers: make([]struct {
+						Host string `goopt:"name:host"`
+						Port int    `goopt:"name:port"`
+					}, 1),
+				}
+				return NewParserFromStruct(opts)
+			},
+			cliArgs:       []string{"--servers.0.host", "localhost", "--servers.0.port", "8080"},
+			flagName:      "servers.0.host",
+			expectedValue: "localhost",
+			description:   "Should handle slice of structs with pre-initialized slice",
+		},
+		{
+			name: "nested slice of structs",
+			setupFunc: func() (*Parser, error) {
+				opts := &struct {
+					Database struct {
+						Shards []struct {
+							Host     string `goopt:"name:host"`
+							Replicas int    `goopt:"name:replicas"`
+						} `goopt:"name:shards"`
+					} `goopt:"name:database"`
+				}{
+					Database: struct {
+						Shards []struct {
+							Host     string `goopt:"name:host"`
+							Replicas int    `goopt:"name:replicas"`
+						} `goopt:"name:shards"`
+					}{
+						// Pre-initialize nested slice
+						Shards: make([]struct {
+							Host     string `goopt:"name:host"`
+							Replicas int    `goopt:"name:replicas"`
+						}, 1),
+					},
+				}
+				return NewParserFromStruct(opts)
+			},
+			cliArgs:       []string{"--database.shards.0.host", "shard1", "--database.shards.0.replicas", "3"},
+			flagName:      "database.shards.0.host",
+			expectedValue: "shard1",
+			description:   "Should handle nested slice of structs with pre-initialized slice",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser, err := tt.setupFunc()
+			assert.NoError(t, err)
+
+			success := parser.Parse(tt.cliArgs)
+			assert.True(t, success, "Parse should succeed")
+
+			value, found := parser.Get(tt.flagName)
+			assert.True(t, found, "Value should be found")
+			assert.Equal(t, tt.expectedValue, value, tt.description)
+		})
+	}
+}
+
+func TestParser_ProcessStructCommands(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func() (*Parser, interface{})
+		wantCmds    []string
+		description string
+	}{
+		{
+			name: "simple command",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := &struct {
+					Serve struct {
+						Host string `goopt:"name:host"`
+					} `goopt:"name:serve;kind:command"`
+				}{}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"serve"},
+			description: "Should register single command without parent",
+		},
+		{
+			name: "nested commands with parent",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := &struct {
+					Server struct {
+						Start struct {
+							Host string `goopt:"name:host"`
+						} `goopt:"name:start;kind:command"`
+					} `goopt:"name:server;kind:command"`
+				}{}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"server", "server start"},
+			description: "Should use existing parent command",
+		},
+		{
+			name: "multiple nested commands",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := &struct {
+					Create struct {
+						User struct {
+							Type struct {
+								Name string `goopt:"name:name"`
+							} `goopt:"name:type;kind:command"`
+						} `goopt:"name:user;kind:command"`
+					} `goopt:"name:create;kind:command"`
+				}{}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"create", "create user", "create user type"},
+			description: "Should build command hierarchy without pre-registered parents",
+		},
+		{
+			name: "explicit command type",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := Command{
+					path:        "server",
+					Description: "Server management",
+					Name:        "server",
+					Subcommands: []Command{
+						{
+							path:        "start",
+							Description: "Start the server",
+							Name:        "start",
+						},
+					},
+				}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"server", "server start"},
+			description: "Should handle explicit Command{} fields",
+		},
+		{
+			name: "mixed command types",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := &struct {
+					Create struct {
+						User  Command
+						Group struct {
+							Add Command
+						} `goopt:"name:group;kind:command;path:create group"`
+					} `goopt:"name:create;kind:command"`
+				}{
+					Create: struct {
+						User  Command
+						Group struct {
+							Add Command
+						} `goopt:"name:group;kind:command;path:create group"`
+					}{
+						User: Command{
+							Name:        "user",
+							Description: "User management",
+						},
+						Group: struct {
+							Add Command
+						}{
+							Add: Command{
+								Name:        "add",
+								Description: "Add a group",
+							},
+						},
+					},
+				}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"create", "create group", "create group add", "create user"},
+			description: "Should handle mix of tagged structs and Command{} fields",
+		},
+		{
+			name: "command with properties",
+			setupFunc: func() (*Parser, interface{}) {
+				opts := &struct {
+					ServerCmd Command
+				}{
+					ServerCmd: Command{
+						Name:        "server",
+						Description: "Server management",
+						path:        "server",
+					},
+				}
+				p := NewParser()
+				return p, opts
+			},
+			wantCmds:    []string{"server"},
+			description: "Should preserve Command{} properties",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser, opts := tt.setupFunc()
+
+			// Handle both pointer and non-pointer types
+			val := reflect.ValueOf(opts)
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
+
+			err := parser.processStructCommands(val, "", 0, 10)
+			assert.NoError(t, err, "processStructCommands should not error")
+
+			var gotCmds []string
+			for kv := parser.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+				gotCmds = append(gotCmds, kv.Value.path)
+
+			}
+
+			sort.Strings(gotCmds)
+			sort.Strings(tt.wantCmds)
+			assert.Equal(t, tt.wantCmds, gotCmds, tt.description)
+		})
+	}
+}
+
+func TestParser_ValidateDependencies(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func(p *Parser) *FlagInfo
+		mainKey     string
+		wantErrs    []string
+		description string
+	}{
+		{
+			name: "circular dependency",
+			setupFunc: func(p *Parser) *FlagInfo {
+				flag1 := NewArgument("", "", Single, false, Secure{}, "")
+				flag1.DependencyMap = map[string][]string{"flag2": {""}}
+				_ = p.AddFlag("flag1", flag1)
+
+				flag2 := NewArgument("", "", Single, false, Secure{}, "")
+				flag2.DependencyMap = map[string][]string{"flag1": {""}}
+				_ = p.AddFlag("flag2", flag2)
+
+				flagInfo, _ := p.acceptedFlags.Get("flag1")
+				return flagInfo
+			},
+			mainKey:     "flag1",
+			wantErrs:    []string{"circular dependency detected"},
+			description: "Should detect direct circular dependencies",
+		},
+		{
+			name: "indirect circular dependency",
+			setupFunc: func(p *Parser) *FlagInfo {
+				flag1 := NewArgument("", "", Single, false, Secure{}, "")
+				flag1.DependencyMap = map[string][]string{"flag2": {""}}
+				_ = p.AddFlag("flag1", flag1)
+
+				flag2 := NewArgument("", "", Single, false, Secure{}, "")
+				flag2.DependencyMap = map[string][]string{"flag3": {""}}
+				_ = p.AddFlag("flag2", flag2)
+
+				flag3 := NewArgument("", "", Single, false, Secure{}, "")
+				flag3.DependencyMap = map[string][]string{"flag1": {""}}
+				_ = p.AddFlag("flag3", flag3)
+
+				flagInfo, _ := p.acceptedFlags.Get("flag1")
+				return flagInfo
+			},
+			mainKey:     "flag1",
+			wantErrs:    []string{"circular dependency detected"},
+			description: "Should detect indirect circular dependencies",
+		},
+		{
+			name: "max depth exceeded",
+			setupFunc: func(p *Parser) *FlagInfo {
+				// Create chain of MaxDependencyDepth+2 flags where each depends on the next
+				maxDepth := p.GetMaxDependencyDepth() + 2
+				for i := 1; i <= maxDepth; i++ {
+					flag := NewArgument("", "", Single, false, Secure{}, "")
+					if i < maxDepth {
+						flag.DependencyMap = map[string][]string{fmt.Sprintf("flag%d", i+1): {""}}
+					}
+					_ = p.AddFlag(fmt.Sprintf("flag%d", i), flag)
+				}
+
+				flagInfo, _ := p.acceptedFlags.Get("flag1")
+				return flagInfo
+			},
+			mainKey:     "flag1",
+			wantErrs:    []string{"maximum dependency depth exceeded for flag"},
+			description: "Should detect when dependency chain exceeds max depth",
+		},
+		{
+			name: "missing dependent flag",
+			setupFunc: func(p *Parser) *FlagInfo {
+				flag := NewArgument("", "", Single, false, Secure{}, "")
+				flag.DependencyMap = map[string][]string{"nonexistent": {""}}
+				_ = p.AddFlag("flag1", flag)
+
+				flagInfo, _ := p.acceptedFlags.Get("flag1")
+				return flagInfo
+			},
+			mainKey:     "flag1",
+			wantErrs:    []string{"flag 'flag1' depends on 'nonexistent', but it is missing from command group"},
+			description: "Should detect when dependent flag doesn't exist",
+		},
+		{
+			name: "valid simple dependency",
+			setupFunc: func(p *Parser) *FlagInfo {
+				flag1 := NewArgument("", "", Single, false, Secure{}, "")
+				flag1.DependencyMap = map[string][]string{"flag2": {""}}
+				_ = p.AddFlag("flag1", flag1)
+
+				flag2 := NewArgument("", "", Single, false, Secure{}, "")
+				_ = p.AddFlag("flag2", flag2)
+
+				flagInfo, _ := p.acceptedFlags.Get("flag1")
+				return flagInfo
+			},
+			mainKey:     "flag1",
+			wantErrs:    nil,
+			description: "Should accept valid dependency chain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			flagInfo := tt.setupFunc(p)
+
+			visited := make(map[string]bool)
+			p.validateDependencies(flagInfo, tt.mainKey, visited, 0)
+
+			errs := p.GetErrors()
+			if len(tt.wantErrs) == 0 {
+				assert.Empty(t, errs)
+			} else {
+				assert.NotEmpty(t, errs, "Expected errors but got none")
+				if len(errs) > 0 {
+					for i, wantErr := range tt.wantErrs {
+						assert.Contains(t, errs[i].Error(), wantErr)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestParser_SetMaxDependencyDepth(t *testing.T) {
+	tests := []struct {
+		name     string
+		setDepth int
+		want     int
+	}{
+		{
+			name:     "default value",
+			setDepth: 0,
+			want:     DefaultMaxDependencyDepth,
+		},
+		{
+			name:     "custom valid value",
+			setDepth: 15,
+			want:     15,
+		},
+		{
+			name:     "negative value should use default",
+			setDepth: -1,
+			want:     DefaultMaxDependencyDepth,
+		},
+		{
+			name:     "zero should use default",
+			setDepth: 0,
+			want:     DefaultMaxDependencyDepth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+
+			if tt.setDepth != 0 {
+				p.SetMaxDependencyDepth(tt.setDepth)
+			}
+
+			got := p.GetMaxDependencyDepth()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParser_CommandExecution(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func(p *Parser) error
+		args        []string
+		execMethod  string            // "single", "all", or "onParse"
+		wantErrs    map[string]string // map[commandName]expectedError
+		description string
+	}{
+		{
+			name: "execute single command",
+			setupFunc: func(p *Parser) error {
+				cmd := &Command{
+					Name: "test",
+					Callback: func(cmdLine *Parser, command *Command) error {
+						return fmt.Errorf("test failed")
+					},
+				}
+				return p.AddCommand(cmd)
+			},
+			args:        []string{"test"},
+			execMethod:  "single",
+			wantErrs:    map[string]string{"test": "test failed"},
+			description: "Should execute single command via ExecuteCommand",
+		},
+		{
+			name: "execute all commands",
+			setupFunc: func(p *Parser) error {
+				cmd1 := &Command{
+					Name: "cmd1",
+					Callback: func(cmdLine *Parser, command *Command) error {
+						return fmt.Errorf("cmd1 failed")
+					},
+				}
+				cmd2 := &Command{
+					Name: "cmd2",
+					Callback: func(cmdLine *Parser, command *Command) error {
+						return fmt.Errorf("cmd2 failed")
+					},
+				}
+				_ = p.AddCommand(cmd1)
+				return p.AddCommand(cmd2)
+			},
+			args:       []string{"cmd1", "cmd2"},
+			execMethod: "all",
+			wantErrs: map[string]string{
+				"cmd1": "cmd1 failed",
+				"cmd2": "cmd2 failed",
+			},
+			description: "Should execute all commands via ExecuteCommands",
+		},
+		{
+			name: "execute on parse",
+			setupFunc: func(p *Parser) error {
+				p.SetExecOnParse(true)
+				cmd := &Command{
+					Name: "test",
+					Callback: func(cmdLine *Parser, command *Command) error {
+						return fmt.Errorf("test failed")
+					},
+				}
+				return p.AddCommand(cmd)
+			},
+			args:        []string{"test"},
+			execMethod:  "onParse",
+			wantErrs:    map[string]string{"test": "test failed"},
+			description: "Should execute commands during Parse when ExecOnParse is true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			err := tt.setupFunc(p)
+			assert.NoError(t, err)
+
+			success := p.Parse(tt.args)
+
+			// Execute commands based on method
+			switch tt.execMethod {
+			case "single":
+				err = p.ExecuteCommand()
+				assert.Error(t, err)
+				// Verify errors via GetCommandExecutionErrors
+				cmdErrs := p.GetCommandExecutionErrors()
+				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
+				for _, kv := range cmdErrs {
+					expectedErr, exists := tt.wantErrs[kv.Key]
+					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
+					assert.Contains(t, kv.Value.Error(), expectedErr)
+				}
+			case "all":
+				errCount := p.ExecuteCommands()
+				assert.Equal(t, len(tt.wantErrs), errCount)
+				// Verify errors via GetCommandExecutionErrors
+				cmdErrs := p.GetCommandExecutionErrors()
+				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
+				for _, kv := range cmdErrs {
+					expectedErr, exists := tt.wantErrs[kv.Key]
+					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
+					assert.Contains(t, kv.Value.Error(), expectedErr)
+				}
+			case "onParse":
+				// For ExecOnParse, check parser errors instead
+				assert.False(t, success, "Parse should fail due to command error")
+				parserErrs := p.GetErrors()
+				assert.Equal(t, len(tt.wantErrs), len(parserErrs))
+				for cmdName, expectedErr := range tt.wantErrs {
+					found := false
+					for _, err := range parserErrs {
+						if strings.Contains(err.Error(), expectedErr) {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "Expected error for command %s not found", cmdName)
+				}
+			}
+		})
+	}
+}
+
+func TestParser_NestedCommandFlags(t *testing.T) {
+	type CommandWithFlag struct {
+		Command struct {
+			Flag string `goopt:"name:flag"`
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type NestedCommands struct {
+		Parent struct {
+			Child struct {
+				Flag string `goopt:"name:flag"`
+			} `goopt:"kind:command;name:child"`
+		} `goopt:"kind:command;name:parent"`
+	}
+
+	type CommandWithPath struct {
+		Command struct {
+			Flag string `goopt:"name:flag;path:other"`
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type CommandWithNested struct {
+		Command struct {
+			Nested struct {
+				Flag string `goopt:"name:flag"`
+			}
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type CommandWithSlice struct {
+		Command struct {
+			Items []struct {
+				Flag string `goopt:"name:flag"`
+			}
+		} `goopt:"kind:command;name:command"`
+	}
+
+	t.Run("flag nested under command", func(t *testing.T) {
+		config := &CommandWithFlag{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Flag should be scoped to command")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("deeply nested flag under commands", func(t *testing.T) {
+		config := &NestedCommands{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"parent", "child", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag", "parent child")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Flag should be scoped to parent child command path")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("nested flag with explicit path overrides command nesting", func(t *testing.T) {
+		config := &CommandWithPath{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"other", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag@other")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Explicit path should override structural nesting")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("nested flag structure under command", func(t *testing.T) {
+		config := &CommandWithNested{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--nested.flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("nested.flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Nested flag structure should maintain dot notation and command scope")
+
+		_, found = parser.Get("nested.flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("slice of structs under command", func(t *testing.T) {
+		config := &CommandWithSlice{}
+		// Initialize the slice with one element
+		config.Command.Items = make([]struct {
+			Flag string `goopt:"name:flag"`
+		}, 1)
+
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--items.0.flag", "value"})
+		assert.True(t, success, "Parse should succeed")
+
+		value, found := parser.Get("items.0.flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Slice elements should maintain index notation and command scope")
+	})
+}
+func TestParser_NestedSlicePathRegex(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"test.0.inner", true},           // Basic slice -> struct
+		{"test.0.inner.1.more", true},    // Two levels: slice -> struct -> slice -> struct
+		{"test.0.inner.1.more.2", false}, // Invalid: ends with index
+		{"simple", false},                // Not a slice path
+		{"test.notanumber.inner", false}, // Invalid: not a number
+		{"test.0", false},                // Invalid: ends with index
+		{"test.0.", false},               // Invalid: incomplete
+		{".0.test", false},               // Invalid: starts with index
+		{"test.0.inner.1", false},        // Invalid: ends with index
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := isNestedSlicePath(tt.path)
+			assert.Equal(t, tt.expected, result, "Path: %s", tt.path)
+		})
+	}
+}
+
+func TestParser_ValidateSlicePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+		errorMsg    string
+		sliceBounds map[string]string
+	}{
+		{
+			name:        "valid single level",
+			path:        "Items.0.Name",
+			expectError: false,
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "index out of bounds",
+			path:        "Items.5.Name",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.5': valid range is 0-1",
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "nested slice valid",
+			path:        "Items.0.SubItems.1.Value",
+			expectError: false,
+			sliceBounds: map[string]string{
+				"Items":            "0",
+				"Items.0.SubItems": "2",
+			},
+		},
+		{
+			name:        "nested slice out of bounds",
+			path:        "Items.0.SubItems.3.Value",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.0.SubItems.3': valid range is 0-2",
+			sliceBounds: map[string]string{
+				"Items":            "0",
+				"Items.0.SubItems": "2",
+			},
+		},
+		{
+			name:        "negative index",
+			path:        "Items.-1.Name",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.-1': valid range is 0-1",
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "missing bounds",
+			path:        "Unknown.0.Value",
+			expectError: false, // We'll let this pass as we validate actual paths elsewhere
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSlicePath(tt.path, tt.sliceBounds)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Equal(t, tt.errorMsg, err.Error())
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Alternative non-regex implementation
+func isNestedSlicePathSimple(path string) bool {
+	parts := strings.Split(path, ".")
+	if len(parts) < 2 {
+		return false
+	}
+
+	// Must start with field name
+	if _, err := strconv.Atoi(parts[0]); err == nil {
+		return false
+	}
+
+	// Check alternating pattern: field.number.field...
+	for i := 1; i < len(parts); i += 2 {
+		// Even positions (1,3,5...) must be numbers
+		if _, err := strconv.Atoi(parts[i]); err != nil {
+			return false
+		}
+		// Odd positions after must be field names
+		if i+1 < len(parts) {
+			if _, err := strconv.Atoi(parts[i+1]); err == nil {
+				return false
+			}
+		}
+	}
+
+	// Must end with field name
+	return len(parts)%2 == 1
+}
+
+func BenchmarkPathValidation(b *testing.B) {
+	paths := []string{
+		"test.0.inner",
+		"test.0.inner.1.more",
+		"test.0.inner.1.more.field",
+		"simple",
+		"test.notanumber.inner",
+		"test.0",
+		"test.0.",
+		".0.test",
+		"really.0.deep.1.nested.2.path.3.structure.4.test",
+	}
+
+	b.Run("Regex", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, path := range paths {
+				isNestedSlicePath(path)
+			}
+		}
+	})
+
+	b.Run("Simple", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, path := range paths {
+				isNestedSlicePathSimple(path)
+			}
+		}
+	})
 }
 
 func TestMain(m *testing.M) {

@@ -55,6 +55,8 @@ func NewParser() *Parser {
 		stdout:               os.Stdout,
 		flagNameConverter:    DefaultFlagNameConverter,
 		commandNameConverter: DefaultCommandNameConverter,
+		maxDependencyDepth:   DefaultMaxDependencyDepth,
+		sliceBounds:          make(map[string]string),
 	}
 }
 
@@ -65,7 +67,20 @@ func NewCmdLineOption() *Parser {
 	return NewParser()
 }
 
-// NewParserFromStruct parses a struct and binds its fields to command-line flags
+// NewParserFromStruct creates a new Parser from a struct.
+// By default, all fields are treated as flags unless:
+//   - They are tagged with `ignore`
+//   - They are unexported
+//   - They are nested structs or slices of structs
+//
+// Default field behavior:
+//   - Type: Single
+//   - Name: derived from field name
+//   - Flag: true
+//
+// Use tags to override defaults:
+//
+//	`goopt:"name:custom;type:chained"`
 func NewParserFromStruct[T any](structWithTags *T) (*Parser, error) {
 	return NewParserFromStructWithLevel(structWithTags, 5)
 }
@@ -79,7 +94,7 @@ func NewCmdLineFromStruct[T any](structWithTags *T) (*Parser, error) {
 
 // NewParserFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
 func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
-	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
+	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0)
 }
 
 // NewCmdLineFromStructWithLevel is an alias for NewParserFromStructWithLevel.
@@ -1198,8 +1213,8 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		cmd := kv.Value
 		if cmd != nil {
-			data.Commands = append(data.Commands, cmd.Path)
-			data.CommandDescriptions[cmd.Path] = cmd.Description
+			data.Commands = append(data.Commands, cmd.path)
+			data.CommandDescriptions[cmd.path] = cmd.Description
 		}
 	}
 
@@ -1259,7 +1274,7 @@ func (s *Parser) PrintGlobalFlags(writer io.Writer) {
 // PrintCommandsWithFlags prints commands with their respective flags
 func (s *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintConfig) {
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		if kv.Value.TopLevel {
+		if kv.Value.topLevel {
 			kv.Value.Visit(func(cmd *Command, level int) bool {
 				// Determine the correct prefix based on command level and position
 				var prefix string
@@ -1272,13 +1287,13 @@ func (s *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 				}
 
 				// Print the command itself with proper indentation
-				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.Path, cmd.Description)
+				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.path, cmd.Description)
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
 
 				// Print flags specific to this command
-				s.PrintCommandSpecificFlags(writer, cmd.Path, level, config)
+				s.PrintCommandSpecificFlags(writer, cmd.path, level, config)
 
 				return true
 			}, 0)
@@ -1344,7 +1359,7 @@ func (s *Parser) PrintCommands(writer io.Writer) {
 // command root. The Command root is at Level 0.
 func (s *Parser) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
 	for kv := s.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		if kv.Value.TopLevel {
+		if kv.Value.topLevel {
 			kv.Value.Visit(func(cmd *Command, level int) bool {
 				var start = config.DefaultPrefix
 				switch {
@@ -1429,4 +1444,32 @@ func (s *Parser) SetStdout(w io.Writer) io.Writer {
 // this is a low-level function and should not be used by most users - by default stdout is os.Stdout
 func (s *Parser) GetStdout() io.Writer {
 	return s.stdout
+}
+
+// SetMaxDependencyDepth sets the maximum allowed depth for flag dependencies.
+// If depth is less than 1, it will be set to DefaultMaxDependencyDepth.
+func (p *Parser) SetMaxDependencyDepth(depth int) {
+	if depth < 1 {
+		depth = DefaultMaxDependencyDepth
+	}
+	p.maxDependencyDepth = depth
+}
+
+// GetMaxDependencyDepth returns the current maximum allowed depth for flag dependencies.
+// If not explicitly set, returns DefaultMaxDependencyDepth.
+func (p *Parser) GetMaxDependencyDepth() int {
+	if p.maxDependencyDepth == 0 {
+		return DefaultMaxDependencyDepth
+	}
+	return p.maxDependencyDepth
+}
+
+// Path returns the full path of the command
+func (c *Command) Path() string {
+	return c.path
+}
+
+// IsTopLevel returns whether this is a top-level command
+func (c *Command) IsTopLevel() bool {
+	return c.topLevel
 }

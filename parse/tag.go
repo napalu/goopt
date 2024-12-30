@@ -313,7 +313,7 @@ func Dependencies(input string) (DependencyMap, error) {
 	return result, nil
 }
 
-// Dependency parses a single dependency entry using the dependency format rules defined above.
+// Dependency parses a single dependency entry using the same dependency format rules as Dependencies.
 func Dependency(input string) (string, []string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

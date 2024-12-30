@@ -7,8 +7,7 @@ func NewCommand(configs ...ConfigureCommandFunc) *Command {
 		Subcommands: nil,
 		Callback:    nil,
 		Description: "",
-		Required:    false,
-		Path:        "",
+		path:        "",
 	}
 
 	for _, config := range configs {
@@ -43,14 +42,6 @@ func WithCallback(callback CommandFunc) ConfigureCommandFunc {
 func WithCommandDescription(description string) ConfigureCommandFunc {
 	return func(command *Command) {
 		command.Description = description
-	}
-}
-
-// SetCommandRequired function is used to set the command as required or optional.
-// If a command is set as required and not provided by the user, an error is generated.
-func SetCommandRequired(required bool) ConfigureCommandFunc {
-	return func(command *Command) {
-		command.Required = required
 	}
 }
 

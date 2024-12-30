@@ -1,0 +1,10 @@
+remote_theme: just-the-docs/just-the-docs
+title: goopt Documentation
+baseurl: "/goopt"  
+url: "https://napalu.github.io"
+color_scheme: light # default scheme
+color_schemes:
+  dark: 
+    color_scheme: dark
+  light: 
+    color_scheme: light 

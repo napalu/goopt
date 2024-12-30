@@ -73,7 +73,6 @@ var (
 
 	// ToSnakeCase converts a string to snake case "my_command_name"
 	ToSnakeCase = func(s string) string {
-		// convert "MyCommandName" to "my_command_name"
 		return strcase.ToSnake(s)
 	}
 
@@ -84,7 +83,6 @@ var (
 
 	// ToLowerCamel converts a string to lower camel case "myCommandName"
 	ToLowerCamel = func(s string) string {
-		// convert "MyCommandName" to "myCommandName"
 		return strcase.ToLowerCamel(s)
 	}
 
@@ -95,7 +93,6 @@ var (
 
 	DefaultCommandNameConverter = ToLowerCase
 	DefaultFlagNameConverter    = ToLowerCamel
-	DefaultEnvNameConverter     = ToScreamingSnake
 )
 
 // OptionType used to define Flag types (such as Standalone, Single, Chained)
@@ -183,9 +180,8 @@ type Command struct {
 	Subcommands []Command
 	Callback    CommandFunc
 	Description string
-	TopLevel    bool
-	Required    bool
-	Path        string
+	topLevel    bool
+	path        string
 }
 
 // FlagInfo is used to store information about a flag
@@ -205,6 +201,7 @@ type Parser struct {
 	errors               []error
 	bind                 map[string]any
 	customBind           map[string]ValueSetFunc
+	sliceBounds          map[string]string // path -> encoded bounds (e.g. "Command.Items" -> "1.1.1")
 	registeredCommands   *orderedmap.OrderedMap[string, *Command]
 	commandOptions       *orderedmap.OrderedMap[string, bool]
 	positionalArgs       []PositionalArgument
@@ -219,6 +216,7 @@ type Parser struct {
 	terminalReader       util.TerminalReader
 	stderr               io.Writer
 	stdout               io.Writer
+	maxDependencyDepth   int
 }
 
 // CmdLineOption is an alias for Parser.
@@ -276,3 +274,6 @@ type tagConfig struct {
 	acceptedValues []PatternValue
 	dependsOn      map[string][]string
 }
+
+// DefaultMaxDependencyDepth is the default maximum depth for flag dependencies
+const DefaultMaxDependencyDepth = 10

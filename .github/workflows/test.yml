@@ -1,10 +1,16 @@
-on: [ push, pull_request ]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - '**'  # all branches
 name: Test
 jobs:
   test:
     strategy:
       matrix:
-        go-version: [ 1.18.x, 1.19.x ]
+        go-version: [ 1.18.x, 1.19.x, stable ]
         os: [ ubuntu-latest, macos-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -26,7 +32,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.19.x  # Pick one version
+          go-version: stable
       - name: Generate Coverage
         run: |
           go test -v ./... -covermode=count -coverprofile=coverage.out
