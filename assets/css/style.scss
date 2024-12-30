@@ -1,0 +1,8 @@
+@import "{{ site.theme }}";
+
+// Adjust the layout
+.wrapper {
+  display: grid;
+  grid-template-columns: 25% 75%;  // Change from 50/50 to 25/75
+  gap: 20px;
+} 
