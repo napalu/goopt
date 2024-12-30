@@ -1,5 +1,20 @@
-$nav-width: 264px !default;
-$nav-width-md: 264px !default;
-$content-width: 900px !default;
-$header-height: 60px !default;
-$search-results-width: 500px !default;
+// Override the variables more forcefully
+$nav-width: 264px;
+$nav-width-md: 264px;
+$content-width: 900px;
+
+// Direct style overrides
+.side-bar {
+  width: 264px !important;
+  @media (min-width: 50rem) {
+    width: 264px !important;
+  }
+}
+
+.main {
+  margin-left: 264px !important;
+  @media (min-width: 50rem) {
+    margin-left: 264px !important;
+    max-width: calc(100% - 264px) !important;
+  }
+}

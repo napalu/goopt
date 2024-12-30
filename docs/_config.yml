@@ -8,3 +8,5 @@ color_schemes:
     color_scheme: dark
   light: 
     color_scheme: light 
+sass:
+  sass_dir: _sass
