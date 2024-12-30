@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -3063,6 +3064,288 @@ func TestParser_CommandExecution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParser_NestedCommandFlags(t *testing.T) {
+	type CommandWithFlag struct {
+		Command struct {
+			Flag string `goopt:"name:flag"`
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type NestedCommands struct {
+		Parent struct {
+			Child struct {
+				Flag string `goopt:"name:flag"`
+			} `goopt:"kind:command;name:child"`
+		} `goopt:"kind:command;name:parent"`
+	}
+
+	type CommandWithPath struct {
+		Command struct {
+			Flag string `goopt:"name:flag;path:other"`
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type CommandWithNested struct {
+		Command struct {
+			Nested struct {
+				Flag string `goopt:"name:flag"`
+			}
+		} `goopt:"kind:command;name:command"`
+	}
+
+	type CommandWithSlice struct {
+		Command struct {
+			Items []struct {
+				Flag string `goopt:"name:flag"`
+			}
+		} `goopt:"kind:command;name:command"`
+	}
+
+	t.Run("flag nested under command", func(t *testing.T) {
+		config := &CommandWithFlag{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Flag should be scoped to command")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("deeply nested flag under commands", func(t *testing.T) {
+		config := &NestedCommands{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"parent", "child", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag", "parent child")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Flag should be scoped to parent child command path")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("nested flag with explicit path overrides command nesting", func(t *testing.T) {
+		config := &CommandWithPath{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"other", "--flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("flag@other")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Explicit path should override structural nesting")
+
+		_, found = parser.Get("flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("nested flag structure under command", func(t *testing.T) {
+		config := &CommandWithNested{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--nested.flag", "value"})
+		assert.True(t, success)
+
+		value, found := parser.Get("nested.flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Nested flag structure should maintain dot notation and command scope")
+
+		_, found = parser.Get("nested.flag")
+		assert.False(t, found, "Flag should not be accessible outside command context")
+	})
+
+	t.Run("slice of structs under command", func(t *testing.T) {
+		config := &CommandWithSlice{}
+		// Initialize the slice with one element
+		config.Command.Items = make([]struct {
+			Flag string `goopt:"name:flag"`
+		}, 1)
+
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"command", "--items.0.flag", "value"})
+		assert.True(t, success, "Parse should succeed")
+
+		value, found := parser.Get("items.0.flag", "command")
+		assert.True(t, found, "Value should be found")
+		assert.Equal(t, "value", value, "Slice elements should maintain index notation and command scope")
+	})
+}
+func TestParser_NestedSlicePathRegex(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"test.0.inner", true},           // Basic slice -> struct
+		{"test.0.inner.1.more", true},    // Two levels: slice -> struct -> slice -> struct
+		{"test.0.inner.1.more.2", false}, // Invalid: ends with index
+		{"simple", false},                // Not a slice path
+		{"test.notanumber.inner", false}, // Invalid: not a number
+		{"test.0", false},                // Invalid: ends with index
+		{"test.0.", false},               // Invalid: incomplete
+		{".0.test", false},               // Invalid: starts with index
+		{"test.0.inner.1", false},        // Invalid: ends with index
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := isNestedSlicePath(tt.path)
+			assert.Equal(t, tt.expected, result, "Path: %s", tt.path)
+		})
+	}
+}
+
+func TestParser_ValidateSlicePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+		errorMsg    string
+		sliceBounds map[string]string
+	}{
+		{
+			name:        "valid single level",
+			path:        "Items.0.Name",
+			expectError: false,
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "index out of bounds",
+			path:        "Items.5.Name",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.5': valid range is 0-1",
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "nested slice valid",
+			path:        "Items.0.SubItems.1.Value",
+			expectError: false,
+			sliceBounds: map[string]string{
+				"Items":            "0",
+				"Items.0.SubItems": "2",
+			},
+		},
+		{
+			name:        "nested slice out of bounds",
+			path:        "Items.0.SubItems.3.Value",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.0.SubItems.3': valid range is 0-2",
+			sliceBounds: map[string]string{
+				"Items":            "0",
+				"Items.0.SubItems": "2",
+			},
+		},
+		{
+			name:        "negative index",
+			path:        "Items.-1.Name",
+			expectError: true,
+			errorMsg:    "index out of bounds at 'Items.-1': valid range is 0-1",
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+		{
+			name:        "missing bounds",
+			path:        "Unknown.0.Value",
+			expectError: false, // We'll let this pass as we validate actual paths elsewhere
+			sliceBounds: map[string]string{
+				"Items": "1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSlicePath(tt.path, tt.sliceBounds)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Equal(t, tt.errorMsg, err.Error())
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Alternative non-regex implementation
+func isNestedSlicePathSimple(path string) bool {
+	parts := strings.Split(path, ".")
+	if len(parts) < 2 {
+		return false
+	}
+
+	// Must start with field name
+	if _, err := strconv.Atoi(parts[0]); err == nil {
+		return false
+	}
+
+	// Check alternating pattern: field.number.field...
+	for i := 1; i < len(parts); i += 2 {
+		// Even positions (1,3,5...) must be numbers
+		if _, err := strconv.Atoi(parts[i]); err != nil {
+			return false
+		}
+		// Odd positions after must be field names
+		if i+1 < len(parts) {
+			if _, err := strconv.Atoi(parts[i+1]); err == nil {
+				return false
+			}
+		}
+	}
+
+	// Must end with field name
+	return len(parts)%2 == 1
+}
+
+func BenchmarkPathValidation(b *testing.B) {
+	paths := []string{
+		"test.0.inner",
+		"test.0.inner.1.more",
+		"test.0.inner.1.more.field",
+		"simple",
+		"test.notanumber.inner",
+		"test.0",
+		"test.0.",
+		".0.test",
+		"really.0.deep.1.nested.2.path.3.structure.4.test",
+	}
+
+	b.Run("Regex", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, path := range paths {
+				isNestedSlicePath(path)
+			}
+		}
+	})
+
+	b.Run("Simple", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, path := range paths {
+				isNestedSlicePathSimple(path)
+			}
+		}
+	})
 }
 
 func TestMain(m *testing.M) {

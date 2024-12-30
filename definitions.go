@@ -201,6 +201,7 @@ type Parser struct {
 	errors               []error
 	bind                 map[string]any
 	customBind           map[string]ValueSetFunc
+	sliceBounds          map[string]string // path -> encoded bounds (e.g. "Command.Items" -> "1.1.1")
 	registeredCommands   *orderedmap.OrderedMap[string, *Command]
 	commandOptions       *orderedmap.OrderedMap[string, bool]
 	positionalArgs       []PositionalArgument

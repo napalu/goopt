@@ -487,4 +487,4 @@ parser.PrintUsageWithGroups(os.Stdout)
 
 ### Contributing
 
-Contributions are welcome! Please check the issues for open tasks and feel free to submit a pull request.
+Contributions are welcome! Contributions should be based on open issues (feel free to open one).

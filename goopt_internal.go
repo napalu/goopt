@@ -90,6 +90,14 @@ func (s *Parser) normalizePosixArgs(state parse.State, currentArg string, comman
 
 func (s *Parser) processFlagArg(state parse.State, argument *Argument, currentArg string, currentCommandPath ...string) {
 	lookup := buildPathFlag(currentArg, currentCommandPath...)
+
+	if isNestedSlicePath(currentArg) {
+		if err := validateSlicePath(lookup, s.sliceBounds); err != nil {
+			s.addError(fmt.Errorf("invalid slice access for flag %s: %w", lookup, err))
+			return
+		}
+	}
+
 	switch argument.TypeOf {
 	case Standalone:
 		if argument.Secure.IsSecure {
@@ -212,6 +220,9 @@ func (s *Parser) ensureInit() {
 	}
 	if s.maxDependencyDepth <= 0 {
 		s.maxDependencyDepth = DefaultMaxDependencyDepth
+	}
+	if s.sliceBounds == nil {
+		s.sliceBounds = make(map[string]string)
 	}
 }
 
@@ -1162,6 +1173,9 @@ func (s *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
 		s.registeredCommands.Set(*it.Key, it.Value)
 	}
+	for path, bounds := range nestedCmdLine.sliceBounds {
+		s.sliceBounds[path] = bounds
+	}
 
 	return nil
 }
@@ -1467,7 +1481,7 @@ func (s *Parser) buildCommand(commandPath, description string, parent *Command) 
 	return topParent, nil
 }
 
-func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDepth, currentDepth int) (*Parser, error) {
+func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPath string, maxDepth, currentDepth int) (*Parser, error) {
 	if currentDepth > maxDepth {
 		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
 	}
@@ -1485,7 +1499,7 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
-	err := c.processStructCommands(structValue, "", 0, maxDepth)
+	err := c.processStructCommands(structValue, commandPath, currentDepth, maxDepth)
 	if err != nil {
 		c.addError(err)
 	}
@@ -1508,43 +1522,61 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 		arg := &Argument{}
 		longName, pathTag, err = unmarshalTagsToArgument(field, arg)
 		if err != nil {
-			if prefix != "" {
-				c.addError(fmt.Errorf("error processing field %s.%s: %w", prefix, field.Name, err))
+			if flagPrefix != "" {
+				c.addError(fmt.Errorf("error processing field %s.%s: %w", flagPrefix, field.Name, err))
 			} else {
 				c.addError(fmt.Errorf("error processing field %s: %w", field.Name, err))
 			}
 			continue
 		}
 
-		// Fallback to field name if no tag found
+		isCommand := isFieldCommand(field)
+
 		if longName == "" {
-			longName = c.flagNameConverter(field.Name)
+			if isCommand {
+				longName = c.commandNameConverter(field.Name)
+			} else {
+				longName = c.flagNameConverter(field.Name)
+			}
 		}
 
-		// Create a new prefix for nested fields
-		fieldPath := longName
-		if prefix != "" {
-			fieldPath = fmt.Sprintf("%s.%s", prefix, longName)
+		// Create new flag prefix only for non-command fields
+		fieldFlagPath := flagPrefix
+		if !isCommand {
+			if flagPrefix == "" {
+				fieldFlagPath = longName
+			} else {
+				fieldFlagPath = fmt.Sprintf("%s.%s", flagPrefix, longName)
+			}
 		}
 
 		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
-			if err := processSliceField(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
-				c.addError(fmt.Errorf("error processing slice field %s: %w", fieldPath, err))
+			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, c); err != nil {
+				c.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
 			}
 			continue
 		}
 
 		if field.Type.Kind() == reflect.Struct {
-			if err := processNestedStruct(fieldPath, fieldValue, maxDepth, currentDepth, c); err != nil {
-				c.addError(fmt.Errorf("error processing nested struct %s: %w", fieldPath, err))
+			newCommandPath := commandPath
+			if isCommand {
+				if newCommandPath == "" {
+					newCommandPath = longName
+				} else {
+					newCommandPath = fmt.Sprintf("%s %s", newCommandPath, longName)
+				}
+			}
+
+			if err := processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, c); err != nil {
+				c.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
 			}
 			continue
 		}
 
-		// Avoid leading dot if prefix is empty
+		// Use both flag prefix and command path appropriately
 		fullFlagName := longName
-		if prefix != "" {
-			fullFlagName = fmt.Sprintf("%s.%s", prefix, longName)
+		if flagPrefix != "" {
+			fullFlagName = fmt.Sprintf("%s.%s", flagPrefix, longName)
 		}
 
 		// Process the path tag to associate the flag with commands or global
@@ -1568,7 +1600,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 						parentCommand = fmt.Sprintf("%s %s", parentCommand, cmdComponent)
 					}
 
-					// Ensure the command hierarchy exists up to this point
 					if cmd, err = c.buildCommand(parentCommand, "", pCmd); err != nil {
 						c.addError(fmt.Errorf("error processing command %s: %w", parentCommand, err))
 					}
@@ -1581,7 +1612,6 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 					}
 				}
 
-				// Bind the flag to the last command in the path
 				err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg, cmdPath)
 				if err != nil {
 					return nil, err
@@ -1593,15 +1623,23 @@ func newParserFromReflectValue(structValue reflect.Value, prefix string, maxDept
 					}
 				}
 			}
-
 		} else {
-			// If no path is specified, consider it a global flag
-			err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+			// If no path specified, use current command path (if any)
+			if commandPath != "" {
+				err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg, commandPath)
+			} else {
+				// Global flag
+				err = c.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+			}
 			if err != nil {
 				return nil, err
 			}
 			if arg.DefaultValue != "" {
-				err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
+				if commandPath != "" {
+					err = c.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, commandPath))
+				} else {
+					err = c.setBoundVariable(arg.DefaultValue, fullFlagName)
+				}
 				if err != nil {
 					c.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
 				}
@@ -1674,7 +1712,7 @@ func (s *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 		}
 
 		// Then process struct fields which might contain struct tags defining nested commands
-		if field.Kind() == reflect.Struct {
+		if field.Kind() == reflect.Struct && isFieldCommand(fieldType) {
 			// Parse the goopt tag for command configuration
 			config, err := unmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
@@ -1767,20 +1805,30 @@ func (s *Parser) getDependentFlags(arg *Argument) []string {
 	return deps
 }
 
-func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
+func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
 	if fieldValue.IsNil() {
 		fieldValue.Set(reflect.MakeSlice(fieldValue.Type(), 0, 0))
 	}
+
+	// Get current bounds or start new
+	currentBounds := strings.Split(c.sliceBounds[flagPrefix], ".")
+	if len(currentBounds) == 1 && currentBounds[0] == "" {
+		currentBounds = []string{}
+	}
+
+	// Add this slice's bounds
+	currentBounds = append(currentBounds, strconv.Itoa(fieldValue.Len()-1))
+	c.sliceBounds[flagPrefix] = strings.Join(currentBounds, ".")
 
 	for idx := 0; idx < fieldValue.Len(); idx++ {
 		elem := fieldValue.Index(idx).Addr()
 
 		// Create full path with the slice index
-		elemPrefix := fmt.Sprintf("%s.%d", prefix, idx)
+		elemPrefix := fmt.Sprintf("%s.%d", flagPrefix, idx)
 
-		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, maxDepth, currentDepth+1)
+		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, commandPath, maxDepth, currentDepth+1)
 		if err != nil {
-			return fmt.Errorf("error processing slice element %s[%d]: %w", prefix, idx, err)
+			return fmt.Errorf("error processing slice element %s[%d]: %w", flagPrefix, idx, err)
 		}
 		err = c.mergeCmdLine(nestedCmdLine)
 		if err != nil {
@@ -1791,10 +1839,10 @@ func processSliceField(prefix string, fieldValue reflect.Value, maxDepth, curren
 	return nil
 }
 
-func processNestedStruct(prefix string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
-	nestedCmdLine, err := newParserFromReflectValue(fieldValue.Addr(), prefix, maxDepth, currentDepth+1)
+func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
+	nestedCmdLine, err := newParserFromReflectValue(fieldValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1)
 	if err != nil {
-		return fmt.Errorf("error processing nested struct %s: %w", prefix, err)
+		return fmt.Errorf("error processing nested struct %s: %w", flagPrefix, err)
 	}
 	err = c.mergeCmdLine(nestedCmdLine)
 	if err != nil {
@@ -1888,4 +1936,51 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 			data.FlagValues[longKey] = values
 		}
 	}
+}
+
+func isFieldCommand(field reflect.StructField) bool {
+	var isCommand bool
+	if cmd, ok := field.Tag.Lookup("goopt"); ok {
+		isCommand = strings.Contains(cmd, "kind:command")
+	}
+
+	if !isCommand && field.Type.Kind() == reflect.Struct {
+		isCommand = field.Type == reflect.TypeOf(Command{})
+	}
+
+	return isCommand
+}
+
+// Matches patterns like:
+// - field.0.inner
+// - field.0.inner.1.more
+// - field.0.inner.1.more.2.even.more
+var nestedSlicePathRegex = regexp.MustCompile(`^([^.]+\.\d+\.[^.]+)(\.\d+\.[^.]+)*$`)
+
+func isNestedSlicePath(path string) bool {
+	return nestedSlicePathRegex.MatchString(path)
+}
+
+func validateSlicePath(path string, sliceBounds map[string]string) error {
+	parts := strings.Split(path, ".")
+	var currentPath []string
+
+	for i, part := range parts {
+		if idx, err := strconv.Atoi(part); err == nil {
+			// Found a numeric index
+			currentPathStr := strings.Join(currentPath, ".")
+			if encodedBounds, ok := sliceBounds[currentPathStr]; ok {
+				maxIdx, _ := strconv.Atoi(encodedBounds)
+				if idx < 0 || idx > maxIdx {
+					return fmt.Errorf("index out of bounds at '%s': valid range is 0-%d",
+						strings.Join(parts[:i+1], "."), maxIdx)
+				}
+			}
+			// Add index to current path for next iteration
+			currentPath = append(currentPath, part)
+		} else {
+			currentPath = append(currentPath, part)
+		}
+	}
+	return nil
 }

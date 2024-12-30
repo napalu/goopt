@@ -127,14 +127,13 @@ func main() {
         return parser.DefaultEnvNameConverter(s)
     })
     
-    // Now APP_VERBOSE=true will set the verbose flag
     // ... rest of your code ...
 }
 ```
 
 ## Next Steps
 
-- [Command Organization Guide](guides/command-organization.md) - Have a look at different ways to structure your CLI
-- [Advanced Features](guides/advanced-features.md) - Explore dependencies, validation, and more
-- [Configuration Guide](configuration/) - Environment variables and external config
+- [Command Organization Guide](command-organization.md) - Have a look at different ways to structure your CLI
+- [Advanced Features](advanced-features.md) - Explore dependencies, validation, and more
+- [Configuration Guide](configuration/index.md) - Environment variables and external config
 - [Shell Completion](shell/completion.md) - Set up shell completions

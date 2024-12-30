@@ -11,16 +11,15 @@ goopt offers three main approaches to organizing commands and flags:
 
 ## Flag-Centric Approach
 
-Best for simpler CLIs with flat structure:
+Best for simpler CLIs with flat structure. Using the path variables allows creating commands and flags in a single line. Several paths can be specified to associate the flag with multiple commands. The value of the flag is shared across all commands that have the same path.
 
 ```go
 type Options struct {
-    CreateUser string `goopt:"kind:flag;path:user create;name:name;desc:Create a new user"`
-    Force bool `goopt:"kind:flag;path:user create,user delete;name:force;desc:Force operation"`
+    CreateUser string `goopt:"kind:flag;path:user create;name:name;desc:Create a new user"` // path is optional, but can be used to specify the command path - this will create a command called "user create" and associate the flag with the "user create" command-context. 
+    Force bool `goopt:"kind:flag;path:user create,user delete;name:force;desc:Force operation"` // shared flag for both  "user create" and "user delete" commands
 }
 ```
 
-[Your current flag-centric content]
 
 ## Command-Centric Approach
 
@@ -36,10 +35,35 @@ type Options struct {
         }
     }
 }
+
+// alternative way to define the same structure
+user := Command{
+    Name: "user",
+    Subcommands: []Command{
+        {Name: "create", Description: "User name"},
+    },
+}
+
+type OtherOptions struct {
+    User :  Command{
+        Name: "user",
+        Subcommands: []Command{
+            {Name: "create", Description: "User name"},
+        },
+    },
+   
+}
 ```
 
-[Your current command-centric content]
 
 ## Mixed Approach
 
-[Your current mixed approach content] 
+```go
+type Options struct {
+    User struct {
+        Create struct {
+            Name string `goopt:"kind:flag;name:name;desc:User name"`
+        }
+    }
+}
+``` 

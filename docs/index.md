@@ -52,6 +52,9 @@ goopt follows these key principles:
 ### Integration
 - [Shell Completion](shell/completion.md) - Setup completion for various shells
 
+### Advanced features
+- [Advanced Features](advanced/advanced-features.md) - Advanced features
+
 ## Need Help?
 
 - Check our [Guides](guides/) section for detailed documentation

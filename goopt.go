@@ -56,6 +56,7 @@ func NewParser() *Parser {
 		flagNameConverter:    DefaultFlagNameConverter,
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
+		sliceBounds:          make(map[string]string),
 	}
 }
 
@@ -93,7 +94,7 @@ func NewCmdLineFromStruct[T any](structWithTags *T) (*Parser, error) {
 
 // NewParserFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
 func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
-	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", maxDepth, 0)
+	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0)
 }
 
 // NewCmdLineFromStructWithLevel is an alias for NewParserFromStructWithLevel.

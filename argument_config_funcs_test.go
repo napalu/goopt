@@ -26,7 +26,7 @@ func (m *MockTerminal) IsTerminal(fd int) bool {
 	return m.IsTerminalResult
 }
 
-func TestArgumentConfigFuncs(t *testing.T) {
+func TestArgument_ConfigFuncs(t *testing.T) {
 
 	tests := []struct {
 		name         string
@@ -220,7 +220,7 @@ func TestArgumentConfigFuncs(t *testing.T) {
 
 			assert.Equal(t, tt.wantParse, opts.ParseString(tt.input))
 			if tt.wantParse {
-				got, ok := opts.Get(strings.Split(tt.input, " ")[0][2:])
+				got, ok := opts.Get(strings.TrimLeftFunc(strings.Split(tt.input, " ")[0], opts.prefixFunc))
 				assert.True(t, ok)
 				assert.Equal(t, tt.wantValue, got)
 			}
