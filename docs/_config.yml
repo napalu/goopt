@@ -8,7 +8,3 @@ color_schemes:
     color_scheme: dark
   light: 
     color_scheme: light 
-
-nav_width: 264px
-content_width: 900px
-max_content_width: 900px
