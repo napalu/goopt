@@ -43,7 +43,7 @@ goopt follows these key principles:
 ### Guides
 - [Getting Started](guides/getting-started.md) - Installation and basic usage
 - [Command Organization](guides/command-organization.md) - Different ways to structure your CLI
-- [Advanced Features](guides/advanced-features.md) - Dependencies, validation, and more
+- [Advanced Features](guides/advanced-features.md) - Nested access, dependencies, validation, and more
 
 ### Configuration
 - [Environment Variables](configuration/environment.md) - ENV var support
@@ -52,11 +52,8 @@ goopt follows these key principles:
 ### Integration
 - [Shell Completion](shell/completion.md) - Setup completion for various shells
 
-### Advanced features
-- [Advanced Features](advanced/advanced-features.md) - Advanced features
-
 ## Need Help?
 
-- Check our [Guides](guides/) section for detailed documentation
-- Visit our [GitHub repository](https://github.com/napalu/goopt) for issues and updates
+- Check [Guides](guides/) section for detailed documentation
+- Visit [GitHub repository](https://github.com/napalu/goopt) for issues and updates
 - See the [API Reference](https://godoc.org/github.com/napalu/goopt) for detailed API documentation 

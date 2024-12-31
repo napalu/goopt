@@ -106,7 +106,7 @@ func main() {
         log.Fatal(err)
     }
     manager.Accept(parser.GetCompletionData())
-    err = manager.SaveCompletion()
+    err = manager.Save()
     if err != nil {
         log.Fatal(err)
     }
@@ -123,8 +123,8 @@ func main() {
     
     // Enable environment variable support
     parser.SetEnvNameConverter(func(s string) string {
-        // default converter is SCREAMING_SNAKE_CASE
-        return parser.DefaultEnvNameConverter(s)
+        // default flag name converter is lowerCamelCase
+        return parser.DefaultFlagNameConverter(s)
     })
     
     // ... rest of your code ...

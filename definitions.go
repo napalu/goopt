@@ -99,16 +99,11 @@ var (
 type OptionType int
 
 const (
-	// Single denotes a Flag accepting a string value
-	Single OptionType = 0
-	// Chained denotes a Flag accepting a string value which should be evaluated as a list (split on ' ', '|' and ',')
-	Chained OptionType = 1
-	// Standalone denotes a boolean Flag (does not accept a value)
-	Standalone OptionType = 2
-	// File denotes a Flag which is evaluated as a path (the content of the file is treated as the value)
-	File OptionType = 3
-	// Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
-	Empty OptionType = 4
+	Empty      OptionType = iota // Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
+	Single     OptionType = 1    // Single denotes a Flag accepting a string value
+	Chained    OptionType = 2    // Chained denotes a Flag accepting a string value which should be evaluated as a list (split on ' ', '|' and ',')
+	Standalone OptionType = 3    // Standalone denotes a boolean Flag (does not accept a value)
+	File       OptionType = 4    // File denotes a Flag which is evaluated as a path (the content of the file is treated as the value)
 )
 
 // PatternValue is used to define an acceptable value for a Flag. The 'pattern' argument is compiled to a regular expression
@@ -116,7 +111,7 @@ const (
 type PatternValue struct {
 	Pattern     string
 	Description string
-	value       *regexp.Regexp
+	Compiled    *regexp.Regexp
 }
 
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data

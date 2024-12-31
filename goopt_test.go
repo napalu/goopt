@@ -2108,14 +2108,14 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			},
 		},
 		{
-			name: "unspecified type defaults to single",
+			name: "unspecified type defaults to empty if type is not supported or cannot be inferred",
 			field: testField{
 				Name:     "TestField",
 				Tag:      `goopt:"name:test"`,
 				WantName: "test",
 				WantPath: "",
 				WantArg: Argument{
-					TypeOf: Single,
+					TypeOf: Empty,
 				},
 			},
 		},
@@ -3286,6 +3286,170 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParser_InferFieldType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected OptionType
+	}{
+		{
+			name: "struct field bool",
+			input: reflect.StructField{
+				Name: "TestBool",
+				Type: reflect.TypeOf(bool(false)),
+			},
+			expected: Standalone,
+		},
+		{
+			name:     "reflect type bool",
+			input:    reflect.TypeOf(bool(false)),
+			expected: Standalone,
+		},
+		{
+			name: "struct field string slice",
+			input: reflect.StructField{
+				Name: "TestStrings",
+				Type: reflect.TypeOf([]string{}),
+			},
+			expected: Chained,
+		},
+		{
+			name:     "reflect type string slice",
+			input:    reflect.TypeOf([]string{}),
+			expected: Chained,
+		},
+		{
+			name: "struct field time.Duration",
+			input: reflect.StructField{
+				Name: "TestDuration",
+				Type: reflect.TypeOf(time.Duration(0)),
+			},
+			expected: Single,
+		},
+		{
+			name:     "reflect type time.Duration",
+			input:    reflect.TypeOf(time.Duration(0)),
+			expected: Single,
+		},
+		{
+			name: "struct field time.Time",
+			input: reflect.StructField{
+				Name: "TestTime",
+				Type: reflect.TypeOf(time.Time{}),
+			},
+			expected: Single,
+		},
+		{
+			name:     "reflect type time.Time",
+			input:    reflect.TypeOf(time.Time{}),
+			expected: Single,
+		},
+		{
+			name:     "nil type",
+			input:    nil,
+			expected: Empty,
+		},
+		{
+			name:     "unsupported type",
+			input:    reflect.TypeOf(struct{}{}),
+			expected: Empty,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferFieldType(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConvertLegacyTags(t *testing.T) {
+	type TestStruct struct {
+		Basic     string `long:"output" short:"o" description:"Output file"`
+		TypeReq   string `long:"format" type:"single" required:"true"`
+		SecPrompt string `long:"password" secure:"true" prompt:"Enter password:"`
+		AccDep    string `long:"output" accepted:"{pattern:json|yaml,desc:Format type}" depends:"{flag:format,values:[json,yaml]}"`
+		Default   string `long:"greeting" default:"Hello World!"`
+		Path      string `long:"config" path:"config/path"`
+		Empty     string
+		Invalid   string `invalid:":tag::format"`
+		Complex   string `long:"complex" description:"Complex value" accepted:"{pattern:a|b|c,desc:Letters}" depends:"{flag:type,values:[single,multi]},{flag:format,values:[json,yaml]}"`
+	}
+
+	tests := []struct {
+		name      string
+		fieldName string
+		expected  string
+		wantErr   bool
+	}{
+		{
+			name:      "basic conversion",
+			fieldName: "Basic",
+			expected:  `goopt:"name:output;short:o;desc:Output file"`,
+		},
+		{
+			name:      "with type and required",
+			fieldName: "TypeReq",
+			expected:  `goopt:"name:format;type:single;required:true"`,
+		},
+		{
+			name:      "with secure and prompt",
+			fieldName: "SecPrompt",
+			expected:  `goopt:"name:password;secure:true;prompt:Enter password:"`,
+		},
+		{
+			name:      "with pattern values and depends",
+			fieldName: "AccDep",
+			expected:  `goopt:"name:output;accepted:{pattern:json|yaml,desc:Format type};depends:{flag:format,values:[json,yaml]}"`,
+		},
+		{
+			name:      "with default value",
+			fieldName: "Default",
+			expected:  `goopt:"name:greeting;default:Hello World!"`,
+		},
+		{
+			name:      "with path",
+			fieldName: "Path",
+			expected:  `goopt:"name:config;path:config/path"`,
+		},
+		{
+			name:      "empty field",
+			fieldName: "Empty",
+			expected:  `goopt:""`,
+		},
+
+		{
+			name:      "complex with multiple patterns and depends",
+			fieldName: "Complex",
+			expected:  `goopt:"name:complex;desc:Complex value;accepted:{pattern:a|b|c,desc:Letters};depends:{flag:type,values:[single,multi]},{flag:format,values:[json,yaml]}"`,
+		},
+	}
+
+	structType := reflect.TypeOf(TestStruct{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field, ok := structType.FieldByName(tt.fieldName)
+			assert.True(t, ok, "Field %s not found", tt.fieldName)
+
+			result, err := ConvertLegacyTags(field)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+
+	t.Run("nil field", func(t *testing.T) {
+		result, err := ConvertLegacyTags(reflect.StructField{})
+		assert.NoError(t, err)
+		assert.Equal(t, `goopt:""`, result)
+	})
 }
 
 // Alternative non-regex implementation

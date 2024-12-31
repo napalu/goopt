@@ -181,7 +181,7 @@ func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
 				return
 			}
 
-			argument.AcceptedValues[i].value = re
+			argument.AcceptedValues[i].Compiled = re
 		}
 	}
 }
