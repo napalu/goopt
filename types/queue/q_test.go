@@ -1,8 +1,9 @@
 package queue
 
 import (
-	"slices"
 	"testing"
+
+	"github.com/napalu/goopt/util"
 )
 
 func TestStackOperations(t *testing.T) {
@@ -124,7 +125,7 @@ func TestIterate(t *testing.T) {
 	}
 
 	actualItems = []int{}
-	slices.Reverse(expectedItems)
+	util.Reverse(expectedItems)
 
 	q.ForEachReverse(func(item int, index int) bool {
 		actualItems = append(actualItems, item)
