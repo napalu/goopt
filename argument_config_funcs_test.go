@@ -3,6 +3,7 @@ package goopt
 import (
 	"bytes"
 	"fmt"
+	"github.com/napalu/goopt/types"
 	"io"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 		{
 			name: "with dependency map - valid value",
 			setupFunc: func(p *Parser) error {
-				err := p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				err := p.AddFlag("main", NewArgument("m", "", types.Single, false, types.Secure{}, ""))
 				if err != nil {
 					return err
 				}
@@ -60,7 +61,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 		{
 			name: "with dependency map - invalid value",
 			setupFunc: func(p *Parser) error {
-				err := p.AddFlag("main", NewArgument("m", "", Single, false, Secure{}, ""))
+				err := p.AddFlag("main", NewArgument("m", "", types.Single, false, types.Secure{}, ""))
 				if err != nil {
 					return err
 				}
@@ -79,7 +80,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with accepted values - valid",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("status", NewArg(
-					WithAcceptedValues([]PatternValue{
+					WithAcceptedValues([]types.PatternValue{
 						{Pattern: "active", Description: "active status"},
 						{Pattern: "inactive", Description: "inactive status"},
 					}),
@@ -94,7 +95,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with accepted values - invalid",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("status", NewArg(
-					WithAcceptedValues([]PatternValue{
+					WithAcceptedValues([]types.PatternValue{
 						{Pattern: "active", Description: "active status"},
 						{Pattern: "inactive", Description: "inactive status"},
 					}),
@@ -110,7 +111,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
 					SetSecure(true),
-					WithType(Single),
+					WithType(types.Single),
 				))
 			},
 			input:        "--password",
@@ -124,7 +125,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 				return p.AddFlag("password", NewArg(
 					SetSecure(true),
 					SetSecurePrompt("Enter password:"),
-					WithType(Single),
+					WithType(types.Single),
 				))
 			},
 			input:        "--password",
@@ -137,7 +138,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
 					SetSecure(true),
-					WithType(Single),
+					WithType(types.Single),
 				))
 			},
 			input:     "--password",
@@ -184,7 +185,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("upper", NewArg(
 					WithPreValidationFilter(strings.ToUpper),
-					WithAcceptedValues([]PatternValue{
+					WithAcceptedValues([]types.PatternValue{
 						{Pattern: "^[A-Z]+$", Description: "uppercase only"},
 					}),
 				))

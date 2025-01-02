@@ -1,20 +1,24 @@
 // Override the variables more forcefully
-$nav-width: 264px;
-$nav-width-md: 264px;
+$nav-width: 364px;
+$nav-width-md: 364px;
 $content-width: 900px;
 
 // Direct style overrides
 .side-bar {
-  width: 264px !important;
+  width: 364px !important;
   @media (min-width: 50rem) {
-    width: 264px !important;
+    width: 364px !important;
   }
 }
 
 .main {
-  margin-left: 264px !important;
+  margin-left: 364px !important;
   @media (min-width: 50rem) {
-    margin-left: 264px !important;
-    max-width: calc(100% - 264px) !important;
+    margin-left: 364px !important;
+    max-width: calc(100% - 364px) !important;
   }
+}
+
+pre {
+  font-size: 1.3rem;
 }

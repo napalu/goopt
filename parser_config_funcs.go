@@ -1,5 +1,7 @@
 package goopt
 
+import "github.com/napalu/goopt/types"
+
 // NewParserWith allows initialization of Parser using option functions. The caller should always test for error on
 // return because Parser will be nil when an error occurs during initialization.
 //
@@ -104,7 +106,7 @@ func WithCommand(command *Command) ConfigureCmdLineFunc {
 }
 
 // WithListDelimiterFunc allows providing a custom function for splitting Chained command-line argument values into lists.
-func WithListDelimiterFunc(delimiterFunc ListDelimiterFunc) ConfigureCmdLineFunc {
+func WithListDelimiterFunc(delimiterFunc types.ListDelimiterFunc) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		*err = cmdLine.SetListDelimiterFunc(delimiterFunc)
 	}

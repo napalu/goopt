@@ -1,3 +1,44 @@
+---
+layout: default
+title: Advanced Features
+parent: Guides
+nav_order: 3
+---
+
+# Advanced Features
+
+## Struct Tag formats
+
+goopt supports two different formats for struct tags:
+New format:
+The tag format uses semicolon-separated key:value pairs:
+- `goopt`: The tag name
+- `kind`: Specifies if it's a `flag` or `command` (default: flag)
+- `name`: Long name for the `flag`/`command` - defaults to the field name if not specified
+- `short`: Short (single-character) name of the `flag` when POSIX compatibility is enabled - otherwise can be a multi-character string used as a mnemonic for the flag name (default)
+- `desc`: Description of the `flag`/`command`
+- `type`: `Flag` type (single|standalone|chained) - defaults to single
+- `required`: Whether the `flag` is required (true|false) - defaults to true
+- `default`: Default value for the `flag`
+- `secure`: For `flag` containing password input (true|false) - defaults to false
+- `prompt`: Prompt text for secure input `flag`
+- `accepted`: `Flag` which matches on values using one or more patterns - a pattern can be a literal value or a regex pattern (e.g. `pattern:json|yaml,desc:Format type`)
+- `depends`: `Flag` dependencies - a dependency can be a flag or set of flags or a set of flags and values (e.g. `flag:output,values:[json,yaml]`)
+
+Old format (deprecated will be removed in the next major release):
+The tag format uses space-separated quoted key:value pairs:
+- `long`: Long name for the `flag` - defaults to the field name if not specified
+- `short`: Short (single-character) name of the `flag` when POSIX compatibility is enabled - otherwise can be a multi-character string used as a mnemonic for the `flag` name (default)
+- `description`: Description of the `flag`
+- `type`: `Flag` type (single|standalone|chained|file) - defaults to single
+- `required`: Whether the `flag` is required (true|false) - defaults to true
+- `default`: Default value for the `flag`
+- `secure`: For `flag` containing password input (true|false) - defaults to false
+- `prompt`: Prompt text for secure input `flag`
+- `accepted`: `Flag` which matches on values using one or more patterns - a pattern can be a literal value or a regex pattern (e.g. `pattern:json|yaml,desc:Format type`)
+- `depends`: `Flag` dependencies - a dependency can be a flag or set of flags or a set of flags and values (e.g. `flag:output,values:[json,yaml]`)
+
+
 ## Nested Struct Access
 
 Nested structs can be accessed using dot notation, allowing for deep flag hierarchies:

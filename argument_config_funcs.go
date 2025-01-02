@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"github.com/napalu/goopt/types"
 	"regexp"
 )
 
@@ -68,7 +69,7 @@ func WithDescription(description string) ConfigureArgumentFunc {
 //  2. Chained - a flag which expects a delimited value representing elements in a list (and is evaluated as a list)
 //  3. Standalone - a boolean flag which by default takes no value (defaults to true) but may accept a value which evaluates to true or false
 //  4. File - a flag which expects a valid file path whose content is the value
-func WithType(typeof OptionType) ConfigureArgumentFunc {
+func WithType(typeof types.OptionType) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.TypeOf = typeof
 	}
@@ -170,7 +171,7 @@ func WithPostValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 
 // WithAcceptedValues sets the accepted values for the argument. The values can be either literal strings or regular expressions.
 // Each value can optionally have a description that will be shown in help text.
-func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
+func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.AcceptedValues = values
 
@@ -181,7 +182,7 @@ func WithAcceptedValues(values []PatternValue) ConfigureArgumentFunc {
 				return
 			}
 
-			argument.AcceptedValues[i].value = re
+			argument.AcceptedValues[i].Compiled = re
 		}
 	}
 }

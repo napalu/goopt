@@ -24,7 +24,7 @@ Variables are evaluated in the following order (from highest precedence to lowes
 
 ```go
 parser.SetEnvNameConverter(func(s string) string {
-    return DefaultEnvNameConverter(s) // DefaultEnvNameConverter is the default implementation and converts ENV var names to lower camel case
+    return DefaultFlagNameConverter(s) // DefaultFlagNameConverter is the default implementation and converts ENV var names to lowerCamelCase
 })
 ```
 
