@@ -1,9 +1,8 @@
 package goopt
 
 import (
-	"errors"
+	"github.com/napalu/goopt/types"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
@@ -37,10 +36,6 @@ type PrettyPrintConfig struct {
 
 // RequiredIfFunc used to specify if an option is required when a particular Command or Flag is specified
 type RequiredIfFunc func(cmdLine *Parser, optionName string) (bool, string)
-
-// ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
-// Defaults to ',' || r == '|' || r == ' '.
-type ListDelimiterFunc func(matchOn rune) bool
 
 // ConfigureCmdLineFunc is used when defining CommandLineOption options
 type ConfigureCmdLineFunc func(cmdLine *Parser, err *error)
@@ -95,25 +90,6 @@ var (
 	DefaultFlagNameConverter    = ToLowerCamel
 )
 
-// OptionType used to define Flag types (such as Standalone, Single, Chained)
-type OptionType int
-
-const (
-	Empty      OptionType = iota // Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
-	Single     OptionType = 1    // Single denotes a Flag accepting a string value
-	Chained    OptionType = 2    // Chained denotes a Flag accepting a string value which should be evaluated as a list (split on ' ', '|' and ',')
-	Standalone OptionType = 3    // Standalone denotes a boolean Flag (does not accept a value)
-	File       OptionType = 4    // File denotes a Flag which is evaluated as a path (the content of the file is treated as the value)
-)
-
-// PatternValue is used to define an acceptable value for a Flag. The 'pattern' argument is compiled to a regular expression
-// and the description argument is used to provide a human-readable description of the pattern.
-type PatternValue struct {
-	Pattern     string
-	Description string
-	Compiled    *regexp.Regexp
-}
-
 // ClearConfig allows to selectively clear a set of CmdLineOption configuration data
 type ClearConfig struct {
 	// KeepOptions: keep key/value options seen on command line
@@ -139,32 +115,19 @@ type PositionalArgument struct {
 	Value    string
 }
 
-// KeyValue denotes Key Value pairs
-type KeyValue[K, V any] struct {
-	Key   K
-	Value V
-}
-
-// Secure set to Secure to true to solicit non-echoed user input from stdin.
-// If Prompt is empty a "password :" prompt will be displayed. Set to the desired value to override.
-type Secure struct {
-	IsSecure bool
-	Prompt   string
-}
-
 // Argument defines a command-line Flag
 type Argument struct {
 	Description    string
-	TypeOf         OptionType
+	TypeOf         types.OptionType
 	Required       bool
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
-	AcceptedValues []PatternValue
+	AcceptedValues []types.PatternValue
 	DependsOn      []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
 	OfValue        []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
 	DependencyMap  map[string][]string
-	Secure         Secure
+	Secure         types.Secure
 	Short          string
 	DefaultValue   string
 }
@@ -189,7 +152,7 @@ type FlagInfo struct {
 type Parser struct {
 	posixCompatible      bool
 	prefixes             []rune
-	listFunc             ListDelimiterFunc
+	listFunc             types.ListDelimiterFunc
 	acceptedFlags        *orderedmap.OrderedMap[string, *FlagInfo]
 	lookup               map[string]string
 	options              map[string]string
@@ -204,7 +167,7 @@ type Parser struct {
 	callbackQueue        *queue.Q[commandCallback]
 	callbackResults      map[string]error
 	callbackOnParse      bool
-	secureArguments      *orderedmap.OrderedMap[string, *Secure]
+	secureArguments      *orderedmap.OrderedMap[string, *types.Secure]
 	envNameConverter     NameConversionFunc
 	commandNameConverter NameConversionFunc
 	flagNameConverter    NameConversionFunc
@@ -229,16 +192,6 @@ type CompletionData struct {
 	CommandDescriptions map[string]string           // Descriptions specific to commands
 }
 
-var (
-	ErrUnsupportedTypeConversion = errors.New("unsupported type conversion")
-	ErrCommandNotFound           = errors.New("command not found")
-	ErrFlagNotFound              = errors.New("flag not found")
-	ErrPosixIncompatible         = errors.New("posix incompatible")
-	ErrValidationFailed          = errors.New("validation failed")
-	ErrBindNilPointer            = errors.New("can't bind flag to nil")
-	ErrVariableNotAPointer       = errors.New("variable is not a pointer")
-)
-
 const (
 	FmtErrorWithString = "%w: %s"
 )
@@ -246,28 +199,6 @@ const (
 type commandCallback struct {
 	callback  CommandFunc
 	arguments []any
-}
-
-type kind string
-
-const (
-	kindFlag    kind = "flag"
-	kindCommand kind = "command"
-	kindEmpty   kind = ""
-)
-
-type tagConfig struct {
-	kind           kind
-	name           string
-	short          string
-	typeOf         OptionType
-	description    string
-	default_       string
-	required       bool
-	secure         Secure
-	path           string
-	acceptedValues []PatternValue
-	dependsOn      map[string][]string
 }
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies

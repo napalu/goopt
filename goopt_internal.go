@@ -9,11 +9,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/araddon/dateparse"
 	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -99,7 +98,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 	}
 
 	switch argument.TypeOf {
-	case Standalone:
+	case types.Standalone:
 		if argument.Secure.IsSecure {
 			p.queueSecureArgument(lookup, argument)
 		} else {
@@ -119,7 +118,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 					"could not process input argument '%s' - the following error occurred: %s", lookup, err))
 			}
 		}
-	case Single, Chained, File:
+	case types.Single, types.Chained, types.File:
 		p.processFlag(argument, state, lookup)
 	}
 }
@@ -204,7 +203,7 @@ func (p *Parser) ensureInit() {
 		p.callbackResults = map[string]error{}
 	}
 	if p.secureArguments == nil {
-		p.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
+		p.secureArguments = orderedmap.NewOrderedMap[string, *types.Secure]()
 	}
 	if p.stderr == nil {
 		p.stderr = os.Stderr
@@ -234,7 +233,7 @@ func (a *Argument) ensureInit() {
 		a.OfValue = []string{}
 	}
 	if a.AcceptedValues == nil {
-		a.AcceptedValues = []PatternValue{}
+		a.AcceptedValues = []types.PatternValue{}
 	}
 	if a.DependencyMap == nil {
 		a.DependencyMap = map[string][]string{}
@@ -336,7 +335,7 @@ func (p *Parser) registerCommand(cmd *Command, name string) {
 
 func (p *Parser) queueSecureArgument(name string, argument *Argument) {
 	if p.secureArguments == nil {
-		p.secureArguments = orderedmap.NewOrderedMap[string, *Secure]()
+		p.secureArguments = orderedmap.NewOrderedMap[string, *types.Secure]()
 	}
 
 	p.rawArgs[name] = name
@@ -434,7 +433,7 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 }
 
 func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg string, err error) {
-	if argument.TypeOf == File {
+	if argument.TypeOf == types.File {
 		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
@@ -513,7 +512,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	return p.setBoundVariable(processed, currentArg)
 }
 
-func (p *Parser) processSecureFlag(name string, config *Secure) {
+func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	var prompt string
 	if !p.HasFlag(name) {
 		return
@@ -538,9 +537,9 @@ func (p *Parser) processSecureFlag(name string, config *Secure) {
 
 func (p *Parser) processSingleValue(next, key string, argument *Argument) string {
 	switch argument.TypeOf {
-	case Single:
+	case types.Single:
 		return p.checkSingle(next, key, argument)
-	case Chained:
+	case types.Chained:
 		return p.checkMultiple(next, key, argument)
 	}
 
@@ -640,7 +639,7 @@ func (p *Parser) walkFlags() {
 		}
 
 		if !flagInfo.Argument.Required {
-			if p.HasFlag(*f.Key) && flagInfo.Argument.TypeOf == Standalone {
+			if p.HasFlag(*f.Key) && flagInfo.Argument.TypeOf == types.Standalone {
 				p.validateStandaloneFlag(*f.Key)
 			}
 			continue
@@ -648,7 +647,7 @@ func (p *Parser) walkFlags() {
 
 		mainKey := p.flagOrShortFlag(*f.Key)
 		if _, found := p.options[mainKey]; found {
-			if flagInfo.Argument.TypeOf == Standalone {
+			if flagInfo.Argument.TypeOf == types.Standalone {
 				p.validateStandaloneFlag(mainKey)
 			}
 			continue
@@ -780,7 +779,7 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 		}
 	}
 
-	return convertString(value, data, currentArg, p.listFunc)
+	return util.ConvertString(value, data, currentArg, p.listFunc)
 }
 
 func (p *Parser) prefixFunc(r rune) bool {
@@ -793,7 +792,7 @@ func (p *Parser) prefixFunc(r rune) bool {
 	return false
 }
 
-func (p *Parser) getListDelimiterFunc() ListDelimiterFunc {
+func (p *Parser) getListDelimiterFunc() types.ListDelimiterFunc {
 	if p.listFunc != nil {
 		return p.listFunc
 	}
@@ -855,279 +854,6 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	return nil
 }
 
-func canConvert(data interface{}, optionType OptionType) (bool, error) {
-	if reflect.TypeOf(data).Kind() != reflect.Ptr {
-		return false, fmt.Errorf("%w: we expect a pointer to a variable", ErrUnsupportedTypeConversion)
-	}
-
-	supported := true
-	var err error
-	if optionType == Standalone {
-		switch data.(type) {
-		case *bool:
-			return true, nil
-		default:
-			return false, fmt.Errorf("%w: Standalone fields can only be bound to a boolean variable", ErrUnsupportedTypeConversion)
-		}
-	}
-
-	switch t := data.(type) {
-	case *string:
-	case *[]string:
-	case *complex64:
-	case *int:
-	case *[]int:
-	case *int64:
-	case *[]int64:
-	case *int32:
-	case *[]int32:
-	case *int16:
-	case *[]int16:
-	case *int8:
-	case *[]int8:
-	case *uint:
-	case *[]uint:
-	case *uint64:
-	case *[]uint64:
-	case *uint32:
-	case *[]uint32:
-	case *uint16:
-	case *[]uint16:
-	case *uint8:
-	case *[]uint8:
-	case *float64:
-	case *[]float64:
-	case *float32:
-	case *[]float32:
-	case *bool:
-	case *[]bool:
-	case *time.Time:
-	case *[]time.Time:
-	case *time.Duration:
-	case *[]time.Duration:
-	default:
-		supported = false
-		err = fmt.Errorf("%w: unsupported data type %v", ErrUnsupportedTypeConversion, t)
-	}
-
-	return supported, err
-}
-
-func convertString(value string, data any, arg string, delimiterFunc ListDelimiterFunc) error {
-	var err error
-
-	switch t := data.(type) {
-	case *string:
-		*(t) = value
-	case *[]string:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		*(t) = values
-	case *complex64:
-		if val, err := strconv.ParseComplex(value, 64); err == nil {
-			*(t) = complex64(val)
-		}
-	case *int:
-		if val, err := strconv.Atoi(value); err == nil {
-			*(t) = val
-		}
-	case *[]int:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int, len(values))
-		for i, v := range values {
-			if val, err := strconv.Atoi(v); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *int64:
-		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
-			*(t) = val
-		}
-	case *[]int64:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 64); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *int32:
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
-			*(t) = int32(val)
-		}
-	case *[]int32:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 32); err == nil {
-				temp[i] = int32(val)
-			}
-		}
-		*(t) = temp
-	case *int16:
-		if val, err := strconv.ParseInt(value, 10, 16); err == nil {
-			*(t) = int16(val)
-		}
-	case *[]int16:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int16, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 16); err == nil {
-				temp[i] = int16(val)
-			}
-		}
-		*(t) = temp
-	case *int8:
-		if val, err := strconv.ParseInt(value, 10, 8); err == nil {
-			*(t) = int8(val)
-		}
-	case *[]int8:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int8, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 8); err == nil {
-				temp[i] = int8(val)
-			}
-		}
-		*(t) = temp
-	case *uint:
-		if val, err := strconv.ParseUint(value, 10, strconv.IntSize); err == nil {
-			*(t) = uint(val)
-		}
-	case *[]uint:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, strconv.IntSize); err == nil {
-				temp[i] = uint(val)
-			}
-		}
-		*(t) = temp
-	case *uint64:
-		if val, err := strconv.ParseUint(value, 10, 64); err == nil {
-			*(t) = val
-		}
-	case *[]uint64:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 64); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *uint32:
-		if val, err := strconv.ParseUint(value, 10, 32); err == nil {
-			*(t) = uint32(val)
-		}
-	case *[]uint32:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 32); err == nil {
-				temp[i] = uint32(val)
-			}
-		}
-		*(t) = temp
-	case *uint16:
-		if val, err := strconv.ParseUint(value, 10, 16); err == nil {
-			*(t) = uint16(val)
-		}
-	case *[]uint16:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint16, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 16); err == nil {
-				temp[i] = uint16(val)
-			}
-		}
-		*(t) = temp
-	case *uint8:
-		if val, err := strconv.ParseUint(value, 10, 8); err == nil {
-			*(t) = uint8(val)
-		}
-	case *[]uint8:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint8, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 8); err == nil {
-				temp[i] = uint8(val)
-			}
-		}
-		*(t) = temp
-	case *float64:
-		if val, err := strconv.ParseFloat(value, 64); err == nil {
-			*(t) = val
-		}
-	case *[]float64:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]float64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseFloat(v, 64); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *float32:
-		if val, err := strconv.ParseFloat(value, 32); err == nil {
-			*(t) = float32(val)
-		}
-	case *[]float32:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]float32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseFloat(v, 32); err == nil {
-				temp[i] = float32(val)
-			}
-		}
-		*(t) = temp
-	case *bool:
-		if val, err := strconv.ParseBool(value); err == nil {
-			*(t) = val
-		}
-	case *[]bool:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]bool, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseBool(v); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *time.Time:
-		if val, err := dateparse.ParseLocal(value); err == nil {
-			*(t) = val
-		}
-	case *[]time.Time:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]time.Time, len(values))
-		for i, v := range values {
-			if val, err := dateparse.ParseLocal(v); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	case *time.Duration:
-		if val, err := time.ParseDuration(value); err == nil {
-			*(t) = val
-		}
-	case *[]time.Duration:
-		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]time.Duration, len(values))
-		for i, v := range values {
-			if val, err := time.ParseDuration(v); err == nil {
-				temp[i] = val
-			}
-		}
-		*(t) = temp
-	default:
-		err = fmt.Errorf("%w: unsupported data type %v for argument %s", ErrUnsupportedTypeConversion, t, arg)
-	}
-
-	return err
-}
-
 func showDependencies(dependencies []string) string {
 	buf := strings.Builder{}
 	dependLen := len(dependencies)
@@ -1180,284 +906,44 @@ func expandVarExpr() *regexp.Regexp {
 	return regexp.MustCompile(`(\$\{.+})`)
 }
 
-func typeOfFlagFromString(s string) OptionType {
-	switch strings.ToUpper(s) {
-	case "STANDALONE":
-		return Standalone
-	case "CHAINED":
-		return Chained
-	case "FILE":
-		return File
-	case "SINGLE":
-		return Single
-	default:
-		return Empty
-	}
-}
-
-func typeOfFlagToString(t OptionType) string {
-	switch t {
-	case Standalone:
-		return "standalone"
-	case Single:
-		return "single"
-	case Chained:
-		return "chained"
-	case File:
-		return "file"
-	default:
-		return "empty"
-	}
-}
-
-func legacyUnmarshalTagFormat(field reflect.StructField) (*tagConfig, error) {
-	config := &tagConfig{
-		kind: kindFlag,
-	}
-
-	tagNames := []string{
-		"long", "short", "description", "required", "type", "default",
-		"secure", "prompt", "path", "accepted", "depends",
-	}
-
-	for _, tag := range tagNames {
-		value, ok := field.Tag.Lookup(tag)
-		if !ok {
-			continue
-		}
-
-		switch tag {
-		case "long":
-			config.name = value
-		case "short":
-			config.short = value
-		case "description":
-			config.description = value
-		case "type":
-			config.typeOf = typeOfFlagFromString(value)
-		case "default":
-			config.default_ = value
-		case "required":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
-			}
-			config.required = boolVal
-		case "secure":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
-			}
-			if boolVal {
-				config.secure = Secure{IsSecure: boolVal}
-			}
-		case "prompt":
-			if config.secure.IsSecure {
-				config.secure.Prompt = value
-			}
-		case "path":
-			config.path = value
-		case "accepted":
-			patterns, err := parse.PatternValues(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'accepted' tag value for field %s: %w", field.Name, err)
-			}
-			// Convert to PatternValue
-			config.acceptedValues = make([]PatternValue, len(patterns))
-			for i, p := range patterns {
-				pv, err := convertPattern(p, field.Name)
-				if err != nil {
-					return nil, err
-				}
-				config.acceptedValues[i] = *pv
-			}
-		case "depends":
-			deps, err := parse.Dependencies(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'depends' tag value for field %s: %w", field.Name, err)
-			}
-			config.dependsOn = deps
-		default:
-			return nil, fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
-		}
-	}
-
-	if config.typeOf == Empty {
-		config.typeOf = inferFieldType(field)
-	}
-
-	return config, nil
-}
-
-func inferFieldType(field interface{}) OptionType {
-	var t reflect.Type
-
-	switch f := field.(type) {
-	case reflect.StructField:
-		if f.Type == nil {
-			return Empty
-		}
-		t = f.Type
-	case reflect.Type:
-		if f == nil {
-			return Empty
-		}
-		t = f
-	default:
-		return Empty
-	}
-
-	switch t.Kind() {
-	case reflect.Bool:
-		return Standalone
-	case reflect.Slice, reflect.Array:
-		// Create a pointer to a slice of the element type
-		slicePtr := reflect.New(t).Interface()
-		if ok, _ := canConvert(slicePtr, Chained); ok {
-			return Chained
-		}
-		return Empty
-	case reflect.String, reflect.Int, reflect.Int64, reflect.Float64, reflect.Float32,
-		reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
-		return Single
-	default:
-		if t == reflect.TypeOf(time.Duration(0)) ||
-			t == reflect.TypeOf(time.Time{}) {
-			return Single
-		}
-		return Empty
-	}
-}
-
-func unmarshalTagFormat(tag string, field reflect.StructField) (*tagConfig, error) {
-	config := &tagConfig{}
-	parts := strings.Split(tag, ";")
-
-	for _, part := range parts {
-		key, value, found := strings.Cut(part, ":")
-		if !found {
-			return nil, fmt.Errorf("invalid tag format in field %s: %s", field.Name, part)
-		}
-
-		switch key {
-		case "kind":
-			switch kind(value) {
-			case kindFlag, kindCommand, kindEmpty:
-				config.kind = kind(value)
-			default:
-				return nil, fmt.Errorf("invalid kind in field %s: %s (must be 'command', 'flag', or empty)",
-					field.Name, value)
-			}
-		case "name":
-			config.name = value
-		case "short":
-			config.short = value
-		case "type":
-			config.typeOf = typeOfFlagFromString(value)
-		case "desc":
-			config.description = value
-		case "default":
-			config.default_ = value
-		case "required":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'required' value in field %s: %w", field.Name, err)
-			}
-			config.required = boolVal
-		case "secure":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'secure' value in field %s: %w", field.Name, err)
-			}
-			if boolVal {
-				config.secure = Secure{IsSecure: boolVal}
-			}
-		case "prompt":
-			if config.secure.IsSecure {
-				config.secure.Prompt = value
-			}
-		case "path":
-			config.path = value
-		case "accepted":
-			patterns, err := parse.PatternValues(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
-			}
-			for i, p := range patterns {
-				config.acceptedValues = make([]PatternValue, len(patterns))
-				pv, err := convertPattern(p, field.Name)
-				if err != nil {
-					return nil, err
-				}
-				config.acceptedValues[i] = *pv
-			}
-		case "depends":
-			deps, err := parse.Dependencies(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid 'depends' value in field %s: %w", field.Name, err)
-			}
-			config.dependsOn = deps
-		default:
-			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
-		}
-	}
-
-	// If kind is empty, treat as flag
-	if config.kind == kindEmpty {
-		config.kind = kindFlag
-	}
-
-	if config.typeOf == Empty {
-		config.typeOf = inferFieldType(field)
-	}
-
-	return config, nil
-}
-
-func convertPattern(p parse.TagPatternValue, fieldName string) (*PatternValue, error) {
-	re, err := regexp.Compile(p.Pattern)
-	if err != nil {
-		return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", fieldName, err)
-	}
-
-	return &PatternValue{
-		Pattern:     p.Pattern,
-		Description: p.Description,
-		Compiled:    re,
-	}, nil
-}
-
 func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) (name string, path string, err error) {
 	// Try new format first
 	if tag, ok := field.Tag.Lookup("goopt"); ok && strings.Contains(tag, ":") {
-		config, err := unmarshalTagFormat(tag, field)
+		config, err := parse.UnmarshalTagFormat(tag, field)
 		if err != nil {
 			return "", "", err
 		}
-		*arg = *config.toArgument()
-		return config.name, config.path, nil
+
+		*arg = *toArgument(config)
+		return config.Name, config.Path, nil
 	}
 
 	// Legacy format handling
-	config, err := legacyUnmarshalTagFormat(field)
+	config, err := parse.LegacyUnmarshalTagFormat(field)
 	if err != nil {
 		return "", "", err
 	}
-	*arg = *config.toArgument()
+	if config == nil {
+		if isStructOrSliceType(field) {
+			return "", "", nil // For nested structs, slices and arrays nil config is valid
+		}
+		return "", "", fmt.Errorf("no valid tags found for field %s", field.Name)
+	}
+	*arg = *toArgument(config)
 
-	return config.name, config.path, nil
+	return config.Name, config.Path, nil
 }
 
-func (c tagConfig) toArgument() *Argument {
+func toArgument(c *types.TagConfig) *Argument {
 	return &Argument{
-		Short:          c.short,
-		Description:    c.description,
-		TypeOf:         c.typeOf,
-		DefaultValue:   c.default_,
-		Required:       c.required,
-		Secure:         c.secure,
-		AcceptedValues: c.acceptedValues,
-		DependencyMap:  c.dependsOn,
+		Short:          c.Short,
+		Description:    c.Description,
+		TypeOf:         c.TypeOf,
+		DefaultValue:   c.Default,
+		Required:       c.Required,
+		Secure:         c.Secure,
+		AcceptedValues: c.AcceptedValues,
+		DependencyMap:  c.DependsOn,
 	}
 }
 
@@ -1788,13 +1274,13 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 		// Then process struct fields which might contain struct tags defining nested commands
 		if field.Kind() == reflect.Struct && isFieldCommand(fieldType) {
 			// Parse the goopt tag for command configuration
-			config, err := unmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
+			config, err := parse.UnmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
 				return err
 			}
 
-			if config.kind == kindCommand {
-				cmdName := config.name
+			if config.Kind == types.KindCommand {
+				cmdName := config.Name
 				if cmdName == "" {
 					cmdName = p.commandNameConverter(fieldType.Name)
 				}
@@ -1807,7 +1293,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 
 				// Handle root-level commands
 				if currentPath == "" {
-					buildCmd, err := p.buildCommand(cmdPath, config.description, nil)
+					buildCmd, err := p.buildCommand(cmdPath, config.Description, nil)
 					if err != nil {
 						return fmt.Errorf("error processing command %s: %w", cmdPath, err)
 					}
@@ -1820,7 +1306,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 					// Handle nested commands by finding their root parent
 					parentPath := strings.Split(currentPath, " ")[0]
 					if regCmd, ok := p.registeredCommands.Get(parentPath); ok {
-						buildCmd, err := p.buildCommand(cmdPath, config.description, regCmd)
+						buildCmd, err := p.buildCommand(cmdPath, config.Description, regCmd)
 						if err != nil {
 							return fmt.Errorf("error processing command %s: %w", cmdPath, err)
 						}
@@ -2057,4 +1543,8 @@ func validateSlicePath(path string, sliceBounds map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func isStructOrSliceType(field reflect.StructField) bool {
+	return field.Type.Kind() == reflect.Struct || field.Type.Kind() == reflect.Slice || field.Type.Kind() == reflect.Array
 }

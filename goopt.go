@@ -25,9 +25,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/napalu/goopt/parse"
-
 	"github.com/napalu/goopt/completion"
+	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -49,7 +49,7 @@ func NewParser() *Parser {
 		listFunc:             matchChainedSeparators,
 		callbackQueue:        queue.New[commandCallback](),
 		callbackResults:      map[string]error{},
-		secureArguments:      orderedmap.NewOrderedMap[string, *Secure](),
+		secureArguments:      orderedmap.NewOrderedMap[string, *types.Secure](),
 		prefixes:             []rune{'-'},
 		stderr:               os.Stderr,
 		stdout:               os.Stdout,
@@ -106,7 +106,7 @@ func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Par
 
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
 // configure Argument using option functions.
-func NewArgument(shortFlag string, description string, typeOf OptionType, required bool, secure Secure, defaultValue string) *Argument {
+func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string) *Argument {
 	return &Argument{
 		Description:  description,
 		TypeOf:       typeOf,
@@ -199,16 +199,16 @@ func (p *Parser) GetCommandExecutionError(commandName string) error {
 		return err
 	}
 
-	return fmt.Errorf("%w: %s was not found or has no associated callback", ErrCommandNotFound, commandName)
+	return fmt.Errorf("%w: %s was not found or has no associated callback", types.ErrCommandNotFound, commandName)
 }
 
 // GetCommandExecutionErrors returns the errors which occurred during execution of command callbacks
 // after ExecuteCommands has been called. Returns a KeyValue list of command name and error
-func (p *Parser) GetCommandExecutionErrors() []KeyValue[string, error] {
-	errors := []KeyValue[string, error]{}
+func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
+	errors := []types.KeyValue[string, error]{}
 	for key, err := range p.callbackResults {
 		if err != nil {
-			errors = append(errors, KeyValue[string, error]{Key: key, Value: err})
+			errors = append(errors, types.KeyValue[string, error]{Key: key, Value: err})
 		}
 	}
 
@@ -225,7 +225,7 @@ func (p *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, comman
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 }
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -238,7 +238,7 @@ func (p *Parser) AddFlagPostValidationFilter(flag string, proc FilterFunc, comma
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 }
 
 // HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -262,7 +262,7 @@ func (p *Parser) GetPreValidationFilter(flag string, commandPath ...string) (Fil
 		}
 	}
 
-	return nil, fmt.Errorf("%w: no pre-validation filters for flag %s", ErrValidationFailed, flag)
+	return nil, fmt.Errorf("%w: no pre-validation filters for flag %s", types.ErrValidationFailed, flag)
 }
 
 // HasPostValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -286,7 +286,7 @@ func (p *Parser) GetPostValidationFilter(flag string, commandPath ...string) (Fi
 		}
 	}
 
-	return nil, fmt.Errorf("%w: no post-validation filters for flag %s", ErrValidationFailed, flag)
+	return nil, fmt.Errorf("%w: no post-validation filters for flag %s", types.ErrValidationFailed, flag)
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
@@ -547,7 +547,7 @@ func (p *Parser) GetOrDefault(flag string, defaultValue string, commandPath ...s
 func (p *Parser) GetBool(flag string, commandPath ...string) (bool, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return false, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return false, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseBool(value)
@@ -559,7 +559,7 @@ func (p *Parser) GetBool(flag string, commandPath ...string) (bool, error) {
 func (p *Parser) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return 0, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseInt(value, 10, bitSize)
@@ -571,7 +571,7 @@ func (p *Parser) GetInt(flag string, bitSize int, commandPath ...string) (int64,
 func (p *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return 0, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	val, err := strconv.ParseFloat(value, bitSize)
@@ -584,7 +584,7 @@ func (p *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (floa
 func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err == nil {
-		if arg.TypeOf == Chained {
+		if arg.TypeOf == types.Chained {
 			value, success := p.Get(flag, commandPath...)
 			if !success {
 				return []string{}, fmt.Errorf("failed to retrieve value for flag '%s'", flag)
@@ -602,7 +602,7 @@ func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 }
 
 // SetListDelimiterFunc sets the value delimiter function for Chained flags
-func (p *Parser) SetListDelimiterFunc(delimiterFunc ListDelimiterFunc) error {
+func (p *Parser) SetListDelimiterFunc(delimiterFunc types.ListDelimiterFunc) error {
 	if delimiterFunc != nil {
 		p.listFunc = delimiterFunc
 
@@ -634,7 +634,7 @@ func (p *Parser) GetConsistencyWarnings() []string {
 		if !found {
 			continue
 		}
-		if flagInfo.Argument.TypeOf == Standalone && flagInfo.Argument.DefaultValue != "" {
+		if flagInfo.Argument.TypeOf == types.Standalone && flagInfo.Argument.DefaultValue != "" {
 			configWarnings = append(configWarnings,
 				fmt.Sprintf("Flag '%s' is a Standalone (boolean) flag and has a default value specified. "+
 					"The default value is ignored.", mainKey))
@@ -683,8 +683,8 @@ func (p *Parser) GetWarnings() []string {
 }
 
 // GetOptions returns a slice of KeyValue pairs which have been supplied on the command-line.
-func (p *Parser) GetOptions() []KeyValue[string, string] {
-	keyValues := make([]KeyValue[string, string], len(p.options))
+func (p *Parser) GetOptions() []types.KeyValue[string, string] {
+	keyValues := make([]types.KeyValue[string, string], len(p.options))
 	i := 0
 	for key, value := range p.options {
 		keyValues[i].Key = key
@@ -715,7 +715,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	if lenS := len(argument.Short); lenS > 0 {
 		if p.posixCompatible && lenS > 1 {
-			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", ErrPosixIncompatible, flag, argument.Short)
+			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", types.ErrPosixIncompatible, flag, argument.Short)
 		}
 
 		// Check for short flag conflicts only for global flags
@@ -728,8 +728,8 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 		p.lookup[argument.Short] = flag
 	}
 
-	if argument.TypeOf == Empty {
-		argument.TypeOf = Single
+	if argument.TypeOf == types.Empty {
+		argument.TypeOf = types.Single
 	}
 
 	p.acceptedFlags.Set(lookupFlag, &FlagInfo{
@@ -743,7 +743,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 // BindFlagToParser is a helper function to allow passing generics to the Parser.BindFlag method
 func BindFlagToParser[T Bindable](s *Parser, data *T, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return ErrBindNilPointer
+		return types.ErrBindNilPointer
 	}
 
 	return s.BindFlag(data, flag, argument, commandPath...)
@@ -759,7 +759,7 @@ func BindFlagToCmdLine[T Bindable](s *Parser, data *T, flag string, argument *Ar
 // CustomBindFlagToParser is a helper function to allow passing generics to the Parser.CustomBindFlag method
 func CustomBindFlagToParser[T any](s *Parser, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return ErrBindNilPointer
+		return types.ErrBindNilPointer
 	}
 
 	return s.CustomBindFlag(data, proc, flag, argument, commandPath...)
@@ -777,22 +777,22 @@ func CustomBindFlagToCmdLine[T any](s *Parser, data *T, proc ValueSetFunc, flag 
 // An error is returned if data cannot be bound - for compile-time safety use BindFlagToParser instead
 func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
 	if bindPtr == nil {
-		return ErrBindNilPointer
+		return types.ErrBindNilPointer
 	}
-	if ok, err := canConvert(bindPtr, argument.TypeOf); !ok {
+	if ok, err := util.CanConvert(bindPtr, argument.TypeOf); !ok {
 		return err
 	}
 
 	if reflect.ValueOf(bindPtr).Kind() != reflect.Ptr {
-		return ErrVariableNotAPointer
+		return types.ErrVariableNotAPointer
 	}
 
 	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
 		return err
 	}
 
-	if argument.TypeOf == Empty {
-		argument.TypeOf = inferFieldType(reflect.ValueOf(bindPtr).Elem().Type())
+	if argument.TypeOf == types.Empty {
+		argument.TypeOf = parse.InferFieldType(reflect.ValueOf(bindPtr).Elem().Type())
 	}
 
 	lookupFlag := buildPathFlag(flag, commandPath...)
@@ -833,14 +833,14 @@ func (p *Parser) CustomBindFlag(data any, proc ValueSetFunc, flag string, argume
 //
 //		a Flag which accepts only whole numbers could be defined as:
 //	 	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
-func (p *Parser) AcceptPattern(flag string, val PatternValue, commandPath ...string) error {
-	return p.AcceptPatterns(flag, []PatternValue{val}, commandPath...)
+func (p *Parser) AcceptPattern(flag string, val types.PatternValue, commandPath ...string) error {
+	return p.AcceptPatterns(flag, []types.PatternValue{val}, commandPath...)
 }
 
 // AcceptPatterns same as PatternValue but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the PatternValue, Parse returns false.
-func (p *Parser) AcceptPatterns(flag string, acceptVal []PatternValue, commandPath ...string) error {
+func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, commandPath ...string) error {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err != nil {
 		return err
@@ -861,14 +861,14 @@ func (p *Parser) AcceptPatterns(flag string, acceptVal []PatternValue, commandPa
 }
 
 // GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
-func (p *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]PatternValue, error) {
+func (p *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]types.PatternValue, error) {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err != nil {
-		return []PatternValue{}, err
+		return []types.PatternValue{}, err
 	}
 
 	if arg.AcceptedValues == nil {
-		return []PatternValue{}, nil
+		return []types.PatternValue{}, nil
 	}
 
 	return arg.AcceptedValues, nil
@@ -1012,7 +1012,7 @@ func (p *Parser) DescribeFlag(flag, description string, commandPath ...string) e
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 }
 
 // GetDescription retrieves a Flag's description as set by DescribeFlag
@@ -1062,7 +1062,7 @@ func (p *Parser) SetFlag(flag, value string, commandPath ...string) error {
 		return err
 	}
 
-	if arg.TypeOf == File {
+	if arg.TypeOf == types.File {
 		path := p.rawArgs[key]
 		if path == "" {
 			path = arg.DefaultValue
@@ -1115,7 +1115,7 @@ func (p *Parser) AddDependency(flag, dependsOn string, commandPath ...string) er
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	// Initialize DependencyMap if needed
@@ -1138,7 +1138,7 @@ func (p *Parser) AddDependencyValue(flag, dependsOn string, allowedValues []stri
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	// Initialize DependencyMap if needed
@@ -1166,7 +1166,7 @@ func (p *Parser) RemoveDependency(flag, dependsOn string, commandPath ...string)
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, ErrFlagNotFound, flag)
+		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
 	}
 
 	dependsOnKey := p.flagOrShortFlag(dependsOn, commandPath...)
@@ -1399,15 +1399,6 @@ func (c *Command) Visit(visitor func(cmd *Command, level int) bool, level int) {
 	for _, cmd := range c.Subcommands {
 		cmd.Visit(visitor, level+1)
 	}
-}
-
-// Describe a LiterateRegex (regular expression with a human-readable explanation of the pattern)
-func (r *PatternValue) Describe() string {
-	if len(r.Description) > 0 {
-		return r.Description
-	}
-
-	return r.Pattern
 }
 
 // SetTerminalReader sets the terminal reader for secure input (by default, the terminal reader is the real terminal)

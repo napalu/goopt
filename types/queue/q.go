@@ -7,6 +7,7 @@ type Q[T any] struct {
 	items []T
 }
 
+// New creates a new Q
 func New[T any]() *Q[T] {
 	return &Q[T]{}
 }
@@ -72,16 +73,45 @@ func (q *Q[T]) At(index int) (T, bool) {
 	return q.items[index], true
 }
 
-// Iterate allows you to iterate over the stack (from top to bottom) or queue (from front to back)
-func (q *Q[T]) Iterate(callback func(item T, index int) bool) {
-	for i := len(q.items) - 1; i >= 0; i-- {
-		if !callback(q.items[i], i) {
-			break
-		}
-	}
+// IterationDirection specifies the direction in which to iterate over the items
+type IterationDirection bool
+
+const (
+	Forward  IterationDirection = true
+	Backward IterationDirection = false
+)
+
+type IterationCallback[T any] func(item T, index int) (keepGoing bool)
+
+// ForEach allows you to iterate over the items (from front to back)
+func (q *Q[T]) ForEach(callback IterationCallback[T]) {
+	q.iterate(Forward, callback)
+}
+
+// ForEachReverse allows you to iterate over the items (from back to front)
+func (q *Q[T]) ForEachReverse(callback IterationCallback[T]) {
+	q.iterate(Backward, callback)
 }
 
 // Clear removes all items
 func (q *Q[T]) Clear() {
 	q.items = q.items[:0]
+}
+
+// iterate allows you to iterate over the items (from front to back when direction is Forward and from back to front when direction is Backward)
+// returning false from the callback will stop the iteration early
+func (q *Q[T]) iterate(direction IterationDirection, callback IterationCallback[T]) {
+	if direction == Forward {
+		for i := 0; i < len(q.items); i++ {
+			if !callback(q.items[i], i) {
+				break
+			}
+		}
+	} else {
+		for i := len(q.items) - 1; i >= 0; i-- {
+			if !callback(q.items[i], i) {
+				break
+			}
+		}
+	}
 }

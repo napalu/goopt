@@ -4,19 +4,23 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/napalu/goopt/types"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParsePatternValues(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    []TagPatternValue
+		want    []types.PatternValue
 		wantErr bool
 	}{
 		{
 			name:  "single pattern",
 			input: "{pattern:json,desc:JSON format}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "json",
 				Description: "JSON format",
 			}},
@@ -24,7 +28,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "multiple patterns",
 			input: "{pattern:json,desc:JSON format},{pattern:yaml,desc:YAML format}",
-			want: []TagPatternValue{
+			want: []types.PatternValue{
 				{Pattern: "json", Description: "JSON format"},
 				{Pattern: "yaml", Description: "YAML format"},
 			},
@@ -32,7 +36,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "regex with escapes",
 			input: "{pattern:(?i)^(?:ALL|INFO|ERROR|WARN|DEBUG|NONE)$,desc:one of (ALL\\, INFO\\, ERROR\\, WARN\\, DEBUG\\, NONE) - case-insensitive}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "(?i)^(?:ALL|INFO|ERROR|WARN|DEBUG|NONE)$",
 				Description: "one of (ALL, INFO, ERROR, WARN, DEBUG, NONE) - case-insensitive",
 			}},
@@ -40,7 +44,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "multiple with escapes",
 			input: "{pattern:a\\,b,desc:Values a\\, b},{pattern:c\\,d,desc:Values c\\, d}",
-			want: []TagPatternValue{
+			want: []types.PatternValue{
 				{Pattern: "a,b", Description: "Values a, b"},
 				{Pattern: "c,d", Description: "Values c, d"},
 			},
@@ -58,7 +62,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "pattern with multiple escapes",
 			input: "{pattern:a\\,b\\,c,desc:Values with\\, multiple\\, commas}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "a,b,c",
 				Description: "Values with, multiple, commas",
 			}},
@@ -66,7 +70,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "pattern with escaped braces",
 			input: "{pattern:\\{\\},desc:Literal braces}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "{}",
 				Description: "Literal braces",
 			}},
@@ -79,7 +83,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "pattern with escaped quotes",
 			input: "{pattern:\\\",desc:Quote},{pattern:\\',desc:Single quote}",
-			want: []TagPatternValue{
+			want: []types.PatternValue{
 				{Pattern: "\"", Description: "Quote"},
 				{Pattern: "'", Description: "Single quote"},
 			},
@@ -87,7 +91,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "pattern with regex special chars",
 			input: "{pattern:^\\w+@\\w+\\.\\w+$,desc:Email regex}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     `^\w+@\w+\.\w+$`,
 				Description: "Email regex",
 			}},
@@ -95,7 +99,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "pattern with multiple escaped backslashes",
 			input: "{pattern:C:\\\\Windows\\\\System32,desc:Windows path}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     `C:\Windows\System32`,
 				Description: "Windows path",
 			}},
@@ -118,7 +122,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "consecutive escapes",
 			input: "{pattern:a\\\\\\,b,desc:Backslash and comma}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     `a\,b`,
 				Description: "Backslash and comma",
 			}},
@@ -126,7 +130,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "mixed escapes in description",
 			input: "{pattern:[a-z]+,desc:Letters (a\\, b\\, c\\\\d\\\\e)}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "[a-z]+",
 				Description: `Letters (a, b, c\d\e)`,
 			}},
@@ -134,7 +138,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "escaped colon",
 			input: "{pattern:key\\:value,desc:Contains colon}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "key:value",
 				Description: "Contains colon",
 			}},
@@ -142,7 +146,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "multiple patterns with mixed escapes",
 			input: "{pattern:\\\\\\,\\\\,desc:Backslash\\, comma},{pattern:\\\"\\',desc:Quotes}",
-			want: []TagPatternValue{
+			want: []types.PatternValue{
 				{Pattern: `\,\`, Description: "Backslash, comma"},
 				{Pattern: `"'`, Description: "Quotes"},
 			},
@@ -150,7 +154,7 @@ func TestParsePatternValues(t *testing.T) {
 		{
 			name:  "spaces",
 			input: "{pattern:a b c,desc:space spaces}",
-			want: []TagPatternValue{{
+			want: []types.PatternValue{{
 				Pattern:     "a b c",
 				Description: "space spaces",
 			}},
@@ -396,6 +400,84 @@ func TestParseDependencies(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Dependencies() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestParser_InferFieldType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected types.OptionType
+	}{
+		{
+			name: "struct field bool",
+			input: reflect.StructField{
+				Name: "TestBool",
+				Type: reflect.TypeOf(bool(false)),
+			},
+			expected: types.Standalone,
+		},
+		{
+			name:     "reflect type bool",
+			input:    reflect.TypeOf(bool(false)),
+			expected: types.Standalone,
+		},
+		{
+			name: "struct field string slice",
+			input: reflect.StructField{
+				Name: "TestStrings",
+				Type: reflect.TypeOf([]string{}),
+			},
+			expected: types.Chained,
+		},
+		{
+			name:     "reflect type string slice",
+			input:    reflect.TypeOf([]string{}),
+			expected: types.Chained,
+		},
+		{
+			name: "struct field time.Duration",
+			input: reflect.StructField{
+				Name: "TestDuration",
+				Type: reflect.TypeOf(time.Duration(0)),
+			},
+			expected: types.Single,
+		},
+		{
+			name:     "reflect type time.Duration",
+			input:    reflect.TypeOf(time.Duration(0)),
+			expected: types.Single,
+		},
+		{
+			name: "struct field time.Time",
+			input: reflect.StructField{
+				Name: "TestTime",
+				Type: reflect.TypeOf(time.Time{}),
+			},
+			expected: types.Single,
+		},
+		{
+			name:     "reflect type time.Time",
+			input:    reflect.TypeOf(time.Time{}),
+			expected: types.Single,
+		},
+		{
+			name:     "nil type",
+			input:    nil,
+			expected: types.Empty,
+		},
+		{
+			name:     "unsupported type",
+			input:    reflect.TypeOf(struct{}{}),
+			expected: types.Empty,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := InferFieldType(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

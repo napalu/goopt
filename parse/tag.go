@@ -3,16 +3,17 @@ package parse
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/napalu/goopt/types"
+	"github.com/napalu/goopt/util"
 )
 
-// TagPatternValue represents a pattern and its description in tag format
-type TagPatternValue struct {
-	Pattern     string
-	Description string
-}
-
-// Dependencies maps flag names to their allowed values
+// DependencyMap maps flag names to their allowed values
 // empty slice means any value is acceptable
 type DependencyMap map[string][]string
 
@@ -53,7 +54,7 @@ const (
 //	{pattern:a\,b,desc:Values a\, b}     -> pattern="a,b" desc="Values a, b"
 //	{pattern:C:\\Windows,desc:Path}      -> pattern="C:\Windows" desc="Path"
 //	{pattern:\w+\:\d+,desc:Key\: Value}  -> pattern="w+:d+" desc="Key: Value"
-func PatternValue(input string) (*TagPatternValue, error) {
+func PatternValue(input string) (*types.PatternValue, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return nil, fmt.Errorf(errEmptyInput, "pattern value")
@@ -130,15 +131,15 @@ func PatternValue(input string) (*TagPatternValue, error) {
 		return nil, fmt.Errorf(errMissingValue, "desc", input)
 	}
 
-	return &TagPatternValue{
+	return &types.PatternValue{
 		Pattern:     pattern,
 		Description: desc,
 	}, nil
 }
 
 // PatternValues parses multiple pattern values
-func PatternValues(input string) ([]TagPatternValue, error) {
-	var result []TagPatternValue
+func PatternValues(input string) ([]types.PatternValue, error) {
+	var result []types.PatternValue
 
 	// Handle empty input
 	input = strings.TrimSpace(input)
@@ -438,7 +439,7 @@ func Dependency(input string) (string, []string, error) {
 				bracketCount--
 				current.WriteByte(ch)
 				// If we're back to bracket level 0 and next char is comma,
-				// this is a complete nested structure
+				// this is a completely nested structure
 				if bracketCount == 0 && i+1 < len(values) && values[i+1] == ',' {
 					if v := strings.TrimSpace(current.String()); v != "" {
 						// For double-bracketed items, remove one level
@@ -477,4 +478,258 @@ func Dependency(input string) (string, []string, error) {
 	}
 
 	return flag, nil, nil
+}
+
+func TypeOfFlagFromString(s string) types.OptionType {
+	switch strings.ToUpper(s) {
+	case "STANDALONE":
+		return types.Standalone
+	case "CHAINED":
+		return types.Chained
+	case "FILE":
+		return types.File
+	case "SINGLE":
+		return types.Single
+	default:
+		return types.Empty
+	}
+}
+
+func TypeOfFlagToString(t types.OptionType) string {
+	switch t {
+	case types.Standalone:
+		return "standalone"
+	case types.Single:
+		return "single"
+	case types.Chained:
+		return "chained"
+	case types.File:
+		return "file"
+	default:
+		return "empty"
+	}
+}
+
+func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, error) {
+	foundLegacyTag := false
+
+	config := &types.TagConfig{
+		Kind: types.KindFlag,
+	}
+
+	tagNames := []string{
+		"long", "short", "description", "required", "type", "default",
+		"secure", "prompt", "path", "accepted", "depends",
+	}
+
+	for _, tag := range tagNames {
+		value, ok := field.Tag.Lookup(tag)
+		if !ok {
+			continue
+		}
+
+		foundLegacyTag = true
+		switch tag {
+		case "long":
+			config.Name = value
+		case "short":
+			config.Short = value
+		case "description":
+			config.Description = value
+		case "type":
+			config.TypeOf = TypeOfFlagFromString(value)
+		case "default":
+			config.Default = value
+		case "required":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+			}
+			config.Required = boolVal
+		case "secure":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+			}
+			if boolVal {
+				config.Secure = types.Secure{IsSecure: boolVal}
+			}
+		case "prompt":
+			if config.Secure.IsSecure {
+				config.Secure.Prompt = value
+			}
+		case "path":
+			config.Path = value
+		case "accepted":
+			patterns, err := PatternValues(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'accepted' tag value for field %s: %w", field.Name, err)
+			}
+			// Convert to PatternValue
+			config.AcceptedValues = make([]types.PatternValue, len(patterns))
+			for i, p := range patterns {
+				pv, err := compilePattern(p, field.Name)
+				if err != nil {
+					return nil, err
+				}
+				config.AcceptedValues[i] = *pv
+			}
+		case "depends":
+			deps, err := Dependencies(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'depends' tag value for field %s: %w", field.Name, err)
+			}
+			config.DependsOn = deps
+		default:
+			return nil, fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+		}
+	}
+
+	if !foundLegacyTag {
+		return nil, nil
+	}
+
+	if config.TypeOf == types.Empty {
+		config.TypeOf = InferFieldType(field)
+	}
+
+	return config, nil
+}
+
+func InferFieldType(field interface{}) types.OptionType {
+	var t reflect.Type
+
+	switch f := field.(type) {
+	case reflect.StructField:
+		if f.Type == nil {
+			return types.Empty
+		}
+		t = f.Type
+	case reflect.Type:
+		if f == nil {
+			return types.Empty
+		}
+		t = f
+	default:
+		return types.Empty
+	}
+
+	switch t.Kind() {
+	case reflect.Bool:
+		return types.Standalone
+	case reflect.Slice, reflect.Array:
+		// Create a pointer to a slice of the element type
+		slicePtr := reflect.New(t).Interface()
+		if ok, _ := util.CanConvert(slicePtr, types.Chained); ok {
+			return types.Chained
+		}
+		return types.Empty
+	case reflect.String, reflect.Int, reflect.Int64, reflect.Float64, reflect.Float32,
+		reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
+		return types.Single
+	default:
+		if t == reflect.TypeOf(time.Duration(0)) ||
+			t == reflect.TypeOf(time.Time{}) {
+			return types.Single
+		}
+		return types.Empty
+	}
+}
+
+func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig, error) {
+	config := &types.TagConfig{}
+	parts := strings.Split(tag, ";")
+
+	for _, part := range parts {
+		key, value, found := strings.Cut(part, ":")
+		if !found {
+			return nil, fmt.Errorf("invalid tag format in field %s: %s", field.Name, part)
+		}
+
+		switch key {
+		case "kind":
+			switch types.Kind(value) {
+			case types.KindFlag, types.KindCommand, types.KindEmpty:
+				config.Kind = types.Kind(value)
+			default:
+				return nil, fmt.Errorf("invalid kind in field %s: %s (must be 'command', 'flag', or empty)",
+					field.Name, value)
+			}
+		case "name":
+			config.Name = value
+		case "short":
+			config.Short = value
+		case "type":
+			config.TypeOf = TypeOfFlagFromString(value)
+		case "desc":
+			config.Description = value
+		case "default":
+			config.Default = value
+		case "required":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'required' value in field %s: %w", field.Name, err)
+			}
+			config.Required = boolVal
+		case "secure":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'secure' value in field %s: %w", field.Name, err)
+			}
+			if boolVal {
+				config.Secure = types.Secure{IsSecure: boolVal}
+			}
+		case "prompt":
+			if config.Secure.IsSecure {
+				config.Secure.Prompt = value
+			}
+		case "path":
+			config.Path = value
+		case "accepted":
+			patterns, err := PatternValues(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
+			}
+			for i, p := range patterns {
+				config.AcceptedValues = make([]types.PatternValue, len(patterns))
+				pv, err := compilePattern(p, field.Name)
+				if err != nil {
+					return nil, err
+				}
+				config.AcceptedValues[i] = *pv
+			}
+		case "depends":
+			deps, err := Dependencies(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid 'depends' value in field %s: %w", field.Name, err)
+			}
+			config.DependsOn = deps
+		default:
+			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
+		}
+	}
+
+	// If kind is empty, treat as flag
+	if config.Kind == types.KindEmpty {
+		config.Kind = types.KindFlag
+	}
+
+	if config.TypeOf == types.Empty && config.Kind != types.KindCommand {
+		config.TypeOf = InferFieldType(field)
+	}
+
+	return config, nil
+}
+
+func compilePattern(p types.PatternValue, fieldName string) (*types.PatternValue, error) {
+	re, err := regexp.Compile(p.Pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", fieldName, err)
+	}
+
+	return &types.PatternValue{
+		Pattern:     p.Pattern,
+		Description: p.Description,
+		Compiled:    re,
+	}, nil
 }
