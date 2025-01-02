@@ -9,7 +9,7 @@ It will be removed in a future version once the migration period is over.
 
 Install the migration tool:
 ```bash
-go install github.com/your/repo/goopt/migration/cmd/goopt-migrate@latest
+go install github.com/napalu/goopt/cmd/goopt-migrate@latest
 ```
 
 Convert a single file:
@@ -25,7 +25,7 @@ goopt-migrate -d path/to/dir
 Options:
 - `-f, --file`: Process a single file
 - `-d, --dir`: Process a directory (recursively)
-- `--dry-run`: Show what would be changed without making changes
+- `-r, --dry-run`: Show what would be changed without making changes
 - `-v, --verbose`: Show detailed progress
 
 ### API Usage

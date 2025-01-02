@@ -9,35 +9,63 @@ nav_order: 3
 
 ## Struct Tag formats
 
-goopt supports two different formats for struct tags:
-New format:
-The tag format uses semicolon-separated key:value pairs:
-- `goopt`: The tag name
-- `kind`: Specifies if it's a `flag` or `command` (default: flag)
-- `name`: Long name for the `flag`/`command` - defaults to the field name if not specified
-- `short`: Short (single-character) name of the `flag` when POSIX compatibility is enabled - otherwise can be a multi-character string used as a mnemonic for the flag name (default)
-- `desc`: Description of the `flag`/`command`
-- `type`: `Flag` type (single|standalone|chained) - defaults to single
-- `required`: Whether the `flag` is required (true|false) - defaults to true
-- `default`: Default value for the `flag`
-- `secure`: For `flag` containing password input (true|false) - defaults to false
-- `prompt`: Prompt text for secure input `flag`
-- `accepted`: `Flag` which matches on values using one or more patterns - a pattern can be a literal value or a regex pattern (e.g. `pattern:json|yaml,desc:Format type`)
-- `depends`: `Flag` dependencies - a dependency can be a flag or set of flags or a set of flags and values (e.g. `flag:output,values:[json,yaml]`)
+| Feature | New Format | Old Format (Deprecated) |
+|---------|------------|------------------------|
+| Separator | Semicolon (;) | Space |
+| Key-Value Delimiter | Colon (:) | Colon (:) |
+| Tag Name | goopt | N/A |
+| Kind | kind:flag\|command | N/A |
+| Long Name | name:value | long:value |
+| Short Name | short:value | short:value |
+| Description | desc:value | description:value |
+| Type | type:single\|standalone\|chained\|file | type:single\|standalone\|chained\|file |
+| Required | required:true\|false | required:true\|false |
+| Default Value | default:value | default:value |
+| Secure Input | secure:true\|false | secure:true\|false |
+| Prompt Text | prompt:value | prompt:value |
+| Accepted Values | accepted:{pattern:json\|yaml,desc:Format type},{pattern:text\|binary,desc:Type} | accepted:pattern:json\|yaml,desc:Format type |
+| Dependencies | depends:{flag:output,values:[json,yaml]},{flag:mode,values:[text]} | depends:flag:output,values:[json,yaml] |
 
-Old format (deprecated will be removed in the next major release):
-The tag format uses space-separated quoted key:value pairs:
-- `long`: Long name for the `flag` - defaults to the field name if not specified
-- `short`: Short (single-character) name of the `flag` when POSIX compatibility is enabled - otherwise can be a multi-character string used as a mnemonic for the `flag` name (default)
-- `description`: Description of the `flag`
-- `type`: `Flag` type (single|standalone|chained|file) - defaults to single
-- `required`: Whether the `flag` is required (true|false) - defaults to true
-- `default`: Default value for the `flag`
-- `secure`: For `flag` containing password input (true|false) - defaults to false
-- `prompt`: Prompt text for secure input `flag`
-- `accepted`: `Flag` which matches on values using one or more patterns - a pattern can be a literal value or a regex pattern (e.g. `pattern:json|yaml,desc:Format type`)
-- `depends`: `Flag` dependencies - a dependency can be a flag or set of flags or a set of flags and values (e.g. `flag:output,values:[json,yaml]`)
+The new format offers several advantages:
+- Namespace Isolation: Using goopt: prefix prevents conflicts with other tag parsers
+- Better Compatibility: Semicolon-separated format is more common in Go struct tags
+- Clearer Structure: All options are under the goopt namespace
+- Future Extensibility: New features can be added without breaking existing parsers
 
+To migrate from the old format to the new one, you can use the migration tool:
+
+[Migration Tool Documentation](https://github.com/napalu/goopt/blob/main/migration/README.md)
+
+The tool will automatically update your struct tags while preserving functionality.
+
+### Complex Tag Formats
+
+#### Accepted Values
+
+Multiple accepted patterns can be specified using brace-comma notation:
+
+```go
+type Config struct {
+    // Single pattern
+    Format string `goopt:"name:format;accepted:{pattern:json|yaml,desc:Output format}"`
+
+    // Multiple patterns
+    Mode string `goopt:"name:mode;accepted:{pattern:read|write,desc:Access mode},{pattern:sync|async,desc:Operation mode}"`
+}
+```
+
+### Dependencies
+Dependencies use the same brace-comma notation:
+
+```go
+type Config struct {
+    // Single dependency
+    Format string `goopt:"name:format;depends:{flag:output,values:[file,dir]}"`
+
+    // Multiple dependencies
+    Compress bool `goopt:"name:compress;depends:{flag:format,values:[json]},{flag:output,values:[file,dir]}"`
+}
+```
 
 ## Nested Struct Access
 
