@@ -45,6 +45,7 @@ const (
 	KindEmpty   Kind = ""
 )
 
+// TagConfig is used to store struct tag information about a flag or command
 type TagConfig struct {
 	Kind           Kind
 	Name           string
@@ -57,6 +58,7 @@ type TagConfig struct {
 	Path           string
 	AcceptedValues []PatternValue
 	DependsOn      map[string][]string
+	Capacity       int
 }
 
 // Describe a PatternValue (regular expression with a human-readable explanation of the pattern)

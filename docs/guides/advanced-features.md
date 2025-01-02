@@ -23,6 +23,7 @@ nav_order: 3
 | Default Value | default:value | default:value |
 | Secure Input | secure:true\|false | secure:true\|false |
 | Prompt Text | prompt:value | prompt:value |
+| SliceCapacity | capacity:value | N/A |
 | Accepted Values | accepted:{pattern:json\|yaml,desc:Format type},{pattern:text\|binary,desc:Type} | accepted:pattern:json\|yaml,desc:Format type |
 | Dependencies | depends:{flag:output,values:[json,yaml]},{flag:mode,values:[text]} | depends:flag:output,values:[json,yaml] |
 
@@ -54,7 +55,7 @@ type Config struct {
 }
 ```
 
-### Dependencies
+#### Dependencies
 Dependencies use the same brace-comma notation:
 
 ```go
@@ -96,48 +97,45 @@ Nested structs are automatically treated as flag containers unless explicitly ma
 
 ## Slice Handling
 
-When using slices in your configuration struct, you must initialize them to the desired size before parsing flags. This is a deliberate design decision for security and resource management:
+When using slices in your configuration struct, there are two distinct cases:
+
+### 1. Terminal Flag Slices
+Terminal flag slices (slices at the end of a path) automatically accept comma-separated values:
 
 ```go
 type Config struct {
     Command struct {
         Items []struct {
-            Flag string `goopt:"name:flag"`
+            Flags []string `goopt:"name:flag"` // Terminal slice
+        }
+    }
+}
+
+// Usage:
+--command.items.0.flag="one,two,three"  // Automatically splits into slice
+```
+
+### 2. Nested Structure Slices
+For slices of structs (nested slices), you can specify their capacity using the `capacity` tag:
+
+```go
+type Config struct {
+    Command struct {
+        Items []struct `goopt:"capacity:3"` {  // Nested slice needs capacity
+            Flag []string `goopt:"name:flag"`  // Terminal slice
         }
     } `goopt:"kind:command;name:command"`
 }
 
-// Initialize slice before use
-config.Command.Items = make([]struct{ Flag string }, expectedSize)
+// Usage:
+--command.items.0.flag="one,two,three"
+--command.items.1.flag="four,five,six"
+--command.items.2.flag="seven,eight"
 ```
 
-### Nested Slice Access
-
-When accessing nested slices, use dot notation with indices:
-```go
-// Valid patterns:
---items.0.flag value        // Simple slice access
---items.0.nested.1.flag value  // Nested slice access
-
-// Invalid patterns:
---items.flag value          // Missing index
---items.0.1.flag value      // Missing field name between indices
-```
-
-All slice access is validated during parsing:
-- Index bounds are checked (e.g., "index out of bounds at 'items.5': valid range is 0-2")
-- Struct field access is validated (e.g., "cannot access field 'flag' on non-struct at 'items.0'")
-- Path format is verified before processing
-
-### Why Pre-initialization?
-
-1. **Security**: Prevents resource exhaustion attacks through flag manipulation
-2. **Memory Control**: Explicit control over slice allocation
-3. **Predictable Behavior**: Clear boundaries for slice-based flags
-4. **Code Clarity**: Explicit initialization makes the expected slice size immediately clear to readers, simplifying both implementation and usage
-
-Without this requirement, malicious input could cause uncontrolled memory growth:
-```go
-// This is prevented by requiring explicit initialization
-app --items.100000000000000000000.flag=value // Could exhaust memory
-``` 
+Important notes:
+1. The `capacity` tag is optional and only needed for nested struct slices
+2. Terminal flag slices are automatically sized based on input
+3. Memory safety is ensured by flag registration - only valid paths are accepted
+4. Attempting to use an index outside the registered range results in "unknown flag" error
+5. Slice bounds are tracked for user feedback when using `NewParserFromStruct` but are not required for memory safety

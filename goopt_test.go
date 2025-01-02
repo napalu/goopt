@@ -3213,78 +3213,115 @@ func TestParser_NestedSlicePathRegex(t *testing.T) {
 
 func TestParser_ValidateSlicePath(t *testing.T) {
 	tests := []struct {
-		name        string
-		path        string
-		expectError bool
-		errorMsg    string
-		sliceBounds map[string]string
+		name      string
+		setup     func(*Parser)
+		path      string
+		wantError bool
+		errorMsg  string
 	}{
 		{
-			name:        "valid single level",
-			path:        "Items.0.Name",
-			expectError: false,
-			sliceBounds: map[string]string{
-				"Items": "1",
+			name: "valid single level slice access",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("items", &FlagInfo{
+					Argument: &Argument{Capacity: 3},
+				})
+				p.acceptedFlags.Set("items.0", &FlagInfo{})
+				p.acceptedFlags.Set("items.1", &FlagInfo{})
+				p.acceptedFlags.Set("items.2", &FlagInfo{})
 			},
+			path: "items.1",
 		},
 		{
-			name:        "index out of bounds",
-			path:        "Items.5.Name",
-			expectError: true,
-			errorMsg:    "index out of bounds at 'Items.5': valid range is 0-1",
-			sliceBounds: map[string]string{
-				"Items": "1",
+			name: "index out of bounds",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("items", &FlagInfo{
+					Argument: &Argument{Capacity: 3},
+				})
 			},
+			path:      "items.3",
+			wantError: true,
+			errorMsg:  "index 3 out of bounds at 'items.3': valid range is 0-2",
 		},
 		{
-			name:        "nested slice valid",
-			path:        "Items.0.SubItems.1.Value",
-			expectError: false,
-			sliceBounds: map[string]string{
-				"Items":            "0",
-				"Items.0.SubItems": "2",
+			name: "nested valid path",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("outer", &FlagInfo{
+					Argument: &Argument{Capacity: 2},
+				})
+				p.acceptedFlags.Set("outer.0", &FlagInfo{})
+				p.acceptedFlags.Set("outer.0.inner", &FlagInfo{
+					Argument: &Argument{Capacity: 3},
+				})
+				p.acceptedFlags.Set("outer.0.inner.1", &FlagInfo{})
 			},
+			path: "outer.0.inner.1",
 		},
 		{
-			name:        "nested slice out of bounds",
-			path:        "Items.0.SubItems.3.Value",
-			expectError: true,
-			errorMsg:    "index out of bounds at 'Items.0.SubItems.3': valid range is 0-2",
-			sliceBounds: map[string]string{
-				"Items":            "0",
-				"Items.0.SubItems": "2",
+			name: "nested out of bounds",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("outer", &FlagInfo{
+					Argument: &Argument{Capacity: 2},
+				})
+				p.acceptedFlags.Set("outer.0", &FlagInfo{})
+				p.acceptedFlags.Set("outer.0.inner", &FlagInfo{
+					Argument: &Argument{Capacity: 3},
+				})
 			},
+			path:      "outer.0.inner.3",
+			wantError: true,
+			errorMsg:  "index 3 out of bounds at 'outer.0.inner.3': valid range is 0-2",
 		},
 		{
-			name:        "negative index",
-			path:        "Items.-1.Name",
-			expectError: true,
-			errorMsg:    "index out of bounds at 'Items.-1': valid range is 0-1",
-			sliceBounds: map[string]string{
-				"Items": "1",
+			name: "negative index",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("items", &FlagInfo{
+					Argument: &Argument{Capacity: 3},
+				})
 			},
+			path:      "items.-1",
+			wantError: true,
+			errorMsg:  "index -1 out of bounds",
 		},
 		{
-			name:        "missing bounds",
-			path:        "Unknown.0.Value",
-			expectError: false, // We'll let this pass as we validate actual paths elsewhere
-			sliceBounds: map[string]string{
-				"Items": "1",
+			name: "missing capacity",
+			setup: func(p *Parser) {
+				p.acceptedFlags.Set("items", &FlagInfo{
+					Argument: &Argument{}, // No capacity set
+				})
 			},
+			path:      "items.0",
+			wantError: true,
+			errorMsg:  "has no capacity set",
+		},
+		{
+			name: "unknown path",
+			setup: func(p *Parser) {
+				// No flags registered
+			},
+			path:      "unknown.0",
+			wantError: true,
+			errorMsg:  "unknown flag: unknown.0", // Updated to match actual error
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateSlicePath(tt.path, tt.sliceBounds)
+			p := NewParser()
+			tt.setup(p)
 
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Equal(t, tt.errorMsg, err.Error())
+			err := p.validateSlicePath(tt.path)
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("validateSlicePath() error = nil, want error")
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("validateSlicePath() error = %v, want error containing %q", err, tt.errorMsg)
 				}
-			} else {
-				assert.NoError(t, err)
+				return
+			}
+
+			if err != nil {
+				t.Errorf("validateSlicePath() unexpected error = %v", err)
 			}
 		})
 	}

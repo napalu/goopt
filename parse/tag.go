@@ -704,6 +704,15 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 				return nil, fmt.Errorf("invalid 'depends' value in field %s: %w", field.Name, err)
 			}
 			config.DependsOn = deps
+		case "capacity":
+			cap, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid capacity value '%s' in %q: %w", value, field.Name, err)
+			}
+			if cap < 0 {
+				return nil, fmt.Errorf("negative capacity not allowed in %q: %d", field.Name, cap)
+			}
+			config.Capacity = cap
 		default:
 			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
 		}

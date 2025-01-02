@@ -1,12 +1,12 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/types"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
@@ -130,6 +130,7 @@ type Argument struct {
 	Secure         types.Secure
 	Short          string
 	DefaultValue   string
+	Capacity       int // For slices, the capacity of the slice, ignored for other types
 }
 
 // Command defines commands and sub-commands
@@ -159,7 +160,6 @@ type Parser struct {
 	errors               []error
 	bind                 map[string]any
 	customBind           map[string]ValueSetFunc
-	sliceBounds          map[string]string // path -> encoded bounds (e.g. "Command.Items" -> "1.1.1")
 	registeredCommands   *orderedmap.OrderedMap[string, *Command]
 	commandOptions       *orderedmap.OrderedMap[string, bool]
 	positionalArgs       []PositionalArgument

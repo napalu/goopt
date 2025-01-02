@@ -56,7 +56,6 @@ func NewParser() *Parser {
 		flagNameConverter:    DefaultFlagNameConverter,
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
-		sliceBounds:          make(map[string]string),
 	}
 }
 
@@ -737,6 +736,21 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 		CommandPath: strings.Join(commandPath, " "), // Keep track of the command path
 	})
 
+	if argument.Capacity < 0 {
+		return fmt.Errorf("negative capacity not allowed: %d", argument.Capacity)
+	}
+
+	if argument.Capacity > 0 {
+		// Register each index
+		for i := 0; i < argument.Capacity; i++ {
+			indexPath := fmt.Sprintf("%s.%d", lookupFlag, i)
+			p.acceptedFlags.Set(indexPath, &FlagInfo{
+				Argument:    argument,
+				CommandPath: strings.Join(commandPath, " "),
+			})
+		}
+	}
+
 	return nil
 }
 
@@ -783,8 +797,31 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 		return err
 	}
 
-	if reflect.ValueOf(bindPtr).Kind() != reflect.Ptr {
+	v := reflect.ValueOf(bindPtr)
+	if v.Kind() != reflect.Ptr {
 		return types.ErrVariableNotAPointer
+	}
+
+	elem := v.Elem()
+	if !elem.IsValid() {
+		return fmt.Errorf("can't bind to invalid value field")
+	}
+
+	lookupFlag := buildPathFlag(flag, commandPath...)
+	if elem.Kind() == reflect.Slice && argument != nil && argument.Capacity > 0 {
+		// Create or resize slice to match capacity
+		newSlice := reflect.MakeSlice(elem.Type(), argument.Capacity, argument.Capacity)
+		// If resizing existing slice, preserve values where possible
+		if elem.Len() > 0 {
+			copyLen := util.Min(elem.Len(), argument.Capacity)
+			reflect.Copy(newSlice.Slice(0, copyLen), elem.Slice(0, copyLen))
+		}
+		elem.Set(newSlice)
+
+		for i := 0; i < argument.Capacity; i++ {
+			indexPath := fmt.Sprintf("%s.%d", lookupFlag, i)
+			p.bind[indexPath] = bindPtr
+		}
 	}
 
 	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
@@ -795,7 +832,6 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 		argument.TypeOf = parse.InferFieldType(reflect.ValueOf(bindPtr).Elem().Type())
 	}
 
-	lookupFlag := buildPathFlag(flag, commandPath...)
 	// Bind the flag to the variable
 	p.bind[lookupFlag] = bindPtr
 

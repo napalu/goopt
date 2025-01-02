@@ -91,7 +91,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 	lookup := buildPathFlag(currentArg, currentCommandPath...)
 
 	if isNestedSlicePath(currentArg) {
-		if err := validateSlicePath(lookup, p.sliceBounds); err != nil {
+		if err := p.validateSlicePath(lookup); err != nil {
 			p.addError(fmt.Errorf("invalid slice access for flag %s: %w", lookup, err))
 			return
 		}
@@ -219,9 +219,6 @@ func (p *Parser) ensureInit() {
 	}
 	if p.maxDependencyDepth <= 0 {
 		p.maxDependencyDepth = DefaultMaxDependencyDepth
-	}
-	if p.sliceBounds == nil {
-		p.sliceBounds = make(map[string]string)
 	}
 }
 
@@ -847,9 +844,6 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
 		p.registeredCommands.Set(*it.Key, it.Value)
 	}
-	for path, bounds := range nestedCmdLine.sliceBounds {
-		p.sliceBounds[path] = bounds
-	}
 
 	return nil
 }
@@ -1365,21 +1359,65 @@ func (p *Parser) getDependentFlags(arg *Argument) []string {
 	return deps
 }
 
+func (p *Parser) validateSlicePath(path string) error {
+	parts := strings.Split(path, ".")
+	currentPath := ""
+
+	for i, part := range parts {
+		if currentPath != "" {
+			currentPath += "."
+		}
+		currentPath += part
+
+		// Try to parse as index
+		if idx, err := strconv.Atoi(part); err == nil {
+			// This part is a numeric index - check against parent's capacity
+			parentPath := strings.Join(parts[:i], ".")
+			if flagInfo, exists := p.acceptedFlags.Get(parentPath); exists {
+				if flagInfo.Argument == nil {
+					return fmt.Errorf("internal error: missing argument info for %s", parentPath)
+				}
+
+				if flagInfo.Argument.Capacity <= 0 {
+					return fmt.Errorf("slice at '%s' has no capacity set", parentPath)
+				}
+
+				if idx < 0 || idx >= flagInfo.Argument.Capacity {
+					return fmt.Errorf("index %d out of bounds at '%s': valid range is 0-%d",
+						idx, currentPath, flagInfo.Argument.Capacity-1)
+				}
+			}
+		}
+	}
+
+	// Final check - does this path exist in our accepted flags?
+	if _, exists := p.acceptedFlags.Get(path); !exists {
+		return fmt.Errorf("unknown flag: %s", path)
+	}
+
+	return nil
+}
+
 func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
-	if fieldValue.IsNil() {
-		fieldValue.Set(reflect.MakeSlice(fieldValue.Type(), 0, 0))
+	// Get capacity from Argument if specified
+	capacity := 0
+	if flagInfo, exists := c.acceptedFlags.Get(flagPrefix); exists && flagInfo.Argument != nil {
+		capacity = flagInfo.Argument.Capacity
 	}
 
-	// Get current bounds or start new
-	currentBounds := strings.Split(c.sliceBounds[flagPrefix], ".")
-	if len(currentBounds) == 1 && currentBounds[0] == "" {
-		currentBounds = []string{}
+	// Initialize or resize slice if needed
+	if fieldValue.IsNil() || (capacity > 0 && fieldValue.Cap() != capacity) {
+		// TODO add a check to ensure capacity is not too large?
+
+		newSlice := reflect.MakeSlice(fieldValue.Type(), capacity, capacity)
+		if !fieldValue.IsNil() && fieldValue.Len() > 0 {
+			copyLen := util.Min(fieldValue.Len(), capacity)
+			reflect.Copy(newSlice.Slice(0, copyLen), fieldValue.Slice(0, copyLen))
+		}
+		fieldValue.Set(newSlice)
 	}
 
-	// Add this slice's bounds
-	currentBounds = append(currentBounds, strconv.Itoa(fieldValue.Len()-1))
-	c.sliceBounds[flagPrefix] = strings.Join(currentBounds, ".")
-
+	// Process each slice element
 	for idx := 0; idx < fieldValue.Len(); idx++ {
 		elem := fieldValue.Index(idx).Addr()
 
@@ -1390,9 +1428,8 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 		if err != nil {
 			return fmt.Errorf("error processing slice element %s[%d]: %w", flagPrefix, idx, err)
 		}
-		err = c.mergeCmdLine(nestedCmdLine)
-		if err != nil {
-			return err
+		if err = c.mergeCmdLine(nestedCmdLine); err != nil {
+			return fmt.Errorf("error merging slice element %s[%d]: %w", flagPrefix, idx, err)
 		}
 	}
 
@@ -1519,30 +1556,6 @@ var nestedSlicePathRegex = regexp.MustCompile(`^([^.]+\.\d+\.[^.]+)(\.\d+\.[^.]+
 
 func isNestedSlicePath(path string) bool {
 	return nestedSlicePathRegex.MatchString(path)
-}
-
-func validateSlicePath(path string, sliceBounds map[string]string) error {
-	parts := strings.Split(path, ".")
-	var currentPath []string
-
-	for i, part := range parts {
-		if idx, err := strconv.Atoi(part); err == nil {
-			// Found a numeric index
-			currentPathStr := strings.Join(currentPath, ".")
-			if encodedBounds, ok := sliceBounds[currentPathStr]; ok {
-				maxIdx, _ := strconv.Atoi(encodedBounds)
-				if idx < 0 || idx > maxIdx {
-					return fmt.Errorf("index out of bounds at '%s': valid range is 0-%d",
-						strings.Join(parts[:i+1], "."), maxIdx)
-				}
-			}
-			// Add index to current path for next iteration
-			currentPath = append(currentPath, part)
-		} else {
-			currentPath = append(currentPath, part)
-		}
-	}
-	return nil
 }
 
 func isStructOrSliceType(field reflect.StructField) bool {

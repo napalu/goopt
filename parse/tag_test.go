@@ -481,3 +481,97 @@ func TestParser_InferFieldType(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalTagFormat_Capacity(t *testing.T) {
+	tests := []struct {
+		name    string
+		tag     string
+		field   reflect.StructField
+		want    *types.TagConfig
+		wantErr bool
+	}{
+		{
+			name: "valid capacity",
+			tag:  "name:items;capacity:5",
+			field: reflect.StructField{
+				Name: "Items",
+				Type: reflect.TypeOf([]string{}),
+			},
+			want: &types.TagConfig{
+				Name:     "items",
+				Capacity: 5,
+				Kind:     types.KindFlag,
+				TypeOf:   types.Chained,
+			},
+		},
+		{
+			name: "zero capacity",
+			tag:  "name:items;capacity:0",
+			field: reflect.StructField{
+				Name: "Items",
+				Type: reflect.TypeOf([]string{}),
+			},
+			want: &types.TagConfig{
+				Name:     "items",
+				Capacity: 0,
+				Kind:     types.KindFlag,
+				TypeOf:   types.Chained,
+			},
+		},
+		{
+			name: "negative capacity",
+			tag:  "name:items;capacity:-1",
+			field: reflect.StructField{
+				Name: "Items",
+				Type: reflect.TypeOf([]string{}),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid capacity",
+			tag:  "name:items;capacity:abc",
+			field: reflect.StructField{
+				Name: "Items",
+				Type: reflect.TypeOf([]string{}),
+			},
+			wantErr: true,
+		},
+		{
+			name: "with other tags",
+			tag:  "name:items;capacity:3;required:true",
+			field: reflect.StructField{
+				Name: "Items",
+				Type: reflect.TypeOf([]string{}),
+			},
+			want: &types.TagConfig{
+				Name:     "items",
+				Required: true,
+				Capacity: 3,
+				Kind:     types.KindFlag,
+				TypeOf:   types.Chained,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := UnmarshalTagFormat(tt.tag, tt.field)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("UnmarshalTagFormat() error = nil, want error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("UnmarshalTagFormat() error = %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UnmarshalTagFormat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
