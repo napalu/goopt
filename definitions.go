@@ -15,7 +15,7 @@ import (
 type Bindable interface {
 	~string | int8 | int16 | int32 | int64 | ~int | uint8 | uint16 | uint32 | uint64 | ~uint | float32 | float64 |
 		bool | time.Time | time.Duration | []string | []int8 | []int16 | []int32 | []int64 | ~[]int | []uint8 | []uint16 | []uint32 |
-		[]uint64 | ~[]uint | []float32 | []float64 | []bool | []time.Time
+		[]uint64 | ~[]uint | []float32 | []float64 | []bool | []time.Time | []time.Duration
 }
 
 // PrettyPrintConfig is used to print the list of accepted commands as a tree in PrintCommandsUsing and PrintCommands
