@@ -16,7 +16,7 @@
 - **POSIX Compatibility**: Offers POSIX-compliant flag parsing, including support for short flags.
 - **Secure Flags**: Enable secure, hidden input for sensitive information like passwords.
 - **Automatic Usage Generation**: Automatically generates usage documentation based on defined flags and commands.
-
+- **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
 ## Installation
 
 Install `goopt` via `go get`:
@@ -326,6 +326,59 @@ Each approach has its benefits:
 - Command-centric provides clear structure for complex command hierarchies
 - Mixed approach allows flexibility where needed
 
+### Positional Arguments
+
+Goopt supports explicit position requirements for command-line arguments:
+
+
+```go
+parser := goopt.NewParser()
+
+// Require source file at start
+parser.AddFlag("source", goopt.NewArg(
+    goopt.WithPosition(goopt.AtStart),
+    goopt.WithRelativeIndex(0),
+))
+
+// Require destination file at end
+parser.AddFlag("dest", goopt.NewArg(
+    goopt.WithPosition(goopt.AtEnd),
+    goopt.WithRelativeIndex(0),
+))
+
+// Parse: myapp source.txt --verbose dest.txt
+args := parser.Parse(os.Args[1:])
+```
+
+### Position Types
+
+- `AtStart`: Argument must appear before any flags or commands
+- `AtEnd`: Argument must appear after all flags and commands
+
+### Features
+
+1. **Flexible Override**: Use flag syntax to override position requirements
+   ```bash
+   myapp --source override.txt --verbose dest.txt
+   ```
+
+2. **Multiple Ordered Positions**: Use PositionalIndex to specify order
+   ```go
+   parser.AddFlag("config", goopt.NewArg(
+       goopt.WithPosition(goopt.AtStart),
+       goopt.WithRelativeIndex(0),
+   ))
+   parser.AddFlag("profile", goopt.NewArg(
+       goopt.WithPosition(goopt.AtStart),
+       goopt.WithRelativeIndex(1),
+   ))
+   ```
+
+3. **Mixed Usage**: Combine positioned and regular arguments
+   ```bash
+   myapp config.yaml profile.json --verbose extra.txt
+   ```
+
 ---
 
 ### Advanced Features
@@ -490,3 +543,4 @@ parser.PrintUsageWithGroups(os.Stdout)
 ### Contributing
 
 Contributions are welcome! Contributions should be based on open issues (feel free to open one).
+

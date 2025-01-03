@@ -1,8 +1,10 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/types"
+	"fmt"
 	"regexp"
+
+	"github.com/napalu/goopt/types"
 )
 
 // NewArg convenience initialization method to configure flags
@@ -184,5 +186,29 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 
 			argument.AcceptedValues[i].Compiled = re
 		}
+	}
+}
+
+// WithPosition sets a position requirement for the argument
+func WithPosition(pos PositionType) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		// Validate position type
+		if pos != AtStart && pos != AtEnd {
+			*err = fmt.Errorf("invalid position type: %d", pos)
+			return
+		}
+		argument.Position = &pos
+	}
+}
+
+// WithRelativeIndex sets the index for ordered positional arguments
+func WithRelativeIndex(idx int) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		// Validate index is non-negative
+		if idx < 0 {
+			*err = fmt.Errorf("positional index must be non-negative, got: %d", idx)
+			return
+		}
+		argument.RelativeIndex = &idx
 	}
 }

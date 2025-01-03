@@ -3,10 +3,11 @@ package goopt
 import (
 	"bytes"
 	"fmt"
-	"github.com/napalu/goopt/types"
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/napalu/goopt/types"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -230,6 +231,92 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			}
 			if tt.wantErrs != nil {
 				assert.Equal(t, tt.wantErrs, opts.GetErrors())
+			}
+		})
+	}
+}
+
+func TestWithPosition(t *testing.T) {
+	tests := []struct {
+		name        string
+		position    PositionType
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "valid AtStart",
+			position: AtStart,
+			wantErr:  false,
+		},
+		{
+			name:     "valid AtEnd",
+			position: AtEnd,
+			wantErr:  false,
+		},
+		{
+			name:        "invalid position type",
+			position:    PositionType(99),
+			wantErr:     true,
+			errContains: "invalid position type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			arg := &Argument{}
+			var err error
+			WithPosition(tt.position)(arg, &err)
+
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, arg.Position)
+				assert.Equal(t, tt.position, *arg.Position)
+			}
+		})
+	}
+}
+
+func TestWithPositionalIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		index       int
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid index zero",
+			index:   0,
+			wantErr: false,
+		},
+		{
+			name:    "valid index positive",
+			index:   5,
+			wantErr: false,
+		},
+		{
+			name:        "invalid negative index",
+			index:       -1,
+			wantErr:     true,
+			errContains: "must be non-negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			arg := &Argument{}
+			var err error
+			WithRelativeIndex(tt.index)(arg, &err)
+
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, arg.RelativeIndex)
+				assert.Equal(t, tt.index, *arg.RelativeIndex)
 			}
 		})
 	}

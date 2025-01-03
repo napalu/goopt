@@ -109,10 +109,19 @@ type ClearConfig struct {
 	KeepPositional bool
 }
 
+// PositionType defines where a positional argument must appear in the command line
+type PositionType int
+
+const (
+	AtStart PositionType = 1 // Must appear before any non-positional arguments
+	AtEnd   PositionType = 2 // Must appear after all non-positional arguments
+)
+
 // PositionalArgument describes command-line arguments which were not matched as flags, flag values, command or command values.
 type PositionalArgument struct {
-	Position int
-	Value    string
+	Position int       // Position in the command line
+	Value    string    // The actual value
+	Argument *Argument // Reference to the argument definition, if this was bound
 }
 
 // Argument defines a command-line Flag
@@ -130,7 +139,9 @@ type Argument struct {
 	Secure         types.Secure
 	Short          string
 	DefaultValue   string
-	Capacity       int // For slices, the capacity of the slice, ignored for other types
+	Capacity       int           // For slices, the capacity of the slice, ignored for other types
+	Position       *PositionType // nil means no position requirement
+	RelativeIndex  *int          // Required if Position is set, determines order within position group
 }
 
 // Command defines commands and sub-commands
