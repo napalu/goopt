@@ -26,7 +26,7 @@ parser := goopt.NewParser()
 // Source file must be first
 parser.AddFlag("source", goopt.NewArg(
     goopt.WithPosition(goopt.AtStart),
-    goopt.WithPositionalIndex(0),
+    goopt.WithRelativeIndex(0),
 ))
 
 // Output file must be last
@@ -67,11 +67,11 @@ You can specify multiple arguments at the same position type using indices:
 ```go
 parser.AddFlag("config", goopt.NewArg(
     goopt.WithPosition(goopt.AtStart),
-    goopt.WithPositionalIndex(0),
+    goopt.WithRelativeIndex(0),
 ))
 parser.AddFlag("profile", goopt.NewArg(
     goopt.WithPosition(goopt.AtStart),
-    goopt.WithPositionalIndex(1),
+    goopt.WithRelativeIndex(1),
 ))
 
 // Usage: myapp config.yaml profile.json --verbose
@@ -84,7 +84,7 @@ Position requirements can be overridden using flag syntax:
 ```go
 parser.AddFlag("source", goopt.NewArg(
     goopt.WithPosition(goopt.AtStart),
-    goopt.WithPositionalIndex(0),
+    goopt.WithRelativeIndex(0),
 ))
 
 // Both are valid:
@@ -108,7 +108,7 @@ parser.AddFlag("config", goopt.NewArg(
 // Output must be last
 parser.AddFlag("output", goopt.NewArg(
     goopt.WithPosition(goopt.AtEnd),
-    goopt.WithRelativelIndex(0),
+    goopt.WithRelativeIndex(0),
 ))
 
 // Any other arguments are captured as regular positional arguments
@@ -158,7 +158,7 @@ if !parser.Parse(os.Args[1:]) {
 ```go
 parser.AddFlag("source", goopt.NewArg(
     goopt.WithPosition(goopt.AtStart),
-    goopt.WithPositionalIndex(0),
+    goopt.WithRelativeIndex(0),
     goopt.WithValidation(func(v string) error {
         // Custom validation for source file
         return nil

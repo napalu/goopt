@@ -1,5 +1,5 @@
-<button class="btn btn-icon js-theme-switcher"
-  style="padding: 0.5em 0.4em 0.5em 0.8em;" title="Toggle Dark/Light Mode"
+<button class="btn btn-icon js-theme-switcher" id="theme-switcher"
+  style="padding: 0.5em 0.4em 0.5em 0.8em; display: none;" title="Toggle Dark/Light Mode"
 >
   <svg viewBox="0 0 16 16" id="svg-sun-icon" class="icon obj-default-theme" title="Toggle Dark Mode">
     <use xlink:href="#svg-sun"></use>
@@ -9,7 +9,7 @@
   </svg>
 </button>
 
-<button class="btn btn-icon" style="padding: 0.5em 0.8em 0.5em 0.4em;" title="View it on Github"
+<button class="btn btn-icon" style="padding: 0.5em 0.8em 0.5em 0.4em; display: none;" title="View it on Github" id="github-icon"
   onclick="window.location.href='//github.com/{{ site.repository }}';"
 >
   <svg viewBox="0 0 16 16" id="svg-git-icon" class="icon" style="display: flex;" title="View it on Github">
@@ -18,7 +18,18 @@
 </button>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+  // Run this immediately to set the theme before page load
+  (function() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initialTheme = savedTheme || (prefersDarkScheme ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  })();
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    
+    if (!currentTheme) {
       const savedTheme = localStorage.getItem('theme');
       const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
       const initialTheme = savedTheme || (prefersDarkScheme ? 'dark' : 'light');
@@ -26,16 +37,21 @@
       document.documentElement.setAttribute('data-theme', initialTheme);
       jtd.setTheme(initialTheme);
       localStorage.setItem('theme', initialTheme);
-    });
-  
-    const themeSwitcher = document.querySelector('.js-theme-switcher');
-  
-    jtd.addEvent(themeSwitcher, 'click', function() {
-      const currentTheme = document.documentElement.getAttribute('data-theme');
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      
-      document.documentElement.setAttribute('data-theme', newTheme);
-      localStorage.setItem('theme', newTheme);
-      jtd.setTheme(newTheme);
-    });
-  </script>
+    }
+    
+    // Show the buttons after theme is set
+    document.getElementById('theme-switcher').style.display = 'block';
+    document.getElementById('github-icon').style.display = 'block';
+  });
+
+  const themeSwitcher = document.querySelector('.js-theme-switcher');
+
+  jtd.addEvent(themeSwitcher, 'click', function() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    jtd.setTheme(newTheme);
+  });
+</script>

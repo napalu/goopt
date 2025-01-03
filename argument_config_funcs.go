@@ -212,3 +212,5 @@ func WithRelativeIndex(idx int) ConfigureArgumentFunc {
 		argument.RelativeIndex = &idx
 	}
 }
+
+// TODO explore adding WithValidation to positional arguments
