@@ -2,17 +2,20 @@ pre {
   font-size: 1.2rem;
 }
 
-
 .icon {
   display: none; /* Initially hide all icons */
+  transition: opacity 0.3s ease-in-out; /* Smooth transition */
+  opacity: 0; /* Start with opacity 0 */
 }
 
 [data-theme='light'] #svg-sun-icon {
-  display: inherit; /* Show the sun icon when in light mode */
+  display: inherit;
+  opacity: 1; /* Fully visible */
 }
 
 [data-theme='dark'] #svg-moon-icon {
-  display: inherit; /* Show the moon icon when in dark mode */
+  display: inherit;
+  opacity: 1; /* Fully visible */
 }
 
 
