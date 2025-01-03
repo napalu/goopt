@@ -1,24 +1,34 @@
-// Override the variables more forcefully
-$nav-width: 364px;
-$nav-width-md: 364px;
-$content-width: 900px;
+pre {
+  font-size: 1.2rem;
+}
 
-// Direct style overrides
+
+.icon {
+  display: none; /* Initially hide all icons */
+}
+
+[data-theme='light'] #svg-sun-icon {
+  display: inherit; /* Show the sun icon when in light mode */
+}
+
+[data-theme='dark'] #svg-moon-icon {
+  display: inherit; /* Show the moon icon when in dark mode */
+}
+
+
 .side-bar {
-  width: 364px !important;
+  width: 25% !important;
   @media (min-width: 50rem) {
-    width: 364px !important;
+    width: 25% !important;
   }
 }
 
 .main {
-  margin-left: 364px !important;
+  margin-left: 25% !important;
+  margin-right: 15% !important;
   @media (min-width: 50rem) {
-    margin-left: 364px !important;
-    max-width: calc(100% - 364px) !important;
+    margin-left: 25% !important;
+    max-width: calc(100% - 25%) !important;
+    margin-right: 15% !important;
   }
-}
-
-pre {
-  font-size: 1.3rem;
 }

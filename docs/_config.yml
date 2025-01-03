@@ -2,6 +2,7 @@ remote_theme: just-the-docs/just-the-docs
 title: goopt Documentation
 baseurl: "/goopt"  
 url: "https://napalu.github.io"
+repository: "goopt/napalu" 
 color_scheme: nil # auto switching
 color_schemes:
   dark: 
