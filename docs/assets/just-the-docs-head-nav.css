@@ -1,0 +1,12 @@
+.icon {
+    display: none; /* Initially hide all icons */
+  }
+  
+  [data-theme='light'] #svg-sun-icon {
+    display: inherit; /* Show the sun icon when in light mode */
+  }
+  
+  [data-theme='dark'] #svg-moon-icon {
+    display: inherit; /* Show the moon icon when in dark mode */
+  }
+  
