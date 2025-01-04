@@ -9,3 +9,7 @@
 .side-bar {
     opacity: 1 !important;
 }
+
+.loading-indicator {
+    display: none !important;
+}
