@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/napalu/goopt/types"
+	"github.com/napalu/goopt/util"
 
 	"github.com/iancoleman/strcase"
 	"github.com/stretchr/testify/assert"
@@ -1092,7 +1093,6 @@ func TestParser_CommandCallbacks(t *testing.T) {
 	assert.Equal(t, "test2", posArgs[1].Value)
 	// positional arguments are 0-based
 	assert.Equal(t, 5, posArgs[1].Position)
-
 }
 
 func TestParser_ParseWithDefaults(t *testing.T) {
@@ -1138,6 +1138,7 @@ func TestParser_StandaloneFlagWithExplicitValue(t *testing.T) {
 				WithShortFlag("fb"),
 				WithType(types.Single))))
 
+	// Test valid boolean flag value
 	assert.True(t, cmdLine.ParseString("-fa false -fb hello"), "should properly parse a command-line with explicitly "+
 		"set boolean flag value among other values")
 	boolValue, err := cmdLine.GetBool("fa")
@@ -1145,11 +1146,15 @@ func TestParser_StandaloneFlagWithExplicitValue(t *testing.T) {
 	assert.False(t, boolValue, "the user-supplied false value of a boolean flag should be respected")
 	assert.Equal(t, cmdLine.GetOrDefault("fb", ""), "hello", "Single flag in command-line "+
 		"with explicitly set boolean flag should have the correct value")
+
+	// Test invalid boolean flag value
 	cmdLine.ClearAll()
-	assert.False(t, cmdLine.ParseString("-fa ouch -fb hello"), "should not properly parse a command-line with explicitly "+
-		"set invalid boolean flag value among other values")
+
+	assert.True(t, cmdLine.ParseString("-fa ouch -fb hello"), "should parse a command-line with an invalid boolean flag value")
 	_, err = cmdLine.GetBool("fa")
-	assert.NotNil(t, err, "boolean conversion of non-boolean string value should result in error")
+	assert.Nil(t, err)
+	assert.Equal(t, cmdLine.GetPositionalArgCount(), 1, "should have 1 positional argument")
+	assert.Equal(t, cmdLine.GetPositionalArgs()[0].Value, "ouch", "should have registered invalid boolean flag value as positional argument")
 }
 
 func TestParser_PrintUsageWithGroups(t *testing.T) {
@@ -3327,6 +3332,55 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 	}
 }
 
+func TestParser_PositionalArgumentsWithFlags(t *testing.T) {
+	opts := NewParser()
+
+	// Add a standalone flag
+	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: types.Standalone})
+
+	// Parse a command line with flags and positional arguments
+	assert.True(t, opts.ParseString("--verbose posArg1 posArg2"), "should parse flags and positional arguments")
+
+	// Check positional arguments
+	posArgs := opts.GetPositionalArgs()
+	assert.Equal(t, 2, len(posArgs), "should have two positional arguments")
+	assert.Equal(t, "posArg1", posArgs[0].Value)
+	assert.Equal(t, "posArg2", posArgs[1].Value)
+}
+
+func TestParser_PositionalArgumentsWithCommands(t *testing.T) {
+	opts := NewParser()
+
+	// Add a command
+	_ = opts.AddCommand(&Command{Name: "create"})
+
+	// Parse a command line with commands and positional arguments
+	assert.True(t, opts.ParseString("create posArg1 posArg2"), "should parse commands and positional arguments")
+
+	// Check positional arguments
+	posArgs := opts.GetPositionalArgs()
+	assert.Equal(t, 2, len(posArgs), "should have two positional arguments")
+	assert.Equal(t, "posArg1", posArgs[0].Value)
+	assert.Equal(t, "posArg2", posArgs[1].Value)
+}
+
+func TestParser_PositionalArgumentsWithCommandSpecificFlags(t *testing.T) {
+	opts := NewParser()
+
+	// Add a command with a specific flag
+	_ = opts.AddCommand(&Command{Name: "create"})
+	_ = opts.AddFlag("name", &Argument{Description: "Name of the entity", TypeOf: types.Single}, "create")
+
+	// Parse a command line with command-specific flags and positional arguments
+	assert.True(t, opts.ParseString("create --name entityName posArg1 posArg2"), "should parse command-specific flags and positional arguments")
+
+	// Check positional arguments
+	posArgs := opts.GetPositionalArgs()
+	assert.Equal(t, 2, len(posArgs), "should have two positional arguments")
+	assert.Equal(t, "posArg1", posArgs[0].Value)
+	assert.Equal(t, "posArg2", posArgs[1].Value)
+}
+
 // Alternative non-regex implementation
 func isNestedSlicePathSimple(path string) bool {
 	parts := strings.Split(path, ".")
@@ -3389,4 +3443,224 @@ func BenchmarkPathValidation(b *testing.B) {
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
+}
+
+func TestParser_PositionalArguments(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          string
+		setupParser   func(*Parser)
+		wantPositions []PositionalArgument
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name: "basic start position",
+			args: "source.txt --verbose dest.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+				// Note: we're not defining dest.txt as a positional argument
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "source.txt"},
+				{Position: 2, Value: "dest.txt"}, // This should still be captured as an unbound positional
+			},
+		},
+		{
+			name: "basic end position",
+			args: "--verbose source.txt dest.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("dest", NewArg(
+					WithPosition(types.AtEnd),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(
+					WithType(types.Standalone), // Add this
+				))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 1, Value: "source.txt"},
+				{Position: 2, Value: "dest.txt"},
+			},
+		},
+		{
+			name: "flag override of positional",
+			args: "--source override.txt dest.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 2, Value: "dest.txt"},
+			},
+		},
+		{
+			name: "missing required start position",
+			args: "--verbose dest.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantErr:     true,
+			errContains: "argument 'source' must appear at start position",
+		},
+		{
+			name: "start position after flags",
+			args: "--verbose source.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantErr:     true,
+			errContains: "argument 'source' must appear at start position",
+		},
+		{
+			name: "end position before flags",
+			args: "dest.txt --verbose",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("dest", NewArg(
+					WithPosition(types.AtEnd),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantErr:     true,
+			errContains: "argument 'dest' must appear at end position",
+		},
+		{
+			name: "multiple start positions in order",
+			args: "first.txt second.txt --verbose",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("first", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("second", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(1),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "first.txt"},
+				{Position: 1, Value: "second.txt"},
+			},
+		},
+		{
+			name: "correct start and end positions",
+			args: "source.txt --verbose --flag dest.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("dest", NewArg(
+					WithPosition(types.AtEnd),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+				_ = p.AddFlag("flag", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "source.txt"},
+				{Position: 3, Value: "dest.txt"},
+			},
+		},
+		{
+			name: "mixed start and regular positional",
+			args: "config.yaml data.txt --verbose extra.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("config", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "config.yaml"},
+				{Position: 1, Value: "data.txt"},
+				{Position: 3, Value: "extra.txt"},
+			},
+		},
+		{
+			name: "override position with flag syntax",
+			args: "--source override.txt --verbose regular.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("source", NewArg(
+					WithPosition(types.AtStart),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				// Args array:
+				// [0]"--source" [1]"override.txt" [2]"--verbose" [3]"regular.txt"
+				// Only regular.txt is counted as a positional argument
+				{Position: 3, Value: "regular.txt"},
+			},
+		},
+		{
+			name: "multiple end positions in order",
+			args: "--verbose data.txt output1.txt output2.txt",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("out1", NewArg(
+					WithPosition(types.AtEnd),
+					WithRelativeIndex(0),
+				))
+				_ = p.AddFlag("out2", NewArg(
+					WithPosition(types.AtEnd),
+					WithRelativeIndex(1),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 1, Value: "data.txt"},
+				{Position: 2, Value: "output1.txt"},
+				{Position: 3, Value: "output2.txt"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			tt.setupParser(p)
+
+			ok := p.ParseString(tt.args)
+			if tt.wantErr {
+				assert.False(t, ok)
+				errs := p.GetErrors()
+				assert.NotEmpty(t, errs)
+				assert.Contains(t, errs[0].Error(), tt.errContains)
+				return
+			}
+
+			assert.True(t, ok)
+			pos := p.GetPositionalArgs()
+
+			// Add more detailed assertion messages
+			assert.Equal(t, len(tt.wantPositions), len(pos),
+				"Expected %d positional args, got %d", len(tt.wantPositions), len(pos))
+
+			// Safe iteration using util.Min
+			for i := 0; i < util.Min(len(tt.wantPositions), len(pos)); i++ {
+				assert.Equal(t, tt.wantPositions[i].Position, pos[i].Position,
+					"Position mismatch at index %d", i)
+				assert.Equal(t, tt.wantPositions[i].Value, pos[i].Value,
+					"Value mismatch at index %d", i)
+			}
+		})
+	}
 }

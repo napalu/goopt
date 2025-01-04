@@ -10,11 +10,11 @@ import (
 )
 
 type Config struct {
-	Dir     string `goopt:"name:dir;short:d;desc:Directory to process recursively"`
-	File    string `goopt:"name:file;short:f;desc:Single file to process"`
+	Dir     string `goopt:"short:d;desc:Directory to process recursively"`
+	File    string `goopt:"short:f;desc:Single file to process"`
 	DryRun  bool   `goopt:"name:dry-run;short:r;desc:Show what would be changed without making changes"`
-	Verbose bool   `goopt:"name:verbose;short:v;desc:Show detailed progress"`
-	Help    bool   `goopt:"name:help;short:h;desc:Show help"`
+	Verbose bool   `goopt:"short:v;desc:Show detailed progress"`
+	Help    bool   `goopt:"short:h;desc:Show help"`
 }
 
 func main() {

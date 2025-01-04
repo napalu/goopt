@@ -32,6 +32,7 @@ goopt follows these key principles:
 - **Rich Feature Set**:
   - Type-safe configuration
   - Ordered command execution
+  - Positional arguments with flexible position and index constraints
   - Flag dependencies and validation
   - Shell completion (Bash, Zsh, Fish, PowerShell)
   - Environment variable support
@@ -44,7 +45,7 @@ goopt follows these key principles:
 - [Getting Started](guides/getting-started.md) - Installation and basic usage
 - [Command Organization](guides/command-organization.md) - Different ways to structure your CLI
 - [Advanced Features](guides/advanced-features.md) - Nested access, dependencies, validation, and more
-
+- [Positional Arguments](guides/positional-arguments.md) - Flexible positional argument handling
 ### Configuration
 - [Environment Variables](configuration/environment.md) - ENV var support
 - [External Configuration](configuration/external-config.md) - Config files and defaults

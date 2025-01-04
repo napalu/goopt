@@ -105,12 +105,14 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			boolVal := "true"
 			if state.CurrentPos()+1 < state.Len() {
 				nextArg := state.Peek()
-				_, found := p.registeredCommands.Get(nextArg)
-				if !found && !p.isFlag(state.Peek()) {
-					boolVal = nextArg
-					state.SkipCurrent()
+				if !p.isCommand(nextArg) && !p.isFlag(nextArg) {
+					if _, err := strconv.ParseBool(nextArg); err == nil {
+						boolVal = nextArg
+						state.SkipCurrent()
+					}
 				}
 			}
+			p.registerFlagValue(lookup, boolVal, currentArg)
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
@@ -237,16 +239,139 @@ func (a *Argument) ensureInit() {
 	}
 }
 
-func (p *Parser) setPositionalArguments(args []string, commandPath ...string) {
+func (p *Parser) setPositionalArguments(state parse.State, commandPath ...string) {
 	var positional []PositionalArgument
+	args := state.Args()
+
+	// First pass: collect positional arguments
 	for i, seen := range args {
 		seen = p.flagOrShortFlag(strings.TrimLeftFunc(seen, p.prefixFunc), commandPath...)
 		if _, found := p.rawArgs[seen]; !found {
-			positional = append(positional, PositionalArgument{i, seen})
+			positional = append(positional, PositionalArgument{
+				Position: i,
+				Value:    seen,
+				Argument: nil,
+			})
 		}
 	}
 
+	// Second pass: match and validate positional arguments
+	for i := range positional {
+		if arg := p.findMatchingPositionalArg(state, positional[i].Position); arg != nil {
+			positional[i].Argument = arg
+		}
+	}
+
+	// Validate all positional requirements were met
+	p.validatePositionalRequirements(state, positional)
+
 	p.positionalArgs = positional
+}
+
+func (p *Parser) validatePositionalRequirements(state parse.State, found []PositionalArgument) {
+	firstNonPos := p.findFirstNonPositionalArg(state)
+	lastNonPos := p.findLastNonPositionalArg(state)
+
+	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
+		arg := flag.Value.Argument
+		if arg.Position == nil || arg.RelativeIndex == nil {
+			continue
+		}
+
+		// Skip if this was provided as a flag
+		if _, exists := p.rawArgs[*flag.Key]; exists {
+			continue
+		}
+
+		// Check if we found this positional argument
+		matched := false
+		for _, pos := range found {
+			if pos.Argument == arg {
+				// Validate position requirements first
+				switch *arg.Position {
+				case types.AtStart:
+					if pos.Position >= firstNonPos {
+						p.addError(fmt.Errorf("argument '%s' must appear before position %d (before flags/commands)",
+							*flag.Key, firstNonPos))
+						continue
+					}
+				case types.AtEnd:
+					if pos.Position <= lastNonPos {
+						p.addError(fmt.Errorf("argument '%s' must appear after position %d (after flags/commands)",
+							*flag.Key, lastNonPos))
+						continue
+					}
+				}
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			p.addError(fmt.Errorf("argument '%s' must appear at %s position",
+				*flag.Key, positionTypeString(*arg.Position)))
+		}
+	}
+}
+
+func positionTypeString(pos types.PositionType) string {
+	switch pos {
+	case types.AtStart:
+		return "start"
+	case types.AtEnd:
+		return "end"
+	default:
+		return "unknown"
+	}
+}
+
+func (p *Parser) findMatchingPositionalArg(state parse.State, pos int) *Argument {
+	// Find first non-positional argument position
+	firstNonPos := p.findFirstNonPositionalArg(state)
+	// Find last non-positional argument position
+	lastNonPos := p.findLastNonPositionalArg(state)
+
+	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
+		arg := flag.Value.Argument
+		if arg.Position == nil || arg.RelativeIndex == nil {
+			continue
+		}
+
+		switch *arg.Position {
+		case types.AtStart:
+			// Must appear before first non-positional arg
+			if pos < firstNonPos && pos == *arg.RelativeIndex {
+				return arg
+			}
+		case types.AtEnd:
+			// Must appear after last non-positional arg
+			if pos > lastNonPos && (pos-lastNonPos-1) == *arg.RelativeIndex {
+				return arg
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Parser) findFirstNonPositionalArg(state parse.State) int {
+	for i := 0; i < state.Len(); i++ {
+		arg := state.Args()[i]
+		if p.isFlag(arg) || p.isCommand(arg) {
+			return i
+		}
+	}
+	return state.Len()
+}
+
+func (p *Parser) findLastNonPositionalArg(state parse.State) int {
+	for i := state.Len() - 1; i >= 0; i-- {
+		arg := state.Args()[i]
+		if p.isFlag(arg) || p.isCommand(arg) {
+			return i
+		}
+	}
+	return -1
 }
 
 func (p *Parser) evalFlagWithPath(state parse.State, currentCommandPath string) {
@@ -283,6 +408,13 @@ func (p *Parser) isFlag(flag string) bool {
 	return strings.HasPrefix(flag, "-")
 }
 
+func (p *Parser) isCommand(arg string) bool {
+	if _, ok := p.registeredCommands.Get(arg); ok {
+		return true
+	}
+	return false
+}
+
 func (p *Parser) isGlobalFlag(arg string) bool {
 	flag, ok := p.acceptedFlags.Get(p.flagOrShortFlag(strings.TrimLeftFunc(arg, p.prefixFunc)))
 	if ok {
@@ -316,6 +448,7 @@ func (p *Parser) registerSecureValue(flag, value string) error {
 func (p *Parser) registerFlagValue(flag, value, rawValue string) {
 	parts := splitPathFlag(flag)
 	p.rawArgs[parts[0]] = rawValue
+	p.rawArgs[rawValue] = rawValue
 
 	p.options[flag] = value
 }
@@ -379,8 +512,6 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 			p.queueCommandCallback(cmd)
 		}
 
-	} else if state.CurrentPos() == 0 && !p.isFlag(currentArg) {
-		p.addError(fmt.Errorf("options should be prefixed by '-'"))
 	}
 
 	return terminating

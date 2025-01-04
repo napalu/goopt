@@ -405,7 +405,7 @@ func (p *Parser) Parse(args []string) bool {
 
 	// Validate all processed options
 	p.validateProcessedOptions()
-	p.setPositionalArguments(args)
+	p.setPositionalArguments(state, currentCommandPath)
 
 	// Process secure arguments if parsing succeeded
 	success := len(p.errors) == 0
