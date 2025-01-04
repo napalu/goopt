@@ -104,7 +104,7 @@ func main() {
 }
 ```
 
-### Programmatic Definition with Commands
+#### Programmatic Definition with Commands
 
 ```go
 package main
@@ -113,13 +113,18 @@ import (
 	"os"
 	"fmt"
 	"github.com/napalu/goopt"
+    "github.com/napalu/goopt/types"
 )
 
 func main() {
 	parser := goopt.NewParser()
 
 	// Define flags
-	parser.AddFlag("output", goopt.NewArgument("Output file", goopt.Single, true))
+	parser.AddFlag("output", goopt.NewArg(
+        goopt.WithDescription("Output file"),
+        goopt.WithType(types.Single),
+        goopt.WithRequired(true),
+    ))
 
 	// Define commands and subcommands
 	createCmd := &goopt.Command{
