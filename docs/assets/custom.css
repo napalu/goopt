@@ -1,0 +1,11 @@
+.site-nav {
+    visibility: visible !important;
+}
+
+.main-content {
+    visibility: visible !important;
+}
+
+.side-bar {
+    opacity: 1 !important;
+}
