@@ -5,15 +5,6 @@ nav_order: 2
 has_children: true
 ---
 
-# Basic Design
-
-`goopt` follows a design that allows flexibility in how flags and commands are defined and parsed.
-
-- **Declarative Flags via Struct Tags**: Flags can be defined using struct tags. The parser introspects the struct and automatically binds the struct fields to flags.
-- **Programmatic Definition**: Commands and flags can also be defined programmatically or declaratively. This allows dynamic construction of commands based on runtime conditions.
-- **Flag Grouping**: Flags can be associated with specific commands or shared across multiple commands. Global flags are available across all commands.
-- **Dependency Validation**: Flags can be defined to depend on the presence or value of other flags. This validation is performed automatically after parsing.
-
 # When to use goopt
 
 `goopt` is particularly well-suited for:

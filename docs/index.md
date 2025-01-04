@@ -38,14 +38,18 @@ goopt follows these key principles:
   - Environment variable support
   - External configuration support through `goopt.ParseWithDefaults`
   - Optional POSIX-compliant flag parsing
+  - Customizable flag name and command name converters
+  - Positional arguments with flexible position and index constraints
 
 ## Documentation Contents
 
 ### Guides
 - [Getting Started](guides/getting-started.md) - Installation and basic usage
 - [Command Organization](guides/command-organization.md) - Different ways to structure your CLI
+- [Struct-First Approach](guides/struct-tags.md) - Struct-first approach
 - [Advanced Features](guides/advanced-features.md) - Nested access, dependencies, validation, and more
 - [Positional Arguments](guides/positional-arguments.md) - Flexible positional argument handling
+
 ### Configuration
 - [Environment Variables](configuration/environment.md) - ENV var support
 - [External Configuration](configuration/external-config.md) - Config files and defaults
