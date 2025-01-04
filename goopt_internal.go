@@ -289,13 +289,13 @@ func (p *Parser) validatePositionalRequirements(state parse.State, found []Posit
 			if pos.Argument == arg {
 				// Validate position requirements first
 				switch *arg.Position {
-				case AtStart:
+				case types.AtStart:
 					if pos.Position >= firstNonPos {
 						p.addError(fmt.Errorf("argument '%s' must appear before position %d (before flags/commands)",
 							*flag.Key, firstNonPos))
 						continue
 					}
-				case AtEnd:
+				case types.AtEnd:
 					if pos.Position <= lastNonPos {
 						p.addError(fmt.Errorf("argument '%s' must appear after position %d (after flags/commands)",
 							*flag.Key, lastNonPos))
@@ -314,11 +314,11 @@ func (p *Parser) validatePositionalRequirements(state parse.State, found []Posit
 	}
 }
 
-func positionTypeString(pos PositionType) string {
+func positionTypeString(pos types.PositionType) string {
 	switch pos {
-	case AtStart:
+	case types.AtStart:
 		return "start"
-	case AtEnd:
+	case types.AtEnd:
 		return "end"
 	default:
 		return "unknown"
@@ -338,12 +338,12 @@ func (p *Parser) findMatchingPositionalArg(state parse.State, pos int) *Argument
 		}
 
 		switch *arg.Position {
-		case AtStart:
+		case types.AtStart:
 			// Must appear before first non-positional arg
 			if pos < firstNonPos && pos == *arg.RelativeIndex {
 				return arg
 			}
-		case AtEnd:
+		case types.AtEnd:
 			// Must appear after last non-positional arg
 			if pos > lastNonPos && (pos-lastNonPos-1) == *arg.RelativeIndex {
 				return arg

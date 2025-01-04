@@ -17,20 +17,23 @@ go get github.com/napalu/goopt
 ### 2. Choose Your Style
 
 #### Struct-First Approach
+
+Names are optional, but if you want to use them, you can use the `name` tag to override the default name. If the name is not provided, goopt will use the default `FlagNameConverter` to convert the field name to a valid flag name in lowerCamelCase.
+
 ```go
 // Define your CLI structure using struct tags
 type Options struct {
     // Global flags
-    Verbose bool   `goopt:"name:verbose;short:v;desc:Enable verbose output"`
-    Output  string `goopt:"name:output;desc:Output file;required:true"`
+    Verbose bool   `goopt:"short:v;desc:Enable verbose output"`
+    Output  string `goopt:"short:o;desc:Output file;required:true"`
     
     // Commands and their flags
     Create struct {
         User struct {
-            Name     string `goopt:"name:name;desc:Username to create;required:true"`
-            Password string `goopt:"name:password;desc:User password;secure:true"`
-        } `goopt:"kind:command;name:user;desc:Create a new user"`
-    } `goopt:"kind:command;name:create;desc:Create resources"`
+            Name     string `goopt:"short:n;desc:Username to create;required:true"`
+            Password string `goopt:"short:p;desc:User password;secure:true"`
+        } `goopt:"kind:command;desc:Create a new user"`
+    } `goopt:"kind:command;desc:Create resources"`
 }
 
 func main() {
@@ -53,6 +56,7 @@ func main() {
 ```
 
 #### Builder Approach
+
 ```go
 func main() {
     parser := goopt.NewParser()
@@ -64,9 +68,16 @@ func main() {
     ))
     
     // Add commands and their flags
-    create := parser.AddCommand("create", "Create resources")
-    user := create.AddCommand("user", "Create a new user")
-    user.AddFlag("name", goopt.NewArg(
+    create := parser.AddCommand(goopt.NewCommand(
+        goopt.WithName("create"),
+        goopt.WithDescription("Create resources"),
+    ))
+    user := create.AddCommand(goopt.NewCommand(
+        goopt.WithName("user"),
+        goopt.WithDescription("Create a new user"),
+    ))
+    user.AddFlag(goopt.NewArg(
+        goopt.WithShortFlag("n"),
         goopt.WithDescription("Username to create"),
         goopt.WithRequired(true),
     ))
@@ -80,8 +91,89 @@ func main() {
     if verbose, _ := parser.Get("verbose"); verbose == "true" {
         fmt.Println("Verbose mode enabled")
     }
+
+    // Or access it as a boolean
+    if v, _ := parser.GetBool("verbose"); v {
+        fmt.Println("Verbose mode enabled")
+    }
+
+    // Or check if the flag is present and provide a default value
+    if vd := parser.GetOrDefault("verbose", "false"); vd == "false" {
+        fmt.Println("Verbose mode is disabled")
+    }
 }
 ```
+
+### Programmatic Definition with Commands
+
+```go
+package main
+
+import (
+	"os"
+	"fmt"
+	"github.com/napalu/goopt"
+)
+
+func main() {
+	parser := goopt.NewParser()
+
+	// Define flags
+	parser.AddFlag("output", goopt.NewArgument("Output file", goopt.Single, true))
+
+	// Define commands and subcommands
+	createCmd := &goopt.Command{
+		Name: "create",
+		Subcommands: []goopt.Command{
+			{Name: "user"},
+			{Name: "group"},
+		},
+	}
+
+	parser.AddCommand(createCmd)
+
+	// Parse the command-line arguments
+	if !parser.Parse(os.Args) {
+		parser.PrintUsage(os.Stdout)
+		return
+	}
+
+	// Access parsed flags
+	output, _ := parser.Get("output")
+	fmt.Println("Output:", output)
+
+	// Access parsed commands
+	cmdValue, _ := parser.GetCommandValue("create user")
+	fmt.Println("Command value:", cmdValue)
+}
+```
+
+### Initialization using option functions
+
+The library provides an interface for defining flags and commands.
+
+```go
+package main
+
+import (
+	"os"
+	"github.com/napalu/goopt"
+    "github.com/napalu/goopt/types"
+)
+
+func main() {
+	parser, _ := goopt.NewParser(
+		goopt.WithFlag("testFlag", goopt.NewArg(goopt.WithType(types.Single))),
+		goopt.WithCommand(
+			goopt.NewCommand(goopt.WithName("testCommand")),
+		),
+	)
+
+	parser.Parse(os.Args)
+}
+```
+This interface allows for dynamic and flexible construction of command-line parsers.
+
 
 ### 3. Add Shell Completion (Optional)
 ```go
@@ -135,5 +227,6 @@ func main() {
 
 - [Command Organization Guide](command-organization.md) - Have a look at different ways to structure your CLI
 - [Advanced Features](advanced-features.md) - Explore dependencies, validation, and more
+- [Positional Arguments](positional-arguments.md) - Explore positional arguments
 - [Configuration Guide](configuration/index.md) - Environment variables and external config
 - [Shell Completion](shell/completion.md) - Set up shell completions

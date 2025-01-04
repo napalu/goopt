@@ -18,40 +18,43 @@
 </button>
 
 <script>
-  // Run this immediately to set the theme before page load
-  (function() {
+  function setTheme(theme) {
+    localStorage.setItem('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    jtd.setTheme(theme);
+  }
+
+  function getTheme() {
     const savedTheme = localStorage.getItem('theme');
     const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const initialTheme = savedTheme || (prefersDarkScheme ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', initialTheme);
+    return initialTheme;
+  }
+
+  (function() {
+    const initialTheme = getTheme();
+    setTheme(initialTheme);
   })();
 
   document.addEventListener('DOMContentLoaded', function() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
-    
     if (!currentTheme) {
-      const savedTheme = localStorage.getItem('theme');
-      const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const initialTheme = savedTheme || (prefersDarkScheme ? 'dark' : 'light');
-      
-      document.documentElement.setAttribute('data-theme', initialTheme);
-      jtd.setTheme(initialTheme);
-      localStorage.setItem('theme', initialTheme);
+      const initialTheme = getTheme();
+      setTheme(initialTheme);
     }
-    
-    // Show the buttons after theme is set
-    document.getElementById('theme-switcher').style.display = 'block';
-    document.getElementById('github-icon').style.display = 'block';
-  });
-
+ });
+  
+  document.getElementById('theme-switcher').style.display = 'block';
+  document.getElementById('github-icon').style.display = 'block';
+  
   const themeSwitcher = document.querySelector('.js-theme-switcher');
 
   jtd.addEvent(themeSwitcher, 'click', function() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    jtd.setTheme(newTheme);
+    if (newTheme && newTheme !== currentTheme) {
+      setTheme(newTheme); 
+    }
   });
 </script>
+

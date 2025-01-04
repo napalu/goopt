@@ -3459,7 +3459,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "source.txt --verbose dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3475,7 +3475,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--verbose source.txt dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("dest", NewArg(
-					WithPosition(AtEnd),
+					WithPosition(types.AtEnd),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(
@@ -3492,7 +3492,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--source override.txt dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 			},
@@ -3505,7 +3505,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--verbose dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3518,7 +3518,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--verbose source.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3531,7 +3531,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "dest.txt --verbose",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("dest", NewArg(
-					WithPosition(AtEnd),
+					WithPosition(types.AtEnd),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3544,11 +3544,11 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "first.txt second.txt --verbose",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("first", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("second", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(1),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3563,11 +3563,11 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "source.txt --verbose --flag dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("dest", NewArg(
-					WithPosition(AtEnd),
+					WithPosition(types.AtEnd),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3583,7 +3583,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "config.yaml data.txt --verbose extra.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("config", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3599,7 +3599,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--source override.txt --verbose regular.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(AtStart),
+					WithPosition(types.AtStart),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
@@ -3616,11 +3616,11 @@ func TestParser_PositionalArguments(t *testing.T) {
 			args: "--verbose data.txt output1.txt output2.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("out1", NewArg(
-					WithPosition(AtEnd),
+					WithPosition(types.AtEnd),
 					WithRelativeIndex(0),
 				))
 				_ = p.AddFlag("out2", NewArg(
-					WithPosition(AtEnd),
+					WithPosition(types.AtEnd),
 					WithRelativeIndex(1),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))

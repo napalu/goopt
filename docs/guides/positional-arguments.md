@@ -32,7 +32,7 @@ parser.AddFlag("source", goopt.NewArg(
 // Output file must be last
 parser.AddFlag("output", goopt.NewArg(
     goopt.WithPosition(goopt.AtEnd),
-    goopt.WithPositionalIndex(0),
+    goopt.WithRelativeIndex(0),
 ))
 ```
 
@@ -57,6 +57,22 @@ myapp --verbose source.txt --format json output.txt
 - Must appear after all flags and commands
 - Ordered by PositionalIndex
 - Example: Output files, destination paths
+
+## Struct Tag Support
+
+Positional arguments can be specified using struct tags:
+
+The position tag uses a brace-enclosed format with two optional fields:
+- `at`: Position type (`start` or `end`)
+- `idx`: Relative index within the position (zero-based)
+
+```go
+type Config struct {
+    Source string `goopt:"name:source;pos:{at:start,idx:0}"` // Must be first argument
+    Profile string `goopt:"name:profile;pos:{at:start,idx:1}"` // Must be second argument
+    Dest   string `goopt:"name:dest;pos:{at:end,idx:0}"`   // Must be last argument
+}
+```
 
 ## Advanced Features
 
@@ -149,25 +165,5 @@ if !parser.Parse(os.Args[1:]) {
 ## Best Practices
 
 1. **Clear Positions**: Use positional arguments when the order is meaningful to users
-
 2. **Flexible Override**: Allow flag syntax override for scripting and automation
-
 3. **Documentation**: Clearly document position requirements in help text
-
-4. **Validation**: Add custom validation for position-dependent requirements:
-```go
-parser.AddFlag("source", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),
-    goopt.WithValidation(func(v string) error {
-        // Custom validation for source file
-        return nil
-    }),
-))
-```
-
-## Coming Soon
-
-- Struct tag support for positional arguments
-- Additional position types (e.g., AfterCommand, BeforeFlag)
-- Custom position validation hooks

@@ -190,10 +190,10 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 }
 
 // WithPosition sets a position requirement for the argument
-func WithPosition(pos PositionType) ConfigureArgumentFunc {
+func WithPosition(pos types.PositionType) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		// Validate position type
-		if pos != AtStart && pos != AtEnd {
+		if pos != types.AtStart && pos != types.AtEnd {
 			*err = fmt.Errorf("invalid position type: %d", pos)
 			return
 		}

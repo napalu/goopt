@@ -239,23 +239,23 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 func TestWithPosition(t *testing.T) {
 	tests := []struct {
 		name        string
-		position    PositionType
+		position    types.PositionType
 		wantErr     bool
 		errContains string
 	}{
 		{
 			name:     "valid AtStart",
-			position: AtStart,
+			position: types.AtStart,
 			wantErr:  false,
 		},
 		{
 			name:     "valid AtEnd",
-			position: AtEnd,
+			position: types.AtEnd,
 			wantErr:  false,
 		},
 		{
 			name:        "invalid position type",
-			position:    PositionType(99),
+			position:    types.PositionType(99),
 			wantErr:     true,
 			errContains: "invalid position type",
 		},

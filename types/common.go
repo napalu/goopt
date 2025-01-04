@@ -30,6 +30,25 @@ type KeyValue[K, V any] struct {
 	Value V
 }
 
+// PositionType defines where a positional argument must appear in the command line
+type PositionType int
+
+const (
+	AtStart PositionType = 1 // Must appear before any non-positional arguments
+	AtEnd   PositionType = 2 // Must appear after all non-positional arguments
+)
+
+// String returns the string representation of a PositionType
+func (p PositionType) String() string {
+	switch p {
+	case AtStart:
+		return "start"
+	case AtEnd:
+		return "end"
+	}
+	return "unknown"
+}
+
 // Secure set to Secure to true to solicit non-echoed user input from stdin.
 // If Prompt is empty a "password :" prompt will be displayed. Set to the desired value to override.
 type Secure struct {
@@ -37,6 +56,7 @@ type Secure struct {
 	Prompt   string
 }
 
+// Kind is used to define the kind of entity a struct tag represents
 type Kind string
 
 const (
@@ -59,6 +79,8 @@ type TagConfig struct {
 	AcceptedValues []PatternValue
 	DependsOn      map[string][]string
 	Capacity       int
+	Position       *PositionType
+	RelativeIndex  *int
 }
 
 // Describe a PatternValue (regular expression with a human-readable explanation of the pattern)
