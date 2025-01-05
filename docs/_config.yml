@@ -11,5 +11,4 @@ color_schemes:
     color_scheme: light 
 sass:
   sass_dir: _sass
-extra_css:
-  - assets/css/custom.css
+
