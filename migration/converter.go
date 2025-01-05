@@ -3,20 +3,22 @@ package migration
 import (
 	"fmt"
 	"strings"
+
+	"github.com/napalu/goopt/types/orderedmap"
 )
 
 // tagConverter handles the conversion of struct tags
 type tagConverter struct {
 	originalTag string
-	legacyTags  map[string]string
-	otherTags   map[string]string
+	legacyTags  *orderedmap.OrderedMap[string, string]
+	otherTags   *orderedmap.OrderedMap[string, string]
 }
 
 func newTagConverter(tag string) *tagConverter {
 	return &tagConverter{
 		originalTag: tag,
-		legacyTags:  make(map[string]string),
-		otherTags:   make(map[string]string),
+		legacyTags:  orderedmap.NewOrderedMap[string, string](),
+		otherTags:   orderedmap.NewOrderedMap[string, string](),
 	}
 }
 
@@ -58,9 +60,9 @@ func (c *tagConverter) Parse() error {
 		}
 
 		if isLegacyTag(key) {
-			c.legacyTags[key] = value
+			c.legacyTags.Set(key, value)
 		} else {
-			c.otherTags[key] = value
+			c.otherTags.Set(key, value)
 		}
 	}
 

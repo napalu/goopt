@@ -264,9 +264,9 @@ func updateTagValue(originalTag string, newGooptTag string) string {
 
 	// Build new tag string with non-legacy, non-goopt tags
 	var newTags []string
-	for key, value := range converter.otherTags {
-		if key != "goopt" {
-			newTags = append(newTags, fmt.Sprintf(`%s:"%s"`, key, value))
+	for f := converter.otherTags.Front(); f != nil; f = f.Next() {
+		if *f.Key != "goopt" {
+			newTags = append(newTags, fmt.Sprintf(`%s:"%s"`, *f.Key, f.Value))
 		}
 	}
 
