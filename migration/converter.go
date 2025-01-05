@@ -25,8 +25,31 @@ func (c *tagConverter) Parse() error {
 	// Remove surrounding backticks
 	tagStr := strings.Trim(c.originalTag, "`")
 
-	// Split into individual tags
-	tags := strings.Fields(tagStr)
+	var tags []string
+	var currentTag strings.Builder
+	inQuote := false
+
+	// Parse tags respecting quoted values
+	for i := 0; i < len(tagStr); i++ {
+		ch := tagStr[i]
+		if ch == '"' {
+			inQuote = !inQuote
+		}
+
+		if ch == ' ' && !inQuote {
+			if currentTag.Len() > 0 {
+				tags = append(tags, currentTag.String())
+				currentTag.Reset()
+			}
+		} else {
+			currentTag.WriteByte(ch)
+		}
+	}
+
+	// Add the last tag if any
+	if currentTag.Len() > 0 {
+		tags = append(tags, currentTag.String())
+	}
 
 	for _, tag := range tags {
 		key, value, err := parseTagKeyValue(tag)
