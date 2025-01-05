@@ -174,44 +174,181 @@ func TestConvertFile(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "simple struct",
-			input: `package test
-type Config struct {
-    Output string ` + "`long:\"output\" short:\"o\"`" + `
-    Format string ` + "`long:\"format\" description:\"Output format\"`" + `
-}`,
-			expected: `package test
-type Config struct {
-    Output string ` + "`goopt:\"name:output;short:o\"`" + `
-    Format string ` + "`goopt:\"name:format;desc:Output format\"`" + `
-}`,
-		},
-		{
-			name: "preserve comments and formatting",
+			name: "embedded newlines in description",
 			input: `package test
 
-// Config holds application settings
 type Config struct {
-    // Output file path
-    Output string ` + "`long:\"output\" json:\"output\"`" + `
+	Output string ` + "`description:\"Output file\\nwith newline\"`" + `
 }`,
 			expected: `package test
 
-// Config holds application settings
 type Config struct {
-    // Output file path
-    Output string ` + "`json:\"output\" goopt:\"name:output\"`" + `
+	Output string ` + "`goopt:\"desc:Output file\\nwith newline\"`" + `
 }`,
 		},
 		{
-			name: "complex tags",
+			name: "nested structs with tags",
 			input: `package test
+
 type Config struct {
-    Format string ` + "`long:\"format\" accepted:\"{pattern:json|yaml,desc:Format type}\" depends:\"{flag:output}\"`" + `
+	Database struct {
+		Host string ` + "`description:\"Database host\"`" + `
+		Port int    ` + "`description:\"Port number\"`" + `
+	}
+	Logging struct {
+		Level string ` + "`description:\"Log level\"`" + `
+	}
 }`,
 			expected: `package test
+
 type Config struct {
-    Format string ` + "`goopt:\"name:format;accepted:{pattern:json|yaml,desc:Format type};depends:{flag:output}\"`" + `
+	Database struct {
+		Host string ` + "`goopt:\"desc:Database host\"`" + `
+		Port int    ` + "`goopt:\"desc:Port number\"`" + `
+	}
+	Logging struct {
+		Level string ` + "`goopt:\"desc:Log level\"`" + `
+	}
+}`,
+		},
+		{
+			name: "deeply nested structs with complex tags",
+			input: `package test
+
+type Config struct {
+	Server struct {
+		Database struct {
+			Master struct {
+				Host string ` + "`description:\"Master host\" required:\"true\"`" + `
+			}
+		}
+	}
+}`,
+			expected: `package test
+
+type Config struct {
+	Server struct {
+		Database struct {
+			Master struct {
+				Host string ` + "`goopt:\"desc:Master host;required:true\"`" + `
+			}
+		}
+	}
+}`,
+		},
+		{
+			name: "multiple embedded newlines in description",
+			input: `package test
+
+type Config struct {
+	Output string ` + "`description:\"First line\\nSecond line\\nThird line\"`" + `
+}`,
+			expected: `package test
+
+type Config struct {
+	Output string ` + "`goopt:\"desc:First line\\nSecond line\\nThird line\"`" + `
+}`,
+		},
+		{
+			name: "mixed newlines and carriage returns",
+			input: `package test
+
+type Config struct {
+	Output string ` + "`description:\"Windows line\\r\\nUnix line\\nMac line\\r\"`" + `
+}`,
+			expected: `package test
+
+type Config struct {
+	Output string ` + "`goopt:\"desc:Windows line\\nUnix line\\nMac line\"`" + `
+}`,
+		},
+		{
+			name: "newlines in nested struct descriptions",
+			input: `package test
+
+type Config struct {
+	Database struct {
+		Host string ` + "`description:\"Primary host\\nBackup host\" required:\"true\"`" + `
+		Settings struct {
+			Mode string ` + "`description:\"Operation mode:\\nread-only\\nread-write\"`" + `
+		}
+	}
+}`,
+			expected: `package test
+
+type Config struct {
+	Database struct {
+		Host string ` + "`goopt:\"desc:Primary host\\nBackup host;required:true\"`" + `
+		Settings struct {
+			Mode string ` + "`goopt:\"desc:Operation mode:\\nread-only\\nread-write\"`" + `
+		}
+	}
+}`,
+		},
+		{
+			name: "description with quotes and spaces",
+			input: `package test
+
+type Config struct {
+	Command string ` + "`description:\"quoted \\\"command\\\" with spaces\"`" + `
+}`,
+			expected: `package test
+
+type Config struct {
+	Command string ` + "`goopt:\"desc:quoted \\\"command\\\" with spaces\"`" + `
+}`,
+		},
+		{
+			name: "multiple legacy tags with spaces and newlines",
+			input: `package test
+
+type Config struct {
+	Password string ` + "`description:\"secure password\\nwith rules\" required:\"true\" secure:\"true\" prompt:\"Enter password:\\nMust be 8+ chars\"`" + `
+}`,
+			expected: `package test
+
+type Config struct {
+	Password string ` + "`goopt:\"desc:secure password\\nwith rules;required:true;secure:true;prompt:Enter password:\\nMust be 8+ chars\"`" + `
+}`,
+		},
+		{
+			name: "mixed legacy and non-legacy tags",
+			input: `package test
+
+type Config struct {
+	Field string ` + "`description:\"test field\" json:\"field,omitempty\" required:\"true\" yaml:\"field\"`" + `
+}`,
+			expected: `package test
+
+type Config struct {
+	Field string ` + "`json:\"field,omitempty\" yaml:\"field\" goopt:\"desc:test field;required:true\"`" + `
+}`,
+		},
+		{
+			name: "deeply nested with mixed tags",
+			input: `package test
+
+type Config struct {
+	Server struct {
+		API struct {
+			Endpoint string ` + "`description:\"API endpoint\\nformat: http(s)://host:port\" json:\"endpoint\" required:\"true\"`" + `
+			Auth struct {
+				Token string ` + "`description:\"Auth token\\nBearer: <token>\" secure:\"true\" json:\"-\"`" + `
+			}
+		}
+	}
+}`,
+			expected: `package test
+
+type Config struct {
+	Server struct {
+		API struct {
+			Endpoint string ` + "`json:\"endpoint\" goopt:\"desc:API endpoint\\nformat: http(s)://host:port;required:true\"`" + `
+			Auth struct {
+				Token string ` + "`json:\"-\" goopt:\"desc:Auth token\\nBearer: <token>;secure:true\"`" + `
+			}
+		}
+	}
 }`,
 		},
 	}

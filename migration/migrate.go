@@ -187,6 +187,56 @@ func convertFile(filename string, sessionDir string) error {
 
 // processFile handles the common AST processing logic
 func processFile(file *ast.File, handler func(field *ast.Field, oldTag, newTag string, structName string) error) error {
+	var processStructType func(st *ast.StructType, structName string) error
+
+	processStructType = func(st *ast.StructType, structName string) error {
+		for _, field := range st.Fields.List {
+			// Process current field's tags if present
+			if field.Tag != nil {
+				structField, err := astToStructField(field)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warning: processing field %s: %v\n", field.Names[0], err)
+					continue
+				}
+
+				config, err := parse.LegacyUnmarshalTagFormat(structField)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warning: parsing tags for field %s: %v\n", field.Names[0], err)
+					continue
+				}
+				if config == nil {
+					// No legacy tags found
+					continue
+				}
+
+				newTag, err := convertLegacyTags(structField)
+				if err != nil || newTag == "" {
+					continue
+				}
+
+				if err := handler(field, field.Tag.Value, newTag, structName); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: handling field %s: %v\n", field.Names[0], err)
+				}
+			}
+
+			// If field is a struct type, process it recursively
+			if fieldType, ok := field.Type.(*ast.StructType); ok {
+				fieldName := ""
+				if len(field.Names) > 0 {
+					fieldName = field.Names[0].Name
+				}
+				nestedStructName := structName
+				if fieldName != "" {
+					nestedStructName = structName + "." + fieldName
+				}
+				if err := processStructType(fieldType, nestedStructName); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		typeSpec, ok := n.(*ast.TypeSpec)
 		if !ok {
@@ -198,43 +248,8 @@ func processFile(file *ast.File, handler func(field *ast.Field, oldTag, newTag s
 			return true
 		}
 
-		// We now have the struct name from typeSpec
-		structName := typeSpec.Name.Name
-
-		// Process struct fields
-		for _, field := range structType.Fields.List {
-			if field.Tag == nil {
-				continue
-			}
-
-			// Convert AST field to reflect.StructField
-			structField, err := astToStructField(field)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: processing field %s: %v\n", field.Names[0], err)
-				continue
-			}
-
-			// Check if this field has any legacy tags
-			config, err := parse.LegacyUnmarshalTagFormat(structField)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: parsing tags for field %s: %v\n", field.Names[0], err)
-				continue
-			}
-			if config == nil {
-				// No legacy tags found
-				continue
-			}
-
-			// Convert legacy tags to new format
-			newTag, err := convertLegacyTags(structField)
-			if err != nil || newTag == "" {
-				continue
-			}
-
-			// Call the handler with the old and new tags, plus struct name
-			if err := handler(field, field.Tag.Value, newTag, structName); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: handling field %s: %v\n", field.Names[0], err)
-			}
+		if err := processStructType(structType, typeSpec.Name.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: processing struct %s: %v\n", typeSpec.Name.Name, err)
 		}
 		return true
 	})
@@ -288,7 +303,8 @@ func convertLegacyTags(field reflect.StructField) (string, error) {
 		parts = append(parts, fmt.Sprintf("short:%s", config.Short))
 	}
 	if config.Description != "" {
-		parts = append(parts, fmt.Sprintf("desc:%s", config.Description))
+		desc := escapeSequences(config.Description)
+		parts = append(parts, fmt.Sprintf("desc:%s", desc))
 	}
 	if config.TypeOf != types.Empty {
 		parts = append(parts, fmt.Sprintf("type:%s", parse.TypeOfFlagToString(config.TypeOf)))
@@ -306,7 +322,8 @@ func convertLegacyTags(field reflect.StructField) (string, error) {
 		parts = append(parts, "secure:true")
 	}
 	if config.Secure.Prompt != "" {
-		parts = append(parts, fmt.Sprintf("prompt:%s", config.Secure.Prompt))
+		prompt := escapeSequences(config.Secure.Prompt)
+		parts = append(parts, fmt.Sprintf("prompt:%s", prompt))
 	}
 	if config.Path != "" {
 		parts = append(parts, fmt.Sprintf("path:%s", config.Path))
@@ -451,4 +468,14 @@ func checkFileAccess(filename string) error {
 		return err
 	}
 	return f.Close()
+}
+
+func escapeSequences(s string) string {
+	// Replace newlines with \n
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	// Replace any remaining carriage returns
+	s = strings.ReplaceAll(s, "\r", "")
+	// Escape quotes
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return s
 }
