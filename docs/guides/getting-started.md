@@ -153,7 +153,7 @@ func main() {
 }
 ```
 
-### Initialization using option functions
+#### Initialization using option functions
 
 The library provides an interface for defining flags and commands.
 
@@ -230,8 +230,10 @@ func main() {
 
 ## Next Steps
 
-- [Command Organization Guide](command-organization.md) - Have a look at different ways to structure your CLI
-- [Advanced Features](advanced-features.md) - Explore dependencies, validation, and more
+- [Command structure patterns](command-organization.md) - Have a look at different ways to structure your CLI
+- [Flag structure patterns](flag-organization.md) - Have a look at different ways to structure your flags
 - [Positional Arguments](positional-arguments.md) - Explore positional arguments
+- [Struct Tags](struct-tags.md) - Explore struct tags
 - [Configuration Guide](configuration/index.md) - Environment variables and external config
 - [Shell Completion](shell/completion.md) - Set up shell completions
+- [Advanced Features](advanced-features.md) - Explore dependencies, validation, and more
