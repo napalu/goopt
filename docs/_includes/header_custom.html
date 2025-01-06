@@ -37,6 +37,14 @@
   })();
 
   document.addEventListener('DOMContentLoaded', function() {
+    const themes = ['light', 'dark'];
+    themes.forEach(theme => {
+        const preloadLink = document.createElement('link');
+        preloadLink.rel = 'preload';
+        preloadLink.as = 'style';
+        preloadLink.href = '/goopt/assets/css/just-the-docs-' + theme + '.css';
+        document.head.appendChild(preloadLink);
+    });
     const currentTheme = document.documentElement.getAttribute('data-theme');
     if (!currentTheme) {
       const initialTheme = getTheme();
