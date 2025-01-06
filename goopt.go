@@ -103,6 +103,18 @@ func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Par
 	return NewParserFromStructWithLevel(structWithTags, maxDepth)
 }
 
+// NewParserFromInterface creates a new parser from an interface{} that should be a struct or a pointer to a struct
+func NewParserFromInterface(i interface{}) (*Parser, error) {
+	v := reflect.ValueOf(i)
+	if v.Kind() != reflect.Ptr {
+		// If not a pointer, create one
+		ptr := reflect.New(v.Type())
+		ptr.Elem().Set(v)
+		v = ptr
+	}
+	return newParserFromReflectValue(v, "", "", 5, 0)
+}
+
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
 // configure Argument using option functions.
 func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string) *Argument {

@@ -2,7 +2,7 @@
 layout: default
 title: Advanced Features
 parent: Guides
-nav_order: 5
+nav_order: 6
 ---
 
 # Advanced Features

@@ -35,7 +35,7 @@ package main
 import "github.com/napalu/goopt/migration"
 
 // Convert a single file
-err := migration.ConvertFile("path/to/file.go")
+err := migration.ConvertSingleFile("path/to/file.go", "path/to/root/backing/dir")
 
 // Convert a directory
 err := migration.ConvertDir("path/to/dir")

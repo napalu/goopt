@@ -1197,6 +1197,15 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			continue
 		}
 
+		if isStructOrSliceType(field) {
+			if field.Type.Kind() == reflect.Ptr {
+				if fieldValue.IsNil() {
+					continue
+				}
+				fieldValue = fieldValue.Elem()
+			}
+		}
+
 		isCommand := isFieldCommand(field)
 
 		if longName == "" {
@@ -1217,14 +1226,15 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 		}
 
-		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
+		if field.Type.Kind() == reflect.Slice || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Slice) {
 			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser); err != nil {
 				parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
 			}
 			continue
 		}
 
-		if field.Type.Kind() == reflect.Struct {
+		if field.Type.Kind() == reflect.Struct || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct) {
+
 			newCommandPath := commandPath
 			if isCommand {
 				if newCommandPath == "" {
@@ -1264,11 +1274,23 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 }
 
 func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, fullFlagName string, arg *Argument) (err error) {
+	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
+		p.addError(fmt.Errorf("unexpected - field pointer %s is nilskipping", fullFlagName))
+		return nil
+	}
+	// Get the interface value - if it's already a pointer, use it directly
+	var interfaceValue interface{}
+	if fieldValue.Kind() == reflect.Ptr {
+		interfaceValue = fieldValue.Interface()
+	} else {
+		interfaceValue = fieldValue.Addr().Interface()
+	}
+
 	if commandPath != "" {
-		err = p.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg, commandPath)
+		err = p.BindFlag(interfaceValue, fullFlagName, arg, commandPath)
 	} else {
 		// Global flag
-		err = p.BindFlag(fieldValue.Addr().Interface(), fullFlagName, arg)
+		err = p.BindFlag(interfaceValue, fullFlagName, arg)
 	}
 	if err != nil {
 		return err
@@ -1364,16 +1386,25 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			continue
 		}
 
+		// Handle pointer fields
+		fieldValue := field
+		if field.Kind() == reflect.Ptr {
+			if field.IsNil() {
+				continue
+			}
+			fieldValue = field.Elem()
+		}
+
 		// Process Command fields first - these are explicit command definitions
 		if fieldType.Type == reflect.TypeOf(Command{}) {
-			cmd := field.Interface().(Command)
+			cmd := fieldValue.Interface().(Command)
 			// Build path by combining current path with command name
 			cmdPath := cmd.Name
 			if currentPath != "" {
 				cmdPath = currentPath + " " + cmd.Name
 			}
 
-			// Find the root parent command (first part of the path)
+			// Find the root parent command
 			var parent *Command
 			if currentPath != "" {
 				parentPath := strings.Split(currentPath, " ")[0]
@@ -1382,7 +1413,6 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				}
 			}
 
-			// Register the command with its full path
 			buildCmd, err := p.buildCommand(cmdPath, cmd.Description, parent)
 			if err != nil {
 				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmdPath, err)
@@ -1392,64 +1422,55 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			if err != nil {
 				return err
 			}
-
-			continue // no need to process nested structs since we've already processed the Command hierarchy at this level
+			continue
 		}
 
 		// Then process struct fields which might contain struct tags defining nested commands
-		if field.Kind() == reflect.Struct && isFieldCommand(fieldType) {
+		if fieldValue.Kind() == reflect.Struct && isFieldCommand(fieldType) {
 			// Parse the goopt tag for command configuration
 			config, err := parse.UnmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
 				return err
 			}
 
-			if config.Kind == types.KindCommand {
-				cmdName := config.Name
-				if cmdName == "" {
-					cmdName = p.commandNameConverter(fieldType.Name)
-				}
-
-				// Build the command path
-				cmdPath := cmdName
-				if currentPath != "" {
-					cmdPath = currentPath + " " + cmdName
-				}
-
-				// Handle root-level commands
-				if currentPath == "" {
-					buildCmd, err := p.buildCommand(cmdPath, config.Description, nil)
-					if err != nil {
-						return fmt.Errorf("error processing command %s: %w", cmdPath, err)
-					}
-
-					err = p.AddCommand(buildCmd)
-					if err != nil {
-						return err
-					}
-				} else {
-					// Handle nested commands by finding their root parent
-					parentPath := strings.Split(currentPath, " ")[0]
-					if regCmd, ok := p.registeredCommands.Get(parentPath); ok {
-						buildCmd, err := p.buildCommand(cmdPath, config.Description, regCmd)
-						if err != nil {
-							return fmt.Errorf("error processing command %s: %w", cmdPath, err)
-						}
-						err = p.AddCommand(buildCmd)
-						if err != nil {
-							return err
-						}
-					} else {
-						return fmt.Errorf("parent command %s not found", parentPath)
-					}
-				}
-
-				// Update current path for nested processing
-				currentPath = cmdPath
+			cmdName := config.Name
+			if cmdName == "" {
+				cmdName = p.commandNameConverter(fieldType.Name)
 			}
 
-			// Recursively process nested structs with the updated path
-			if err := p.processStructCommands(field, currentPath, currentDepth+1, maxDepth); err != nil {
+			// Build the command path
+			cmdPath := cmdName
+			if currentPath != "" {
+				cmdPath = currentPath + " " + cmdName
+			}
+
+			// Find parent command if we're nested
+			var parent *Command
+			if currentPath != "" {
+				parentPath := strings.Split(currentPath, " ")[0]
+				if reg, ok := p.registeredCommands.Get(parentPath); ok {
+					parent = reg
+				}
+			}
+
+			// Build and register the command
+			buildCmd, err := p.buildCommand(cmdPath, config.Description, parent)
+			if err != nil {
+				return fmt.Errorf("error processing command %s: %w", cmdPath, err)
+			}
+
+			err = p.AddCommand(buildCmd)
+			if err != nil {
+				return err
+			}
+
+			// Process nested structure with updated path
+			if err := p.processStructCommands(fieldValue, cmdPath, currentDepth+1, maxDepth); err != nil {
+				return err
+			}
+		} else if fieldValue.Kind() == reflect.Struct {
+			// Process non-command struct fields for nested commands
+			if err := p.processStructCommands(fieldValue, currentPath, currentDepth+1, maxDepth); err != nil {
 				return err
 			}
 		}
@@ -1537,7 +1558,7 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 	}
 
 	// Initialize or resize slice if needed
-	if fieldValue.IsNil() || (capacity > 0 && fieldValue.Cap() != capacity) {
+	if (fieldValue.Kind() == reflect.Slice && fieldValue.IsNil()) || (capacity > 0 && fieldValue.Cap() != capacity) {
 		// TODO add a check to ensure capacity is not too large?
 
 		newSlice := reflect.MakeSlice(fieldValue.Type(), capacity, capacity)
@@ -1576,7 +1597,6 @@ func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Valu
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -1667,13 +1687,18 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 }
 
 func isFieldCommand(field reflect.StructField) bool {
+	typ := field.Type
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
 	var isCommand bool
 	if cmd, ok := field.Tag.Lookup("goopt"); ok {
 		isCommand = strings.Contains(cmd, "kind:command")
 	}
 
-	if !isCommand && field.Type.Kind() == reflect.Struct {
-		isCommand = field.Type == reflect.TypeOf(Command{})
+	if !isCommand && typ.Kind() == reflect.Struct {
+		isCommand = typ == reflect.TypeOf(Command{})
 	}
 
 	return isCommand
@@ -1690,5 +1715,9 @@ func isNestedSlicePath(path string) bool {
 }
 
 func isStructOrSliceType(field reflect.StructField) bool {
-	return field.Type.Kind() == reflect.Struct || field.Type.Kind() == reflect.Slice || field.Type.Kind() == reflect.Array
+	typ := field.Type
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return typ.Kind() == reflect.Struct || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array
 }

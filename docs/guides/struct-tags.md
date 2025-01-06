@@ -2,7 +2,7 @@
 layout: default
 title: Struct Tags
 parent: Guides
-nav_order: 4
+nav_order: 5
 ---
 
 # Struct Tag Reference

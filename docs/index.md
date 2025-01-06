@@ -45,7 +45,8 @@ goopt follows these key principles:
 
 ### Guides
 - [Getting Started](guides/getting-started.md) - Installation and basic usage
-- [Command Organization](guides/command-organization.md) - Different ways to structure your CLI
+- [Command structure patterns](guides/command-organization.md) - Different ways to structure your CLI
+- [Flag structure patterns](guides/flag-organization.md) - Different ways to structure your flags
 - [Struct-First Approach](guides/struct-tags.md) - Struct-first approach
 - [Advanced Features](guides/advanced-features.md) - Nested access, dependencies, validation, and more
 - [Positional Arguments](guides/positional-arguments.md) - Flexible positional argument handling
