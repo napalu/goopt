@@ -1,129 +1,137 @@
 ---
 layout: default
-title: Command Organization
+title: Command structure patterns
 parent: Guides
 nav_order: 2
 ---
 
-# Command Organization
+# Command structure patterns
 
-goopt offers three main approaches to organizing commands and flags:
+goopt offers several approaches to organizing commands and flags:
 
-
-## Flag-Centric Approach
-
-Best for simpler CLIs with flat structure. Using the path variables allows creating commands and flags in a single line. Several paths can be specified to associate the flag with multiple commands. The value of the flag is shared across all commands that have the same path.
-
+## 1. Flag-Centric Approach (Path-Based)
 ```go
+
+ // path is a comma-separated list of command paths - commands are created on the fly and flags are shared across commands
 type Options struct {
-    // Commands defined by path in flag structs
-    CreateUser string `goopt:"kind:flag;path:user create;name:name;desc:Create a new user"`
-    CreateRole string `goopt:"kind:flag;path:role create;name:name;desc:Create a new role"`
-    DeleteUser string `goopt:"kind:flag;path:user delete;name:name;desc:Delete a user"`
-    
-    // Shared flag across specific commands
-    Force bool `goopt:"kind:flag;path:user create,user delete,role create;name:force;desc:Force operation"`
+    Host string `goopt:"name:host;path:server start,server stop"`
+    Port int    `goopt:"name:port;path:server start"`
 }
 ```
 
+### Advantages:
+- Flags can be shared across commands
+- Clear visibility of flag reuse
+- Flexible command path definition
+- Good for commands sharing many flags
 
-## Command-Centric Approach
+### Trade-offs:
+- Command structure less visible in code
+- Can become hard to maintain for complex hierarchies
+- Need to carefully manage path strings
 
-Better for complex hierarchical CLIs:
-
+## 2. Explicit Command Declaration with flags
 ```go
 type Options struct {
-    User struct {
-        `goopt:"kind:command;name:user;desc:User management"`
-        Create struct {
-            `goopt:"kind:command;name:create;desc:Create a user"`
-            Name string `goopt:"kind:flag;name:name;desc:User name"`
-        }
-    }
-}
-
-// alternative way to define the same structure
-user := Command{
-    Name: "user",
-    Subcommands: []Command{
-        {Name: "create", Description: "User name"},
-    },
-}
-
-type OtherOptions struct {
-    User :  Command{
-        Name: "user",
+    Server Command {
+        Name: "server",
         Subcommands: []Command{
-            {Name: "create", Description: "User name"},
-        },
+            {Name: "start", Description: "Start server"},
+            {Name: "stop", Description: "Stop server"},
+        }
     },
-   
+    Host string `goopt:"name:host;path:server start,server stop"` // This is a flag - the path is a comma-separated list of command paths - commands are created on the fly if not found
 }
 ```
 
+### Advantages:
+- Clear command hierarchy
+- Full control over command properties
+- Good for static command structures
+- Easy to add command-specific behavior
+
+### Trade-offs:
+- More verbose
+- Less flexible for dynamic command structures
+- Flags can be shared across commands via the path but must be defined outside of the command struct
+
+## 3. Struct Tag Command Definition
 ```go
 type Options struct {
-    User struct {
-        `goopt:"kind:command;name:user;desc:User management"`
-        
-        Create struct {
-            `goopt:"kind:command;name:create;desc:Create a user"`
-            Name string `goopt:"kind:flag;name:name;desc:User name"`
-        }
-        Delete struct {
-            `goopt:"kind:command;name:delete;desc:Delete a user"`
-            Name string `goopt:"kind:flag;name:name;desc:User name"`
-        }
-    }
-    Role struct {
-        `goopt:"kind:command;name:role;desc:Role management"`
-        
-        Create struct {
-            `goopt:"kind:command;name:create;desc:Create a role"`
-            Name string `goopt:"kind:flag;name:name;desc:Role name"`
-        }
-    }
-    
-    // Shared flag across specific commands
-    Force bool `goopt:"kind:flag;path:user create,user delete,role create;name:force;desc:Force operation"`
+    Server struct {
+        Start struct {
+            Host string `goopt:"name:host"` // This is a flag
+            Port int    `goopt:"name:port"` // This is a flag
+        } `goopt:"kind:command"`
+        Stop struct{} `goopt:"kind:command"`
+    } `goopt:"kind:command"`
 }
 ```
 
-## Mixed Approach
+### Advantages:
+- Clear command hierarchy in code structure
+- Natural nesting of commands
+- Command-specific flags clearly grouped
+- Good for complex command hierarchies
 
+### Trade-offs:
+- Can't easily share flags between commands
+- More nested structures
+- Can lead to deeper type hierarchies
+
+## 4. Shared Resources via Pointers
 ```go
-type Options struct {
-    User struct {
-        Create struct {
-            Name string `goopt:"kind:flag;name:name;desc:User name"`
-        }
-    }
+type ServerConfig struct {
+    Host string `goopt:"name:host"`
+    Port int    `goopt:"name:port"`
 }
-``` 
 
-```go
 type Options struct {
-    // Command-centric for user management
-    User struct {
-        `goopt:"kind:command;name:user;desc:User management"`
-        
-        Create struct {
-            `goopt:"kind:command;name:create;desc:Create a user"`
-            Name string `goopt:"kind:flag;name:name;desc:User name"`
-        }
-    }
-    
-    // Flag-centric for role management
-    CreateRole string `goopt:"kind:flag;path:role create;name:name;desc:Create a new role"`
-    DeleteRole string `goopt:"kind:flag;path:role delete;name:name;desc:Delete a role"`
-    
-    // Shared flag across specific commands
-    Force bool `goopt:"kind:flag;path:user create,role create;name:force;desc:Force operation"`
+    Start struct {
+        *ServerConfig `goopt:"name:server"` // This is a pointer to a ServerConfig struct - the name can be overridden with the name tag
+    } `goopt:"kind:command"` // command start has a pointer to a ServerConfig struct
+    Stop struct {
+        *ServerConfig `goopt:"name:server"` // This is a pointer to a ServerConfig struct - the name can be overridden with the name tag
+    } `goopt:"kind:command"` // command stop has a pointer to a ServerConfig struct
 }
 ```
 
---- 
-Each approach has its benefits:
-- Flag-centric is flatter and good for simpler CLIs
-- Command-centric provides clear structure for complex command hierarchies
-- Mixed approach allows flexibility where needed
+### Advantages:
+- Reuse configuration structures
+- DRY principle for shared settings
+- Good for modular command configurations
+- Flexible composition of command options
+
+### Trade-offs:
+- Need to manage nil pointers
+- Less explicit flag visibility
+- Can hide dependencies
+
+## Best Practices
+
+1. Choose based on your primary use case:
+   - Flag-centric for shared flags across commands
+   - Explicit commands for static hierarchies
+   - Struct tags for complex, unique command trees
+   - Pointer sharing for modular configurations
+
+2. Consider maintenance:
+   - Prefer struct tags for deep hierarchies
+   - Use explicit commands for simple hierarchies
+   - Use flag paths for flat command structures
+
+3. Consider visibility:
+   - Make command structure clear in code
+   - Document shared flags
+   - Use consistent naming patterns
+
+4. Handle complexity:
+   - Break down deep hierarchies
+   - Use shared structs for common patterns
+   - Consider generating complex structures
+
+5. Error handling:
+   - Validate command paths
+   - Check for flag name collisions
+   - Handle nil pointers appropriately
+

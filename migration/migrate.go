@@ -259,8 +259,8 @@ func processFile(file *ast.File, handler func(field *ast.Field, oldTag, newTag s
 
 // updateTagValue removes all legacy tags and adds the new goopt tag
 func updateTagValue(originalTag string, newGooptTag string) string {
-	converter := newTagConverter(originalTag)
-	_ = converter.Parse() // We can ignore the error as we just want to filter tags
+	converter := NewTagCollector(originalTag)
+	_ = converter.Parse(isLegacyTag) // We can ignore the error as we just want to filter tags
 
 	// Build new tag string with non-legacy, non-goopt tags
 	var newTags []string
@@ -473,6 +473,7 @@ func checkFileAccess(filename string) error {
 func escapeSequences(s string) string {
 	// Replace newlines with \n
 	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\t", "\\t")
 	// Replace any remaining carriage returns
 	s = strings.ReplaceAll(s, "\r", "")
 	// Escape quotes

@@ -7,25 +7,28 @@ import (
 	"github.com/napalu/goopt/types/orderedmap"
 )
 
-// tagConverter handles the conversion of struct tags
-type tagConverter struct {
+// TagCollector handles the conversion of struct tags
+type TagCollector struct {
 	originalTag string
-	legacyTags  *orderedmap.OrderedMap[string, string]
+	gooptTags   *orderedmap.OrderedMap[string, string]
 	otherTags   *orderedmap.OrderedMap[string, string]
 }
 
-func newTagConverter(tag string) *tagConverter {
-	return &tagConverter{
+func NewTagCollector(tag string) *TagCollector {
+	return &TagCollector{
 		originalTag: tag,
-		legacyTags:  orderedmap.NewOrderedMap[string, string](),
+		gooptTags:   orderedmap.NewOrderedMap[string, string](),
 		otherTags:   orderedmap.NewOrderedMap[string, string](),
 	}
 }
 
 // Parse separates legacy tags from other tags
-func (c *tagConverter) Parse() error {
-	// Remove surrounding backticks
+func (c *TagCollector) Parse(isGoopt func(s string) bool) error {
 	tagStr := strings.Trim(c.originalTag, "`")
+
+	if isGoopt == nil {
+		isGoopt = isLegacyTag
+	}
 
 	var tags []string
 	var currentTag strings.Builder
@@ -59,8 +62,8 @@ func (c *tagConverter) Parse() error {
 			return fmt.Errorf("parsing tag %q: %w", tag, err)
 		}
 
-		if isLegacyTag(key) {
-			c.legacyTags.Set(key, value)
+		if isGoopt(key) {
+			c.gooptTags.Set(key, value)
 		} else {
 			c.otherTags.Set(key, value)
 		}
@@ -103,4 +106,8 @@ func isLegacyTag(key string) bool {
 		}
 	}
 	return false
+}
+
+func isGooptTag(key string) bool {
+	return strings.HasPrefix(key, "goopt:")
 }

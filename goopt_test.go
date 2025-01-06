@@ -3441,10 +3441,6 @@ func BenchmarkPathValidation(b *testing.B) {
 	})
 }
 
-func TestMain(m *testing.M) {
-	os.Exit(m.Run())
-}
-
 func TestParser_PositionalArguments(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -3663,4 +3659,360 @@ func TestParser_PositionalArguments(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewParserFromStruct_NestedPointerStructs(t *testing.T) {
+	type Inner struct {
+		InnerField string `goopt:"name:inner-field;short:i;desc:inner field description"`
+	}
+
+	type Middle struct {
+		MiddleField string  `goopt:"name:middle-field;short:m;desc:middle field description"`
+		Inner       *Inner  `goopt:"name:inner"`
+		InnerPtr    *string `goopt:"name:inner-ptr;desc:pointer to string"`
+	}
+
+	type Config struct {
+		TopField string  `goopt:"name:top-field;short:t;desc:top field description"`
+		Middle   *Middle `goopt:"name:middle"`
+		NilPtr   *Inner  `goopt:"name:nil-ptr"`
+	}
+
+	str := "test"
+	cfg := &Config{
+		Middle: &Middle{
+			Inner:    &Inner{},
+			InnerPtr: &str,
+		},
+	}
+
+	parser, err := NewParserFromStruct(cfg)
+	assert.NoError(t, err)
+
+	// Check that flags were properly registered
+	arg1, err := parser.GetArgument("top-field")
+	assert.NoError(t, err)
+	assert.NotNil(t, arg1)
+
+	arg2, err := parser.GetArgument("middle.middle-field")
+	assert.NoError(t, err)
+	assert.NotNil(t, arg2)
+
+	arg3, err := parser.GetArgument("middle.inner.inner-field")
+	assert.NoError(t, err)
+	assert.NotNil(t, arg3)
+
+	arg4, err := parser.GetArgument("middle.inner-ptr")
+	assert.NoError(t, err)
+	assert.NotNil(t, arg4)
+
+	// Check that nil pointers are handled gracefully
+	_, err = parser.GetArgument("nil-ptr.inner-field")
+	assert.Error(t, err) // Should error because nil-ptr is nil
+}
+
+func TestParser_NestedCommandRegistration(t *testing.T) {
+	type Config struct {
+		// ... Config fields if needed
+	}
+
+	type Options struct {
+		Verbose bool `goopt:"name:verbose;short:v;desc:be loud when working;type:standalone;default:false"`
+		Csv     struct {
+			In          string `goopt:"name:in;short:i;desc:csv input file"`
+			Out         string `goopt:"name:out;short:o;desc:csv output;default:stdout"`
+			Headers     bool   `goopt:"name:headers;short:h;desc:defaults to true - set to false to indicate csv file has no headers;type:standalone"`
+			SearchByPos int    `goopt:"name:searchByPos;short:U;desc:position of field in csv file containing the user id;default:0"`
+			GroupPos    int    `goopt:"name:groupPos;short:g;desc:position of field in csv file containing the user groups;default:0"`
+			OverridePos int    `goopt:"name:overridePos;short:O;desc:position of field in csv file containing the user id to use if present"`
+		}
+		Config *Config
+		Users  struct {
+			Upsert struct {
+				Config *Config
+			} `goopt:"kind:command"`
+			Update     struct{} `goopt:"kind:command"`
+			Diff       struct{} `goopt:"kind:command"`
+			Deactivate struct {
+				Delete bool `goopt:"name:delete;short:dlt;desc:delete users when deactivating;default:false"`
+			} `goopt:"kind:command"`
+			Search struct {
+				WithAttributes bool   `goopt:"name:withAttributes;short:wa;desc:ask for additional attributes;type:standalone"`
+				CrowdQuery     string `goopt:"name:crowdQuery;short:q;desc:crowd search query string;required:true"`
+			} `goopt:"kind:command"`
+		} `goopt:"kind:command"`
+		Group struct {
+			Members struct{} `goopt:"kind:command"`
+			Add     struct{} `goopt:"kind:command"`
+			Sync    struct{} `goopt:"kind:command"`
+		} `goopt:"kind:command"`
+	}
+
+	opts := &Options{}
+	parser, err := NewParserFromStruct(opts)
+	assert.NoError(t, err)
+
+	// Test global flags
+	verboseArg, err := parser.GetArgument("verbose")
+	assert.NoError(t, err)
+	assert.Equal(t, "v", verboseArg.Short)
+	assert.True(t, verboseArg.TypeOf == types.Standalone)
+
+	// Test nested non-command struct flags
+	csvInArg, err := parser.GetArgument("csv.in")
+	assert.NoError(t, err)
+	assert.Equal(t, "i", csvInArg.Short)
+
+	// Test command registration
+	expectedCommands := []struct {
+		path   string
+		fields []string // expected flag names for this command
+	}{
+		{
+			path:   "users upsert",
+			fields: nil, // Add fields if any
+		},
+		{
+			path:   "users update",
+			fields: nil,
+		},
+		{
+			path:   "users diff",
+			fields: nil,
+		},
+		{
+			path: "users deactivate",
+			fields: []string{
+				"delete",
+			},
+		},
+		{
+			path: "users search",
+			fields: []string{
+				"withAttributes",
+				"crowdQuery",
+			},
+		},
+		{
+			path:   "group members",
+			fields: nil,
+		},
+		{
+			path:   "group add",
+			fields: nil,
+		},
+		{
+			path:   "group sync",
+			fields: nil,
+		},
+	}
+
+	for _, cmd := range expectedCommands {
+		// Verify command exists
+		command, ok := parser.getCommand(cmd.path)
+
+		assert.NotNil(t, command, "Command %s should exist", cmd.path)
+		assert.True(t, ok)
+
+		// Verify command flags
+		if cmd.fields != nil {
+			for _, field := range cmd.fields {
+				flagPath := buildPathFlag(field, cmd.path)
+				arg, err := parser.GetArgument(flagPath)
+				assert.NoError(t, err, "Flag %s should exist", flagPath)
+				assert.NotNil(t, arg)
+			}
+		}
+	}
+
+	// Test that non-existent commands return nil
+	command, ok := parser.getCommand("nonexistent")
+	assert.Nil(t, command)
+	assert.False(t, ok)
+
+	command, ok = parser.getCommand("users nonexistent")
+	assert.Nil(t, command)
+	assert.False(t, ok)
+}
+
+func TestParser_ReusableAndMixedFlagPatterns(t *testing.T) {
+	// Common reusable structures
+	type LogConfig struct {
+		Level   string `goopt:"name:level;default:info"`
+		Format  string `goopt:"name:format;default:json"`
+		Path    string `goopt:"name:path"`
+		Verbose bool   `goopt:"name:verbose;type:standalone"`
+	}
+
+	type DatabaseConfig struct {
+		Host     string `goopt:"name:host;default:localhost"`
+		Port     int    `goopt:"name:port;default:5432"`
+		User     string `goopt:"name:user;required:true"`
+		Password string `goopt:"name:password;required:true"`
+	}
+
+	type testConfig struct {
+		Primary DatabaseConfig `goopt:"name:primary-db"`
+		Replica DatabaseConfig `goopt:"name:replica-db"`
+		Logs    LogConfig      `goopt:"name:log"`
+	}
+
+	// For the mixed approach test
+	type mixedConfig struct {
+		Server struct {
+			Host string     `goopt:"name:host;default:localhost"`
+			Port int        `goopt:"name:port;default:8080"`
+			Logs *LogConfig `goopt:"name:logs"`
+		}
+		Client struct {
+			Endpoint string     `goopt:"name:endpoint;required:true"`
+			Logs     *LogConfig `goopt:"name:logs"`
+		}
+	}
+
+	// For the nil pointer test
+	type nilPointerConfig struct {
+		Server struct {
+			Host string     `goopt:"name:host"`
+			Logs *LogConfig `goopt:"name:logs"`
+		}
+	}
+
+	tests := []struct {
+		name          string
+		setupConfig   func() interface{} // Change back to interface{} to handle different types
+		args          []string
+		envVars       map[string]string
+		validateFunc  func(*testing.T, *Parser)
+		expectSuccess bool
+	}{
+		{
+			name: "reusable flag groups with prefixes",
+			setupConfig: func() interface{} {
+				return &testConfig{}
+			},
+			args: []string{
+				"--primary-db.host", "primary.example.com",
+				"--primary-db.user", "admin",
+				"--primary-db.password", "secret",
+				"--replica-db.host", "replica.example.com",
+				"--replica-db.user", "reader",
+				"--replica-db.password", "secret2",
+				"--log.level", "debug",
+			},
+			validateFunc: func(t *testing.T, p *Parser) {
+				// Check primary DB flags
+				_, err := p.GetArgument("primary-db.host")
+				assert.NoError(t, err)
+				assert.Equal(t, "primary.example.com", p.GetOrDefault("primary-db.host", ""))
+
+				// Check replica DB flags
+				_, err = p.GetArgument("replica-db.host")
+				assert.NoError(t, err)
+				assert.Equal(t, "replica.example.com", p.GetOrDefault("replica-db.host", ""))
+
+				// Check log flags
+				_, err = p.GetArgument("log.level")
+				assert.NoError(t, err)
+				assert.Equal(t, "debug", p.GetOrDefault("log.level", ""))
+			},
+			expectSuccess: true,
+		},
+		{
+			name: "mixed approach with pointers",
+			setupConfig: func() interface{} {
+				return &mixedConfig{
+					Server: struct {
+						Host string     `goopt:"name:host;default:localhost"`
+						Port int        `goopt:"name:port;default:8080"`
+						Logs *LogConfig `goopt:"name:logs"`
+					}{
+						Logs: &LogConfig{},
+					},
+					Client: struct {
+						Endpoint string     `goopt:"name:endpoint;required:true"`
+						Logs     *LogConfig `goopt:"name:logs"`
+					}{
+						Logs: &LogConfig{},
+					},
+				}
+			},
+			args: []string{
+				"--server.host", "api.example.com",
+				"--server.logs.level", "debug",
+				"--client.endpoint", "https://api.example.com",
+				"--client.logs.level", "info",
+			},
+			validateFunc: func(t *testing.T, p *Parser) {
+				// Check server flags
+				_, err := p.GetArgument("server.host")
+				assert.NoError(t, err)
+				assert.Equal(t, "api.example.com", p.GetOrDefault("server.host", ""))
+
+				// Check server logs
+				_, err = p.GetArgument("server.logs.level")
+				assert.NoError(t, err)
+				assert.Equal(t, "debug", p.GetOrDefault("server.logs.level", ""))
+
+				// Check client flags
+				_, err = p.GetArgument("client.endpoint")
+				assert.NoError(t, err)
+				assert.Equal(t, "https://api.example.com", p.GetOrDefault("client.endpoint", ""))
+
+				// Check client logs
+				_, err = p.GetArgument("client.logs.level")
+				assert.NoError(t, err)
+				assert.Equal(t, "info", p.GetOrDefault("client.logs.level", ""))
+			},
+			expectSuccess: true,
+		},
+		{
+			name: "nil pointer handling",
+			setupConfig: func() interface{} {
+				return &nilPointerConfig{}
+			},
+			args: []string{"--server.host", "localhost"},
+			validateFunc: func(t *testing.T, p *Parser) {
+				// Should handle nil LogConfig gracefully
+				_, err := p.GetArgument("server.host")
+				assert.NoError(t, err)
+				assert.Equal(t, "localhost", p.GetOrDefault("server.host", ""))
+
+				// Logs flags should not be registered
+				_, err = p.GetArgument("server.logs.level")
+				assert.Error(t, err)
+			},
+			expectSuccess: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup environment variables if any
+			for k, v := range tt.envVars {
+				os.Setenv(k, v)
+				defer os.Unsetenv(k)
+			}
+
+			// Create parser directly from the config pointer
+			config := tt.setupConfig()
+			parser, err := NewParserFromInterface(config)
+			if !assert.NoError(t, err) {
+				return
+			}
+
+			// Parse arguments
+			success := parser.Parse(tt.args)
+			assert.Equal(t, tt.expectSuccess, success)
+
+			// Run validation
+			if tt.validateFunc != nil {
+				tt.validateFunc(t, parser)
+			}
+		})
+	}
+}
+
+func TestMain(m *testing.M) {
+	os.Exit(m.Run())
 }
