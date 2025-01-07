@@ -10,19 +10,11 @@ has_children: true
 `goopt` is particularly well-suited for:
 
 - **Flexible command definition** supporting struct-first, builder pattern, or imperative style
-- **Multiple command organization approaches**:
-  - Flag-centric (using struct base path tags)
-  - Command-centric (grouping via command structs)
-  - Mixed approach combining both styles
+- **Multiple command organization approaches**: support for a variety of command organization styles
 - **Type-safe configurations** with compile-time validation
 - **Ordered command execution** where commands need to be processed in sequence
 
 Feature overview:
-- Multiple command definition styles:
-  - Struct-based using tags
-  - Builder pattern
-  - Imperative
-  - Mixed approaches
 - Flexible command organization:
   - Flag-centric with base paths
   - Command-centric with struct grouping

@@ -7,6 +7,8 @@ nav_order: 3
 
 # Flag Structure Patterns
 
+goopt supports a variety of flag organization styles.
+
 ## 1. Flat Flag Structure
 ```go
 type Options struct {
