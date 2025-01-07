@@ -4085,6 +4085,61 @@ func TestNestedCommandFlags(t *testing.T) {
 	}
 }
 
+func TestPointerToSliceOfStructs(t *testing.T) {
+	type Item struct {
+		Name  string `goopt:"name:name"`
+		Value int    `goopt:"name:value"`
+	}
+
+	type TestStruct struct {
+		Command struct {
+			Items       *[]*Item `goopt:"name:items"`        // Pointer to slice of pointers to structs
+			SimpleItems *[]Item  `goopt:"name:simple-items"` // Pointer to slice of structs
+		} `goopt:"kind:command"`
+	}
+
+	opts := &TestStruct{}
+
+	// Initialize the slices and their elements
+	items := make([]*Item, 2)
+	items[0] = &Item{} // Initialize each pointer.go
+	items[1] = &Item{}
+
+	simpleItems := make([]Item, 2) // Simple items don't need pointer.go initialization
+
+	opts.Command.Items = &items
+	opts.Command.SimpleItems = &simpleItems
+
+	p, err := NewParserFromStruct(opts)
+	assert.NoError(t, err)
+	assert.Empty(t, p.GetErrors())
+
+	assert.True(t, p.Parse([]string{
+		"command",
+		"--items.0.name", "item1",
+		"--items.0.value", "1",
+		"--items.1.name", "item2",
+		"--items.1.value", "2",
+		"--simple-items.0.name", "item3",
+		"--simple-items.0.value", "3",
+		"--simple-items.1.name", "item4",
+		"--simple-items.1.value", "4",
+	}))
+
+	assert.Empty(t, p.GetErrors())
+
+	// Verify the values
+	assert.Equal(t, "item1", (*opts.Command.Items)[0].Name)
+	assert.Equal(t, 1, (*opts.Command.Items)[0].Value)
+	assert.Equal(t, "item2", (*opts.Command.Items)[1].Name)
+	assert.Equal(t, 2, (*opts.Command.Items)[1].Value)
+
+	assert.Equal(t, "item3", (*opts.Command.SimpleItems)[0].Name)
+	assert.Equal(t, 3, (*opts.Command.SimpleItems)[0].Value)
+	assert.Equal(t, "item4", (*opts.Command.SimpleItems)[1].Name)
+	assert.Equal(t, 4, (*opts.Command.SimpleItems)[1].Value)
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
