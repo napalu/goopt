@@ -4013,7 +4013,7 @@ func TestParser_ReusableAndMixedFlagPatterns(t *testing.T) {
 	}
 }
 
-func TestNestedCommandFlags(t *testing.T) {
+func TestParser_NestedCommandFlagsWithSlices(t *testing.T) {
 	type CommonConfig struct {
 		Host string `goopt:"name:host;short:h"`
 	}
@@ -4085,7 +4085,7 @@ func TestNestedCommandFlags(t *testing.T) {
 	}
 }
 
-func TestPointerToSliceOfStructs(t *testing.T) {
+func TestParser_PointerToSliceOfStructs(t *testing.T) {
 	type Item struct {
 		Name  string `goopt:"name:name"`
 		Value int    `goopt:"name:value"`
@@ -4138,6 +4138,76 @@ func TestPointerToSliceOfStructs(t *testing.T) {
 	assert.Equal(t, 3, (*opts.Command.SimpleItems)[0].Value)
 	assert.Equal(t, "item4", (*opts.Command.SimpleItems)[1].Name)
 	assert.Equal(t, 4, (*opts.Command.SimpleItems)[1].Value)
+}
+
+func TestParser_CheckMultiple(t *testing.T) {
+	type Config struct {
+		LogLevel string   `goopt:"name:log-level;accepted:{pattern:(?i)^(?:ALL|INFO|ERROR|WARN|DEBUG|NONE)$,desc:Log level}"`
+		Format   string   `goopt:"name:format;accepted:{pattern:json|yaml|toml,desc:Log format}"`
+		Tags     []string `goopt:"name:tags;accepted:{pattern:^[a-zA-Z0-9_-]+$,desc:Log tags}"` // Fixed pattern to be more strict
+	}
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+		check   func(*testing.T, *Config)
+	}{
+		{
+			name:    "valid log level",
+			args:    []string{"--log-level", "INFO"},
+			wantErr: false,
+			check: func(t *testing.T, c *Config) {
+				assert.Equal(t, "INFO", c.LogLevel)
+			},
+		},
+		{
+			name:    "invalid log level",
+			args:    []string{"--log-level", "INVALID"},
+			wantErr: true,
+		},
+		{
+			name:    "valid format",
+			args:    []string{"--format", "json"},
+			wantErr: false,
+			check: func(t *testing.T, c *Config) {
+				assert.Equal(t, "json", c.Format)
+			},
+		},
+		{
+			name:    "valid tags",
+			args:    []string{"--tags", "tag1,tag2,tag3"},
+			wantErr: false,
+			check: func(t *testing.T, c *Config) {
+				assert.Equal(t, []string{"tag1", "tag2", "tag3"}, c.Tags)
+			},
+		},
+		{
+			name:    "invalid tags",
+			args:    []string{"--tags", "tag1,@invalid,tag3"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			p, err := NewParserFromStruct(cfg)
+			assert.NoError(t, err)
+
+			ok := p.Parse(tt.args)
+			if tt.wantErr {
+				assert.False(t, ok)
+				assert.NotEmpty(t, p.GetErrors())
+			} else {
+				assert.True(t, ok)
+				assert.Empty(t, p.GetErrors())
+				if tt.check != nil {
+					tt.check(t, cfg)
+				}
+			}
+		})
+	}
 }
 
 func TestMain(m *testing.M) {
