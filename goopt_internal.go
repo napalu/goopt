@@ -1226,11 +1226,17 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 		}
 
-		if field.Type.Kind() == reflect.Slice || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Slice) {
-			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser); err != nil {
-				parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
+		if field.Type.Kind() == reflect.Slice ||
+			(field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Slice) {
+
+			if !isBasicType(field.Type) {
+				// Process as nested structure
+				if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser); err != nil {
+					parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
+				}
+				continue
 			}
-			continue
+
 		}
 
 		if field.Type.Kind() == reflect.Struct || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct) {
@@ -1720,4 +1726,23 @@ func isStructOrSliceType(field reflect.StructField) bool {
 		typ = typ.Elem()
 	}
 	return typ.Kind() == reflect.Struct || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array
+}
+
+func isBasicType(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64,
+		reflect.String:
+		return true
+	case reflect.Slice:
+		// Check if it's a slice of basic types
+		return isBasicType(t.Elem())
+	case reflect.Ptr:
+		// Check the type being pointed to
+		return isBasicType(t.Elem())
+	default:
+		return false
+	}
 }

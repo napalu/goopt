@@ -4013,6 +4013,78 @@ func TestParser_ReusableAndMixedFlagPatterns(t *testing.T) {
 	}
 }
 
+func TestNestedCommandFlags(t *testing.T) {
+	type CommonConfig struct {
+		Host string `goopt:"name:host;short:h"`
+	}
+
+	type TestStruct struct {
+		Group struct {
+			Add struct {
+				Config CommonConfig
+				Groups []string `goopt:"name:groups;short:g"`
+			} `goopt:"kind:command"`
+			Remove struct {
+				Config CommonConfig
+				Groups []string `goopt:"name:groups;short:g"`
+			} `goopt:"kind:command"`
+		} `goopt:"kind:command"`
+	}
+
+	opts := &TestStruct{}
+	p, err := NewParserFromStruct(opts)
+	assert.NoError(t, err)
+	if p.GetErrorCount() > 0 {
+		t.Logf("Parse errors: %v", p.GetErrors())
+	}
+	assert.Empty(t, p.GetErrors())
+
+	tests := []struct {
+		args     []string
+		wantErr  bool
+		expected []string
+		host     string
+	}{
+		{
+			args:     []string{"group", "add", "--groups", "group1,group2", "--config.host", "localhost"},
+			expected: []string{"group1", "group2"},
+			host:     "localhost",
+		},
+		{
+			args:     []string{"group", "remove", "--groups", "group3", "--config.host", "otherhost"},
+			expected: []string{"group3"},
+			host:     "otherhost",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			if !p.Parse(tt.args) {
+				t.Logf("Parse errors: %v", p.GetErrors())
+				assert.Contains(t, p.GetErrors(), tt.wantErr)
+			}
+
+			var got []string
+			var gotHost string
+			switch tt.args[1] {
+			case "add":
+				got = opts.Group.Add.Groups
+				gotHost = opts.Group.Add.Config.Host
+			case "remove":
+				got = opts.Group.Remove.Groups
+				gotHost = opts.Group.Remove.Config.Host
+			}
+
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("Groups = %v, want %v", got, tt.expected)
+			}
+			if gotHost != tt.host {
+				t.Errorf("Host = %v, want %v", gotHost, tt.host)
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
