@@ -1154,30 +1154,31 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 	}
 
 	parser := NewParser()
-	st := structValue.Type()
-	if st.Kind() == reflect.Ptr {
-		if structValue.IsNil() {
-			return nil, fmt.Errorf("nil pointer encountered")
-		}
-		st = st.Elem()
-		structValue = structValue.Elem()
+
+	// Unwrap the value and type
+	unwrappedValue, err := util.UnwrapValue(structValue)
+	if err != nil {
+		return nil, fmt.Errorf("error unwrapping value: %w", err)
 	}
+
+	st := util.UnwrapType(structValue.Type())
 	if st.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("only structs can be tagged")
 	}
 
-	err := parser.processStructCommands(structValue, commandPath, currentDepth, maxDepth)
+	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth)
 	if err != nil {
 		parser.addError(err)
 	}
 
+	// Use unwrappedValue for field iteration
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		if _, ok := field.Tag.Lookup("ignore"); ok {
 			continue
 		}
 
-		fieldValue := structValue.Field(i)
+		fieldValue := unwrappedValue.Field(i) // Use unwrappedValue here
 		if !fieldValue.CanAddr() || !fieldValue.CanInterface() {
 			continue
 		}
@@ -1365,8 +1366,13 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 
 func (p *Parser) processStructCommands(val reflect.Value, currentPath string, currentDepth, maxDepth int) error {
 	// Handle case where the entire value is a Command type (not a struct containing commands)
-	if val.Type() == reflect.TypeOf(Command{}) {
-		cmd := val.Interface().(Command)
+	unwrappedValue, err := util.UnwrapValue(val)
+	if err != nil {
+		return fmt.Errorf("error unwrapping value: %w", err)
+	}
+
+	if unwrappedValue.Type() == reflect.TypeOf(Command{}) {
+		cmd := unwrappedValue.Interface().(Command)
 		_, err := p.buildCommand(cmd.path, cmd.Description, nil)
 		if err != nil {
 			return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.path, err)
@@ -1379,14 +1385,14 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 	}
 
 	// Prevent infinite recursion
-	typ := val.Type()
+	typ := util.UnwrapType(val.Type())
 	if currentDepth > maxDepth {
 		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
 	}
 
 	// Process all fields in the struct
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
+	for i := 0; i < unwrappedValue.NumField(); i++ {
+		field := unwrappedValue.Field(i)
 		fieldType := typ.Field(i)
 		if !fieldType.IsExported() || fieldType.Tag.Get("ignore") != "" {
 			continue
@@ -1563,21 +1569,28 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 		capacity = flagInfo.Argument.Capacity
 	}
 
+	// Unwrap the field value
+	unwrappedValue, err := util.UnwrapValue(fieldValue)
+	if err != nil {
+		return fmt.Errorf("error unwrapping slice field %s: %w", flagPrefix, err)
+	}
+
 	// Initialize or resize slice if needed
-	if (fieldValue.Kind() == reflect.Slice && fieldValue.IsNil()) || (capacity > 0 && fieldValue.Cap() != capacity) {
+	if (unwrappedValue.Kind() == reflect.Slice && unwrappedValue.IsNil()) ||
+		(capacity > 0 && unwrappedValue.Cap() != capacity) {
 		// TODO add a check to ensure capacity is not too large?
 
-		newSlice := reflect.MakeSlice(fieldValue.Type(), capacity, capacity)
-		if !fieldValue.IsNil() && fieldValue.Len() > 0 {
-			copyLen := util.Min(fieldValue.Len(), capacity)
-			reflect.Copy(newSlice.Slice(0, copyLen), fieldValue.Slice(0, copyLen))
+		newSlice := reflect.MakeSlice(unwrappedValue.Type(), capacity, capacity)
+		if !unwrappedValue.IsNil() && unwrappedValue.Len() > 0 {
+			copyLen := util.Min(unwrappedValue.Len(), capacity)
+			reflect.Copy(newSlice.Slice(0, copyLen), unwrappedValue.Slice(0, copyLen))
 		}
-		fieldValue.Set(newSlice)
+		unwrappedValue.Set(newSlice)
 	}
 
 	// Process each slice element
-	for idx := 0; idx < fieldValue.Len(); idx++ {
-		elem := fieldValue.Index(idx).Addr()
+	for idx := 0; idx < unwrappedValue.Len(); idx++ {
+		elem := unwrappedValue.Index(idx).Addr()
 
 		// Create full path with the slice index
 		elemPrefix := fmt.Sprintf("%s.%d", flagPrefix, idx)
@@ -1595,10 +1608,16 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 }
 
 func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
-	nestedCmdLine, err := newParserFromReflectValue(fieldValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1)
+	unwrappedValue, err := util.UnwrapValue(fieldValue)
+	if err != nil {
+		return fmt.Errorf("error unwrapping nested struct: %w", err)
+	}
+
+	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1)
 	if err != nil {
 		return fmt.Errorf("error processing nested struct %s: %w", flagPrefix, err)
 	}
+
 	err = c.mergeCmdLine(nestedCmdLine)
 	if err != nil {
 		return err
@@ -1693,10 +1712,8 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 }
 
 func isFieldCommand(field reflect.StructField) bool {
-	typ := field.Type
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
+	// Use UnwrapType instead of manual pointer.go unwrapping
+	typ := util.UnwrapType(field.Type)
 
 	var isCommand bool
 	if cmd, ok := field.Tag.Lookup("goopt"); ok {

@@ -153,12 +153,12 @@ func InferFieldType(field interface{}) types.OptionType {
 		if f.Type == nil {
 			return types.Empty
 		}
-		t = f.Type
+		t = util.UnwrapType(f.Type)
 	case reflect.Type:
 		if f == nil {
 			return types.Empty
 		}
-		t = f
+		t = util.UnwrapType(f)
 	default:
 		return types.Empty
 	}
