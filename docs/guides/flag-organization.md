@@ -125,7 +125,6 @@ type Options struct {
    - Consider command-line usability
 
 3. Flag Naming:
-   - Use kebab-case for flag names
    - Prefix for component disambiguation
    - Keep names concise but clear
 
