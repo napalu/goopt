@@ -80,31 +80,31 @@ func NewCmdLineOption() *Parser {
 // Use tags to override defaults:
 //
 //	`goopt:"name:custom;type:chained"`
-func NewParserFromStruct[T any](structWithTags *T) (*Parser, error) {
-	return NewParserFromStructWithLevel(structWithTags, 5)
+func NewParserFromStruct[T any](structWithTags *T, config ...ConfigureCmdLineFunc) (*Parser, error) {
+	return NewParserFromStructWithLevel(structWithTags, 5, config...)
 }
 
 // NewCmdLineFromStruct is an alias for NewParserFromStruct.
 //
 // Deprecated: Use NewParserFromStruct instead. This function will be removed in v2.0.0.
-func NewCmdLineFromStruct[T any](structWithTags *T) (*Parser, error) {
-	return NewParserFromStruct(structWithTags)
+func NewCmdLineFromStruct[T any](structWithTags *T, config ...ConfigureCmdLineFunc) (*Parser, error) {
+	return NewParserFromStructWithLevel(structWithTags, 5, config...)
 }
 
 // NewParserFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
-func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
-	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0)
+func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int, config ...ConfigureCmdLineFunc) (*Parser, error) {
+	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0, config...)
 }
 
 // NewCmdLineFromStructWithLevel is an alias for NewParserFromStructWithLevel.
 //
 // Deprecated: Use NewParserFromStructWithLevel instead. This function will be removed in v2.0.0.
-func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int) (*Parser, error) {
-	return NewParserFromStructWithLevel(structWithTags, maxDepth)
+func NewCmdLineFromStructWithLevel[T any](structWithTags *T, maxDepth int, config ...ConfigureCmdLineFunc) (*Parser, error) {
+	return NewParserFromStructWithLevel(structWithTags, maxDepth, config...)
 }
 
 // NewParserFromInterface creates a new parser from an interface{} that should be a struct or a pointer to a struct
-func NewParserFromInterface(i interface{}) (*Parser, error) {
+func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Parser, error) {
 	v := reflect.ValueOf(i)
 	if v.Kind() != reflect.Ptr {
 		// If not a pointer, create one
@@ -112,7 +112,8 @@ func NewParserFromInterface(i interface{}) (*Parser, error) {
 		ptr.Elem().Set(v)
 		v = ptr
 	}
-	return newParserFromReflectValue(v, "", "", 5, 0)
+
+	return newParserFromReflectValue(v, "", "", 5, 0, config...)
 }
 
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
@@ -170,7 +171,7 @@ func (p *Parser) ExecuteCommands() int {
 			cmd, cmdOk := call.arguments[1].(*Command)
 			if cmdLineOk && cmdOk {
 				err := call.callback(cmdLine, cmd)
-				p.callbackResults[cmd.Name] = err
+				p.callbackResults[cmd.path] = err
 				if err != nil {
 					callbackErrors++
 				}
@@ -191,7 +192,7 @@ func (p *Parser) ExecuteCommand() error {
 			cmd, cmdOk := call.arguments[1].(*Command)
 			if cmdLineOk && cmdOk {
 				err := call.callback(cmdLine, cmd)
-				p.callbackResults[cmd.Name] = err
+				p.callbackResults[cmd.path] = err
 				if err != nil {
 					return err
 				}
@@ -637,22 +638,10 @@ func (p *Parser) SetArgumentPrefixes(prefixes []rune) error {
 
 // GetConsistencyWarnings is a helper function which provides information about eventual option consistency warnings.
 // It is intended for users of the library rather than for end-users
+//
+// Deprecated: Use GetWarnings instead. This function will be removed in v2.0.0.
 func (p *Parser) GetConsistencyWarnings() []string {
-	var configWarnings []string
-	for opt := range p.options {
-		mainKey := p.flagOrShortFlag(opt)
-		flagInfo, found := p.acceptedFlags.Get(mainKey)
-		if !found {
-			continue
-		}
-		if flagInfo.Argument.TypeOf == types.Standalone && flagInfo.Argument.DefaultValue != "" {
-			configWarnings = append(configWarnings,
-				fmt.Sprintf("Flag '%s' is a Standalone (boolean) flag and has a default value specified. "+
-					"The default value is ignored.", mainKey))
-		}
-	}
-
-	return configWarnings
+	return p.GetWarnings()
 }
 
 // GetWarnings returns a string slice of all warnings (non-fatal errors) - a warning is set when optional dependencies
@@ -694,6 +683,9 @@ func (p *Parser) GetWarnings() []string {
 }
 
 // GetOptions returns a slice of KeyValue pairs which have been supplied on the command-line.
+// Note: Short flags are always resolved to their long form in the returned options.
+// For example, if "-d" is specified on the command line and maps to "--debug",
+// the returned option will use "debug" as the key.
 func (p *Parser) GetOptions() []types.KeyValue[string, string] {
 	keyValues := make([]types.KeyValue[string, string], len(p.options))
 	i := 0

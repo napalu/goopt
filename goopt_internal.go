@@ -405,7 +405,17 @@ func (p *Parser) flagOrShortFlag(flag string, commandPath ...string) string {
 }
 
 func (p *Parser) isFlag(flag string) bool {
-	return strings.HasPrefix(flag, "-")
+	if len(p.prefixes) == 0 {
+		return strings.HasPrefix(flag, "-")
+	}
+
+	for _, prefix := range p.prefixes {
+		if strings.HasPrefix(flag, string(prefix)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (p *Parser) isCommand(arg string) bool {
@@ -1148,12 +1158,19 @@ func (p *Parser) buildCommand(commandPath, description string, parent *Command) 
 	return topParent, nil
 }
 
-func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPath string, maxDepth, currentDepth int) (*Parser, error) {
+func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPath string, maxDepth, currentDepth int, config ...ConfigureCmdLineFunc) (*Parser, error) {
 	if currentDepth > maxDepth {
 		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
 	}
 
+	var err error
 	parser := NewParser()
+	for _, cfg := range config {
+		cfg(parser, &err)
+		if err != nil {
+			return nil, fmt.Errorf("error configuring parser: %w", err)
+		}
+	}
 
 	// Unwrap the value and type
 	unwrappedValue, err := util.UnwrapValue(structValue)
@@ -1198,15 +1215,6 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			continue
 		}
 
-		if isStructOrSliceType(field) {
-			if field.Type.Kind() == reflect.Ptr {
-				if fieldValue.IsNil() {
-					continue
-				}
-				fieldValue = fieldValue.Elem()
-			}
-		}
-
 		isCommand := isFieldCommand(field)
 
 		if longName == "" {
@@ -1227,34 +1235,30 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 		}
 
-		if field.Type.Kind() == reflect.Slice ||
-			(field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Slice) {
-
-			if !isBasicType(field.Type) {
+		if isStructOrSliceType(field) {
+			if isSliceType(field) && !isBasicType(field.Type) {
 				// Process as nested structure
-				if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser); err != nil {
+				if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
 					parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
 				}
 				continue
 			}
 
-		}
-
-		if field.Type.Kind() == reflect.Struct || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct) {
-
-			newCommandPath := commandPath
-			if isCommand {
-				if newCommandPath == "" {
-					newCommandPath = longName
-				} else {
-					newCommandPath = fmt.Sprintf("%s %s", newCommandPath, longName)
+			if isStructType(field) {
+				newCommandPath := commandPath
+				if isCommand {
+					if newCommandPath == "" {
+						newCommandPath = longName
+					} else {
+						newCommandPath = fmt.Sprintf("%s %s", newCommandPath, longName)
+					}
 				}
-			}
 
-			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser); err != nil {
-				parser.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
+				if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
+					parser.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
+				}
+				continue
 			}
-			continue
 		}
 
 		// Use both flag prefix and command path appropriately
@@ -1562,7 +1566,7 @@ func (p *Parser) validateSlicePath(path string) error {
 	return nil
 }
 
-func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
+func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser, config ...ConfigureCmdLineFunc) error {
 	// Get capacity from Argument if specified
 	capacity := 0
 	if flagInfo, exists := c.acceptedFlags.Get(flagPrefix); exists && flagInfo.Argument != nil {
@@ -1595,7 +1599,7 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 		// Create full path with the slice index
 		elemPrefix := fmt.Sprintf("%s.%d", flagPrefix, idx)
 
-		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, commandPath, maxDepth, currentDepth+1)
+		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, commandPath, maxDepth, currentDepth+1, config...)
 		if err != nil {
 			return fmt.Errorf("error processing slice element %s[%d]: %w", flagPrefix, idx, err)
 		}
@@ -1607,13 +1611,13 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 	return nil
 }
 
-func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser) error {
+func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser, config ...ConfigureCmdLineFunc) error {
 	unwrappedValue, err := util.UnwrapValue(fieldValue)
 	if err != nil {
 		return fmt.Errorf("error unwrapping nested struct: %w", err)
 	}
 
-	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1)
+	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1, config...)
 	if err != nil {
 		return fmt.Errorf("error processing nested struct %s: %w", flagPrefix, err)
 	}
@@ -1738,11 +1742,25 @@ func isNestedSlicePath(path string) bool {
 }
 
 func isStructOrSliceType(field reflect.StructField) bool {
+	return isSliceType(field) || isStructType(field)
+}
+
+func isStructType(field reflect.StructField) bool {
 	typ := field.Type
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
-	return typ.Kind() == reflect.Struct || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array
+
+	return typ.Kind() == reflect.Struct
+}
+
+func isSliceType(field reflect.StructField) bool {
+	typ := field.Type
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	return typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array
 }
 
 func isBasicType(t reflect.Type) bool {

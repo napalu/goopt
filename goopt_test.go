@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"bytes"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -4206,6 +4207,384 @@ func TestParser_CheckMultiple(t *testing.T) {
 					tt.check(t, cfg)
 				}
 			}
+		})
+	}
+}
+
+func TestParser_GetCommandExecutionError(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupCmd      *Command
+		args          string
+		cmdPath       string
+		expectedError string
+	}{
+		{
+			name: "no error on successful execution",
+			setupCmd: &Command{
+				Name: "command",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					return nil
+				},
+			},
+			args:    "command",
+			cmdPath: "command",
+		},
+		{
+			name: "error on command execution",
+			setupCmd: &Command{
+				Name: "failing",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					return fmt.Errorf("command failed")
+				},
+			},
+			args:          "failing",
+			cmdPath:       "failing",
+			expectedError: "command failed",
+		},
+		{
+			name: "error in subcommand",
+			setupCmd: &Command{
+				Name: "parent",
+				Subcommands: []Command{
+					{
+						Name: "child",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							return fmt.Errorf("child command failed")
+						},
+					},
+				},
+			},
+			args:          "parent child",
+			cmdPath:       "parent child",
+			expectedError: "child command failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			err := p.AddCommand(tt.setupCmd)
+			assert.NoError(t, err)
+
+			_ = p.ParseString(tt.args)
+			_ = p.ExecuteCommands()
+			err = p.GetCommandExecutionError(tt.cmdPath)
+
+			if tt.expectedError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+		})
+	}
+}
+
+func TestParser_HasAcceptedValues(t *testing.T) {
+	type Config struct {
+		LogLevel string   `goopt:"name:log-level;accepted:{pattern:(?i)^(?:INFO|ERROR|WARN)$,desc:Log level}"`
+		Format   string   `goopt:"name:format"`
+		Tags     []string `goopt:"name:tags;accepted:{pattern:[a-z]+,desc:Tag format}"`
+		Command  struct {
+			SubFlag string `goopt:"name:sub-flag;accepted:{pattern:value1|value2,desc:Allowed values}"`
+		} `goopt:"kind:command"`
+	}
+
+	tests := []struct {
+		name     string
+		flagPath string
+		expected bool
+	}{
+		{
+			name:     "flag with accepted values",
+			flagPath: "log-level",
+			expected: true,
+		},
+		{
+			name:     "flag without accepted values",
+			flagPath: "format",
+			expected: false,
+		},
+		{
+			name:     "slice flag with accepted values",
+			flagPath: "tags",
+			expected: true,
+		},
+		{
+			name:     "nested flag with accepted values",
+			flagPath: "sub-flag@command",
+			expected: true,
+		},
+		{
+			name:     "non-existent flag",
+			flagPath: "nonexistent",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			p, err := NewParserFromStruct(cfg)
+			assert.NoError(t, err)
+			assert.Empty(t, p.GetErrors(), "Parser should have no errors after initialization")
+
+			hasAccepted := p.HasAcceptedValues(tt.flagPath)
+			assert.Equal(t, tt.expected, hasAccepted)
+		})
+	}
+}
+
+func TestParser_PrintFlags(t *testing.T) {
+	type Config struct {
+		LogLevel string   `goopt:"name:log-level;short:l;desc:Set logging level;required:true"`
+		Debug    bool     `goopt:"name:debug;short:d;desc:Enable debug mode"`
+		Tags     []string `goopt:"name:tags;desc:List of tags"`
+		Hidden   string   `goopt:"name:hidden;desc:Hidden option;ignore"`
+	}
+
+	tests := []struct {
+		name             string
+		expectedOutput   []string
+		unexpectedOutput []string
+	}{
+		{
+			name: "all flags",
+			expectedOutput: []string{
+				"\n --log-level  or -l \"Set logging level\" (required)",
+				"\n --debug  or -d \"Enable debug mode\" (optional)",
+				"\n --tags  \"List of tags\" (optional)",
+			},
+			unexpectedOutput: []string{
+				"--hidden", // Should not show ignored flags
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			p, err := NewParserFromStruct(cfg)
+			assert.NoError(t, err)
+
+			// Capture output
+			var buf bytes.Buffer
+			p.PrintFlags(&buf)
+			output := buf.String()
+
+			// Check expected output
+			for _, expected := range tt.expectedOutput {
+				assert.Contains(t, output, expected)
+			}
+
+			// Check unexpected output
+			for _, unexpected := range tt.unexpectedOutput {
+				assert.NotContains(t, output, unexpected)
+			}
+		})
+	}
+}
+
+func TestParser_Path(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupCmd *Command
+		cmdPath  string
+	}{
+		{
+			name: "top level command",
+			setupCmd: &Command{
+				Name: "create",
+			},
+			cmdPath: "create",
+		},
+		{
+			name: "nested command",
+			setupCmd: &Command{
+				Name: "create",
+				Subcommands: []Command{
+					{
+						Name: "user",
+					},
+				},
+			},
+			cmdPath: "create user",
+		},
+		{
+			name: "deeply nested command",
+			setupCmd: &Command{
+				Name: "create",
+				Subcommands: []Command{
+					{
+						Name: "user",
+						Subcommands: []Command{
+							{
+								Name: "admin",
+							},
+						},
+					},
+				},
+			},
+			cmdPath: "create user admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			err := p.AddCommand(tt.setupCmd)
+			assert.NoError(t, err)
+
+			args := strings.Split(tt.cmdPath, " ")
+			ok := p.Parse(args)
+			assert.True(t, ok)
+
+			cmd, found := p.getCommand(tt.cmdPath)
+			assert.True(t, found)
+			assert.NotNil(t, cmd)
+			assert.Equal(t, tt.cmdPath, cmd.Path())
+		})
+	}
+}
+
+func TestParser_SetArgumentPrefixes(t *testing.T) {
+	type Config struct {
+		Debug bool   `goopt:"kind:flag"`
+		Level string `goopt:"kind:flag"`
+	}
+
+	tests := []struct {
+		name     string
+		args     []string
+		want     map[string]string
+		wantErr  bool
+		wantBool bool // expected Parse() result
+		prefixes []rune
+	}{
+		{
+			name: "custom prefix flags",
+			args: []string{"+debug", "/level", "info"},
+			want: map[string]string{
+				"debug": "true",
+				"level": "info",
+			},
+			prefixes: []rune{'+', '/'},
+			wantBool: true,
+		},
+		{
+			name: "mixed prefix usage",
+			args: []string{"+debug", "--level", "info"},
+			want: map[string]string{
+				"debug": "true",
+				"level": "info",
+			},
+			prefixes: []rune{'-', '+'},
+			wantBool: true,
+		},
+		{
+			name: "wrong prefix",
+			args: []string{"--debug", "--level", "info"},
+			want: map[string]string{
+				"debug": "false",
+				"level": "info",
+			},
+			prefixes: nil, // pass nil prefixes
+			wantBool: false,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			p, err := NewParserFromStruct(cfg, WithArgumentPrefixes(tt.prefixes))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			ok := p.Parse(tt.args)
+			assert.Equal(t, tt.wantBool, ok, "Parse() result mismatch")
+
+			for flag, expectedValue := range tt.want {
+				value := p.GetOrDefault(flag, "")
+				assert.Equal(t, expectedValue, value, "Value mismatch for flag %s", flag)
+			}
+		})
+	}
+}
+
+func TestParser_GetOptions(t *testing.T) {
+	type Config struct {
+		Debug   bool     `goopt:"name:debug;short:d"`
+		Level   string   `goopt:"name:level;short:l"`
+		Tags    []string `goopt:"name:tags"`
+		Command struct {
+			SubFlag string `goopt:"name:sub-flag"`
+		} `goopt:"kind:command"`
+	}
+
+	tests := []struct {
+		name     string
+		args     []string
+		expected map[string]string
+	}{
+		{
+			name: "global flags",
+			args: []string{"--debug", "--level", "info", "--tags", "tag1,tag2"},
+			expected: map[string]string{
+				"debug": "true",
+				"level": "info",
+				"tags":  "tag1,tag2",
+			},
+		},
+		{
+			name: "short flags resolved to long form",
+			args: []string{"-d", "-l", "debug"},
+			expected: map[string]string{
+				"debug": "true",
+				"level": "debug",
+			},
+		},
+		{
+			name: "command flags",
+			args: []string{"command", "--sub-flag", "value"},
+			expected: map[string]string{
+				"sub-flag@command": "value",
+			},
+		},
+		{
+			name: "mixed flags with short form resolved",
+			args: []string{"-d", "command", "--sub-flag", "value"},
+			expected: map[string]string{
+				"debug":            "true",
+				"sub-flag@command": "value",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			p, err := NewParserFromStruct(cfg)
+			assert.NoError(t, err)
+
+			ok := p.Parse(tt.args)
+			assert.True(t, ok)
+
+			options := p.GetOptions()
+			assert.NotNil(t, options)
+			assert.Equal(t, len(tt.expected), len(options))
+
+			// Convert options to map for easier comparison
+			optMap := make(map[string]string)
+			for _, kv := range options {
+				optMap[kv.Key] = kv.Value
+			}
+
+			assert.Equal(t, tt.expected, optMap)
 		})
 	}
 }

@@ -119,7 +119,7 @@ func WithArgumentPrefixes(prefixes []rune) ConfigureCmdLineFunc {
 	}
 }
 
-// WithPosix for switching on Posix/GNU-like flag compatibility - not implemented yet
+// WithPosix for switching on Posix/GNU-like flag compatibility
 func WithPosix(usePosix bool) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.SetPosix(usePosix)
