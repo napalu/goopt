@@ -24,6 +24,17 @@ pre {
   opacity: 1; /* Fully visible */
 }
 
+/* Hide SVG until it's loaded */
+.search-icon use {
+  opacity: 0;
+}
+
+/* Show SVG once loaded */
+.search-icon use:not(:empty) {
+  opacity: 1;
+  transition: opacity 0.2s ease-in;
+}
+
 .side-bar {
   width: 25% !important;
   @media (min-width: 50rem) {
