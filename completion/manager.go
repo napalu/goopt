@@ -86,11 +86,16 @@ func (cm *Manager) checkCompletionFile(path string) (string, bool) {
 	completionPath := cm.getCompletionFilePath(path)
 	st, err := os.Stat(completionPath)
 	if err == nil && !st.IsDir() && st.Size() > 0 {
-		return completionPath, true
+		// Try to open the file to verify permissions
+		f, err := os.Open(completionPath)
+		if err == nil {
+			f.Close()
+			return completionPath, true
+		}
 	}
 
 	// If primary path doesn't have a completion, try fallback
-	if cm.Paths.Fallback != "" && path != cm.Paths.Fallback {
+	if path == cm.Paths.Primary && cm.Paths.Fallback != "" {
 		return cm.checkCompletionFile(cm.Paths.Fallback)
 	}
 

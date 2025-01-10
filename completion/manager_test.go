@@ -475,6 +475,50 @@ func TestCompletionManager_HasExistingCompletion(t *testing.T) {
 			wantExists:     true,
 			wantPathSuffix: "mytool",
 		},
+		{
+			name:        "primary path empty but fallback has completion",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = ""
+				cm.Paths.Fallback = filepath.Join(tempDir, "fallback")
+				if err := os.MkdirAll(cm.Paths.Fallback, 0755); err != nil {
+					t.Fatal(err)
+				}
+				completionPath := cm.getCompletionFilePath(cm.Paths.Fallback)
+				if err := os.WriteFile(completionPath, []byte("test"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantExists: false,
+			wantPathSuffix: "",
+		},
+		{
+			name:        "both paths empty",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = ""
+				cm.Paths.Fallback = ""
+			},
+			wantExists: false,
+		},
+		{
+			name:        "inaccessible file",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = filepath.Join(tempDir, "primary")
+				completionPath := cm.getCompletionFilePath(cm.Paths.Primary)
+				if err := os.MkdirAll(filepath.Dir(completionPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(completionPath, []byte("test completion"), 0000); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantExists: false,
+		},
 	}
 
 	for _, tt := range tests {
