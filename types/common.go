@@ -8,6 +8,24 @@ import (
 // OptionType used to define Flag types (such as Standalone, Single, Chained)
 type OptionType int
 
+// String returns the string representation of an OptionType
+func (o OptionType) String() string {
+	switch o {
+	case Standalone:
+		return "standalone"
+	case Single:
+		return "single"
+	case Chained:
+		return "chained"
+	case File:
+		return "file"
+	case Empty:
+		fallthrough
+	default:
+		return "empty"
+	}
+}
+
 const (
 	Empty      OptionType = iota // Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
 	Single     OptionType = 1    // Single denotes a Flag accepting a string value

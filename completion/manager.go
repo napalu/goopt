@@ -41,42 +41,72 @@ func (cm *Manager) Save() (path string, err error) {
 		return path, fmt.Errorf("no completion script generated")
 	}
 
-	if err := cm.ensureCompletionPath(); err != nil {
-		return path, err
+	path = cm.Paths.Primary
+	if err := cm.ensureCompletionPath(path); err != nil {
+		if cm.Paths.Fallback != "" {
+			if err := cm.ensureCompletionPath(cm.Paths.Fallback); err != nil {
+				return cm.Paths.Fallback, err
+			}
+			path = cm.Paths.Fallback
+		} else {
+			return path, err
+		}
 	}
 
-	path = cm.getCompletionFilePath()
-	if err := os.WriteFile(path, []byte(cm.script), 0644); err != nil {
+	completionPath := cm.getCompletionFilePath(path)
+	if err := os.WriteFile(completionPath, []byte(cm.script), 0644); err != nil {
 		err = fmt.Errorf("failed to write completion file: %w", err)
-		return path, err
+		return completionPath, err
 	}
 
-	err = ensurePermission(path, 0644)
+	err = ensurePermission(completionPath, 0644)
 	if err != nil {
-		return path, err
+		return completionPath, err
 	}
 
-	return path, nil
+	return completionPath, nil
 }
 
-func (cm *Manager) ensureCompletionPath() error {
-	perm := os.FileMode(0755)
-	err := os.MkdirAll(cm.Paths.Primary, perm)
-	if err != nil {
-		return fmt.Errorf("failed to create primary completion directory: %w", err)
+// IsShellSupported returns whether the current shell has completion generation support
+func (cm *Manager) IsShellSupported() bool {
+	return cm.generator != nil
+}
+
+// HasExistingCompletion checks if a completion script is already installed
+// Returns the path to the existing completion file and whether it exists
+func (cm *Manager) HasExistingCompletion() (string, bool) {
+	return cm.checkCompletionFile(cm.Paths.Primary)
+}
+
+func (cm *Manager) checkCompletionFile(path string) (string, bool) {
+	if path == "" {
+		return "", false
 	}
 
-	err = ensurePermission(cm.Paths.Primary, perm)
+	completionPath := cm.getCompletionFilePath(path)
+	st, err := os.Stat(completionPath)
+	if err == nil && !st.IsDir() && st.Size() > 0 {
+		return completionPath, true
+	}
+
+	// If primary path doesn't have a completion, try fallback
+	if cm.Paths.Fallback != "" && path != cm.Paths.Fallback {
+		return cm.checkCompletionFile(cm.Paths.Fallback)
+	}
+
+	return "", false
+}
+
+func (cm *Manager) ensureCompletionPath(path string) error {
+	perm := os.FileMode(0755)
+	err := os.MkdirAll(path, perm)
+	if err != nil {
+		return fmt.Errorf("failed to create completion path directory %s: %w", path, err)
+	}
+
+	err = ensurePermission(path, perm)
 	if err == nil {
 		return nil
-	}
-
-	if cm.Paths.Fallback != "" {
-		err = os.MkdirAll(cm.Paths.Fallback, perm)
-		if err != nil {
-			return fmt.Errorf("failed to create fallback completion directory: %w", err)
-		}
-		return ensurePermission(cm.Paths.Fallback, perm)
 	}
 
 	return fmt.Errorf("failed to create completion directories: %w", err)
@@ -113,8 +143,8 @@ func (cm *Manager) getShellFileConventions() CompletionFileInfo {
 	}
 }
 
-func (cm *Manager) getCompletionFilePath() string {
+func (cm *Manager) getCompletionFilePath(path string) string {
 	conventions := cm.getShellFileConventions()
 	filename := conventions.Prefix + cm.ProgramName + conventions.Extension
-	return filepath.Join(cm.Paths.Primary, filename)
+	return filepath.Join(path, filename)
 }

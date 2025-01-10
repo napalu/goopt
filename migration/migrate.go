@@ -307,7 +307,7 @@ func convertLegacyTags(field reflect.StructField) (string, error) {
 		parts = append(parts, fmt.Sprintf("desc:%s", desc))
 	}
 	if config.TypeOf != types.Empty {
-		parts = append(parts, fmt.Sprintf("type:%s", parse.TypeOfFlagToString(config.TypeOf)))
+		parts = append(parts, fmt.Sprintf("type:%s", config.TypeOf))
 	}
 	if config.Required {
 		parts = append(parts, "required:true")

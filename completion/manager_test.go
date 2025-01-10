@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -349,6 +350,148 @@ func TestCompletionManager_SaveCompletion(t *testing.T) {
 
 			if !tt.wantErr && tt.checkFile != nil {
 				tt.checkFile(t, path)
+			}
+		})
+	}
+}
+
+func TestCompletionManager_IsShellSupported(t *testing.T) {
+	tests := []struct {
+		name        string
+		shell       string
+		programName string
+		want        bool
+	}{
+		{
+			name:        "bash is supported",
+			shell:       "bash",
+			programName: "mytool",
+			want:        true,
+		},
+		{
+			name:        "zsh is supported",
+			shell:       "zsh",
+			programName: "mytool",
+			want:        true,
+		},
+		{
+			name:        "powershell is supported",
+			shell:       "powershell",
+			programName: "mytool",
+			want:        true,
+		},
+		{
+			name:        "unsupported shell",
+			shell:       "invalid-shell",
+			programName: "mytool",
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, err := NewManager(tt.shell, tt.programName)
+			if err != nil && tt.want {
+				t.Fatalf("NewManager() error = %v", err)
+			}
+			if err == nil && !tt.want {
+				t.Fatal("NewManager() expected error for unsupported shell")
+			}
+			if cm != nil && cm.IsShellSupported() != tt.want {
+				t.Errorf("IsShellSupported() = %v, want %v", cm.IsShellSupported(), tt.want)
+			}
+		})
+	}
+}
+
+func TestCompletionManager_HasExistingCompletion(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name           string
+		shell          string
+		programName    string
+		setupFunc      func(t *testing.T, cm *Manager)
+		wantExists     bool
+		wantPathSuffix string
+	}{
+		{
+			name:        "no completion file exists",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = filepath.Join(tempDir, "nonexistent")
+			},
+			wantExists: false,
+		},
+		{
+			name:        "completion file exists in primary path",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = filepath.Join(tempDir, "primary")
+				completionPath := cm.getCompletionFilePath(cm.Paths.Primary)
+				if err := os.MkdirAll(filepath.Dir(completionPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(completionPath, []byte("test completion"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantExists:     true,
+			wantPathSuffix: "mytool",
+		},
+		{
+			name:        "empty completion file",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = filepath.Join(tempDir, "empty")
+				completionPath := cm.getCompletionFilePath(cm.Paths.Primary)
+				if err := os.MkdirAll(filepath.Dir(completionPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(completionPath, []byte(""), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantExists: false,
+		},
+		{
+			name:        "fallback path has completion",
+			shell:       "bash",
+			programName: "mytool",
+			setupFunc: func(t *testing.T, cm *Manager) {
+				cm.Paths.Primary = filepath.Join(tempDir, "primary")
+				cm.Paths.Fallback = filepath.Join(tempDir, "fallback")
+				completionPath := cm.getCompletionFilePath(cm.Paths.Fallback)
+				if err := os.MkdirAll(filepath.Dir(completionPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(completionPath, []byte("test completion"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantExists:     true,
+			wantPathSuffix: "mytool",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, err := NewManager(tt.shell, tt.programName)
+			if err != nil {
+				t.Fatalf("NewManager() error = %v", err)
+			}
+
+			tt.setupFunc(t, cm)
+
+			gotPath, gotExists := cm.HasExistingCompletion()
+			if gotExists != tt.wantExists {
+				t.Errorf("HasExistingCompletion() exists = %v, want %v", gotExists, tt.wantExists)
+			}
+			if tt.wantExists && !strings.HasSuffix(gotPath, tt.wantPathSuffix) {
+				t.Errorf("HasExistingCompletion() path = %v, want suffix %v", gotPath, tt.wantPathSuffix)
 			}
 		})
 	}

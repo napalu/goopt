@@ -1235,30 +1235,28 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 		}
 
-		if isStructOrSliceType(field) {
-			if isSliceType(field) && !isBasicType(field.Type) {
-				// Process as nested structure
-				if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-					parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
+		if isSliceType(field) && !isBasicType(field.Type) {
+			// Process as nested structure
+			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
+				parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
+			}
+			continue
+		}
+
+		if isStructType(field) {
+			newCommandPath := commandPath
+			if isCommand {
+				if newCommandPath == "" {
+					newCommandPath = longName
+				} else {
+					newCommandPath = fmt.Sprintf("%s %s", newCommandPath, longName)
 				}
-				continue
 			}
 
-			if isStructType(field) {
-				newCommandPath := commandPath
-				if isCommand {
-					if newCommandPath == "" {
-						newCommandPath = longName
-					} else {
-						newCommandPath = fmt.Sprintf("%s %s", newCommandPath, longName)
-					}
-				}
-
-				if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-					parser.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
-				}
-				continue
+			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
+				parser.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
 			}
+			continue
 		}
 
 		// Use both flag prefix and command path appropriately

@@ -29,6 +29,7 @@ const (
 	errBothValues        = "cannot specify both 'value' and 'values' in: %s"
 )
 
+// TypeOfFlagFromString converts a string to a types.OptionType
 func TypeOfFlagFromString(s string) types.OptionType {
 	switch strings.ToUpper(s) {
 	case "STANDALONE":
@@ -41,21 +42,6 @@ func TypeOfFlagFromString(s string) types.OptionType {
 		return types.Single
 	default:
 		return types.Empty
-	}
-}
-
-func TypeOfFlagToString(t types.OptionType) string {
-	switch t {
-	case types.Standalone:
-		return "standalone"
-	case types.Single:
-		return "single"
-	case types.Chained:
-		return "chained"
-	case types.File:
-		return "file"
-	default:
-		return "empty"
 	}
 }
 
