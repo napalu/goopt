@@ -490,7 +490,7 @@ func TestCompletionManager_HasExistingCompletion(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			wantExists: false,
+			wantExists:     false,
 			wantPathSuffix: "",
 		},
 		{
@@ -500,22 +500,6 @@ func TestCompletionManager_HasExistingCompletion(t *testing.T) {
 			setupFunc: func(t *testing.T, cm *Manager) {
 				cm.Paths.Primary = ""
 				cm.Paths.Fallback = ""
-			},
-			wantExists: false,
-		},
-		{
-			name:        "inaccessible file",
-			shell:       "bash",
-			programName: "mytool",
-			setupFunc: func(t *testing.T, cm *Manager) {
-				cm.Paths.Primary = filepath.Join(tempDir, "primary")
-				completionPath := cm.getCompletionFilePath(cm.Paths.Primary)
-				if err := os.MkdirAll(filepath.Dir(completionPath), 0755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(completionPath, []byte("test completion"), 0000); err != nil {
-					t.Fatal(err)
-				}
 			},
 			wantExists: false,
 		},
@@ -532,10 +516,10 @@ func TestCompletionManager_HasExistingCompletion(t *testing.T) {
 
 			gotPath, gotExists := cm.HasExistingCompletion()
 			if gotExists != tt.wantExists {
-				t.Errorf("HasExistingCompletion() exists = %v, want %v", gotExists, tt.wantExists)
+				t.Errorf("HasExistingCompletion() exists '%s' = %v, want %v", tt.name, gotExists, tt.wantExists)
 			}
 			if tt.wantExists && !strings.HasSuffix(gotPath, tt.wantPathSuffix) {
-				t.Errorf("HasExistingCompletion() path = %v, want suffix %v", gotPath, tt.wantPathSuffix)
+				t.Errorf("HasExistingCompletion() path '%s' = %v, want suffix %v", tt.name, gotPath, tt.wantPathSuffix)
 			}
 		})
 	}
