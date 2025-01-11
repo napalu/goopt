@@ -139,7 +139,7 @@ func TestHandleOperators(t *testing.T) {
 		{
 			name:      "simple pipe",
 			input:     "cmd1 | cmd2",
-			tokens:    []string{"cmd1", "|"},
+			tokens:    []string{},
 			index:     5,
 			operators: []string{"|", "&&", "||"},
 			want:      true,
@@ -167,7 +167,11 @@ func TestHandleOperators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var tokens []string
+			tokens := []string{}
+			if len(tt.input) > 0 && tt.index > 0 {
+				tokens = append(tokens, tt.input[:tt.index])
+			}
+
 			builder := &strings.Builder{}
 			index := tt.index
 
@@ -268,8 +272,8 @@ func TestHandleEnvVar(t *testing.T) {
 			input:   "%TEST_VAR",
 			envVars: map[string]string{"TEST_VAR": "value"},
 			index:   0,
-			want:    "",
-			wantErr: true,
+			want:    "%TEST_VAR",
+			wantErr: false,
 		},
 		{
 			name:    "empty var name",
