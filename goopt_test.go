@@ -4494,7 +4494,6 @@ func TestParser_SetArgumentPrefixes(t *testing.T) {
 			wantErr:  true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{}
@@ -4587,6 +4586,166 @@ func TestParser_GetOptions(t *testing.T) {
 			assert.Equal(t, tt.expected, optMap)
 		})
 	}
+}
+
+func TestGetFlagPath(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+		want string
+	}{
+		{
+			name: "no path",
+			flag: "flag",
+			want: "",
+		},
+		{
+			name: "simple path",
+			flag: "flag@cmd",
+			want: "cmd",
+		},
+		{
+			name: "nested path",
+			flag: "flag@cmd subcmd",
+			want: "cmd subcmd",
+		},
+		{
+			name: "empty string",
+			flag: "",
+			want: "",
+		},
+		{
+			name: "only at",
+			flag: "@",
+			want: "",
+		},
+		{
+			name: "multiple at",
+			flag: "flag@@",
+			want: "",
+		},
+		{
+			name: "trailing at",
+			flag: "flag@cmd@",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getFlagPath(tt.flag); got != tt.want {
+				t.Errorf("getFlagPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitPathFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+		want []string
+	}{
+		{
+			name: "no path",
+			flag: "flag",
+			want: []string{"flag"},
+		},
+		{
+			name: "simple path",
+			flag: "flag@cmd",
+			want: []string{"flag", "cmd"},
+		},
+		{
+			name: "nested path",
+			flag: "flag@cmd subcmd",
+			want: []string{"flag", "cmd subcmd"},
+		},
+		{
+			name: "empty string",
+			flag: "",
+			want: []string{""},
+		},
+		{
+			name: "only at",
+			flag: "@",
+			want: []string{"", ""},
+		},
+		{
+			name: "multiple at",
+			flag: "flag@@cmd",
+			want: []string{"flag", "", "cmd"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitPathFlag(tt.flag)
+			if !stringSliceEqual(got, tt.want) {
+				t.Errorf("splitPathFlag() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsNestedSlicePath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{
+			name: "empty path",
+			path: "",
+			want: false,
+		},
+		{
+			name: "simple path",
+			path: "users",
+			want: false,
+		},
+		{
+			name: "nested path",
+			path: "field.0.inner",
+			want: true,
+		},
+		{
+			name: "deeply nested path",
+			path: "field.0.inner.1.more",
+			want: true,
+		},
+		{
+			name: "trailing dot",
+			path: "users.addresses.",
+			want: false,
+		},
+		{
+			name: "multiple dots",
+			path: "users..addresses",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNestedSlicePath(tt.path); got != tt.want {
+				t.Errorf("isNestedSlicePath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Helper function for comparing string slices
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestMain(m *testing.M) {

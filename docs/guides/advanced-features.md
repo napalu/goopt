@@ -24,8 +24,8 @@ nav_order: 6
 | Secure Input | secure:true\|false | secure:true\|false |
 | Prompt Text | prompt:value | prompt:value |
 | SliceCapacity | capacity:value | N/A |
-| Accepted Values | accepted:{pattern:json\|yaml,desc:Format type},{pattern:text\|binary,desc:Type} | accepted:pattern:json\|yaml,desc:Format type |
-| Dependencies | depends:{flag:output,values:[json,yaml]},{flag:mode,values:[text]} | depends:flag:output,values:[json,yaml] |
+| Accepted Values | accepted:{pattern:json\|yaml,desc:Format type},{pattern:text\|binary,desc:Type} | accepted:{pattern:json\|yaml,desc:Format type} |
+| Dependencies | depends:{flag:output,values:[json,yaml]},{flag:mode,values:[text]} | depends:flag:{output,values:[json,yaml]} |
 | Positional Flag | pos:{at:start\|end,idx:value} | N/A |
 
 The new format offers several advantages:

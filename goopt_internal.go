@@ -795,15 +795,19 @@ func (p *Parser) walkFlags() {
 		}
 
 		cmdArg := splitPathFlag(mainKey)
-		if len(flagInfo.Argument.DependsOn) == 0 {
+
+		if !p.shouldValidateDependencies(flagInfo) {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && p.HasCommand(cmdArg[1])) {
 				p.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))
 			}
-
 		} else {
 			p.validateDependencies(flagInfo, mainKey, visited, 0)
 		}
 	}
+}
+
+func (p *Parser) shouldValidateDependencies(flagInfo *FlagInfo) bool {
+	return len(flagInfo.Argument.DependsOn) > 0 || (flagInfo.Argument.DependencyMap != nil && len(flagInfo.Argument.DependsOn) > 0)
 }
 
 func (p *Parser) validateStandaloneFlag(key string) {
@@ -1641,7 +1645,7 @@ func splitPathFlag(flag string) []string {
 
 func getFlagPath(flag string) string {
 	paths := splitPathFlag(flag)
-	if len(paths) > 1 {
+	if len(paths) == 2 {
 		return paths[1]
 	}
 

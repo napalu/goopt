@@ -2,6 +2,7 @@ package parse
 
 import (
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
@@ -240,6 +241,145 @@ func TestUnmarshalTagFormat_Position(t *testing.T) {
 			}
 			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("UnmarshalTagFormat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLegacyUnmarshalTagFormat_SupportedTags(t *testing.T) {
+	tests := []struct {
+		name    string
+		field   reflect.StructField
+		want    *types.TagConfig
+		wantErr bool
+	}{
+		{
+			name: "all supported tags",
+			field: reflect.StructField{
+				Name: "Config",
+				Type: reflect.TypeOf(""),
+				Tag: reflect.StructTag(
+					`long:"config" short:"c" description:"config file" ` +
+						`type:"file" default:"/etc/config" required:"true" ` +
+						`secure:"true" prompt:"Enter config path" path:"config" ` +
+						`accepted:"{pattern:json|yaml,desc:Format type}" ` +
+						`depends:"{flag:output,values:[json,yaml]}"`,
+				),
+			},
+			want: &types.TagConfig{
+				Name:        "config",
+				Short:       "c",
+				Description: "config file",
+				TypeOf:      types.File,
+				Default:     "/etc/config",
+				Required:    true,
+				Secure:      types.Secure{IsSecure: true, Prompt: "Enter config path"},
+				Path:        "config",
+				AcceptedValues: []types.PatternValue{
+					{Pattern: "json|yaml", Description: "Format type", Compiled: regexp.MustCompile("json|yaml")},
+				},
+				DependsOn: map[string][]string{
+					"output": {"json", "yaml"},
+				},
+				Kind: types.KindFlag,
+			},
+		},
+		{
+			name: "minimal tags",
+			field: reflect.StructField{
+				Name: "Verbose",
+				Type: reflect.TypeOf(false),
+				Tag:  reflect.StructTag(`long:"verbose"`),
+			},
+			want: &types.TagConfig{
+				Name:   "verbose",
+				Kind:   types.KindFlag,
+				TypeOf: types.Standalone,
+			},
+		},
+		{
+			name: "chained type with description",
+			field: reflect.StructField{
+				Name: "Files",
+				Type: reflect.TypeOf([]string{}),
+				Tag:  reflect.StructTag(`long:"files" type:"chained" description:"input files"`),
+			},
+			want: &types.TagConfig{
+				Name:        "files",
+				Description: "input files",
+				Kind:        types.KindFlag,
+				TypeOf:      types.Chained,
+			},
+		},
+		{
+			name: "secure input with prompt",
+			field: reflect.StructField{
+				Name: "Password",
+				Type: reflect.TypeOf(""),
+				Tag:  reflect.StructTag(`long:"password" secure:"true" prompt:"Enter password"`),
+			},
+			want: &types.TagConfig{
+				Name:   "password",
+				Kind:   types.KindFlag,
+				TypeOf: types.Single,
+				Secure: types.Secure{
+					IsSecure: true,
+					Prompt:   "Enter password",
+				},
+			},
+		},
+		{
+			name: "accepted values with description",
+			field: reflect.StructField{
+				Name: "Format",
+				Type: reflect.TypeOf(""),
+				Tag:  reflect.StructTag(`long:"format" accepted:"{pattern:json|yaml|text,desc:Output format}"`),
+			},
+			want: &types.TagConfig{
+				Name:   "format",
+				Kind:   types.KindFlag,
+				TypeOf: types.Single,
+				AcceptedValues: []types.PatternValue{
+					{Pattern: "json|yaml|text", Description: "Output format", Compiled: regexp.MustCompile("json|yaml|text")},
+				},
+			},
+		},
+		{
+			name: "dependencies",
+			field: reflect.StructField{
+				Name: "Compress",
+				Type: reflect.TypeOf(false),
+				Tag:  reflect.StructTag(`long:"compress" depends:"{flag:format,values:[json,yaml]}"`),
+			},
+			want: &types.TagConfig{
+				Name:   "compress",
+				Kind:   types.KindFlag,
+				TypeOf: types.Standalone,
+				DependsOn: map[string][]string{
+					"format": {"json", "yaml"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := LegacyUnmarshalTagFormat(tt.field)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("LegacyUnmarshalTagFormat() error = nil, want error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("LegacyUnmarshalTagFormat() error = %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("LegacyUnmarshalTagFormat() = \n%v, want \n%v", got, tt.want)
 			}
 		})
 	}
