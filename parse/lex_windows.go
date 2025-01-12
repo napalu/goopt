@@ -1,12 +1,9 @@
 package parse
 
 import (
-	"errors"
 	"os"
 	"strings"
 )
-
-var ErrMissingClosingPercent = errors.New("missing closing % in environment variable")
 
 func Split(commandString string) ([]string, error) {
 	tokens := make([]string, 0)
@@ -65,15 +62,16 @@ func Split(commandString string) ([]string, error) {
 			continue
 		}
 
-		if !inQuotes && handleOperators(commandString, &tokens, &argBuilder, operators, length, &i) {
-			continue
-		}
-
 		if !inQuotes && (char == ' ' || char == '\t') {
 			if argBuilder.Len() > 0 {
 				tokens = append(tokens, argBuilder.String())
 				argBuilder.Reset()
 			}
+			i++
+			continue
+		}
+
+		if !inQuotes && handleOperators(commandString, &tokens, &argBuilder, operators, length, &i) {
 			i++
 			continue
 		}
@@ -136,9 +134,6 @@ func handleBackslashes(runes []rune, argBuilder *strings.Builder, inQuotes *bool
 
 func handleOperators(commandString string, tokens *[]string, argBuilder *strings.Builder, operators []string, length int, index *int) bool {
 	if index == nil || *index >= length {
-		return false
-	}
-	if commandString[*index] == ' ' {
 		return false
 	}
 

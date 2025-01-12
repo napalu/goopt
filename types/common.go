@@ -27,7 +27,7 @@ func (o OptionType) String() string {
 }
 
 const (
-	Empty      OptionType = iota // Empty denotes a Flag which is not set - this is internally used to indicate that a Flag is not set
+	Empty      OptionType = iota // Empty denotes a Flag which is not set
 	Single     OptionType = 1    // Single denotes a Flag accepting a string value
 	Chained    OptionType = 2    // Chained denotes a Flag accepting a string value which should be evaluated as a list (split on ' ', '|' and ',')
 	Standalone OptionType = 3    // Standalone denotes a boolean Flag (does not accept a value)
