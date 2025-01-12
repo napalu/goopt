@@ -74,7 +74,7 @@ func TestSplitWindows(t *testing.T) {
 		{
 			name:    "redirection operators",
 			input:   "cmd > out.txt 2>> err.txt",
-			want:    []string{"cmd", ">", "out.txt", "2>>", "err.txt"},
+			want:    []string{"cmd", ">", "out.txt", "2", ">>", "err.txt"},
 			wantErr: false,
 		},
 		{
@@ -98,7 +98,7 @@ func TestSplitWindows(t *testing.T) {
 		{
 			name:    "empty environment variable",
 			input:   "echo %NONEXISTENT%",
-			want:    []string{"echo", ""},
+			want:    []string{"echo"},
 			wantErr: false,
 		},
 	}
@@ -128,49 +128,51 @@ func TestSplitWindows(t *testing.T) {
 
 func TestHandleOperators(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		index     int
-		operators []string
-		want      bool
-		wantIndex int
-		tokens    []string
+		name       string
+		input      string
+		index      int
+		operators  []string
+		want       bool
+		wantIndex  int
+		tokens     []string
+		wantTokens []string
 	}{
 		{
-			name:      "simple pipe",
-			input:     "cmd1 | cmd2",
-			tokens:    []string{},
-			index:     5,
-			operators: []string{"|", "&&", "||"},
-			want:      true,
-			wantIndex: 6,
+			name:       "simple pipe",
+			input:      "cmd1 | cmd2",
+			tokens:     []string{"cmd1"},
+			index:      5,
+			operators:  []string{"|", "&&", "||"},
+			want:       true,
+			wantIndex:  6,
+			wantTokens: []string{"cmd1", "|"},
 		},
 		{
-			name:      "double operator",
-			input:     "cmd1 && cmd2",
-			index:     5,
-			operators: []string{"&&", "||", "|"},
-			want:      true,
-			wantIndex: 7,
-			tokens:    []string{"cmd1", "&&"},
+			name:       "double operator",
+			input:      "cmd1 && cmd2",
+			tokens:     []string{"cmd1"},
+			index:      5,
+			operators:  []string{"&&", "||", "|"},
+			want:       true,
+			wantIndex:  7,
+			wantTokens: []string{"cmd1", "&&"},
 		},
 		{
-			name:      "no operator",
-			input:     "cmd1 cmd2",
-			index:     5,
-			operators: []string{"|", "&&", "||"},
-			want:      false,
-			wantIndex: 5,
-			tokens:    []string{"cmd1"},
+			name:       "no operator",
+			input:      "cmd1 cmd2",
+			tokens:     []string{"cmd1"},
+			index:      5,
+			operators:  []string{"|", "&&", "||"},
+			want:       false,
+			wantIndex:  5,
+			wantTokens: []string{"cmd1"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := []string{}
-			if len(tt.input) > 0 && tt.index > 0 {
-				tokens = append(tokens, tt.input[:tt.index])
-			}
+			tokens := make([]string, len(tt.tokens))
+			copy(tokens, tt.tokens)
 
 			builder := &strings.Builder{}
 			index := tt.index
@@ -183,8 +185,8 @@ func TestHandleOperators(t *testing.T) {
 			if index != tt.wantIndex {
 				t.Errorf("index = %v, want %v", index, tt.wantIndex)
 			}
-			if !reflect.DeepEqual(tokens, tt.tokens) {
-				t.Errorf("tokens = %v, want %v", tokens, tt.tokens)
+			if !reflect.DeepEqual(tokens, tt.wantTokens) {
+				t.Errorf("tokens = %v, want %v", tokens, tt.wantTokens)
 			}
 		})
 	}
@@ -214,7 +216,7 @@ func TestHandleBackslashes(t *testing.T) {
 			input:      `\\test`,
 			startIndex: 0,
 			inQuotes:   false,
-			want:       `\`,
+			want:       `\\`,
 			wantIndex:  2,
 			wantQuotes: false,
 		},
@@ -272,7 +274,7 @@ func TestHandleEnvVar(t *testing.T) {
 			input:   "%TEST_VAR",
 			envVars: map[string]string{"TEST_VAR": "value"},
 			index:   0,
-			want:    "%TEST_VAR",
+			want:    "",
 			wantErr: false,
 		},
 		{

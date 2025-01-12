@@ -42,8 +42,14 @@ func TestGetCompletionPaths(t *testing.T) {
 
 				switch runtime.GOOS {
 				case "windows":
-					if !strings.Contains(paths.Primary, "Documents\\PowerShell") {
-						t.Error("Expected Windows PowerShell path in Documents")
+					if isPowerShellCore() {
+						if !strings.Contains(paths.Primary, "Documents\\PowerShell") {
+							t.Error("Expected Windows PowerShell path in Documents")
+						}
+					} else {
+						if !strings.Contains(paths.Primary, "Documents\\WindowsPowerShell") {
+							t.Error("Expected Windows PowerShell path in Documents")
+						}
 					}
 				case "darwin":
 					if !strings.Contains(paths.Primary, "Library/PowerShell") {

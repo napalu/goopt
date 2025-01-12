@@ -1,15 +1,21 @@
 package parse
 
 import (
+	"errors"
 	"os"
 	"strings"
 )
+
+var ErrMissingClosingPercent = errors.New("missing closing % in environment variable")
 
 func Split(commandString string) ([]string, error) {
 	tokens := make([]string, 0)
 	argBuilder := strings.Builder{}
 	inQuotes, escaped := false, false
-	operators := []string{"&&", "||", ">>", "<<", "|", "&", ">", "<", "(", ")"}
+	operators := []string{
+		"&&", "||", ">>", "<<", // 2-char operators first
+		"|", "&", ">", "<", "(", ")", // 1-char operators last
+	}
 	length := len(commandString)
 	runes := []rune(commandString)
 	i := 0
@@ -103,7 +109,6 @@ func handleEnvVar(commandString string, argBuilder *strings.Builder, i int) (int
 		return end + 1, nil
 	}
 
-	argBuilder.WriteRune('%')
 	return i + 1, nil
 }
 
@@ -130,17 +135,26 @@ func handleBackslashes(runes []rune, argBuilder *strings.Builder, inQuotes *bool
 }
 
 func handleOperators(commandString string, tokens *[]string, argBuilder *strings.Builder, operators []string, length int, index *int) bool {
+	if index == nil || *index >= length {
+		return false
+	}
+	if commandString[*index] == ' ' {
+		return false
+	}
+
+	// Try to match the longest operator at current position
 	for _, op := range operators {
-		opLen := len(op)
-		if *index+opLen <= length && commandString[*index:*index+opLen] == op {
+		if *index+len(op) < length && commandString[*index:*index+len(op)] == op {
 			if argBuilder.Len() > 0 {
 				*tokens = append(*tokens, argBuilder.String())
 				argBuilder.Reset()
 			}
 			*tokens = append(*tokens, op)
-			*index += opLen
+			*index += len(op)
+
 			return true
 		}
 	}
+
 	return false
 }
