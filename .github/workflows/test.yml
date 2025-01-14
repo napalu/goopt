@@ -1,3 +1,12 @@
+name: Test
+permissions:
+  # For actions/checkout and running tests
+  contents: read
+  # For create-pull-request action
+  pull-requests: write
+  # For creating branches (needed by create-pull-request)
+  statuses: write
+
 on:
   push:
     branches:
@@ -5,7 +14,7 @@ on:
   pull_request:
     branches:
       - '**'  # all branches
-name: Test
+ 
 jobs:
   test:
     strategy:
