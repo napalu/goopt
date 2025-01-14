@@ -1,42 +1,38 @@
-
 pre {
   font-size: 1.2rem;
 }
 
 .icon {
-  display: none; /* Initially hide all icons */
-  transition: opacity 0.3s ease-in-out; /* Smooth transition */
-  opacity: 0; /* Start with opacity 0 */
+  display: none;
+  /* Initially hide all icons */
+  transition: opacity 0.3s ease-in-out;
+  /* Smooth transition */
+  opacity: 0;
+  /* Start with opacity 0 */
 }
 
 [data-theme='light'] #svg-sun-icon {
   display: inherit;
-  opacity: 1; /* Fully visible */
+  opacity: 1;
+  /* Fully visible */
 }
 
 [data-theme='dark'] #svg-moon-icon {
   display: inherit;
-  opacity: 1; /* Fully visible */
+  opacity: 1;
+  /* Fully visible */
 }
 
 #svg-git-icon {
   display: inherit;
-  opacity: 1; /* Fully visible */
-}
-
-/* Hide SVG until it's loaded */
-.search-icon use {
-  opacity: 0;
-}
-
-/* Show SVG once loaded */
-.search-icon use:not(:empty) {
   opacity: 1;
-  transition: opacity 0.2s ease-in;
+  /* Fully visible */
 }
+
 
 .side-bar {
   width: 25% !important;
+
   @media (min-width: 50rem) {
     width: 25% !important;
   }
@@ -45,6 +41,7 @@ pre {
 .main {
   margin-left: 25% !important;
   margin-right: 15% !important;
+
   @media (min-width: 50rem) {
     margin-left: 25% !important;
     max-width: calc(100% - 25%) !important;

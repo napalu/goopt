@@ -1,6 +1,5 @@
 <button class="btn btn-icon js-theme-switcher" id="theme-switcher"
-  style="padding: 0.5em 0.4em 0.5em 0.8em; display: none;" title="Toggle Dark/Light Mode"
->
+  style="padding: 0.5em 0.4em 0.5em 0.8em; display: none;" title="Toggle Dark/Light Mode">
   <svg viewBox="0 0 16 16" id="svg-sun-icon" class="icon obj-default-theme" title="Toggle Dark Mode">
     <use xlink:href="#svg-sun"></use>
   </svg>
@@ -9,9 +8,8 @@
   </svg>
 </button>
 
-<button class="btn btn-icon" style="padding: 0.5em 0.8em 0.5em 0.4em; display: none;" title="View it on Github" id="github-icon"
-  onclick="window.location.href='//github.com/{{ site.repository }}';"
->
+<button class="btn btn-icon" style="padding: 0.5em 0.8em 0.5em 0.4em; display: none;" title="View it on Github"
+  id="github-icon" onclick="window.location.href='//github.com/{{ site.repository }}';">
   <svg viewBox="0 0 16 16" id="svg-git-icon" class="icon" style="display: flex;" title="View it on Github">
     <use xlink:href="#svg-git"></use>
   </svg>
@@ -31,38 +29,36 @@
     return initialTheme;
   }
 
-  (function() {
+  (function () {
     const initialTheme = getTheme();
     setTheme(initialTheme);
   })();
 
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', function () {
     const themes = ['light', 'dark'];
     themes.forEach(theme => {
-        const preloadLink = document.createElement('link');
-        preloadLink.rel = 'preload';
-        preloadLink.as = 'style';
-        preloadLink.href = '/goopt/assets/css/just-the-docs-' + theme + '.css';
-        document.head.appendChild(preloadLink);
+      const preloadLink = document.createElement('link');
+      preloadLink.rel = 'preload';
+      preloadLink.as = 'style';
+      preloadLink.href = '/goopt/assets/css/just-the-docs-' + theme + '.css';
+      document.head.appendChild(preloadLink);
     });
     const currentTheme = document.documentElement.getAttribute('data-theme');
     if (!currentTheme) {
       const initialTheme = getTheme();
       setTheme(initialTheme);
     }
- });
-  
+  });
+
   document.getElementById('theme-switcher').style.display = 'block';
   document.getElementById('github-icon').style.display = 'block';
-  
   const themeSwitcher = document.querySelector('.js-theme-switcher');
 
-  jtd.addEvent(themeSwitcher, 'click', function() {
+  jtd.addEvent(themeSwitcher, 'click', function () {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     if (newTheme && newTheme !== currentTheme) {
-      setTheme(newTheme); 
+      setTheme(newTheme);
     }
   });
 </script>
-

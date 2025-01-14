@@ -5,6 +5,7 @@ func InsertSlice[T any](arr []T, pos int, element ...T) []T {
 	return append(arr[:pos], append(element, arr[pos:]...)...)
 }
 
+// Reverse reverses the slice in place
 func Reverse[T any](s []T) {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
