@@ -478,7 +478,8 @@ func (p *Parser) queueSecureArgument(name string, argument *Argument) {
 		p.secureArguments = orderedmap.NewOrderedMap[string, *types.Secure]()
 	}
 
-	p.rawArgs[name] = name
+	pathFlag := splitPathFlag(name)
+	p.rawArgs[pathFlag[0]] = name
 	p.secureArguments.Set(name, &argument.Secure)
 }
 
