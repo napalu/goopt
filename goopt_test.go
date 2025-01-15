@@ -4735,6 +4735,60 @@ func TestIsNestedSlicePath(t *testing.T) {
 	}
 }
 
+func TestParser_SecureFlagsInCommandContext(t *testing.T) {
+	type Config struct {
+		Nested struct {
+			Secret string `goopt:"name:secret;secure:true;prompt:Enter secret;path:command"`
+		}
+	}
+
+	type Options struct {
+		Verbose  bool   `goopt:"name:verbose"`
+		Password string `goopt:"name:password;secure:true;prompt:Enter password"`
+		Command  struct {
+			Config Config
+		} `goopt:"kind:command"`
+	}
+
+	opts := &Options{}
+	parser, err := NewParserFromStruct(opts)
+	assert.NoError(t, err)
+
+	originalReader := parser.SetTerminalReader(nil)
+	originalStderr := parser.SetStderr(&bytes.Buffer{})
+	originalStdout := parser.SetStdout(&bytes.Buffer{})
+	defer func() {
+		parser.SetTerminalReader(originalReader)
+		parser.SetStderr(originalStderr)
+		parser.SetStdout(originalStdout)
+	}()
+	parser.SetTerminalReader(&MockTerminal{
+		Password:         []byte("test-password"),
+		IsTerminalResult: true,
+		Err:              nil,
+	})
+
+	// Test parsing with command context
+	args := []string{"command", "--password", "--verbose", "--config.nested.secret"}
+
+	assert.True(t, parser.Parse(args))
+
+	// Verify the password was set correctly
+	assert.Equal(t, "test-password", opts.Password)
+	assert.Equal(t, "test-password", opts.Command.Config.Nested.Secret)
+
+	// Test that secure flags are properly registered in command context
+	passwordArg, err := parser.GetArgument("password")
+	assert.NoError(t, err)
+	assert.True(t, passwordArg.Secure.IsSecure)
+	assert.Equal(t, "Enter password", passwordArg.Secure.Prompt)
+
+	secretArg, err := parser.GetArgument("config.nested.secret", "command")
+	assert.NoError(t, err)
+	assert.True(t, secretArg.Secure.IsSecure)
+	assert.Equal(t, "Enter secret", secretArg.Secure.Prompt)
+}
+
 // Helper function for comparing string slices
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
