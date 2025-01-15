@@ -33,8 +33,14 @@ jobs:
         run: |
           go test ./...
   update-badge:
-    needs: test  # This ensures all tests pass first
-    runs-on: ubuntu-latest  # Only needs to run once
+    # Only run this job on push to main, not on pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    # Add specific permissions for this job
+    permissions:
+      contents: write  # Needed for pushing changes
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
