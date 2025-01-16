@@ -656,6 +656,11 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if !p.HasFlag(name) {
 		return
 	}
+	pathFlag := splitPathFlag(name)
+	if _, ok := p.rawArgs[pathFlag[0]]; !ok {
+		return
+	}
+
 	if !config.IsSecure {
 		return
 	}
@@ -791,6 +796,12 @@ func (p *Parser) walkFlags() {
 			}
 			continue
 		} else if flagInfo.Argument.Secure.IsSecure {
+			pathFlag := splitPathFlag(mainKey)
+			if len(pathFlag) == 2 {
+				if !p.HasCommand(pathFlag[1]) {
+					continue
+				}
+			}
 			p.queueSecureArgument(mainKey, flagInfo.Argument)
 			continue
 		}

@@ -4743,9 +4743,10 @@ func TestParser_SecureFlagsInCommandContext(t *testing.T) {
 	}
 
 	type Options struct {
-		Verbose  bool   `goopt:"name:verbose"`
-		Password string `goopt:"name:password;secure:true;prompt:Enter password"`
-		Command  struct {
+		Verbose          bool   `goopt:"name:verbose"`
+		Password         string `goopt:"name:password;secure:true;prompt:Enter password"`
+		ShouldNotBeAsked string `goopt:"secure:true;prompt:Should not be shown;path:not-passed-command;required:true"`
+		Command          struct {
 			Config Config
 		} `goopt:"kind:command"`
 	}
@@ -4787,6 +4788,8 @@ func TestParser_SecureFlagsInCommandContext(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, secretArg.Secure.IsSecure)
 	assert.Equal(t, "Enter secret", secretArg.Secure.Prompt)
+
+	assert.Empty(t, opts.ShouldNotBeAsked)
 }
 
 // Helper function for comparing string slices
