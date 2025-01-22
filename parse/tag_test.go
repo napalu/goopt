@@ -384,3 +384,131 @@ func TestLegacyUnmarshalTagFormat_SupportedTags(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalTagFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		tag      string
+		field    reflect.StructField
+		wantErr  bool
+		wantKind types.Kind
+		wantName string
+		want     *types.TagConfig
+	}{
+		{
+			name: "valid kind",
+			tag:  "kind:flag;name:test;short:t;type:single;desc:description;default:defaultVal;required:false;secure:true;prompt:promptText;path:pathValue;accepted:{pattern:^one$,desc:''},{pattern:^two$,desc:''}",
+			field: reflect.StructField{
+				Name: "TestField",
+				Type: reflect.TypeOf(types.TagConfig{}),
+			},
+			wantErr:  false,
+			wantKind: types.KindFlag,
+			wantName: "test",
+			want: &types.TagConfig{
+				Kind:        types.KindFlag,
+				Name:        "test",
+				Short:       "t",
+				Default:     "defaultVal",
+				Description: "description",
+				TypeOf:      types.Single,
+				Path:        "pathValue",
+				Secure: types.Secure{
+					IsSecure: true,
+					Prompt:   "promptText",
+				},
+				AcceptedValues: []types.PatternValue{{Pattern: "^one$", Description: "''", Compiled: regexp.MustCompile("^one$")}, {Pattern: "^two$", Description: "''", Compiled: regexp.MustCompile("^two$")}},
+			},
+		},
+		{
+			name: "invalid kind",
+			tag:  "kind:invalid;name:test;short:t;type:single;desc:description;default:defaultVal;required:false;secure:false;prompt:promptText;path:pathValue;accepted:{pattern:^one$,desc:''},{pattern:^two$,desc:''}",
+			field: reflect.StructField{
+				Name: "TestField",
+				Type: reflect.TypeOf(types.TagConfig{}),
+			},
+			wantErr:  true,
+			wantKind: types.KindEmpty,
+			wantName: "test",
+		},
+		{
+			name: "empty tag",
+			tag:  "",
+			field: reflect.StructField{
+				Name: "TestField",
+				Type: reflect.TypeOf(types.TagConfig{}),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, err := UnmarshalTagFormat(tt.tag, tt.field)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UnmarshalTagFormat() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if config != nil {
+				if config.Kind != tt.wantKind {
+					t.Errorf("UnmarshalTagFormat() got Kind = %v, want %v", config.Kind, tt.wantKind)
+				}
+				if config.Name != tt.wantName {
+					t.Errorf("UnmarshalTagFormat() got Name = %v, want %v", config.Name, tt.wantName)
+				}
+				if !equals(config, tt.want) {
+					t.Errorf("UnmarshalTagFormat() got %v, want %v", config, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func equals(t, other *types.TagConfig) bool {
+	if t == nil || other == nil {
+		return t == other
+	}
+	if !reflect.DeepEqual(t.Kind, other.Kind) {
+		return false
+	}
+	if t.Name != other.Name {
+		return false
+	}
+	if t.Short != other.Short {
+		return false
+	}
+	if t.TypeOf != other.TypeOf {
+		return false
+	}
+	if t.Description != other.Description {
+		return false
+	}
+	if t.Default != other.Default {
+		return false
+	}
+	if t.Required != other.Required {
+		return false
+	}
+	if t.Secure != other.Secure {
+		return false
+	}
+	if t.Path != other.Path {
+		return false
+	}
+	if !reflect.DeepEqual(t.AcceptedValues, other.AcceptedValues) {
+		return false
+	}
+	if !reflect.DeepEqual(t.DependsOn, other.DependsOn) {
+		return false
+	}
+	if t.Capacity != other.Capacity {
+		return false
+	}
+	if t.RelativeIndex != other.RelativeIndex {
+		return false
+	}
+	if t.Position != other.Position {
+		return false
+	}
+	return true
+}
