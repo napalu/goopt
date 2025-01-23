@@ -223,3 +223,45 @@ func TestOrderedMap(t *testing.T) {
 		assert.Equal(t, 2, val2)
 	})
 }
+
+func TestOrderedMap_Len(t *testing.T) {
+	tests := []struct {
+		name     string
+		elements map[string]int
+		want     int
+	}{
+		{
+			name:     "empty map",
+			elements: map[string]int{},
+			want:     0,
+		},
+		{
+			name: "single element",
+			elements: map[string]int{
+				"one": 1,
+			},
+			want: 1,
+		},
+		{
+			name: "multiple elements",
+			elements: map[string]int{
+				"one":   1,
+				"two":   2,
+				"three": 3,
+			},
+			want: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			om := NewOrderedMap[string, int]()
+			for k, v := range tt.elements {
+				om.Set(k, v)
+			}
+			if got := om.Len(); got != tt.want {
+				t.Errorf("Len() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -1,105 +1,59 @@
 package parse
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/napalu/goopt/types"
 )
 
 // PositionData represents a parsed position configuration
 type PositionData struct {
-	At  *types.PositionType // Position type (start/end)
-	Idx *int                // Relative index within the position
+	Index int // Sequential index for positional argument
 }
 
-// Position parses a single position entry in format pos:{at:start,idx:0}
+// Position parses a position tag value in both formats:
+// - New format: "N" (just the number)
+// - Legacy format: "{idx:N}"
 func Position(input string) (*PositionData, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return nil, fmt.Errorf(errEmptyInput, "position")
 	}
 
-	// Validate format
-	if !strings.HasPrefix(input, "pos:{") || !strings.HasSuffix(input, "}") {
-		return nil, fmt.Errorf(errMalformedBraces, input)
-	}
-	input = strings.TrimPrefix(input, "pos:")
-	input = strings.Trim(input, "{} \r\n")
-
-	// Handle empty braces case
-	if input == "" {
-		return &PositionData{}, nil
-	}
-
-	// Parse key-value pairs
-	parts := make(map[string]string)
-	var current strings.Builder
-
-	input = input + "," // Add trailing comma to simplify parsing
-	for i := 0; i < len(input); i++ {
-		ch := input[i]
-		if ch == ',' {
-			part := current.String()
-			key, value, found := strings.Cut(strings.TrimSpace(part), ":")
-			if !found {
-				if strings.Contains(part, "=") {
-					return nil, errors.New(errInvalidFormat)
-				}
-				return nil, fmt.Errorf(errMalformedBraces, input)
-			}
-			key = strings.TrimSpace(key)
-			value = strings.TrimSpace(value)
-			if key == "" {
-				return nil, fmt.Errorf(errEmptyKey, part)
-			}
-			parts[key] = value
-			current.Reset()
-			continue
+	// Handle legacy format
+	if strings.HasPrefix(input, "{") {
+		if !strings.HasSuffix(input, "}") {
+			return nil, fmt.Errorf(errMalformedBraces, input)
 		}
-		current.WriteByte(ch)
+
+		// Extract content between braces and split by ':'
+		content := strings.TrimSpace(input[1 : len(input)-1])
+		parts := strings.Split(content, ":")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf(errInvalidFormat, input)
+		}
+
+		// Check for 'idx' prefix (case insensitive, with whitespace)
+		if !strings.EqualFold(strings.TrimSpace(parts[0]), "idx") {
+			return nil, fmt.Errorf(errInvalidFormat, input)
+		}
+
+		// Parse the number
+		return parseIndex(parts[1])
 	}
 
-	data := &PositionData{}
-
-	// Handle 'at' field
-	if atStr, ok := parts["at"]; ok && atStr != "" {
-		pos, err := parsePositionType(atStr)
-		if err != nil {
-			return nil, err
-		}
-		data.At = &pos
-	}
-
-	// Handle 'idx' field
-	if idxStr, ok := parts["idx"]; ok && idxStr != "" {
-		idx, err := strconv.Atoi(idxStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid index value: %s", idxStr)
-		}
-		if idx < 0 {
-			return nil, fmt.Errorf("index must be non-negative: %d", idx)
-		}
-		data.Idx = &idx
-	}
-
-	return data, nil
+	// New format: just the number
+	return parseIndex(input)
 }
 
-func parsePositionType(pos string) (types.PositionType, error) {
-	pos = strings.TrimSpace(pos)
-	if pos == "" {
-		return 0, nil // Empty position type is valid
+func parseIndex(value string) (*PositionData, error) {
+	value = strings.TrimSpace(value)
+	idx, err := strconv.Atoi(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid index value: %s", value)
 	}
-
-	switch strings.ToLower(pos) {
-	case "start":
-		return types.AtStart, nil
-	case "end":
-		return types.AtEnd, nil
-	default:
-		return 0, fmt.Errorf("invalid position type: %s", pos)
+	if idx < 0 {
+		return nil, fmt.Errorf("index must be non-negative")
 	}
+	return &PositionData{Index: idx}, nil
 }

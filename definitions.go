@@ -116,26 +116,6 @@ type PositionalArgument struct {
 	Argument *Argument // Reference to the argument definition, if this was bound
 }
 
-// Argument defines a command-line Flag
-type Argument struct {
-	Description    string
-	TypeOf         types.OptionType
-	Required       bool
-	RequiredIf     RequiredIfFunc
-	PreFilter      FilterFunc
-	PostFilter     FilterFunc
-	AcceptedValues []types.PatternValue
-	DependsOn      []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
-	OfValue        []string // Deprecated: use DependencyMap instead - will be removed in v2.0.0
-	DependencyMap  map[string][]string
-	Secure         types.Secure
-	Short          string
-	DefaultValue   string
-	Capacity       int                 // For slices, the capacity of the slice, ignored for other types
-	Position       *types.PositionType // nil means no position requirement
-	RelativeIndex  *int                // Required if Position is set, determines order within position group
-}
-
 // Command defines commands and sub-commands
 type Command struct {
 	Name        string

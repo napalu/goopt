@@ -20,12 +20,12 @@ func TestUnwrapValue(t *testing.T) {
 		},
 		{
 			name:    "single pointer",
-			input:   ptr("test"),
+			input:   NewOfType("test"),
 			wantErr: false,
 		},
 		{
 			name:    "double pointer",
-			input:   ptr(ptr("test")),
+			input:   NewOfType(NewOfType("test")),
 			wantErr: false,
 		},
 		{
@@ -64,12 +64,12 @@ func TestUnwrapType(t *testing.T) {
 		},
 		{
 			name:     "pointer to string",
-			input:    ptr("test"),
+			input:    NewOfType("test"),
 			expected: reflect.String,
 		},
 		{
 			name:     "pointer to pointer to string",
-			input:    ptr(ptr("test")),
+			input:    NewOfType(NewOfType("test")),
 			expected: reflect.String,
 		},
 	}
@@ -81,9 +81,4 @@ func TestUnwrapType(t *testing.T) {
 			assert.Equal(t, tt.expected, unwrapped.Kind())
 		})
 	}
-}
-
-// Helper function to create pointers
-func ptr[T any](v T) *T {
-	return &v
 }

@@ -21,7 +21,7 @@ const (
 	errEmptyInput        = "empty %s"
 	errMalformedBraces   = "malformed braces in: %s"
 	errUnmatchedBrackets = "unmatched brackets in: %s"
-	errInvalidFormat     = "invalid format"
+	errInvalidFormat     = "invalid format in: %s"
 	errEmptyKey          = "empty key in: %s"
 	errMissingValue      = "missing or empty %s in: %s"
 	errDuplicateFlag     = "duplicate flag: %s"
@@ -249,12 +249,11 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			}
 			config.Capacity = cap
 		case "pos":
-			posData, err := Position(fmt.Sprintf("pos:%s", value))
+			posData, err := Position(value)
 			if err != nil {
 				return nil, fmt.Errorf("invalid position in field %s: %w", field.Name, err)
 			}
-			config.Position = posData.At
-			config.RelativeIndex = posData.Idx
+			config.Position = &posData.Index
 		default:
 			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
 		}

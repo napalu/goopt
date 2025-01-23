@@ -236,49 +236,6 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 	}
 }
 
-func TestWithPosition(t *testing.T) {
-	tests := []struct {
-		name        string
-		position    types.PositionType
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:     "valid AtStart",
-			position: types.AtStart,
-			wantErr:  false,
-		},
-		{
-			name:     "valid AtEnd",
-			position: types.AtEnd,
-			wantErr:  false,
-		},
-		{
-			name:        "invalid position type",
-			position:    types.PositionType(99),
-			wantErr:     true,
-			errContains: "invalid position type",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			arg := &Argument{}
-			var err error
-			WithPosition(tt.position)(arg, &err)
-
-			if tt.wantErr {
-				assert.NotNil(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
-			} else {
-				assert.Nil(t, err)
-				assert.NotNil(t, arg.Position)
-				assert.Equal(t, tt.position, *arg.Position)
-			}
-		})
-	}
-}
-
 func TestWithPositionalIndex(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -308,15 +265,17 @@ func TestWithPositionalIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			arg := &Argument{}
 			var err error
-			WithRelativeIndex(tt.index)(arg, &err)
+			WithPosition(tt.index)(arg, &err)
 
 			if tt.wantErr {
 				assert.NotNil(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
 				assert.Nil(t, err)
-				assert.NotNil(t, arg.RelativeIndex)
-				assert.Equal(t, tt.index, *arg.RelativeIndex)
+				assert.NotNil(t, arg.Position)
+				if arg.Position != nil {
+					assert.Equal(t, tt.index, *arg.Position)
+				}
 			}
 		})
 	}

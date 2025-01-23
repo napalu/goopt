@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1151,11 +1152,15 @@ func TestParser_StandaloneFlagWithExplicitValue(t *testing.T) {
 	// Test invalid boolean flag value
 	cmdLine.ClearAll()
 
-	assert.True(t, cmdLine.ParseString("-fa ouch -fb hello"), "should parse a command-line with an invalid boolean flag value")
+	assert.True(t, cmdLine.ParseString("-fa ouch -fb hello"), "should parse a command-line with a valid boolean flag value")
 	_, err = cmdLine.GetBool("fa")
 	assert.Nil(t, err)
-	assert.Equal(t, cmdLine.GetPositionalArgCount(), 1, "should have 1 positional argument")
+	assert.Equal(t, 1, cmdLine.GetPositionalArgCount(), "should have 1 positional argument")
 	assert.Equal(t, cmdLine.GetPositionalArgs()[0].Value, "ouch", "should have registered invalid boolean flag value as positional argument")
+
+	cmdLine.ClearAll()
+	assert.True(t, cmdLine.ParseString("-fa false -fb hello"), "should parse a command-line with a valid boolean flag value")
+	assert.Equal(t, 0, cmdLine.GetPositionalArgCount(), "should have 1 positional argument")
 }
 
 func TestParser_PrintUsageWithGroups(t *testing.T) {
@@ -1220,7 +1225,7 @@ func TestParser_PrintUsageWithGroups(t *testing.T) {
 
 Global Flags:
 
- --help or - "Display help" (optional)
+ --help "Display help" (optional)
 
 Commands:
  +  create "Create resources"
@@ -3452,32 +3457,29 @@ func TestParser_PositionalArguments(t *testing.T) {
 		errContains   string
 	}{
 		{
-			name: "basic start position",
+			name: "basic positional",
 			args: "source.txt --verbose dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
+					WithPosition(0),
 				))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-				// Note: we're not defining dest.txt as a positional argument
+				_ = p.AddFlag("dest", NewArg(WithPosition(1)))
 			},
 			wantPositions: []PositionalArgument{
 				{Position: 0, Value: "source.txt"},
-				{Position: 2, Value: "dest.txt"}, // This should still be captured as an unbound positional
+				{Position: 2, Value: "dest.txt"}, // Unbound positional
 			},
 		},
 		{
-			name: "basic end position",
+			name: "sequential positions",
 			args: "--verbose source.txt dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("dest", NewArg(
-					WithPosition(types.AtEnd),
-					WithRelativeIndex(0),
+					WithPosition(1),
 				))
-				_ = p.AddFlag("verbose", NewArg(
-					WithType(types.Standalone), // Add this
-				))
+				_ = p.AddFlag("source", NewArg(WithPosition(0)))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
 			},
 			wantPositions: []PositionalArgument{
 				{Position: 1, Value: "source.txt"},
@@ -3486,147 +3488,31 @@ func TestParser_PositionalArguments(t *testing.T) {
 		},
 		{
 			name: "flag override of positional",
-			args: "--source override.txt dest.txt",
+			args: "--valueFlag value --source override.txt dest.txt",
 			setupParser: func(p *Parser) {
+				_ = p.AddFlag("valueFlag", NewArg())
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
+					WithPosition(0),
 				))
+				_ = p.AddFlag("dest", NewArg(WithPosition(1)))
 			},
 			wantPositions: []PositionalArgument{
-				{Position: 2, Value: "dest.txt"},
+				{Position: 4, Value: "dest.txt"},
 			},
 		},
 		{
-			name: "missing required start position",
+			name: "missing required positional",
 			args: "--verbose dest.txt",
 			setupParser: func(p *Parser) {
 				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
+					WithPosition(0),
+					SetRequired(true),
 				))
+				_ = p.AddFlag("dest", NewArg(WithPosition(1), SetRequired(true)))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
 			},
 			wantErr:     true,
-			errContains: "argument 'source' must appear at start position",
-		},
-		{
-			name: "start position after flags",
-			args: "--verbose source.txt",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantErr:     true,
-			errContains: "argument 'source' must appear at start position",
-		},
-		{
-			name: "end position before flags",
-			args: "dest.txt --verbose",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("dest", NewArg(
-					WithPosition(types.AtEnd),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantErr:     true,
-			errContains: "argument 'dest' must appear at end position",
-		},
-		{
-			name: "multiple start positions in order",
-			args: "first.txt second.txt --verbose",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("first", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("second", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(1),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantPositions: []PositionalArgument{
-				{Position: 0, Value: "first.txt"},
-				{Position: 1, Value: "second.txt"},
-			},
-		},
-		{
-			name: "correct start and end positions",
-			args: "source.txt --verbose --flag dest.txt",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("dest", NewArg(
-					WithPosition(types.AtEnd),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-				_ = p.AddFlag("flag", NewArg(WithType(types.Standalone)))
-			},
-			wantPositions: []PositionalArgument{
-				{Position: 0, Value: "source.txt"},
-				{Position: 3, Value: "dest.txt"},
-			},
-		},
-		{
-			name: "mixed start and regular positional",
-			args: "config.yaml data.txt --verbose extra.txt",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("config", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantPositions: []PositionalArgument{
-				{Position: 0, Value: "config.yaml"},
-				{Position: 1, Value: "data.txt"},
-				{Position: 3, Value: "extra.txt"},
-			},
-		},
-		{
-			name: "override position with flag syntax",
-			args: "--source override.txt --verbose regular.txt",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("source", NewArg(
-					WithPosition(types.AtStart),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantPositions: []PositionalArgument{
-				// Args array:
-				// [0]"--source" [1]"override.txt" [2]"--verbose" [3]"regular.txt"
-				// Only regular.txt is counted as a positional argument
-				{Position: 3, Value: "regular.txt"},
-			},
-		},
-		{
-			name: "multiple end positions in order",
-			args: "--verbose data.txt output1.txt output2.txt",
-			setupParser: func(p *Parser) {
-				_ = p.AddFlag("out1", NewArg(
-					WithPosition(types.AtEnd),
-					WithRelativeIndex(0),
-				))
-				_ = p.AddFlag("out2", NewArg(
-					WithPosition(types.AtEnd),
-					WithRelativeIndex(1),
-				))
-				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
-			},
-			wantPositions: []PositionalArgument{
-				{Position: 1, Value: "data.txt"},
-				{Position: 2, Value: "output1.txt"},
-				{Position: 3, Value: "output2.txt"},
-			},
+			errContains: "missing required positional argument 'dest' at index 1",
 		},
 	}
 
@@ -3640,18 +3526,17 @@ func TestParser_PositionalArguments(t *testing.T) {
 				assert.False(t, ok)
 				errs := p.GetErrors()
 				assert.NotEmpty(t, errs)
-				assert.Contains(t, errs[0].Error(), tt.errContains)
+				if len(errs) > 0 {
+					assert.Contains(t, errs[0].Error(), tt.errContains)
+				}
 				return
 			}
 
 			assert.True(t, ok)
 			pos := p.GetPositionalArgs()
 
-			// Add more detailed assertion messages
-			assert.Equal(t, len(tt.wantPositions), len(pos),
-				"Expected %d positional args, got %d", len(tt.wantPositions), len(pos))
+			assert.Equal(t, len(tt.wantPositions), len(pos))
 
-			// Safe iteration using util.Min
 			for i := 0; i < util.Min(len(tt.wantPositions), len(pos)); i++ {
 				assert.Equal(t, tt.wantPositions[i].Position, pos[i].Position,
 					"Position mismatch at index %d", i)
@@ -4352,9 +4237,9 @@ func TestParser_PrintFlags(t *testing.T) {
 		{
 			name: "all flags",
 			expectedOutput: []string{
-				"\n --log-level  or -l \"Set logging level\" (required)",
-				"\n --debug  or -d \"Enable debug mode\" (optional)",
-				"\n --tags  \"List of tags\" (optional)",
+				"\n --log-level or -l \"Set logging level\" (required)",
+				"\n --debug or -d \"Enable debug mode\" (optional)",
+				"\n --tags \"List of tags\" (optional)",
 			},
 			unexpectedOutput: []string{
 				"--hidden", // Should not show ignored flags
@@ -4588,7 +4473,7 @@ func TestParser_GetOptions(t *testing.T) {
 	}
 }
 
-func TestGetFlagPath(t *testing.T) {
+func TestParser_GetFlagPath(t *testing.T) {
 	tests := []struct {
 		name string
 		flag string
@@ -4636,8 +4521,26 @@ func TestGetFlagPath(t *testing.T) {
 			if got := getFlagPath(tt.flag); got != tt.want {
 				t.Errorf("getFlagPath() = %v, want %v", got, tt.want)
 			}
+
 		})
 	}
+}
+
+func TestParser_IsTopLevel(t *testing.T) {
+	p := NewParser()
+	_ = p.AddFlag("top", NewArg())
+	_ = p.AddCommand(NewCommand(
+		WithName("cmd"),
+		WithSubcommands(NewCommand(WithName("sub"))),
+	))
+
+	cmd, _ := p.getCommand("cmd")
+	assert.NotNil(t, cmd)
+	sub, _ := p.getCommand("cmd sub")
+	assert.NotNil(t, sub)
+
+	assert.True(t, cmd.IsTopLevel(), "cmd should be top-level command")
+	assert.False(t, sub.IsTopLevel(), "sub should not be top-level command")
 }
 
 func TestSplitPathFlag(t *testing.T) {
@@ -4790,6 +4693,388 @@ func TestParser_SecureFlagsInCommandContext(t *testing.T) {
 	assert.Equal(t, "Enter secret", secretArg.Secure.Prompt)
 
 	assert.Empty(t, opts.ShouldNotBeAsked)
+}
+
+func TestParser_ComplexPositionalArguments(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          string
+		setupParser   func(*Parser)
+		wantPositions []PositionalArgument
+		wantFlags     map[string]string
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name: "three positionals with mixed flags",
+			args: "input.txt --verbose output.txt --format json config.yaml",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("input", NewArg(
+					WithPosition(0),
+					WithDescription("Input file"),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("output", NewArg(
+					WithPosition(1),
+					WithDescription("Output file"),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("config", NewArg(
+					WithPosition(2),
+					WithDescription("Config file"),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("verbose", NewArg(
+					WithType(types.Standalone),
+					WithDescription("Verbose output"),
+				))
+				_ = p.AddFlag("format", NewArg(
+					WithType(types.Single),
+					WithDescription("Output format"),
+					WithAcceptedValues([]types.PatternValue{
+						{Pattern: "json|yaml|text", Description: "Output format", Compiled: regexp.MustCompile("json|yaml|text")},
+					},
+					)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "input.txt"},
+				{Position: 2, Value: "output.txt"},
+				{Position: 5, Value: "config.yaml"},
+			},
+			wantFlags: map[string]string{
+				"verbose": "true",
+				"format":  "json",
+			},
+		},
+		{
+			name: "missing middle positional",
+			args: "input.txt --verbose --format json config.yaml",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("input", NewArg(
+					WithPosition(0),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("output", NewArg(
+					WithPosition(1),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("config", NewArg(
+					WithPosition(2),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+				_ = p.AddFlag("format", NewArg(WithType(types.Single)))
+			},
+			wantErr:     true,
+			errContains: "missing required positional argument",
+		},
+		{
+			name: "unbound positional between required ones",
+			args: "input.txt extra.dat output.txt --verbose config.yaml",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("input", NewArg(
+					WithPosition(0),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("output", NewArg(
+					WithPosition(1),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("config", NewArg(
+					WithPosition(2),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "input.txt"},
+				{Position: 1, Value: "extra.dat"}, // Unbound positional
+				{Position: 2, Value: "output.txt"},
+				{Position: 4, Value: "config.yaml"},
+			},
+			wantFlags: map[string]string{
+				"verbose": "true",
+			},
+		},
+		{
+			name: "flag value mistaken as positional",
+			args: "input.txt --format json output.txt config.yaml",
+			setupParser: func(p *Parser) {
+				_ = p.AddFlag("input", NewArg(
+					WithPosition(0),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("output", NewArg(
+					WithPosition(1),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("config", NewArg(
+					WithPosition(2),
+					SetRequired(true),
+				))
+				_ = p.AddFlag("format", NewArg(WithType(types.Single)))
+			},
+			wantPositions: []PositionalArgument{
+				{Position: 0, Value: "input.txt"},
+				{Position: 3, Value: "output.txt"},
+				{Position: 4, Value: "config.yaml"},
+			},
+			wantFlags: map[string]string{
+				"format": "json",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			tt.setupParser(p)
+
+			ok := p.ParseString(tt.args)
+			if tt.wantErr {
+				assert.False(t, ok)
+				errs := p.GetErrors()
+				assert.NotEmpty(t, errs)
+				assert.Contains(t, errs[0].Error(), tt.errContains)
+				return
+			}
+
+			assert.True(t, ok)
+			pos := p.GetPositionalArgs()
+			assert.Equal(t, len(tt.wantPositions), len(pos))
+
+			for i := 0; i < util.Min(len(tt.wantPositions), len(pos)); i++ {
+				assert.Equal(t, tt.wantPositions[i].Position, pos[i].Position,
+					"Position mismatch at index %d", i)
+				assert.Equal(t, tt.wantPositions[i].Value, pos[i].Value,
+					"Value mismatch at index %d", i)
+			}
+
+			// Verify flag values
+			for flag, expectedValue := range tt.wantFlags {
+				assert.Equal(t, expectedValue, p.GetOrDefault(flag, ""),
+					"Flag value mismatch for %s", flag)
+			}
+		})
+	}
+}
+
+func TestParser_ComplexPositionalArgumentsWithGapsAndDefaults(t *testing.T) {
+	type Config struct {
+		Source      string `goopt:"pos:0;required:true"`
+		Destination string `goopt:"pos:1"`
+		Optional    string `goopt:"pos:2;default:default_value"`
+	}
+
+	var cfg Config
+	p, err := NewParserFromStruct(&cfg)
+	assert.NoError(t, err)
+
+	// Test with all positionals provided
+	assert.True(t, p.ParseString("src dest opt"), "should parse all positional arguments")
+	assert.Empty(t, p.GetErrors())
+	assert.Equal(t, "src", cfg.Source, "should bind first positional")
+	assert.Equal(t, "dest", cfg.Destination, "should bind second positional")
+	assert.Equal(t, "opt", cfg.Optional, "should bind third positional")
+
+	// Test with required and default
+	cfg = Config{}
+	p.ClearAll()
+	assert.True(t, p.ParseString("src dest"), "should parse with missing optional argument")
+	assert.Equal(t, "src", cfg.Source, "should bind first positional")
+	assert.Equal(t, "dest", cfg.Destination, "should bind second positional")
+	assert.Equal(t, "default_value", cfg.Optional, "should use default value for missing optional")
+
+	// Test missing required
+	cfg = Config{}
+	p.ClearAll()
+	assert.False(t, p.ParseString(""), "should not parse empty string when flags are required")
+	assert.NotEmpty(t, p.GetErrors(), "should have error for missing required positional")
+
+	// Test positions are preserved
+	cfg = Config{}
+	p.ClearAll()
+	assert.True(t, p.ParseString("src dest"))
+	posArgs := p.GetPositionalArgs()
+	assert.Equal(t, 3, len(posArgs), "should have three positional arguments")
+	assert.Equal(t, 0, posArgs[0].Position, "first positional should have position 0")
+	assert.Equal(t, 1, posArgs[1].Position, "second positional should have position 1")
+	assert.Equal(t, 2, posArgs[2].Position, "third positional should have position 2")
+}
+
+func TestParser_MoreStructTagPositionalArguments(t *testing.T) {
+	type ComplexConfig struct {
+		First    string `goopt:"pos:0;required:true"`
+		Second   string `goopt:"pos:2;default:second_default"` // Note gap at pos:1
+		Third    string `goopt:"pos:5;default:third_default"`  // Larger gap
+		Fourth   string `goopt:"pos:1"`                        // Fill the gap
+		Optional string `goopt:"pos:10;default:way_back"`      // Far gap
+	}
+
+	var cfg ComplexConfig
+	p, err := NewParserFromStruct(&cfg)
+	assert.NoError(t, err)
+
+	// Test 1: Minimal input (only required)
+	assert.True(t, p.ParseString("first"), "should parse with only required arg")
+	assert.Empty(t, p.GetErrors())
+	assert.Equal(t, "first", cfg.First)
+	assert.Equal(t, "second_default", cfg.Second)
+	assert.Equal(t, "third_default", cfg.Third)
+	assert.Equal(t, "", cfg.Fourth)
+	assert.Equal(t, "way_back", cfg.Optional)
+
+	// Test 2: Fill some gaps
+	cfg = ComplexConfig{}
+	p, err = NewParserFromStruct(&cfg)
+	assert.NoError(t, err)
+	assert.True(t, p.ParseString("first middle second"), "should parse with some gaps filled")
+	assert.Empty(t, p.GetErrors())
+	assert.Equal(t, "first", cfg.First)
+	assert.Equal(t, "middle", cfg.Fourth)
+	assert.Equal(t, "second", cfg.Second)
+	assert.Equal(t, "third_default", cfg.Third)
+	assert.Equal(t, "way_back", cfg.Optional)
+
+	// Test 3: Fill all positions up to a gap
+	cfg = ComplexConfig{}
+	p, err = NewParserFromStruct(&cfg)
+	assert.NoError(t, err)
+	assert.True(t, p.ParseString("first middle second third fourth fifth sixth"), "should parse multiple args")
+	assert.Empty(t, p.GetErrors())
+	assert.Equal(t, "first", cfg.First)
+	assert.Equal(t, "middle", cfg.Fourth)
+	assert.Equal(t, "second", cfg.Second)
+	assert.Equal(t, "fifth", cfg.Third)
+	assert.Equal(t, "way_back", cfg.Optional)
+
+	// Test 4: Test position preservation
+	posArgs := p.GetPositionalArgs()
+	assert.Equal(t, 8, len(posArgs), "should have 8 positional args (7 from input + 1 default)")
+
+	expected := []struct {
+		pos   int
+		value string
+	}{
+		{0, "first"},     // bound to First
+		{1, "middle"},    // bound to Fourth
+		{2, "second"},    // bound to Second
+		{3, "third"},     // unbound
+		{4, "fourth"},    // unbound
+		{5, "fifth"},     // bound to Third
+		{6, "sixth"},     // unbound
+		{10, "way_back"}, // bound to Optional (default)
+	}
+
+	for i, exp := range expected {
+		assert.Equal(t, exp.pos, posArgs[i].Position,
+			fmt.Sprintf("position at index %d should be %d", i, exp.pos))
+		assert.Equal(t, exp.value, posArgs[i].Value,
+			fmt.Sprintf("value at position %d should be %s", exp.pos, exp.value))
+	}
+
+	// Test 5: Very large gap
+	type LargeGapConfig struct {
+		Start string `goopt:"pos:{idx:0};required:true"`
+		Far   string `goopt:"pos:{idx:100};default:far_default"`
+	}
+	var lgCfg LargeGapConfig
+	p, err = NewParserFromStruct(&lgCfg)
+	assert.NoError(t, err)
+	assert.True(t, p.ParseString("start"), "should handle large gaps")
+	assert.Equal(t, "start", lgCfg.Start)
+	assert.Equal(t, "far_default", lgCfg.Far)
+
+	// Test 6: Multiple optional gaps
+	type MultiGapConfig struct {
+		First string `goopt:"pos:0;required:true"`
+		Gap1  string `goopt:"pos:2;default:gap1_default"`
+		Gap2  string `goopt:"pos:4;default:gap2_default"`
+		Gap3  string `goopt:"pos:6;default:gap3_default"`
+		Last  string `goopt:"pos:8;default:last_default"`
+	}
+	var mgCfg MultiGapConfig
+	p, err = NewParserFromStruct(&mgCfg)
+	assert.NoError(t, err)
+
+	// Test partial fill
+	assert.True(t, p.ParseString("first second third"), "should handle multiple gaps")
+	assert.Equal(t, "first", mgCfg.First)
+	assert.Equal(t, "third", mgCfg.Gap1)
+	assert.Equal(t, "gap2_default", mgCfg.Gap2)
+	assert.Equal(t, "gap3_default", mgCfg.Gap3)
+	assert.Equal(t, "last_default", mgCfg.Last)
+
+	// Test 7: Error cases
+	p.ClearAll()
+	assert.False(t, p.ParseString(""), "should fail with missing required arg")
+	assert.NotEmpty(t, p.GetErrors())
+}
+
+func TestParser_PrintPositionalArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  interface{}
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "basic positional args",
+			config: struct {
+				Source   string `goopt:"name:source;pos:0;desc:Source file"`
+				Dest     string `goopt:"name:dest;pos:1;desc:Destination file"`
+				Optional string `goopt:"name:optional;pos:5;desc:Optional file"`
+			}{},
+			want: `
+Positional Arguments:
+ source "Source file" (position: 0)
+ dest "Destination file" (position: 1)
+ optional "Optional file" (position: 5)
+`,
+		},
+		{
+			name: "no positional args",
+			config: struct {
+				Flag1 string `goopt:"name:flag1"`
+				Flag2 string `goopt:"name:flag2"`
+			}{},
+			want: "",
+		},
+		{
+			name: "mixed flags and positions",
+			config: struct {
+				Source  string `goopt:"name:source;pos:0;desc:Source file"`
+				Verbose bool   `goopt:"name:verbose"`
+				Dest    string `goopt:"name:dest;pos:1;desc:Destination file"`
+			}{},
+			want: `
+Positional Arguments:
+ source "Source file" (position: 0)
+ dest "Destination file" (position: 1)
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewParserFromInterface(tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewParserFromStruct() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil {
+				return
+			}
+
+			var buf bytes.Buffer
+			p.PrintPositionalArgs(&buf)
+			got := buf.String()
+
+			if got != tt.want {
+				t.Errorf("PrintPositionalArgs() output mismatch:\ngot:\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
 }
 
 // Helper function for comparing string slices

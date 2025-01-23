@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/napalu/goopt/types"
+	"github.com/napalu/goopt/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -191,43 +192,32 @@ func TestUnmarshalTagFormat_Position(t *testing.T) {
 	}{
 		{
 			name: "position with other tags",
-			tag:  "name:source;desc:Source file;pos:{at:start,idx:0};required:true",
-			want: &types.TagConfig{
-				Kind:          types.KindFlag,
-				Name:          "source",
-				Description:   "Source file",
-				Position:      ptr(types.AtStart),
-				RelativeIndex: ptr(0),
-				Required:      true,
-			},
-		},
-		{
-			name: "position only idx",
-			tag:  "pos:{idx:1}",
-			want: &types.TagConfig{
-				Kind:          types.KindFlag,
-				RelativeIndex: ptr(1),
-			},
-		},
-		{
-			name: "position with empty at",
-			tag:  "pos:{at:};required:true",
+			tag:  "pos:0;required:true",
 			want: &types.TagConfig{
 				Kind:     types.KindFlag,
+				Position: util.NewOfType(0),
 				Required: true,
 			},
 		},
 		{
-			name: "multiple position tags",
-			tag:  "pos:{at:start};pos:{at:end}", // Last one wins
+			name: "legacy position format",
+			tag:  "pos:{idx:0}",
 			want: &types.TagConfig{
 				Kind:     types.KindFlag,
-				Position: ptr(types.AtEnd),
+				Position: util.NewOfType(0),
 			},
 		},
 		{
-			name:    "invalid position type",
-			tag:     "pos:{at:middle}",
+			name: "multiple position tags",
+			tag:  "pos:0;pos:1", // Last one wins
+			want: &types.TagConfig{
+				Kind:     types.KindFlag,
+				Position: util.NewOfType(1),
+			},
+		},
+		{
+			name:    "invalid position",
+			tag:     "pos:-1",
 			wantErr: true,
 		},
 	}
