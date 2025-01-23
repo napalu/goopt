@@ -132,6 +132,11 @@ func (o *OrderedMap[K, V]) Iterator() func() (*int, *K, V) {
 	}
 }
 
+// Len returns the number of elements in the OrderedMap
+func (o *OrderedMap[K, V]) Len() int {
+	return o.keys.Len()
+}
+
 // Delete will remove the key and its associated value.
 func (o *OrderedMap[K, V]) Delete(key K) {
 	e, exists := o.store[key]

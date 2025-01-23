@@ -31,7 +31,7 @@ type Config struct {
 | `secure` | For password input | `secure:true\|false` |
 | `prompt` | Prompt text for secure input | `prompt:Password:` |
 | `capacity` | Slice capacity for nested structs | `capacity:3` |
-| `pos` | Position requirements | `pos:{at:start,idx:0}` |
+| `pos` | Position requirements | `pos:0` |
 | `accepted` | Accepted values/patterns | `accepted:{pattern:json\|yaml,desc:Format}` |
 | `depends` | Flag dependencies | `depends:{flag:output,values:[json]}` |
 
@@ -42,22 +42,14 @@ The `pos` tag allows specifying position requirements for arguments:
 ```go
 type Config struct {
     // Must be first argument
-    Source string `goopt:"name:source;pos:{at:start,idx:0}"`
-    
+    Source string `goopt:"name:source;pos:0"`
+        // Second argument from start
+    Profile string `goopt:"name:profile;pos:1"`
     // Must be last argument
-    Dest string `goopt:"name:dest;pos:{at:end,idx:0}"`
+    Dest string `goopt:"name:dest;pos:2"`
     
-    // Second argument from start
-    Profile string `goopt:"name:profile;pos:{at:start,idx:1}"`
 }
 ```
-
-### Position Types
-- `start`: Argument must appear before flags/commands
-- `end`: Argument must appear after flags/commands
-
-### Index
-The optional `idx` field specifies relative position when multiple arguments share the same position type.
 
 ## Complex Tag Examples
 

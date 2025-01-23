@@ -5,43 +5,8 @@ import (
 	"regexp"
 
 	"github.com/napalu/goopt/types"
+	"github.com/napalu/goopt/util"
 )
-
-// NewArg convenience initialization method to configure flags
-func NewArg(configs ...ConfigureArgumentFunc) *Argument {
-	argument := &Argument{}
-	for _, config := range configs {
-		config(argument, nil)
-	}
-
-	return argument
-}
-
-// Set configures the Argument instance with the provided ConfigureArgumentFunc(s),
-// and returns an error if a configuration results in an error.
-//
-// Usage example:
-//
-//	arg := &Argument{}
-//	err := arg.Set(
-//	    WithDescription("example argument"),
-//	    WithType(Standalone),
-//	    IsRequired,
-//	)
-//	if err != nil {
-//	    // handle error
-//	}
-func (a *Argument) Set(configs ...ConfigureArgumentFunc) error {
-	a.ensureInit()
-	var err error
-	for _, config := range configs {
-		config(a, &err)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 // WithShortFlag represents the short form of a flag. Since by default and design, no max length is enforced,
 // the "short" flag can be looked at as an alternative to using the long name. I use it as a moniker. The short flag
@@ -190,27 +155,12 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 }
 
 // WithPosition sets a position requirement for the argument
-func WithPosition(pos types.PositionType) ConfigureArgumentFunc {
+func WithPosition(idx int) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
-		// Validate position type
-		if pos != types.AtStart && pos != types.AtEnd {
-			*err = fmt.Errorf("invalid position type: %d", pos)
-			return
-		}
-		argument.Position = &pos
-	}
-}
-
-// WithRelativeIndex sets the index for ordered positional arguments
-func WithRelativeIndex(idx int) ConfigureArgumentFunc {
-	return func(argument *Argument, err *error) {
-		// Validate index is non-negative
 		if idx < 0 {
 			*err = fmt.Errorf("positional index must be non-negative, got: %d", idx)
 			return
 		}
-		argument.RelativeIndex = &idx
+		argument.Position = util.NewOfType(idx)
 	}
 }
-
-// TODO explore adding WithValidation to positional arguments

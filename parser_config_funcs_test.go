@@ -7,6 +7,8 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/types"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func TestWithExecOnParse(t *testing.T) {
@@ -218,7 +220,7 @@ func TestWithNameConverters(t *testing.T) {
 				return strings.ReplaceAll(strings.ToUpper(s), "_", "")
 			},
 			cmdConverter: func(s string) string {
-				return strings.Title(strings.ToLower(s))
+				return cases.Title(language.Und).String(strings.ToLower(s))
 			},
 			expectedFlag: "USERNAME",
 			expectedCmd:  "Command",

@@ -24,3 +24,7 @@ func UnwrapType(t reflect.Type) reflect.Type {
 	}
 	return t
 }
+
+func NewOfType[T any](value T) *T {
+	return &value
+}

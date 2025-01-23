@@ -7,145 +7,85 @@ nav_order: 4
 
 # Positional Arguments
 
-Goopt provides robust support for positional arguments, allowing you to enforce specific positions for command-line arguments while maintaining flexibility.
+Goopt provides robust support for positional arguments, allowing you to specify exact positions for command-line arguments.
 
 ## Overview
 
-Positional arguments are command-line arguments that must appear in specific positions relative to flags and commands. This is useful for:
+Positional arguments are command-line arguments that must appear in specific positions. This is useful for:
 - Enforcing input/output file ordering
-- Maintaining compatibility with existing scripts
 - Creating intuitive command-line interfaces
+- Maintaining compatibility with existing scripts
 
 ## Basic Usage
 
-### Defining Positional Arguments
+### Using Struct Tags (Recommended)
+
+The simplest way to define positional arguments is using struct tags:
+
+```go
+type Config struct {
+    Source      string `goopt:"pos:0;required:true"`      // First argument
+    Destination string `goopt:"pos:1"`                    // Second argument
+    Optional    string `goopt:"pos:2;default:backup.txt"` // Third argument with default
+}
+
+var cfg Config
+parser, err := goopt.NewParserFromStruct(&cfg)
+```
+
+### Programmatic API
+
+You can also define positions programmatically:
 
 ```go
 parser := goopt.NewParser()
 
-// Source file must be first
+// Add positional arguments
 parser.AddFlag("source", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),
+    goopt.WithPosition(0),
+    goopt.WithRequired(true),
 ))
-
-// Output file must be last
-parser.AddFlag("output", goopt.NewArg(
-    goopt.WithPosition(goopt.AtEnd),
-    goopt.WithRelativeIndex(0),
+parser.AddFlag("dest", goopt.NewArg(
+    goopt.WithPosition(1),
 ))
-```
-
-### Using Positional Arguments
-
-```bash
-# Correct usage
-myapp source.txt --verbose --format json output.txt
-
-# Incorrect usage (source not at start)
-myapp --verbose source.txt --format json output.txt
-```
-
-## Position Types
-
-### AtStart
-- Must appear before any flags or commands
-- Ordered by PositionalIndex
-- Example: Source files, configuration files
-
-### AtEnd
-- Must appear after all flags and commands
-- Ordered by PositionalIndex
-- Example: Output files, destination paths
-
-## Struct Tag Support
-
-Positional arguments can be specified using struct tags:
-
-The position tag uses a brace-enclosed format with two optional fields:
-- `at`: Position type (`start` or `end`)
-- `idx`: Relative index within the position (zero-based)
-
-```go
-type Config struct {
-    Source string `goopt:"name:source;pos:{at:start,idx:0}"` // Must be first argument
-    Profile string `goopt:"name:profile;pos:{at:start,idx:1}"` // Must be second argument
-    Dest   string `goopt:"name:dest;pos:{at:end,idx:0}"`   // Must be last argument
-}
 ```
 
 ## Advanced Features
 
-### Multiple Ordered Arguments
+### Gaps in Positions
 
-You can specify multiple arguments at the same position type using indices:
+You can leave gaps between positions:
 
 ```go
-parser.AddFlag("config", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),
-))
-parser.AddFlag("profile", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(1),
-))
-
-// Usage: myapp config.yaml profile.json --verbose
+type Config struct {
+    First     string `goopt:"pos:0"`           // First argument
+    Last      string `goopt:"pos:10"`          // Much later argument
+    VeryLast  string `goopt:"pos:100"`         // Even later
+}
 ```
 
-### Flag Override
+### Optional Arguments with Defaults
 
-Position requirements can be overridden using flag syntax:
+Positional arguments can have default values:
 
 ```go
-parser.AddFlag("source", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),
-))
-
-// Both are valid:
-// myapp source.txt --verbose
-// myapp --source source.txt --verbose
+type Config struct {
+    Required string `goopt:"pos:0;required:true"`      // Must be provided
+    Optional string `goopt:"pos:1;default:fallback"`   // Uses default if missing
+}
 ```
 
 ### Mixed Positional and Regular Arguments
 
-You can mix positioned and regular arguments:
+Unbound arguments preserve their relative positions:
 
 ```go
-parser := goopt.NewParser()
-
-// Config must be first
-parser.AddFlag("config", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),
-))
-
-// Output must be last
-parser.AddFlag("output", goopt.NewArg(
-    goopt.WithPosition(goopt.AtEnd),
-    goopt.WithRelativeIndex(0),
-))
-
-// Any other arguments are captured as regular positional arguments
-// myapp config.yaml data1.txt data2.txt --verbose output.txt
-```
-
-### Multiple Ordered Arguments
-
-You can specify multiple arguments at the same position type using relative indices:
-
-```go
-parser.AddFlag("config", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(0),  // First at start
-))
-parser.AddFlag("profile", goopt.NewArg(
-    goopt.WithPosition(goopt.AtStart),
-    goopt.WithRelativeIndex(1),  // Second at start
-))
-
-// Usage: myapp config.yaml profile.json --verbose
+// Command: myapp source.txt extra1 extra2 dest.txt
+type Config struct {
+    Source string `goopt:"pos:0"`  // Gets "source.txt"
+    Dest   string `goopt:"pos:3"`  // Gets "dest.txt"
+}
+// "extra1" and "extra2" are available as unbound positional arguments
 ```
 
 ## Error Handling
@@ -156,14 +96,27 @@ Goopt provides clear error messages for position violations:
 if !parser.Parse(os.Args[1:]) {
     for _, err := range parser.GetErrors() {
         fmt.Println("Error:", err)
-        // Example: "Error: argument 'source' must appear at start position"
-        // Example: "Error: argument 'output' must appear at end position"
+        // Example: "Error: missing required positional argument 'source' at position 0"
     }
 }
 ```
 
 ## Best Practices
 
-1. **Clear Positions**: Use positional arguments when the order is meaningful to users
-2. **Flexible Override**: Allow flag syntax override for scripting and automation
-3. **Documentation**: Clearly document position requirements in help text
+1. **Use Sequential Positions**: When possible, use consecutive positions (0, 1, 2...)
+2. **Required First**: Place required positional arguments before optional ones
+3. **Default Values**: Provide defaults for optional positions when it makes sense
+4. **Documentation**: Clearly document position requirements in help text
+5. **Reasonable Gaps**: While gaps are allowed, keep them small unless there's a good reason
+
+## Accessing Positional Arguments
+
+You can access all positional arguments, including unbound ones:
+
+```go
+// After parsing
+args := parser.GetPositionalArgs()
+for _, arg := range args {
+    fmt.Printf("Position %d: %s\n", arg.Position, arg.Value)
+}
+```

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -114,21 +115,6 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 	}
 
 	return newParserFromReflectValue(v, "", "", 5, 0, config...)
-}
-
-// NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
-// configure Argument using option functions.
-func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string) *Argument {
-	return &Argument{
-		Description:  description,
-		TypeOf:       typeOf,
-		Required:     required,
-		DependsOn:    []string{},
-		OfValue:      []string{},
-		Secure:       secure,
-		Short:        shortFlag,
-		DefaultValue: defaultValue,
-	}
 }
 
 func (p *Parser) SetExecOnParse(value bool) {
@@ -350,7 +336,7 @@ func (p *Parser) Parse(args []string) bool {
 
 	for state.Advance() {
 		cur := state.CurrentArg()
-		if p.isFlag(state.CurrentArg()) {
+		if p.isFlag(cur) {
 			if p.isGlobalFlag(cur) {
 				p.evalFlagWithPath(state, "")
 			} else {
@@ -417,8 +403,8 @@ func (p *Parser) Parse(args []string) bool {
 	}
 
 	// Validate all processed options
+	p.setPositionalArguments(state)
 	p.validateProcessedOptions()
-	p.setPositionalArguments(state, currentCommandPath)
 
 	// Process secure arguments if parsing succeeded
 	success := len(p.errors) == 0
@@ -1216,11 +1202,6 @@ func (p *Parser) RemoveDependency(flag, dependsOn string, commandPath ...string)
 	return nil
 }
 
-// FlagPath returns the command part of a Flag or an empty string when not.
-func (p *Parser) FlagPath(flag string) string {
-	return getFlagPath(flag)
-}
-
 // GetErrors returns a list of the errors encountered during Parse
 func (p *Parser) GetErrors() []error {
 	return p.errors
@@ -1278,6 +1259,7 @@ func (p *Parser) GenerateCompletion(shell, programName string) string {
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
 func (p *Parser) PrintUsage(writer io.Writer) {
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s", []byte(os.Args[0]))))
+	p.PrintPositionalArgs(writer)
 	p.PrintFlags(writer)
 	if p.registeredCommands.Count() > 0 {
 		_, _ = writer.Write([]byte("\ncommands:\n"))
@@ -1287,10 +1269,9 @@ func (p *Parser) PrintUsage(writer io.Writer) {
 
 // PrintUsageWithGroups pretty prints accepted Flags and show command-specific Flags grouped by Commands to io.Writer.
 func (p *Parser) PrintUsageWithGroups(writer io.Writer) {
-	// Print the program usage
 	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s\n", os.Args[0])))
 
-	// Print global flags
+	p.PrintPositionalArgs(writer)
 	p.PrintGlobalFlags(writer)
 
 	// Print command-specific flags and commands
@@ -1306,15 +1287,52 @@ func (p *Parser) PrintUsageWithGroups(writer io.Writer) {
 	}
 }
 
+// PrintPositionalArgs prints all positional arguments in order
+func (p *Parser) PrintPositionalArgs(writer io.Writer) {
+	var args []PositionalArgument
+
+	// Collect all flags marked as positional
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.Argument != nil && f.Value.Argument.isPositional() {
+			if f.Value.Argument.Position == nil {
+				continue
+			}
+
+			args = append(args, PositionalArgument{
+				Position: *f.Value.Argument.Position,
+				Value:    *f.Key,
+				Argument: f.Value.Argument,
+			})
+		}
+	}
+
+	// Sort by position
+	sort.SliceStable(args, func(i, j int) bool {
+		return args[i].Position < args[j].Position
+	})
+
+	// Print args with indices
+	if len(args) > 0 {
+		_, _ = writer.Write([]byte("\nPositional Arguments:\n"))
+		for _, arg := range args {
+			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (position: %d)\n",
+				arg.Value,
+				arg.Argument.Description,
+				arg.Position)))
+		}
+	}
+}
+
 // PrintGlobalFlags prints global (non-command-specific) flags
 func (p *Parser) PrintGlobalFlags(writer io.Writer) {
 	_, _ = writer.Write([]byte("\nGlobal Flags:\n\n"))
 
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.Argument.isPositional() {
+			continue
+		}
 		if f.Value.CommandPath == "" { // Global flags have no command path
-			shortFlag, _ := p.GetShortFlag(*f.Key)
-			requiredOrOptional := describeRequired(f.Value.Argument)
-			_, _ = writer.Write([]byte(fmt.Sprintf(" --%s or -%s \"%s\" (%s)\n", *f.Key, shortFlag, f.Value.Argument.Description, requiredOrOptional)))
+			_, _ = writer.Write([]byte(fmt.Sprintf(" --%s %s\n", *f.Key, f.Value.Argument)))
 		}
 	}
 }
@@ -1360,12 +1378,7 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 
 			flagParts := splitPathFlag(*f.Key)
 			flagDesc := fmt.Sprintf("--%s", flagParts[0])
-			if f.Value.Argument != nil && f.Value.Argument.Short != "" {
-				flagDesc = fmt.Sprintf("%s or -%s", flagDesc, f.Value.Argument.Short)
-			}
-
-			requiredOrOptional := describeRequired(f.Value.Argument)
-			flag := fmt.Sprintf("%s%s \"%s\" (%s)\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), flagDesc, f.Value.Argument.Description, requiredOrOptional)
+			flag := fmt.Sprintf("%s%s %s\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), flagDesc, f.Value.Argument)
 
 			_, _ = writer.Write([]byte(flag))
 		}
@@ -1374,18 +1387,8 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (p *Parser) PrintFlags(writer io.Writer) {
-	var shortOption string
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		shortFlag, err := p.GetShortFlag(*f.Key)
-		if err == nil {
-			shortOption = " or -" + shortFlag + " "
-		} else {
-			shortOption = " "
-		}
-
-		requiredOrOptional := describeRequired(f.Value.Argument)
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s %s\"%s\" (%s)",
-			*f.Key, shortOption, p.GetDescription(*f.Key), requiredOrOptional)))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s %s", *f.Key, f.Value.Argument)))
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -224,154 +225,212 @@ func (p *Parser) ensureInit() {
 	}
 }
 
-func (a *Argument) ensureInit() {
-	if a.DependsOn == nil {
-		a.DependsOn = []string{}
-	}
-	if a.OfValue == nil {
-		a.OfValue = []string{}
-	}
-	if a.AcceptedValues == nil {
-		a.AcceptedValues = []types.PatternValue{}
-	}
-	if a.DependencyMap == nil {
-		a.DependencyMap = map[string][]string{}
-	}
+type flagCache struct {
+	flags        map[string]map[string]*FlagInfo
+	needsValue   map[string]bool
+	isStandalone map[string]bool
 }
 
-func (p *Parser) setPositionalArguments(state parse.State, commandPath ...string) {
-	var positional []PositionalArgument
-	args := state.Args()
+func (p *Parser) buildFlagCache() *flagCache {
+	cache := &flagCache{
+		flags:        make(map[string]map[string]*FlagInfo),
+		needsValue:   make(map[string]bool),
+		isStandalone: make(map[string]bool),
+	}
 
-	// First pass: collect positional arguments
-	for i, seen := range args {
-		seen = p.flagOrShortFlag(strings.TrimLeftFunc(seen, p.prefixFunc), commandPath...)
-		if _, found := p.rawArgs[seen]; !found {
-			positional = append(positional, PositionalArgument{
-				Position: i,
-				Value:    seen,
-				Argument: nil,
+	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
+		fv := flag.Value
+		longName := *flag.Key
+
+		if _, exists := cache.flags[longName]; !exists {
+			cache.flags[longName] = make(map[string]*FlagInfo)
+		}
+
+		if shortName := fv.Argument.Short; shortName != "" {
+			if _, exists := cache.flags[shortName]; !exists {
+				cache.flags[shortName] = make(map[string]*FlagInfo)
+			}
+		}
+
+		cmdPath := ""
+		if fv.CommandPath != "" {
+			cmdPath = fv.CommandPath
+		}
+
+		cache.flags[longName][cmdPath] = fv
+		if shortName := fv.Argument.Short; shortName != "" {
+			cache.flags[shortName][cmdPath] = fv
+			cache.isStandalone[shortName] = fv.Argument.TypeOf == types.Standalone
+			cache.needsValue[shortName] = fv.Argument.TypeOf != types.Standalone
+		}
+
+		cache.isStandalone[longName] = fv.Argument.TypeOf == types.Standalone
+		cache.needsValue[longName] = fv.Argument.TypeOf != types.Standalone
+	}
+
+	return cache
+}
+
+func (p *Parser) setPositionalArguments(state parse.State) {
+	args := state.Args()
+	positional := make([]PositionalArgument, 0, len(args))
+	cache := p.buildFlagCache()
+
+	declaredPos := make([]struct {
+		key      string
+		flag     *FlagInfo
+		index    int
+		required bool
+	}, 0, p.acceptedFlags.Len())
+
+	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
+		fv := flag.Value
+		if fv.Argument.Position != nil {
+			declaredPos = append(declaredPos, struct {
+				key      string
+				flag     *FlagInfo
+				index    int
+				required bool
+			}{
+				*flag.Key,
+				fv,
+				*fv.Argument.Position,
+				fv.Argument.Required,
 			})
 		}
 	}
 
-	// Second pass: match and validate positional arguments
-	for i := range positional {
-		if arg := p.findMatchingPositionalArg(state, positional[i].Position); arg != nil {
-			positional[i].Argument = arg
-		}
+	if len(declaredPos) > 0 {
+		sort.SliceStable(declaredPos, func(i, j int) bool {
+			return declaredPos[i].index < declaredPos[j].index
+		})
 	}
 
-	// Validate all positional requirements were met
-	p.validatePositionalRequirements(state, positional)
+	skipNext := false
+	currentCmdPath := make([]string, 0, 3) // Pre-allocate for typical command depth
 
-	p.positionalArgs = positional
-}
-
-func (p *Parser) validatePositionalRequirements(state parse.State, found []PositionalArgument) {
-	firstNonPos := p.findFirstNonPositionalArg(state)
-	lastNonPos := p.findLastNonPositionalArg(state)
-
-	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
-		arg := flag.Value.Argument
-		if arg.Position == nil || arg.RelativeIndex == nil {
+	for i, arg := range args {
+		if skipNext {
+			skipNext = false
 			continue
 		}
 
-		// Skip if this was provided as a flag
-		if _, exists := p.rawArgs[*flag.Key]; exists {
+		if p.isFlag(arg) {
+			name := strings.TrimLeft(arg, "-")
+			if len(currentCmdPath) > 0 {
+				name = buildPathFlag(name, currentCmdPath...)
+			}
+			if cache.needsValue[name] {
+				skipNext = true
+			}
 			continue
 		}
 
-		// Check if we found this positional argument
-		matched := false
-		for _, pos := range found {
-			if pos.Argument == arg {
-				// Validate position requirements first
-				switch *arg.Position {
-				case types.AtStart:
-					if pos.Position >= firstNonPos {
-						p.addError(fmt.Errorf("argument '%s' must appear before position %d (before flags/commands)",
-							*flag.Key, firstNonPos))
-						continue
-					}
-				case types.AtEnd:
-					if pos.Position <= lastNonPos {
-						p.addError(fmt.Errorf("argument '%s' must appear after position %d (after flags/commands)",
-							*flag.Key, lastNonPos))
-						continue
-					}
+		// Handle previous flag's value
+		if i > 0 && p.isFlag(args[i-1]) {
+			prevName := strings.TrimFunc(args[i-1], p.prefixFunc)
+			if len(currentCmdPath) > 0 {
+				prevName = buildPathFlag(prevName, currentCmdPath...)
+			}
+			if cache.needsValue[prevName] {
+				skipNext = true
+				continue
+			}
+			if cache.isStandalone[prevName] {
+				if _, err := strconv.ParseBool(arg); err == nil {
+					continue
 				}
-				matched = true
-				break
 			}
 		}
 
-		if !matched {
-			p.addError(fmt.Errorf("argument '%s' must appear at %s position",
-				*flag.Key, positionTypeString(*arg.Position)))
+		// Check command path
+		isCmd := false
+		if len(currentCmdPath) == 0 {
+			if p.isCommand(arg) {
+				currentCmdPath = append(currentCmdPath, arg)
+				isCmd = true
+			}
+		} else {
+			if p.isCommand(strings.Join(append(currentCmdPath, arg), " ")) {
+				currentCmdPath = append(currentCmdPath, arg)
+				isCmd = true
+			} else {
+				currentCmdPath = currentCmdPath[:0]
+			}
 		}
-	}
-}
 
-func positionTypeString(pos types.PositionType) string {
-	switch pos {
-	case types.AtStart:
-		return "start"
-	case types.AtEnd:
-		return "end"
-	default:
-		return "unknown"
-	}
-}
-
-func (p *Parser) findMatchingPositionalArg(state parse.State, pos int) *Argument {
-	// Find first non-positional argument position
-	firstNonPos := p.findFirstNonPositionalArg(state)
-	// Find last non-positional argument position
-	lastNonPos := p.findLastNonPositionalArg(state)
-
-	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
-		arg := flag.Value.Argument
-		if arg.Position == nil || arg.RelativeIndex == nil {
+		if isCmd {
 			continue
 		}
 
-		switch *arg.Position {
-		case types.AtStart:
-			// Must appear before first non-positional arg
-			if pos < firstNonPos && pos == *arg.RelativeIndex {
-				return arg
+		positional = append(positional, PositionalArgument{
+			Position: i,
+			Value:    arg,
+			Argument: nil,
+		})
+	}
+
+	maxDeclaredIdx := 0
+	if len(declaredPos) > 0 {
+		maxDeclaredIdx = declaredPos[len(declaredPos)-1].index
+	}
+	// Match and register positionals in one pass
+	for _, decl := range declaredPos {
+		if decl.index >= len(positional) {
+			if decl.required {
+				p.addError(fmt.Errorf("missing required positional argument '%s' at index %d",
+					decl.key, decl.index))
 			}
-		case types.AtEnd:
-			// Must appear after last non-positional arg
-			if pos > lastNonPos && (pos-lastNonPos-1) == *arg.RelativeIndex {
-				return arg
+			if decl.flag.Argument.DefaultValue != "" {
+				// Only extend if within reasonable bounds
+				if decl.index <= maxDeclaredIdx {
+					// Extend result slice if needed
+					if decl.index >= len(positional) {
+						newResult := make([]PositionalArgument, decl.index+1)
+						copy(newResult, positional)
+						positional = newResult
+					}
+					positional[decl.index] = PositionalArgument{
+						Position: decl.index,
+						Value:    decl.flag.Argument.DefaultValue,
+						Argument: decl.flag.Argument,
+					}
+
+				} else {
+					continue
+				}
+			} else {
+				continue
 			}
 		}
+
+		pos := &positional[decl.index]
+		pos.Argument = decl.flag.Argument
+
+		// Build path once
+		lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+		p.registerFlagValue(lookup, pos.Value, pos.Value)
+		p.options[lookup] = pos.Value
+		p.setBoundVariable(pos.Value, lookup)
 	}
 
-	return nil
-}
+	newResult := make([]PositionalArgument, 0, len(positional))
 
-func (p *Parser) findFirstNonPositionalArg(state parse.State) int {
-	for i := 0; i < state.Len(); i++ {
-		arg := state.Args()[i]
-		if p.isFlag(arg) || p.isCommand(arg) {
-			return i
+	for i := range positional {
+		// Keep positions that either:
+		// 1. Have a non-empty value
+		// 2. Are unbound (Argument == nil) and have any value
+		if positional[i].Value != "" {
+			newResult = append(newResult, positional[i])
 		}
 	}
-	return state.Len()
-}
 
-func (p *Parser) findLastNonPositionalArg(state parse.State) int {
-	for i := state.Len() - 1; i >= 0; i-- {
-		arg := state.Args()[i]
-		if p.isFlag(arg) || p.isCommand(arg) {
-			return i
-		}
-	}
-	return -1
+	// Sort by position to maintain order
+	sort.Slice(newResult, func(i, j int) bool {
+		return newResult[i].Position < newResult[j].Position
+	})
+
+	p.positionalArgs = newResult
 }
 
 func (p *Parser) evalFlagWithPath(state parse.State, currentCommandPath string) {
@@ -656,10 +715,6 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if !p.HasFlag(name) {
 		return
 	}
-	pathFlag := splitPathFlag(name)
-	if _, ok := p.rawArgs[pathFlag[0]]; !ok {
-		return
-	}
 
 	if !config.IsSecure {
 		return
@@ -810,7 +865,11 @@ func (p *Parser) walkFlags() {
 
 		if !p.shouldValidateDependencies(flagInfo) {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && p.HasCommand(cmdArg[1])) {
-				p.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))
+				if flagInfo.Argument.Position != nil {
+					p.addError(fmt.Errorf("flag '%s' missing required positional argument at index %d", *f.Key, *flagInfo.Argument.Position))
+				} else {
+					p.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))
+				}
 			}
 		} else {
 			p.validateDependencies(flagInfo, mainKey, visited, 0)
@@ -856,7 +915,8 @@ func (p *Parser) walkCommands() {
 		}
 
 		for _, m := range matchedCommands {
-			for _, sub := range m.Subcommands {
+			for i := range m.Subcommands {
+				sub := m.Subcommands[i]
 				stack.Push(&sub)
 			}
 		}
@@ -1095,6 +1155,7 @@ func toArgument(c *types.TagConfig) *Argument {
 		Secure:         c.Secure,
 		AcceptedValues: c.AcceptedValues,
 		DependencyMap:  c.DependsOn,
+		Position:       c.Position,
 	}
 }
 
