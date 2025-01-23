@@ -494,9 +494,6 @@ func equals(t, other *types.TagConfig) bool {
 	if t.Capacity != other.Capacity {
 		return false
 	}
-	if t.RelativeIndex != other.RelativeIndex {
-		return false
-	}
 	if t.Position != other.Position {
 		return false
 	}
