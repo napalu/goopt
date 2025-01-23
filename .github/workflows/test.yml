@@ -29,6 +29,17 @@ jobs:
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
         with:
           go-version: ${{ matrix.go-version }}
+      - name: Debug File Content
+        run: |
+          echo "=== Checking parse/tag_test.go ==="
+          cat parse/tag_test.go
+          echo "=== Line 497 context ==="
+          sed -n '492,502p' parse/tag_test.go
+          echo "=== Git Status ==="
+          git status
+          echo "=== Git Branch Info ==="
+          git branch -v
+        shell: bash
       - name: Clean Go Caches
         run: |
           go clean -cache
