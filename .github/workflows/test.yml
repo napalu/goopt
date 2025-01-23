@@ -1,10 +1,7 @@
 name: Test
 permissions:
-  # For actions/checkout and running tests
   contents: read
-  # For create-pull-request action
   pull-requests: write
-  # For creating branches (needed by create-pull-request)
   statuses: write
 
 on:
@@ -14,7 +11,7 @@ on:
   pull_request:
     branches:
       - '**'  # all branches
- 
+
 jobs:
   test:
     strategy:
@@ -24,44 +21,36 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+      - name: Debug Current State
+        run: |
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: $(git rev-parse HEAD)"
+          git status
       - name: Setup go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Debug File Content
-        run: |
-          echo "=== Checking parse/tag_test.go ==="
-          cat parse/tag_test.go
-          echo "=== Line 497 context ==="
-          sed -n '492,502p' parse/tag_test.go
-          echo "=== Git Status ==="
-          git status
-          echo "=== Git Branch Info ==="
-          git branch -v
-        shell: bash
-      - name: Clean Go Caches
-        run: |
-          go clean -cache
-          go clean -testcache
-          go clean -modcache
-          rm -rf pkg/
-        shell: bash
       - name: Run Test
         run: |
           go mod tidy
-          go test ./...
+          go test ./... --race
   update-badge:
-    needs: test  # This ensures all tests pass first
-    runs-on: ubuntu-latest  # Only needs to run once
+    needs: test
+    runs-on: ubuntu-latest
     permissions:
-      contents: write    # Only needed for this job
+      contents: write
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Setup go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
+        uses: actions/setup-go@v4
         with:
           go-version: stable
       - name: Generate Coverage
@@ -69,17 +58,17 @@ jobs:
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
       - name: Go Coverage Badge
-        uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
+        uses: tj-actions/coverage-badge-go@v1.4
         with:
           filename: coverage.out
-      - name: Verify Changed files
-        uses: tj-actions/verify-changed-files@6ed7632824d235029086612d4330d659005af687
+      - name: Verify Changed Files
+        uses: tj-actions/verify-changed-files@v11
         id: verify-changed-files
         with:
           files: README.md
       - name: Create Pull Request
         if: steps.verify-changed-files.outputs.files_changed == 'true'
-        uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f
+        uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ github.token }}
           commit-message: "chore: Updated coverage badge"
