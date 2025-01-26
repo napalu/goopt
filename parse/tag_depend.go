@@ -134,7 +134,7 @@ func Dependency(input string) (string, []string, error) {
 	var current strings.Builder
 	var bracketCount int
 
-	input = input + "," // Add trailing comma to simplify parsing
+	input += "," // Add trailing comma to simplify parsing
 	for i := 0; i < len(input); i++ {
 		ch := input[i]
 		switch ch {
@@ -207,7 +207,7 @@ func Dependency(input string) (string, []string, error) {
 		var bracketCount int
 		var lastChar rune
 
-		values = values + "," // Add trailing comma to simplify parsing
+		values += "," // Add trailing comma to simplify parsing
 		for i := 0; i < len(values); i++ {
 			ch := values[i]
 			if escaped {
@@ -225,6 +225,7 @@ func Dependency(input string) (string, []string, error) {
 					current.WriteByte(ch)
 				}
 				escaped = false
+				lastChar = rune(ch)
 				continue
 			}
 
@@ -234,17 +235,18 @@ func Dependency(input string) (string, []string, error) {
 				continue
 			}
 
-			if ch == '[' {
+			switch ch {
+			case '[':
 				bracketCount++
 				current.WriteByte(ch)
-			} else if ch == ']' {
+				lastChar = '['
+			case ']':
 				bracketCount--
 				current.WriteByte(ch)
-				// If we're back to bracket level 0 and next char is comma,
-				// this is a completely nested structure
+				lastChar = ']'
+				// Handle nested bracket comma separation
 				if bracketCount == 0 && i+1 < len(values) && values[i+1] == ',' {
 					if v := strings.TrimSpace(current.String()); v != "" {
-						// For double-bracketed items, remove one level
 						if strings.HasPrefix(v, "[[") && strings.HasSuffix(v, "]]") {
 							v = v[1 : len(v)-1]
 						}
@@ -254,22 +256,24 @@ func Dependency(input string) (string, []string, error) {
 					i++ // Skip the comma
 					continue
 				}
-			} else if ch == ',' && !escaped && bracketCount == 0 {
-				if v := strings.TrimSpace(current.String()); v != "" {
-					valueList = append(valueList, v)
+			case ',':
+				if !escaped && bracketCount == 0 {
+					if v := strings.TrimSpace(current.String()); v != "" {
+						valueList = append(valueList, v)
+					}
+					current.Reset()
+					continue
 				}
-				current.Reset()
-				continue
-			} else {
 				current.WriteByte(ch)
+				lastChar = ','
+			default:
+				current.WriteByte(ch)
+				lastChar = rune(ch)
 			}
-
-			lastChar = rune(ch)
 		}
 
-		// Don't forget the last value
+		// Final value cleanup
 		if v := strings.TrimSpace(current.String()); v != "" {
-			// For double-bracketed items, remove one level
 			if strings.HasPrefix(v, "[[") && strings.HasSuffix(v, "]]") {
 				v = v[1 : len(v)-1]
 			}

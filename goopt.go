@@ -1344,11 +1344,12 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 			kv.Value.Visit(func(cmd *Command, level int) bool {
 				// Determine the correct prefix based on command level and position
 				var prefix string
-				if level == 0 {
+				switch {
+				case level == 0:
 					prefix = config.NewCommandPrefix
-				} else if len(cmd.Subcommands) == 0 {
+				case len(cmd.Subcommands) == 0:
 					prefix = config.TerminalPrefix
-				} else {
+				default:
 					prefix = config.DefaultPrefix
 				}
 

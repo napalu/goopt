@@ -210,12 +210,10 @@ func TestWithNameConverters(t *testing.T) {
 			expectedCmd:  "command",
 		},
 		{
-			name:    "mixed case converters",
-			args:    []string{"Command", "SubCommand"},
-			envVars: map[string]string{"USER_NAME": "test-user"},
-			flagConverter: func(s string) string {
-				return strings.ToUpper(s)
-			},
+			name:          "mixed case converters",
+			args:          []string{"Command", "SubCommand"},
+			envVars:       map[string]string{"USER_NAME": "test-user"},
+			flagConverter: strings.ToUpper,
 			envConverter: func(s string) string {
 				return strings.ReplaceAll(strings.ToUpper(s), "_", "")
 			},
@@ -226,12 +224,10 @@ func TestWithNameConverters(t *testing.T) {
 			expectedCmd:  "Command",
 		},
 		{
-			name:    "kebab case converter",
-			args:    []string{"command", "subcommand"},
-			envVars: map[string]string{"USER_NAME": "test-user"},
-			flagConverter: func(s string) string {
-				return strcase.ToKebab(s)
-			},
+			name:          "kebab case converter",
+			args:          []string{"command", "subcommand"},
+			envVars:       map[string]string{"USER_NAME": "test-user"},
+			flagConverter: strcase.ToKebab,
 			envConverter: func(s string) string {
 				return strings.ReplaceAll(strings.ToLower(s), "_", "-")
 			},

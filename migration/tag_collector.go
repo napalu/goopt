@@ -14,6 +14,10 @@ type TagCollector struct {
 	otherTags   *orderedmap.OrderedMap[string, string]
 }
 
+// NewTagCollector creates a new instance of TagCollector with the provided tag string.
+// The tag string should be a valid Go struct tag (e.g. `json:"name" xml:"name"`).
+// It initializes empty maps for both goopt-specific tags and other tags that will be
+// populated when Parse() is called.
 func NewTagCollector(tag string) *TagCollector {
 	return &TagCollector{
 		originalTag: tag,
@@ -27,7 +31,7 @@ func (c *TagCollector) Parse(isGoopt func(s string) bool) error {
 	tagStr := strings.Trim(c.originalTag, "`")
 
 	if isGoopt == nil {
-		isGoopt = isLegacyTag
+		isGoopt = IsLegacyTag
 	}
 
 	var tags []string
@@ -84,8 +88,8 @@ func parseTagKeyValue(tag string) (key, value string, err error) {
 	return parts[0], value, nil
 }
 
-// isLegacyTag checks if a tag is a legacy goopt tag
-func isLegacyTag(key string) bool {
+// IsLegacyTag checks if a string matches the legacy goopt struct tag format
+func IsLegacyTag(key string) bool {
 	legacyPrefixes := []string{
 		"long",
 		"short",
@@ -108,6 +112,7 @@ func isLegacyTag(key string) bool {
 	return false
 }
 
-func isGooptTag(key string) bool {
+// IsGooptTag checks if a string matches the goopt struct tag format
+func IsGooptTag(key string) bool {
 	return strings.HasPrefix(key, "goopt:")
 }

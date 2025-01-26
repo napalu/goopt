@@ -19,11 +19,12 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		}
 
 		// Combined short and long flags
-		if flag.Short != "" && flag.Long != "" {
+		switch {
+		case flag.Short != "" && flag.Long != "":
 			cmd = fmt.Sprintf("%s -l %s -s %s", cmd, flag.Long, flag.Short)
-		} else if flag.Short != "" {
+		case flag.Short != "":
 			cmd = fmt.Sprintf("%s -s %s", cmd, flag.Short)
-		} else {
+		default:
 			cmd = fmt.Sprintf("%s -l %s", cmd, flag.Long)
 		}
 		cmd = fmt.Sprintf("%s -d '%s'", cmd, escapeFish(flag.Description))
@@ -33,13 +34,14 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		if values, ok := data.FlagValues[flag.Long]; ok {
 			for _, val := range values {
 				valueCmd := fmt.Sprintf("complete -c %s -f", programName)
-				if flag.Short != "" && flag.Long != "" {
+				switch {
+				case flag.Short != "" && flag.Long != "":
 					valueCmd = fmt.Sprintf("%s -l %s -s %s -n '__fish_seen_argument -l %s -s %s'",
 						valueCmd, flag.Long, flag.Short, flag.Long, flag.Short)
-				} else if flag.Short != "" {
+				case flag.Short != "":
 					valueCmd = fmt.Sprintf("%s -s %s -n '__fish_seen_argument -s %s'",
 						valueCmd, flag.Short, flag.Short)
-				} else {
+				default:
 					valueCmd = fmt.Sprintf("%s -l %s -n '__fish_seen_argument -l %s'",
 						valueCmd, flag.Long, flag.Long)
 				}
@@ -85,11 +87,12 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 			cmdFlag = fmt.Sprintf("%s -n '__fish_seen_subcommand_from %s'", cmdFlag, cmd)
 
 			// Add flag options
-			if flag.Short != "" && flag.Long != "" {
+			switch {
+			case flag.Short != "" && flag.Long != "":
 				cmdFlag = fmt.Sprintf("%s -l %s -s %s", cmdFlag, flag.Long, flag.Short)
-			} else if flag.Short != "" {
+			case flag.Short != "":
 				cmdFlag = fmt.Sprintf("%s -s %s", cmdFlag, flag.Short)
-			} else {
+			default:
 				cmdFlag = fmt.Sprintf("%s -l %s", cmdFlag, flag.Long)
 			}
 			cmdFlag = fmt.Sprintf("%s -d '%s'", cmdFlag, escapeFish(flag.Description))
@@ -100,13 +103,14 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 				for _, val := range values {
 					valueCmd := fmt.Sprintf("complete -c %s -f -n '__fish_seen_subcommand_from %s'",
 						programName, cmd)
-					if flag.Short != "" && flag.Long != "" {
+					switch {
+					case flag.Short != "" && flag.Long != "":
 						valueCmd = fmt.Sprintf("%s -l %s -s %s -n '__fish_seen_argument -l %s -s %s'",
 							valueCmd, flag.Long, flag.Short, flag.Long, flag.Short)
-					} else if flag.Short != "" {
+					case flag.Short != "":
 						valueCmd = fmt.Sprintf("%s -s %s -n '__fish_seen_argument -s %s'",
 							valueCmd, flag.Short, flag.Short)
-					} else {
+					default:
 						valueCmd = fmt.Sprintf("%s -l %s -n '__fish_seen_argument -l %s'",
 							valueCmd, flag.Long, flag.Long)
 					}

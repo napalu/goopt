@@ -260,7 +260,7 @@ func processFile(file *ast.File, handler func(field *ast.Field, oldTag, newTag s
 // updateTagValue removes all legacy tags and adds the new goopt tag
 func updateTagValue(originalTag string, newGooptTag string) string {
 	converter := NewTagCollector(originalTag)
-	_ = converter.Parse(isLegacyTag) // We can ignore the error as we just want to filter tags
+	_ = converter.Parse(IsLegacyTag) // We can ignore the error as we just want to filter tags
 
 	// Build new tag string with non-legacy, non-goopt tags
 	var newTags []string

@@ -50,7 +50,7 @@ func PatternValue(input string) (*types.PatternValue, error) {
 	var escaped bool
 	var lastChar rune
 
-	input = input + "," // Add trailing comma to simplify parsing
+	input += "," // Add trailing comma to simplify parsing
 	for i := 0; i < len(input); i++ {
 		ch := input[i]
 		if escaped {

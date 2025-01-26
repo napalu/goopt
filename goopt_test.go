@@ -563,9 +563,7 @@ func TestParser_EnvToFlag(t *testing.T) {
 			NewArg(WithShortFlag("t"),
 				WithType(types.Single))))
 	assert.Nil(t, err)
-	flagFunc := cmdLine.SetEnvNameConverter(func(s string) string {
-		return upperSnakeToCamelCase(s)
-	})
+	flagFunc := cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	os.Setenv("TEST_ME", "test")
 
@@ -582,9 +580,7 @@ func TestParser_EnvToFlag(t *testing.T) {
 			NewArg(WithShortFlag("t"),
 				WithType(types.Single)), "command test"))
 	assert.Nil(t, err)
-	_ = cmdLine.SetEnvNameConverter(func(s string) string {
-		return upperSnakeToCamelCase(s)
-	})
+	_ = cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
 
 	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
 
@@ -607,9 +603,7 @@ func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
 	_ = opts.AddFlag("verboseTest", &Argument{Description: "Verbose output", TypeOf: types.Standalone})
 	_ = opts.AddFlag("configTest", &Argument{Description: "Config file", TypeOf: types.Single}, "create")
 	_ = opts.AddFlag("idTest", &Argument{Description: "User ID", TypeOf: types.Single}, "create")
-	flagFunc := opts.SetEnvNameConverter(func(s string) string {
-		return upperSnakeToCamelCase(s)
-	})
+	flagFunc := opts.SetEnvNameConverter(upperSnakeToCamelCase)
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	// Simulate environment variables
 	os.Setenv("VERBOSE_TEST", "true")
@@ -637,9 +631,8 @@ func TestParser_MixedFlagsWithEnvVars(t *testing.T) {
 	_ = opts.AddFlag("verbose", &Argument{Description: "Verbose output", TypeOf: types.Standalone})
 	_ = opts.AddFlag("config", &Argument{Description: "Config file", TypeOf: types.Single}, "create")
 	_ = opts.AddFlag("force", &Argument{Description: "Force deletion", TypeOf: types.Standalone}, "delete")
-	flagFunc := opts.SetEnvNameConverter(func(s string) string {
-		return upperSnakeToCamelCase(s)
-	})
+	flagFunc := opts.SetEnvNameConverter(upperSnakeToCamelCase)
+
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	// Simulate environment variables
 	os.Setenv("VERBOSE", "true")
@@ -702,9 +695,7 @@ func TestParser_PosixFlagsWithEnvVars(t *testing.T) {
 	_ = opts.AddCommand(&Command{Name: "build"})
 	_ = opts.AddFlag("output", &Argument{Description: "Output file", Short: "o", TypeOf: types.Single}, "build")
 	_ = opts.AddFlag("opt", &Argument{Description: "Optimization level", Short: "p", TypeOf: types.Single}, "build")
-	flagFunc := opts.SetEnvNameConverter(func(s string) string {
-		return upperSnakeToCamelCase(s)
-	})
+	flagFunc := opts.SetEnvNameConverter(upperSnakeToCamelCase)
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
 	// Simulate environment variables
 	os.Setenv("OUTPUT", "/build/output")
@@ -1681,31 +1672,23 @@ func TestParser_ValidationFilters(t *testing.T) {
 		want       string
 	}{
 		{
-			name: "pre-validation filter",
-			preFilter: func(s string) string {
-				return strings.ToUpper(s)
-			},
-			input: "test",
-			want:  "TEST",
+			name:      "pre-validation filter",
+			preFilter: strings.ToUpper,
+			input:     "test",
+			want:      "TEST",
 		},
 		{
-			name: "post-validation filter",
-			postFilter: func(s string) string {
-				return strings.TrimSpace(s)
-			},
-			input: " test ",
-			want:  "test",
+			name:       "post-validation filter",
+			postFilter: strings.TrimSpace,
+			input:      " test ",
+			want:       "test",
 		},
 		{
-			name: "both filters",
-			preFilter: func(s string) string {
-				return strings.ToUpper(s)
-			},
-			postFilter: func(s string) string {
-				return strings.TrimSpace(s)
-			},
-			input: " test ",
-			want:  "TEST",
+			name:       "both filters",
+			preFilter:  strings.ToUpper,
+			postFilter: strings.TrimSpace,
+			input:      " test ",
+			want:       "TEST",
 		},
 		{
 			name: "filter returning empty string",
@@ -5011,6 +4994,25 @@ func TestParser_MoreStructTagPositionalArguments(t *testing.T) {
 	assert.NotEmpty(t, p.GetErrors())
 }
 
+func BenchmarkParse(b *testing.B) {
+	parser := NewParser()
+	parser.AddFlag("verbose", NewArg(WithShortFlag("v")))
+	parser.AddFlag("output", NewArg(WithShortFlag("o")))
+	parser.AddFlag("input", NewArg(WithShortFlag("i")))
+	parser.AddFlag("config", NewArg(WithShortFlag("c")))
+	parser.AddFlag("format", NewArg(WithShortFlag("f")))
+	parser.AddFlag("loglevel", NewArg(WithShortFlag("l")))
+	parser.AddFlag("logfile", NewArg(WithShortFlag("L")))
+	parser.AddFlag("logformat", NewArg(WithShortFlag("F")))
+	parser.AddFlag("logrotate", NewArg(WithShortFlag("R")))
+	parser.AddFlag("logrotate-interval", NewArg(WithShortFlag("r")))
+	args := []string{"-v", "--output", "test", "--input", "test", "--config", "test", "--format", "test", "--loglevel", "test", "--logfile", "test", "--logformat", "test", "--logrotate", "test", "--logrotate-interval", "test"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		parser.Parse(args)
+	}
+}
 func TestParser_PrintPositionalArgs(t *testing.T) {
 	tests := []struct {
 		name    string

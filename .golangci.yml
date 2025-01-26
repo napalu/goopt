@@ -1,0 +1,39 @@
+linters:
+  enable:
+    - gosec
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - goimports
+    - gocritic
+ 
+linters-settings:
+  gosec:
+    excludes:
+      - G304  # File inclusion via variable
+      - G306  # File permissions
+      - G401  # Weak crypto
+      - G501  # Memory aliasing
+
+issues:
+  exclude-rules:
+    - path: (migration/.*_test\.go|completion/.*_test\.go|goopt_test\.go)
+      linters:
+        - gosec
+      text: "G30[46]:"  # Covers G304 and G306
+
+    - path: migration/migrate\.go
+      linters:
+        - gosec
+      text: "G304:"
+    
+    - path: goopt_test\.go
+      linters:
+        - gosec
+      text: "G(501|401):"  # Separate from path-based exclusions
+
+    - path: completion/manager\.go
+      linters:
+        - gosec
+      text: "G306:"

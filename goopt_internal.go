@@ -411,7 +411,9 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
 		p.registerFlagValue(lookup, pos.Value, pos.Value)
 		p.options[lookup] = pos.Value
-		p.setBoundVariable(pos.Value, lookup)
+		if err := p.setBoundVariable(pos.Value, lookup); err != nil {
+			p.addError(fmt.Errorf("error setting bound variable for %s: %w", lookup, err))
+		}
 	}
 
 	newResult := make([]PositionalArgument, 0, len(positional))
@@ -1160,6 +1162,10 @@ func toArgument(c *types.TagConfig) *Argument {
 }
 
 func (p *Parser) buildCommand(commandPath, description string, parent *Command) (*Command, error) {
+	if commandPath == "" {
+		return nil, fmt.Errorf("empty command path")
+	}
+
 	commandNames := strings.Split(commandPath, " ")
 
 	var topParent = parent
@@ -1725,27 +1731,6 @@ func getFlagPath(flag string) string {
 	return ""
 }
 
-func describeRequired(argument *Argument) string {
-	requiredOrOptional := "optional"
-	if argument.Required {
-		requiredOrOptional = "required"
-	} else if argument.RequiredIf != nil {
-		requiredOrOptional = "conditional"
-	}
-
-	return requiredOrOptional
-}
-
-func formatFlagDescription(arg *Argument) string {
-	status := ""
-	if arg.Required {
-		status = "(required) "
-	} else if len(arg.DependsOn) > 0 {
-		status = "(conditional) "
-	}
-	return status + arg.Description
-}
-
 func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo) {
 	if flagInfo == nil || flagInfo.Argument == nil {
 		return
@@ -1755,7 +1740,7 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 	pair := completion.FlagPair{
 		Long:        flagName,
 		Short:       flagInfo.Argument.Short,
-		Description: formatFlagDescription(flagInfo.Argument),
+		Description: flagInfo.Argument.description(),
 		Type:        completion.FlagType(flagInfo.Argument.TypeOf),
 	}
 

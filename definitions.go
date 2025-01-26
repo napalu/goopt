@@ -62,29 +62,19 @@ type NameConversionFunc func(string) string
 // Built-in conversion strategies
 var (
 	// ToKebabCase converts a string to kebab case "my-command-name"
-	ToKebabCase = func(s string) string {
-		return strcase.ToKebab(s)
-	}
+	ToKebabCase = strcase.ToKebab
 
 	// ToSnakeCase converts a string to snake case "my_command_name"
-	ToSnakeCase = func(s string) string {
-		return strcase.ToSnake(s)
-	}
+	ToSnakeCase = strcase.ToSnake
 
 	// ToScreamingSnake converts a string to screaming snake case "MY_COMMAND_NAME"
-	ToScreamingSnake = func(s string) string {
-		return strcase.ToScreamingSnake(s)
-	}
+	ToScreamingSnake = strcase.ToScreamingSnake
 
 	// ToLowerCamel converts a string to lower camel case "myCommandName"
-	ToLowerCamel = func(s string) string {
-		return strcase.ToLowerCamel(s)
-	}
+	ToLowerCamel = strcase.ToLowerCamel
 
 	// ToLowerCase converts a string to lower case "mycommandname"
-	ToLowerCase = func(s string) string {
-		return strings.ToLower(s)
-	}
+	ToLowerCase = strings.ToLower
 
 	DefaultCommandNameConverter = ToLowerCase
 	DefaultFlagNameConverter    = ToLowerCamel
