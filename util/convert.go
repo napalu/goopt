@@ -12,7 +12,6 @@ import (
 )
 
 func ConvertString(value string, data any, arg string, delimiterFunc types.ListDelimiterFunc) error {
-	var err error
 
 	switch t := data.(type) {
 	case *string:
@@ -23,23 +22,35 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 	case *complex64:
 		if val, err := strconv.ParseComplex(value, 64); err == nil {
 			*(t) = complex64(val)
+		} else {
+			return fmt.Errorf("invalid complex number: %s", value)
 		}
 	case *int:
-		if val, err := strconv.Atoi(value); err == nil {
-			*(t) = val
+		if num, ok := ParseNumeric(value); !ok || !num.IsInt {
+			return fmt.Errorf("invalid integer: %s", value)
+		} else if num.IsInt {
+			*(t) = int(num.Int)
+		} else {
+			return fmt.Errorf("integer overflow: %s", value)
 		}
 	case *[]int:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int, len(values))
 		for i, v := range values {
-			if val, err := strconv.Atoi(v); err == nil {
-				temp[i] = val
+			if num, ok := ParseNumeric(v); !ok || !num.IsInt {
+				return fmt.Errorf("invalid integer: %s", v)
+			} else if num.IsInt {
+				temp[i] = int(num.Int)
+			} else {
+				return fmt.Errorf("integer overflow: %s", v)
 			}
 		}
 		*(t) = temp
 	case *int64:
 		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
 			*(t) = val
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]int64:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -47,12 +58,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseInt(v, 10, 64); err == nil {
 				temp[i] = val
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *int32:
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			*(t) = int32(val)
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]int32:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -60,12 +75,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseInt(v, 10, 32); err == nil {
 				temp[i] = int32(val)
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *int16:
 		if val, err := strconv.ParseInt(value, 10, 16); err == nil {
 			*(t) = int16(val)
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]int16:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -73,12 +92,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseInt(v, 10, 16); err == nil {
 				temp[i] = int16(val)
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *int8:
 		if val, err := strconv.ParseInt(value, 10, 8); err == nil {
 			*(t) = int8(val)
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]int8:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -86,12 +109,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseInt(v, 10, 8); err == nil {
 				temp[i] = int8(val)
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *uint:
 		if val, err := strconv.ParseUint(value, 10, strconv.IntSize); err == nil {
 			*(t) = uint(val)
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]uint:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -99,12 +126,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseUint(v, 10, strconv.IntSize); err == nil {
 				temp[i] = uint(val)
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *uint64:
 		if val, err := strconv.ParseUint(value, 10, 64); err == nil {
 			*(t) = val
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]uint64:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -112,12 +143,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseUint(v, 10, 64); err == nil {
 				temp[i] = val
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
 	case *uint32:
 		if val, err := strconv.ParseUint(value, 10, 32); err == nil {
 			*(t) = uint32(val)
+		} else {
+			return fmt.Errorf("invalid integer: %s", value)
 		}
 	case *[]uint32:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -125,6 +160,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseUint(v, 10, 32); err == nil {
 				temp[i] = uint32(val)
+			} else {
+				return fmt.Errorf("invalid integer: %s", v)
 			}
 		}
 		*(t) = temp
@@ -209,6 +246,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 	case *time.Duration:
 		if val, err := time.ParseDuration(value); err == nil {
 			*(t) = val
+		} else {
+			return fmt.Errorf("invalid duration: %s", value)
 		}
 	case *[]time.Duration:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -216,14 +255,16 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := time.ParseDuration(v); err == nil {
 				temp[i] = val
+			} else {
+				return fmt.Errorf("invalid duration: %s", v)
 			}
 		}
 		*(t) = temp
 	default:
-		err = fmt.Errorf("%w: unsupported data type %v for argument %s", types.ErrUnsupportedTypeConversion, t, arg)
+		return fmt.Errorf("%w: unsupported data type %v for argument %s", types.ErrUnsupportedTypeConversion, t, arg)
 	}
 
-	return err
+	return nil
 }
 
 func CanConvert(data interface{}, optionType types.OptionType) (bool, error) {

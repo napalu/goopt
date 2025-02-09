@@ -8,9 +8,9 @@ import (
 
 // State represents the current state of the argument parser
 type State interface {
-	CurrentPos() int                         // Get the current position
+	Pos() int                                // Get the current position
 	SetPos(pos int)                          // Set the current position
-	SkipCurrent()                            // Skip the current argument
+	Skip()                                   // Skip the current argument
 	Args() []string                          // Get the entire argument list
 	InsertArgsAt(pos int, newArgs ...string) // Insert new arguments at a specific position
 	ReplaceArgs(newArgs ...string)           // Replace the entire argument list
@@ -37,8 +37,8 @@ func NewState(args []string) *DefaultState {
 	}
 }
 
-// CurrentPos returns the current position in the argument list
-func (s *DefaultState) CurrentPos() int {
+// Pos returns the current position in the argument list
+func (s *DefaultState) Pos() int {
 	return s.pos
 }
 
@@ -47,8 +47,8 @@ func (s *DefaultState) SetPos(pos int) {
 	s.pos = pos
 }
 
-// SkipCurrent advances the current position to the next argument
-func (s *DefaultState) SkipCurrent() {
+// Skip advances the current position to the next argument
+func (s *DefaultState) Skip() {
 	s.pos++
 }
 
@@ -59,6 +59,9 @@ func (s *DefaultState) Args() []string {
 
 // CurrentArg returns the current argument
 func (s *DefaultState) CurrentArg() string {
+	if s.pos < 0 || s.pos >= len(s.args) {
+		return ""
+	}
 	return s.args[s.pos]
 }
 

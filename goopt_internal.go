@@ -57,7 +57,7 @@ func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) {
 
 func (p *Parser) normalizePosixArgs(state parse.State, currentArg string, commandPath string) {
 	newArgs := make([]string, 0, state.Len())
-	statePos := state.CurrentPos()
+	statePos := state.Pos()
 	if statePos > 0 {
 		newArgs = append(newArgs, state.Args()[:statePos]...)
 	}
@@ -104,12 +104,12 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			p.queueSecureArgument(lookup, argument)
 		} else {
 			boolVal := "true"
-			if state.CurrentPos()+1 < state.Len() {
+			if state.Pos()+1 < state.Len() {
 				nextArg := state.Peek()
 				if !p.isCommand(nextArg) && !p.isFlag(nextArg) {
 					if _, err := strconv.ParseBool(nextArg); err == nil {
 						boolVal = nextArg
-						state.SkipCurrent()
+						state.Skip()
 					}
 				}
 			}
@@ -467,11 +467,22 @@ func (p *Parser) flagOrShortFlag(flag string, commandPath ...string) string {
 
 func (p *Parser) isFlag(flag string) bool {
 	if len(p.prefixes) == 0 {
-		return strings.HasPrefix(flag, "-")
+		if strings.HasPrefix(flag, "-") {
+			if n, ok := util.ParseNumeric(flag); ok && n.IsNegative {
+				return false
+			}
+			return true
+		}
+		return false
 	}
 
 	for _, prefix := range p.prefixes {
 		if strings.HasPrefix(flag, string(prefix)) {
+			if prefix == '-' {
+				if n, ok := util.ParseNumeric(flag); ok && n.IsNegative {
+					return false
+				}
+			}
 			return true
 		}
 	}
@@ -601,23 +612,23 @@ func (p *Parser) queueCommandCallback(cmd *Command) {
 func (p *Parser) processFlag(argument *Argument, state parse.State, flag string) {
 	var err error
 	if argument.Secure.IsSecure {
-		if state.CurrentPos() < state.Len()-1 {
+		if state.Pos() < state.Len()-1 {
 			if !p.isFlag(state.Peek()) {
-				state.SkipCurrent()
+				state.Skip()
 			}
 		}
 		p.queueSecureArgument(flag, argument)
 	} else {
 		var next string
-		if state.CurrentPos() < state.Len()-1 {
+		if state.Pos() < state.Len()-1 {
 			next = state.Peek()
 		}
 		if (len(next) == 0 || p.isFlag(next)) && len(argument.DefaultValue) > 0 {
 			next = argument.DefaultValue
 		} else {
-			state.SkipCurrent()
+			state.Skip()
 		}
-		if state.CurrentPos() >= state.Len()-1 && len(next) == 0 {
+		if state.Pos() >= state.Len()-1 && len(next) == 0 {
 			p.addError(fmt.Errorf("flag '%s' expects a value", flag))
 		} else {
 			next, err = p.flagValue(argument, next, flag)
@@ -651,6 +662,13 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 		}
 		p.registerFlagValue(flag, arg, next)
 	} else {
+		if p.isFlag(next) && argument.TypeOf == types.Single {
+			stripped := strings.TrimLeftFunc(next, p.prefixFunc)
+			if _, ok := p.acceptedFlags.Get(stripped); ok {
+				p.addError(fmt.Errorf("flag '%s' expects a value", flag))
+				return
+			}
+		}
 		arg = next
 		p.registerFlagValue(flag, next, next)
 	}

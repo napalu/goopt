@@ -404,13 +404,18 @@ func TestWithListDelimiter(t *testing.T) {
 			wantBool: false,
 		},
 		{
-			name: "mixed delimiters",
-			args: []string{"--tags", "a,b;c", "--nums", "1,2;3"},
+			name: "semicolon delimited lists with valid numbers",
+			args: []string{"--tags", "a;b;c", "--nums", "1;2;3"},
 			want: map[string][]string{
-				"tags": {"a,b", "c"},
-				"nums": {"1,2", "3"},
+				"tags": {"a", "b", "c"},
+				"nums": {"1", "2", "3"},
 			},
 			wantBool: true,
+		},
+		{
+			name:     "mixed delimiters invalid numbers",
+			args:     []string{"--tags", "a,b;c", "--nums", "1,2;3"},
+			wantBool: false,
 		},
 	}
 

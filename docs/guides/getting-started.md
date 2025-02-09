@@ -40,12 +40,13 @@ func main() {
     opts := &Options{}
     parser, _ := goopt.NewParserFromStruct(opts)
     
-    if !parser.Parse(os.Args) {
+    if ok := parser.Parse(os.Args); !ok {
+        fmt.Fprintln(os.Stderr, "Invalid command-line arguments:")
         for _, err := range parser.Errors() {
-            fmt.Println(err)
-        }   
+            fmt.Fprintf(os.Stderr, " - %s\n", err)
+        }
         parser.PrintUsageWithGroups(os.Stdout)
-        return
+        os.Exit(1)
     }
     
     // Access values directly through the struct
@@ -227,6 +228,14 @@ func main() {
     // ... rest of your code ...
 }
 ```
+
+## Version Compatibility
+
+![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
+![goopt Version](https://img.shields.io/github/v/tag/napalu/goopt)
+
+See [Migration Guide](migration.md) for updates between versions.
+goopt supports all Go versions from 1.18 onward. See our [compatibility policy](../compatibility.md) for details.
 
 ## Next Steps
 

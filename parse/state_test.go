@@ -10,23 +10,23 @@ func TestDefaultState(t *testing.T) {
 	t.Run("NewState", func(t *testing.T) {
 		args := []string{"arg1", "arg2"}
 		state := NewState(args)
-		assert.Equal(t, -1, state.CurrentPos())
+		assert.Equal(t, -1, state.Pos())
 		assert.Equal(t, args, state.Args())
 	})
 
 	t.Run("CurrentPos and SetPos", func(t *testing.T) {
 		state := NewState([]string{"arg1", "arg2"})
-		assert.Equal(t, -1, state.CurrentPos())
+		assert.Equal(t, -1, state.Pos())
 
 		state.SetPos(1)
-		assert.Equal(t, 1, state.CurrentPos())
+		assert.Equal(t, 1, state.Pos())
 	})
 
 	t.Run("SkipCurrent", func(t *testing.T) {
 		state := NewState([]string{"arg1", "arg2"})
 		state.SetPos(0)
-		state.SkipCurrent()
-		assert.Equal(t, 1, state.CurrentPos())
+		state.Skip()
+		assert.Equal(t, 1, state.Pos())
 	})
 
 	t.Run("Args and ReplaceArgs", func(t *testing.T) {
@@ -65,11 +65,11 @@ func TestDefaultState(t *testing.T) {
 		state.SetPos(0)
 
 		assert.True(t, state.Advance())
-		assert.Equal(t, 1, state.CurrentPos())
+		assert.Equal(t, 1, state.Pos())
 
 		// Test advance at end
 		assert.False(t, state.Advance())
-		assert.Equal(t, 1, state.CurrentPos())
+		assert.Equal(t, 1, state.Pos())
 	})
 
 	t.Run("Len", func(t *testing.T) {

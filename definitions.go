@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
@@ -148,6 +149,7 @@ type Parser struct {
 	stderr               io.Writer
 	stdout               io.Writer
 	maxDependencyDepth   int
+	parseState           parse.State
 }
 
 // CmdLineOption is an alias for Parser.

@@ -367,7 +367,7 @@ func (p *Parser) Parse(args []string) bool {
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
 				if len(envFlagsByCommand[currentCommandPath]) > 0 {
-					state.InsertArgsAt(state.CurrentPos()+1, envFlagsByCommand[currentCommandPath]...)
+					state.InsertArgsAt(state.Pos()+1, envFlagsByCommand[currentCommandPath]...)
 				}
 				envInserted[currentCommandPath]++
 			}
@@ -415,6 +415,7 @@ func (p *Parser) Parse(args []string) bool {
 		success = len(p.errors) == 0
 	}
 	p.secureArguments = nil
+	p.parseState = state
 
 	return success
 }

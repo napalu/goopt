@@ -341,6 +341,34 @@ func TestUtil_ConvertString(t *testing.T) {
 				time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC),
 			},
 		},
+		{
+			name:    "hex to int",
+			value:   "0x1a",
+			data:    new(int),
+			want:    26,
+			wantErr: false,
+		},
+		{
+			name:    "hex to uint (invalid)",
+			value:   "0x1a",
+			data:    new(uint),
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "binary to int",
+			value:   "0b1010",
+			data:    new(int),
+			want:    10,
+			wantErr: false,
+		},
+		{
+			name:    "negative to uint (invalid)",
+			value:   "-5",
+			data:    new(uint),
+			want:    0,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
