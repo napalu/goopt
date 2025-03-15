@@ -15,6 +15,7 @@ type State interface {
 	InsertArgsAt(pos int, newArgs ...string) // Insert new arguments at a specific position
 	ReplaceArgs(newArgs ...string)           // Replace the entire argument list
 	CurrentArg() string                      // Get the current argument
+	ArgAt(pos int) (string, error)           // Get the argument at a specific position
 	Peek() string                            // Peek at the next argument
 	Advance() bool                           // New method for advancing to the next argument
 	Len() int                                // Gets the length of the argument list
@@ -30,7 +31,7 @@ type DefaultState struct {
 }
 
 // NewState creates a new State instance with the given argument list
-func NewState(args []string) *DefaultState {
+func NewState(args []string) State {
 	return &DefaultState{
 		pos:  -1,
 		args: args,

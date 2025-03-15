@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/iancoleman/strcase"
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
 	"github.com/napalu/goopt/util"
+	"golang.org/x/text/language"
 )
 
 type Bindable interface {
@@ -103,18 +104,21 @@ type ClearConfig struct {
 // PositionalArgument describes command-line arguments which were not matched as flags, flag values, command or command values.
 type PositionalArgument struct {
 	Position int       // Position in the command line
+	ArgPos   int       // Position in the argument list
 	Value    string    // The actual value
 	Argument *Argument // Reference to the argument definition, if this was bound
 }
 
 // Command defines commands and sub-commands
 type Command struct {
-	Name        string
-	Subcommands []Command
-	Callback    CommandFunc
-	Description string
-	topLevel    bool
-	path        string
+	Name           string
+	NameKey        string
+	Subcommands    []Command
+	Callback       CommandFunc
+	Description    string
+	DescriptionKey string
+	topLevel       bool
+	path           string
 }
 
 // FlagInfo is used to store information about a flag
@@ -149,7 +153,10 @@ type Parser struct {
 	stderr               io.Writer
 	stdout               io.Writer
 	maxDependencyDepth   int
-	parseState           parse.State
+	i18n                 *i18n.Bundle
+	userI18n             *i18n.Bundle
+	currentLanguage      language.Tag
+	renderer             Renderer
 }
 
 // CmdLineOption is an alias for Parser.
@@ -165,6 +172,22 @@ type CompletionData struct {
 	Descriptions        map[string]string           // Descriptions for commands/flags
 	FlagValues          map[string][]CompletionData // Values for flags
 	CommandDescriptions map[string]string           // Descriptions specific to commands
+}
+
+// Renderer is an interface for rendering Goopt structures
+type Renderer interface {
+	// Flag rendering
+	FlagName(f *Argument) string
+	FlagDescription(f *Argument) string
+	FlagUsage(f *Argument) string
+
+	// Command rendering
+	CommandName(c *Command) string
+	CommandDescription(c *Command) string
+	CommandUsage(c *Command) string
+
+	// Error handling
+	Error(err error) string
 }
 
 const (

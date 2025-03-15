@@ -2,14 +2,16 @@ package goopt
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/google/uuid"
 	"github.com/napalu/goopt/types"
 )
 
 // Argument defines a command-line Flag
 type Argument struct {
+	NameKey        string
 	Description    string
+	DescriptionKey string
 	TypeOf         types.OptionType
 	Required       bool
 	RequiredIf     RequiredIfFunc
@@ -24,20 +26,29 @@ type Argument struct {
 	DefaultValue   string
 	Capacity       int // For slices, the capacity of the slice, ignored for other types
 	Position       *int
+	uuid           string
 }
 
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
 // configure Argument using option functions.
-func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string) *Argument {
+func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string, descriptionKey ...string) *Argument {
+	descKey := ""
+	if len(descriptionKey) > 0 {
+		descKey = descriptionKey[0]
+	}
+
 	return &Argument{
-		Description:  description,
-		TypeOf:       typeOf,
-		Required:     required,
-		DependsOn:    []string{},
-		OfValue:      []string{},
-		Secure:       secure,
-		Short:        shortFlag,
-		DefaultValue: defaultValue,
+		Description:    description,
+		DescriptionKey: descKey,
+		TypeOf:         typeOf,
+		Required:       required,
+		DependsOn:      []string{},
+		OfValue:        []string{},
+		Secure:         secure,
+		Short:          shortFlag,
+		DefaultValue:   defaultValue,
+		DependencyMap:  map[string][]string{},
+		uuid:           uuid.New().String(),
 	}
 }
 
@@ -77,11 +88,6 @@ func (a *Argument) Set(configs ...ConfigureArgumentFunc) error {
 	return nil
 }
 
-// String returns a string representation of the Argument instance
-func (a *Argument) String() string {
-	return strings.TrimLeft(fmt.Sprintf("%s %s %s", a.short(), a.description(), a.required()), " ")
-}
-
 func (a *Argument) ensureInit() {
 	if a.DependsOn == nil {
 		a.DependsOn = []string{}
@@ -95,41 +101,31 @@ func (a *Argument) ensureInit() {
 	if a.DependencyMap == nil {
 		a.DependencyMap = map[string][]string{}
 	}
-}
-
-func (a *Argument) default_() string {
-	return a.DefaultValue
+	if a.uuid == "" {
+		a.uuid = uuid.New().String()
+	}
 }
 
 func (a *Argument) isPositional() bool {
 	return a.Position != nil
 }
 
-func (a *Argument) short() string {
-	if a.Short == "" {
+func (a *Argument) GetLongName(parser *Parser) string {
+	if parser == nil {
 		return ""
 	}
 
-	return "or -" + a.Short
-}
-
-func (a *Argument) required() string {
-	requiredOrOptional := "optional"
-	if a.Required {
-		requiredOrOptional = "required"
-	} else if a.RequiredIf != nil {
-		requiredOrOptional = "conditional"
+	if a.uuid != "" {
+		return parser.lookup[a.uuid]
 	}
 
-	return "(" + requiredOrOptional + ")"
+	return ""
 }
 
-func (a *Argument) description() string {
-	d := a.default_()
-	if d != "" {
-		return fmt.Sprintf("\"%s\" (defaults to: %s)", a.Description, d)
-
+func (a *Argument) DisplayID() string {
+	if a.Position != nil {
+		return fmt.Sprintf("pos%d", *a.Position)
 	}
 
-	return fmt.Sprintf("\"%s\"", a.Description)
+	return fmt.Sprintf("%s-%s", a.uuid[:8], a.DescriptionKey)
 }

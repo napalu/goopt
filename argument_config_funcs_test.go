@@ -124,8 +124,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with secure prompt - terminal input",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
-					SetSecure(true),
-					SetSecurePrompt("Enter password:"),
+					WithSecurePrompt("Enter password: "),
 					WithType(types.Single),
 				))
 			},
@@ -138,7 +137,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with secure flag - terminal error",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
-					SetSecure(true),
+					WithSecurePrompt(""),
 					WithType(types.Single),
 				))
 			},

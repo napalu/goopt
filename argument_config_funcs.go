@@ -43,14 +43,32 @@ func WithType(typeof types.OptionType) ConfigureArgumentFunc {
 }
 
 // SetRequired when true, the flag must be supplied on the command-line
+//
+// Deprecated: Use WithRequired instead
 func SetRequired(required bool) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Required = required
 	}
 }
 
+// WithRequired allows to set a function to evaluate if a flag is required
+func WithRequired(required bool) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Required = required
+	}
+}
+
 // SetRequiredIf allows to set a function to evaluate if a flag is required
+//
+// Deprecated: Use WithRequiredIf instead
 func SetRequiredIf(requiredIf RequiredIfFunc) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.RequiredIf = requiredIf
+	}
+}
+
+// WithRequiredIf allows to set a function to evaluate if a flag is required
+func WithRequiredIf(requiredIf RequiredIfFunc) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.RequiredIf = requiredIf
 	}
@@ -102,6 +120,8 @@ func WithDependentValueFlags(dependencies, values []string) ConfigureArgumentFun
 }
 
 // SetSecure sets the secure flag to true or false
+//
+// Deprecated: Use WithSecurePrompt instead
 func SetSecure(secure bool) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Secure.IsSecure = secure
@@ -109,8 +129,18 @@ func SetSecure(secure bool) ConfigureArgumentFunc {
 }
 
 // SetSecurePrompt sets the prompt for the secure flag
+//
+// Deprecated: Use WithSecurePrompt instead
 func SetSecurePrompt(prompt string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
+		argument.Secure.Prompt = prompt
+	}
+}
+
+// WithSecurePrompt sets the prompt for the secure flag
+func WithSecurePrompt(prompt string) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Secure.IsSecure = true
 		argument.Secure.Prompt = prompt
 	}
 }

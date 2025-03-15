@@ -1,8 +1,10 @@
 package util
 
 import (
-	"fmt"
 	"reflect"
+
+	"github.com/napalu/goopt/i18n"
+	"github.com/napalu/goopt/types"
 )
 
 // UnwrapValue recursively unwraps pointer and returns the underlying value
@@ -10,7 +12,8 @@ import (
 func UnwrapValue(v reflect.Value) (reflect.Value, error) {
 	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
-			return reflect.Value{}, fmt.Errorf("nil pointer encountered")
+			return reflect.Value{}, i18n.Default().WrapErrorf(types.ErrNilPointer,
+				types.ErrNilPointer.Error())
 		}
 		v = v.Elem()
 	}

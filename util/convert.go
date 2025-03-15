@@ -1,13 +1,13 @@
 package util
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/araddon/dateparse"
+	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/types"
 )
 
@@ -23,26 +23,63 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseComplex(value, 64); err == nil {
 			*(t) = complex64(val)
 		} else {
-			return fmt.Errorf("invalid complex number: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseComplex,
+				types.ErrParseComplex.Error(), value)
 		}
+	case *[]complex64:
+		values := strings.FieldsFunc(value, delimiterFunc)
+		temp := make([]complex64, len(values))
+		for i, v := range values {
+			if val, err := strconv.ParseComplex(v, 64); err == nil {
+				temp[i] = complex64(val)
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseComplex,
+					types.ErrParseComplex.Error(), v)
+			}
+		}
+		*(t) = temp
+
+	case *complex128:
+		if val, err := strconv.ParseComplex(value, 128); err == nil {
+			*(t) = complex128(val)
+		} else {
+			return i18n.Default().WrapErrorf(types.ErrParseComplex,
+				types.ErrParseComplex.Error(), value)
+		}
+	case *[]complex128:
+		values := strings.FieldsFunc(value, delimiterFunc)
+		temp := make([]complex128, len(values))
+		for i, v := range values {
+			if val, err := strconv.ParseComplex(v, 128); err == nil {
+				temp[i] = complex128(val)
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseComplex,
+					types.ErrParseComplex.Error(), v)
+			}
+		}
+		*(t) = temp
 	case *int:
 		if num, ok := ParseNumeric(value); !ok || !num.IsInt {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseInt,
+				types.ErrParseInt.Error(), value)
 		} else if num.IsInt {
 			*(t) = int(num.Int)
 		} else {
-			return fmt.Errorf("integer overflow: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseOverflow,
+				types.ErrParseOverflow.Error(), value)
 		}
 	case *[]int:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int, len(values))
 		for i, v := range values {
 			if num, ok := ParseNumeric(v); !ok || !num.IsInt {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseInt,
+					types.ErrParseInt.Error(), v)
 			} else if num.IsInt {
 				temp[i] = int(num.Int)
 			} else {
-				return fmt.Errorf("integer overflow: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseOverflow,
+					types.ErrParseOverflow.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -50,7 +87,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
 			*(t) = val
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseInt64,
+				types.ErrParseInt64.Error(), value)
 		}
 	case *[]int64:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -59,7 +97,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseInt(v, 10, 64); err == nil {
 				temp[i] = val
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseInt64,
+					types.ErrParseInt64.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -67,7 +106,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			*(t) = int32(val)
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseInt32,
+				types.ErrParseInt32.Error(), value)
 		}
 	case *[]int32:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -76,7 +116,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseInt(v, 10, 32); err == nil {
 				temp[i] = int32(val)
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseInt,
+					types.ErrParseInt.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -84,7 +125,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseInt(value, 10, 16); err == nil {
 			*(t) = int16(val)
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseInt,
+				types.ErrParseInt.Error(), value)
 		}
 	case *[]int16:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -93,7 +135,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseInt(v, 10, 16); err == nil {
 				temp[i] = int16(val)
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseInt16,
+					types.ErrParseInt16.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -101,7 +144,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseInt(value, 10, 8); err == nil {
 			*(t) = int8(val)
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseInt8,
+				types.ErrParseInt8.Error(), value)
 		}
 	case *[]int8:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -110,7 +154,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseInt(v, 10, 8); err == nil {
 				temp[i] = int8(val)
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseInt8,
+					types.ErrParseInt8.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -118,7 +163,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseUint(value, 10, strconv.IntSize); err == nil {
 			*(t) = uint(val)
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseUint,
+				types.ErrParseUint.Error(), value)
 		}
 	case *[]uint:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -127,7 +173,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseUint(v, 10, strconv.IntSize); err == nil {
 				temp[i] = uint(val)
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseUint,
+					types.ErrParseUint.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -135,7 +182,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseUint(value, 10, 64); err == nil {
 			*(t) = val
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseUint64,
+				types.ErrParseUint64.Error(), value)
 		}
 	case *[]uint64:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -144,7 +192,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseUint(v, 10, 64); err == nil {
 				temp[i] = val
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseUint64,
+					types.ErrParseUint64.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -152,7 +201,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := strconv.ParseUint(value, 10, 32); err == nil {
 			*(t) = uint32(val)
 		} else {
-			return fmt.Errorf("invalid integer: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseUint32,
+				types.ErrParseUint32.Error(), value)
 		}
 	case *[]uint32:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -161,7 +211,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := strconv.ParseUint(v, 10, 32); err == nil {
 				temp[i] = uint32(val)
 			} else {
-				return fmt.Errorf("invalid integer: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseUint32,
+					types.ErrParseUint32.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -175,12 +226,18 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseUint(v, 10, 16); err == nil {
 				temp[i] = uint16(val)
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseUint16,
+					types.ErrParseUint16.Error(), v)
 			}
 		}
 		*(t) = temp
 	case *uint8:
 		if val, err := strconv.ParseUint(value, 10, 8); err == nil {
 			*(t) = uint8(val)
+		} else {
+			return i18n.Default().WrapErrorf(types.ErrParseUint8,
+				types.ErrParseUint8.Error(), value)
 		}
 	case *[]uint8:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -188,12 +245,18 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseUint(v, 10, 8); err == nil {
 				temp[i] = uint8(val)
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseUint8,
+					types.ErrParseUint8.Error(), v)
 			}
 		}
 		*(t) = temp
 	case *float64:
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			*(t) = val
+		} else {
+			return i18n.Default().WrapErrorf(types.ErrParseFloat64,
+				types.ErrParseFloat64.Error(), value)
 		}
 	case *[]float64:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -201,12 +264,18 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseFloat(v, 64); err == nil {
 				temp[i] = val
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseFloat64,
+					types.ErrParseFloat64.Error(), v)
 			}
 		}
 		*(t) = temp
 	case *float32:
 		if val, err := strconv.ParseFloat(value, 32); err == nil {
 			*(t) = float32(val)
+		} else {
+			return i18n.Default().WrapErrorf(types.ErrParseFloat32,
+				types.ErrParseFloat32.Error(), value)
 		}
 	case *[]float32:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -214,6 +283,9 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseFloat(v, 32); err == nil {
 				temp[i] = float32(val)
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseFloat32,
+					types.ErrParseFloat32.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -227,12 +299,18 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := strconv.ParseBool(v); err == nil {
 				temp[i] = val
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseBool,
+					types.ErrParseBool.Error(), v)
 			}
 		}
 		*(t) = temp
 	case *time.Time:
 		if val, err := dateparse.ParseLocal(value); err == nil {
 			*(t) = val
+		} else {
+			return i18n.Default().WrapErrorf(types.ErrParseTime,
+				types.ErrParseTime.Error(), value)
 		}
 	case *[]time.Time:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -240,6 +318,9 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		for i, v := range values {
 			if val, err := dateparse.ParseLocal(v); err == nil {
 				temp[i] = val
+			} else {
+				return i18n.Default().WrapErrorf(types.ErrParseTime,
+					types.ErrParseTime.Error(), v)
 			}
 		}
 		*(t) = temp
@@ -247,7 +328,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if val, err := time.ParseDuration(value); err == nil {
 			*(t) = val
 		} else {
-			return fmt.Errorf("invalid duration: %s", value)
+			return i18n.Default().WrapErrorf(types.ErrParseDuration,
+				types.ErrParseDuration.Error(), value)
 		}
 	case *[]time.Duration:
 		values := strings.FieldsFunc(value, delimiterFunc)
@@ -256,12 +338,14 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 			if val, err := time.ParseDuration(v); err == nil {
 				temp[i] = val
 			} else {
-				return fmt.Errorf("invalid duration: %s", v)
+				return i18n.Default().WrapErrorf(types.ErrParseDuration,
+					types.ErrParseDuration.Error(), v)
 			}
 		}
 		*(t) = temp
 	default:
-		return fmt.Errorf("%w: unsupported data type %v for argument %s", types.ErrUnsupportedTypeConversion, t, arg)
+		return i18n.Default().WrapErrorf(types.ErrUnsupportedTypeConversion,
+			types.ErrUnsupportedTypeConversion.Error(), t, arg)
 	}
 
 	return nil
@@ -269,7 +353,8 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 
 func CanConvert(data interface{}, optionType types.OptionType) (bool, error) {
 	if reflect.TypeOf(data).Kind() != reflect.Ptr {
-		return false, fmt.Errorf("%w: we expect a pointer to a variable", types.ErrUnsupportedTypeConversion)
+		return false, i18n.Default().WrapErrorf(types.ErrPointerExpected,
+			types.ErrPointerExpected.Error(), optionType)
 	}
 
 	supported := true
@@ -279,7 +364,8 @@ func CanConvert(data interface{}, optionType types.OptionType) (bool, error) {
 		case *bool:
 			return true, nil
 		default:
-			return false, fmt.Errorf("%w: Standalone fields can only be bound to a boolean variable", types.ErrUnsupportedTypeConversion)
+			return false, i18n.Default().WrapErrorf(types.ErrUnsupportedTypeConversion,
+				types.ErrFieldBinding.Error(), optionType)
 		}
 	}
 
@@ -319,7 +405,8 @@ func CanConvert(data interface{}, optionType types.OptionType) (bool, error) {
 	case *[]time.Duration:
 	default:
 		supported = false
-		err = fmt.Errorf("%w: unsupported data type %v", types.ErrUnsupportedTypeConversion, t)
+		err = i18n.Default().WrapErrorf(types.ErrUnsupportedTypeConversion,
+			types.ErrUnsupportedTypeConversion.Error(), t)
 	}
 
 	return supported, err

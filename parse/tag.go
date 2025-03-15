@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/util"
 )
@@ -78,13 +79,15 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "required":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+				return nil, i18n.NewTranslatableError(err, types.ErrInvalidAttributeForType.Error(),
+					"'required'", field.Name, value)
 			}
 			config.Required = boolVal
 		case "secure":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+				return nil, i18n.NewTranslatableError(err, types.ErrInvalidAttributeForType.Error(),
+					"'secure'", field.Name, value)
 			}
 			if boolVal {
 				config.Secure = types.Secure{IsSecure: boolVal}
@@ -98,7 +101,8 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "accepted":
 			patterns, err := PatternValues(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'accepted' tag value for field %s: %w", field.Name, err)
+				return nil, i18n.NewTranslatableError(err, types.ErrInvalidAttributeForType.Error(),
+					"'accepted'", field.Name, value)
 			}
 			// Convert to PatternValue
 			config.AcceptedValues = make([]types.PatternValue, len(patterns))
@@ -112,11 +116,13 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "depends":
 			deps, err := Dependencies(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'depends' tag value for field %s: %w", field.Name, err)
+				return nil, i18n.NewTranslatableError(err, types.ErrInvalidAttributeForType.Error(),
+					"'depends'", field.Name, value)
 			}
 			config.DependsOn = deps
 		default:
-			return nil, fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+			return nil, i18n.NewTranslatableError(nil, types.ErrInvalidAttributeForType.Error(),
+				"'unrecognized'", tag, "on field", field.Name)
 		}
 	}
 
@@ -182,6 +188,8 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		}
 
 		switch key {
+		case "descKey":
+			config.DescriptionKey = value
 		case "kind":
 			switch types.Kind(value) {
 			case types.KindFlag, types.KindCommand, types.KindEmpty:

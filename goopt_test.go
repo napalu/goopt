@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/util"
+	"golang.org/x/text/language"
 
 	"github.com/iancoleman/strcase"
 	"github.com/stretchr/testify/assert"
@@ -1015,7 +1017,7 @@ func TestParser_PosixCompatibleFlags(t *testing.T) {
 		Description: "posix incompatible flag",
 		TypeOf:      types.Single,
 	})
-	assert.True(t, errors.Is(err, types.ErrPosixIncompatible))
+	assert.True(t, errors.Is(err, types.ErrPosixShortForm))
 	err = opts.AddFlag("listFlag", &Argument{
 		Short:       "f",
 		Description: "list",
@@ -2139,7 +2141,7 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			}
 
 			arg := &Argument{}
-			gotName, gotPath, err := unmarshalTagsToArgument(structField, arg)
+			gotName, gotPath, err := unmarshalTagsToArgument(nil, structField, arg)
 			if (err != nil) != tt.field.WantErr {
 				t.Errorf("unmarshalTagsToArgument() error = %v, wantErr %v", err, tt.field.WantErr)
 				return
@@ -2941,6 +2943,17 @@ func TestParser_SetMaxDependencyDepth(t *testing.T) {
 }
 
 func TestParser_CommandExecution(t *testing.T) {
+	testBundle := i18n.Default()
+	sentinel := errors.New("test_failed")
+	err := testBundle.AddLanguage(language.English, map[string]string{
+		"goopt.error.command_callback_error": "command failed '%s'",
+		"err.test_failed":                    "test failed",
+		"err.cmd1_failed":                    "cmd1 failed",
+		"err.cmd2_failed":                    "cmd2 failed",
+	})
+	if err != nil {
+		t.Fatalf("failed to add language: %v", err)
+	}
 	tests := []struct {
 		name        string
 		setupFunc   func(p *Parser) error
@@ -2955,7 +2968,7 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd := &Command{
 					Name: "test",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("test failed")
+						return cmdLine.i18n.WrapErrorf(nil, "err.test_failed", command.Name)
 					},
 				}
 				return p.AddCommand(cmd)
@@ -2971,13 +2984,13 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd1 := &Command{
 					Name: "cmd1",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("cmd1 failed")
+						return cmdLine.i18n.WrapErrorf(sentinel, types.ErrCommandCallbackErrorKey, command.Name)
 					},
 				}
 				cmd2 := &Command{
 					Name: "cmd2",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("cmd2 failed")
+						return cmdLine.i18n.WrapErrorf(sentinel, types.ErrCommandCallbackErrorKey, command.Name)
 					},
 				}
 				_ = p.AddCommand(cmd1)
@@ -2986,8 +2999,8 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"cmd1", "cmd2"},
 			execMethod: "all",
 			wantErrs: map[string]string{
-				"cmd1": "cmd1 failed",
-				"cmd2": "cmd2 failed",
+				"cmd1": "test_failed: command failed 'cmd1'",
+				"cmd2": "test_failed: command failed 'cmd2'",
 			},
 			description: "Should execute all commands via ExecuteCommands",
 		},
@@ -2998,14 +3011,16 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd := &Command{
 					Name: "test",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("test failed")
+						return i18n.NewTranslatableError(sentinel, types.ErrCommandCallbackErrorKey, command.Name)
 					},
 				}
 				return p.AddCommand(cmd)
 			},
-			args:        []string{"test"},
-			execMethod:  "onParse",
-			wantErrs:    map[string]string{"test": "test failed"},
+			args:       []string{"test"},
+			execMethod: "onParse",
+			wantErrs: map[string]string{
+				"test": "test_failed: command failed 'test'",
+			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},
 	}
@@ -3027,9 +3042,10 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedErr, exists := tt.wantErrs[kv.Key]
-					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
-					assert.Contains(t, kv.Value.Error(), expectedErr)
+					expectedKey := tt.wantErrs[kv.Key]
+					expectedMsg := testBundle.T(expectedKey)
+					renderedMsg := p.renderer.Error(kv.Value)
+					assert.Equal(t, expectedMsg, renderedMsg)
 				}
 			case "all":
 				errCount := p.ExecuteCommands()
@@ -3038,9 +3054,10 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedErr, exists := tt.wantErrs[kv.Key]
-					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
-					assert.Contains(t, kv.Value.Error(), expectedErr)
+					expectedKey := tt.wantErrs[kv.Key]
+					expectedMsg := testBundle.T(expectedKey)
+					renderedMsg := p.renderer.Error(kv.Value)
+					assert.Equal(t, expectedMsg, renderedMsg)
 				}
 			case "onParse":
 				// For ExecOnParse, check parser errors instead
@@ -3050,7 +3067,8 @@ func TestParser_CommandExecution(t *testing.T) {
 				for cmdName, expectedErr := range tt.wantErrs {
 					found := false
 					for _, err := range parserErrs {
-						if strings.Contains(err.Error(), expectedErr) {
+						renderedMsg := p.renderer.Error(err)
+						if renderedMsg == expectedErr {
 							found = true
 							break
 						}
@@ -3495,7 +3513,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
 			},
 			wantErr:     true,
-			errContains: "missing required positional argument 'dest' at index 1",
+			errContains: "flag 'dest' missing required positional argument at index 1",
 		},
 	}
 

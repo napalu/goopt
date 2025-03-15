@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/completion"
+	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
@@ -223,6 +224,22 @@ func (p *Parser) ensureInit() {
 	if p.maxDependencyDepth <= 0 {
 		p.maxDependencyDepth = DefaultMaxDependencyDepth
 	}
+	if p.i18n == nil {
+		p.i18n = i18n.Default()
+	}
+}
+
+func (p *Parser) getArgumentInfoByID(id string) *FlagInfo {
+	longName := p.lookup[id]
+	if longName == "" {
+		return nil
+	}
+
+	if info, found := p.acceptedFlags.Get(longName); found {
+		return info
+	}
+
+	return nil
 }
 
 type flagCache struct {
@@ -308,7 +325,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 	skipNext := false
 	currentCmdPath := make([]string, 0, 3) // Pre-allocate for typical command depth
-
+	argPos := 0
 	for i, arg := range args {
 		if skipNext {
 			skipNext = false
@@ -367,7 +384,9 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			Position: i,
 			Value:    arg,
 			Argument: nil,
+			ArgPos:   argPos,
 		})
+		argPos++
 	}
 
 	maxDeclaredIdx := 0
@@ -377,10 +396,11 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	// Match and register positionals in one pass
 	for _, decl := range declaredPos {
 		if decl.index >= len(positional) {
-			if decl.required {
-				p.addError(fmt.Errorf("missing required positional argument '%s' at index %d",
-					decl.key, decl.index))
-			}
+			/*if decl.required {
+				p.addError(
+					p.i18n.WrapErrorf(types.ErrRequiredPositionalFlag, types.ErrRequiredPositionalFlagKey, decl.key, decl.index))
+				continue
+			}*/
 			if decl.flag.Argument.DefaultValue != "" {
 				// Only extend if within reasonable bounds
 				if decl.index <= maxDeclaredIdx {
@@ -394,6 +414,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 						Position: decl.index,
 						Value:    decl.flag.Argument.DefaultValue,
 						Argument: decl.flag.Argument,
+						ArgPos:   *decl.flag.Argument.Position,
 					}
 
 				} else {
@@ -405,14 +426,16 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		}
 
 		pos := &positional[decl.index]
+		if pos.ArgPos != *decl.flag.Argument.Position {
+			//p.addError(p.i18n.WrapErrorf(types.ErrRequiredPositionalFlag, types.ErrRequiredPositionalFlagKey, decl.key, decl.index))
+			continue
+		}
 		pos.Argument = decl.flag.Argument
-
-		// Build path once
 		lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
 		p.registerFlagValue(lookup, pos.Value, pos.Value)
 		p.options[lookup] = pos.Value
 		if err := p.setBoundVariable(pos.Value, lookup); err != nil {
-			p.addError(fmt.Errorf("error setting bound variable for %s: %w", lookup, err))
+			p.addError(p.i18n.WrapErrorf(err, types.ErrSettingBoundValueKey, lookup))
 		}
 	}
 
@@ -1137,12 +1160,18 @@ func expandVarExpr() *regexp.Regexp {
 	return regexp.MustCompile(`(\$\{.+})`)
 }
 
-func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) (name string, path string, err error) {
+func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg *Argument) (name string, path string, err error) {
 	// Try new format first
 	if tag, ok := field.Tag.Lookup("goopt"); ok && strings.Contains(tag, ":") {
 		config, err := parse.UnmarshalTagFormat(tag, field)
 		if err != nil {
 			return "", "", err
+		}
+
+		if bundle != nil && config.DescriptionKey != "" {
+			if tr := bundle.T(config.DescriptionKey); tr != config.DescriptionKey {
+				config.Description = tr
+			}
 		}
 
 		*arg = *toArgument(config)
@@ -1158,7 +1187,7 @@ func unmarshalTagsToArgument(field reflect.StructField, arg *Argument) (name str
 		if isStructOrSliceType(field) {
 			return "", "", nil // For nested structs, slices and arrays nil config is valid
 		}
-		return "", "", fmt.Errorf("no valid tags found for field %s", field.Name)
+		return "", "", types.ErrNoValidTags
 	}
 	*arg = *toArgument(config)
 
@@ -1306,12 +1335,22 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			pathTag  string
 		)
 		arg := &Argument{}
-		longName, pathTag, err = unmarshalTagsToArgument(field, arg)
+		var bundle *i18n.Bundle
+		if parser.userI18n != nil {
+			bundle = parser.userI18n
+		} else if parser.i18n != nil {
+			bundle = parser.i18n
+		}
+
+		if bundle == nil {
+			bundle = i18n.Default()
+		}
+		longName, pathTag, err = unmarshalTagsToArgument(bundle, field, arg)
 		if err != nil {
 			if flagPrefix != "" {
-				parser.addError(fmt.Errorf("error processing field %s.%s: %w", flagPrefix, field.Name, err))
+				parser.addError(bundle.WrapErrorf(err, "error processing field %s.%s", flagPrefix, field.Name))
 			} else {
-				parser.addError(fmt.Errorf("error processing field %s: %w", field.Name, err))
+				parser.addError(bundle.WrapErrorf(err, "error processing field %s", field.Name))
 			}
 			continue
 		}
@@ -1339,7 +1378,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		if isSliceType(field) && !isBasicType(field.Type) {
 			// Process as nested structure
 			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(fmt.Errorf("error processing slice field %s: %w", fieldFlagPath, err))
+				parser.addError(parser.i18n.WrapErrorf(err, "error processing slice field %s", fieldFlagPath))
 			}
 			continue
 		}
@@ -1355,7 +1394,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 
 			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(fmt.Errorf("error processing nested struct %s: %w", fieldFlagPath, err))
+				parser.addError(parser.i18n.WrapErrorf(err, "error processing nested struct %s", fieldFlagPath))
 			}
 			continue
 		}
@@ -1749,7 +1788,7 @@ func getFlagPath(flag string) string {
 	return ""
 }
 
-func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo) {
+func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {
 	if flagInfo == nil || flagInfo.Argument == nil {
 		return
 	}
@@ -1758,7 +1797,7 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 	pair := completion.FlagPair{
 		Long:        flagName,
 		Short:       flagInfo.Argument.Short,
-		Description: flagInfo.Argument.description(),
+		Description: renderer.FlagDescription(flagInfo.Argument),
 		Type:        completion.FlagType(flagInfo.Argument.TypeOf),
 	}
 

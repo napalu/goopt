@@ -1,0 +1,7 @@
+{
+    "error.required_flag": "Required flag missing: %s",
+    "error.invalid_number": "Invalid number: %s",
+    "help.usage": "Usage: %s",
+    "help.commands": "Commands: %s",
+    "help.flags": "Flags: %s"
+}
