@@ -17,7 +17,7 @@ import (
 	"golang.org/x/text/message/catalog"
 )
 
-//go:embed ./locales/*.json
+//go:embed locales/en.json locales/fr.json locales/de.json
 var defaultLocales embed.FS
 
 var (
