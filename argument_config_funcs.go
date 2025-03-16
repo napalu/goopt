@@ -1,9 +1,9 @@
 package goopt
 
 import (
-	"fmt"
 	"regexp"
 
+	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/util"
 )
@@ -188,9 +188,16 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 func WithPosition(idx int) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		if idx < 0 {
-			*err = fmt.Errorf("positional index must be non-negative, got: %d", idx)
+			*err = errs.ErrPositionMustBeNonNegative.WithArgs(idx)
 			return
 		}
 		argument.Position = util.NewOfType(idx)
+	}
+}
+
+// WithDescriptionKey sets a translation key for the argument
+func WithDescriptionKey(key string) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.DescriptionKey = key
 	}
 }

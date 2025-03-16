@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/completion"
+	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/parse"
 	"github.com/napalu/goopt/types"
@@ -35,7 +36,7 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) {
 	if found {
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 	} else {
-		p.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", flag, currentCommandPath))
+		p.addError(errs.ErrUnknownFlagInCommandPath.WithArgs(flag, currentCommandPath))
 	}
 }
 
@@ -52,7 +53,7 @@ func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) {
 	if found {
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 	} else {
-		p.addError(fmt.Errorf("unknown argument '%s' in command Path '%s'", flag, currentCommandPath))
+		p.addError(errs.ErrUnknownFlagInCommandPath.WithArgs(flag, currentCommandPath))
 	}
 }
 
@@ -94,7 +95,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 
 	if isNestedSlicePath(currentArg) {
 		if err := p.validateSlicePath(lookup); err != nil {
-			p.addError(fmt.Errorf("invalid slice access for flag %s: %w", lookup, err))
+			p.addError(errs.ErrProcessingField.WithArgs(lookup).Wrap(err))
 			return
 		}
 	}
@@ -118,8 +119,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(fmt.Errorf(
-					"could not process input argument '%s' - the following error occurred: %s", lookup, err))
+				p.addError(errs.ErrProcessingFlag.WithArgs(lookup).Wrap(err))
 			}
 		}
 	case types.Single, types.Chained, types.File:
@@ -142,7 +142,7 @@ func (p *Parser) registerCommandRecursive(cmd *Command) {
 
 func (p *Parser) validateCommand(cmdArg *Command, level, maxDepth int) (bool, error) {
 	if level > maxDepth {
-		return false, fmt.Errorf("max command depth of %d exceeded", maxDepth)
+		return false, errs.ErrRecursionDepthExceeded.WithArgs(maxDepth)
 	}
 
 	var commandType string
@@ -152,7 +152,7 @@ func (p *Parser) validateCommand(cmdArg *Command, level, maxDepth int) (bool, er
 		commandType = "command"
 	}
 	if cmdArg.Name == "" {
-		return false, fmt.Errorf("the 'Name' property is missing from %s on Level %d: %+v", commandType, level, cmdArg)
+		return false, errs.ErrMissingPropertyOnLevel.WithArgs("Name", commandType, level, cmdArg)
 	}
 
 	if level == 0 {
@@ -435,7 +435,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		p.registerFlagValue(lookup, pos.Value, pos.Value)
 		p.options[lookup] = pos.Value
 		if err := p.setBoundVariable(pos.Value, lookup); err != nil {
-			p.addError(p.i18n.WrapErrorf(err, types.ErrSettingBoundValueKey, lookup))
+			p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
 		}
 	}
 
@@ -652,14 +652,14 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 			state.Skip()
 		}
 		if state.Pos() >= state.Len()-1 && len(next) == 0 {
-			p.addError(fmt.Errorf("flag '%s' expects a value", flag))
+			p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
 		} else {
 			next, err = p.flagValue(argument, next, flag)
 			if err != nil {
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
-					p.addError(fmt.Errorf("failed to process your input for Flag '%s': %s", flag, err))
+					p.addError(errs.ErrProcessingFlag.WithArgs(flag).Wrap(err))
 				}
 			}
 		}
@@ -671,15 +671,15 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid Path but could not find %s - error %s", flag, next, e.Error())
+			err = errs.ErrNotFoundPathForFlag.WithArgs(flag, next).Wrap(e)
 			return
 		} else if st.IsDir() {
-			err = fmt.Errorf("flag '%s' should be a file but is a directory", flag)
+			err = errs.ErrNotFilePathForFlag.WithArgs(flag)
 			return
 		}
 		next = filepath.Clean(next)
 		if val, e := os.ReadFile(next); e != nil {
-			err = fmt.Errorf("flag '%s' should be a valid file but reading from %s produces error %s ", flag, next, e.Error())
+			err = errs.ErrFlagFileOperation.WithArgs(flag, next).Wrap(e)
 		} else {
 			arg = string(val)
 		}
@@ -688,7 +688,7 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 		if p.isFlag(next) && argument.TypeOf == types.Single {
 			stripped := strings.TrimLeftFunc(next, p.prefixFunc)
 			if _, ok := p.acceptedFlags.Get(stripped); ok {
-				p.addError(fmt.Errorf("flag '%s' expects a value", flag))
+				p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
 				return
 			}
 		}
@@ -720,8 +720,7 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		cmdQueue.Push(&sub) // Keep subcommands in the queue
 		return true, &sub
 	} else if len(currentCmd.Subcommands) > 0 {
-		p.addError(fmt.Errorf("command %s expects one of the following: %v",
-			currentCmd.Name, currentCmd.Subcommands))
+		p.addError(errs.ErrCommandExpectsSubcommand.WithArgs(currentCmd.Name, currentCmd.Subcommands))
 	}
 
 	return false, nil
@@ -770,10 +769,10 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if pass, err := util.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader()); err == nil {
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
-			p.addError(fmt.Errorf("failed to process flag '%s' secure value: %s", name, err))
+			p.addError(errs.ErrProcessingFlag.WithArgs(name).Wrap(err))
 		}
 	} else {
-		p.addError(fmt.Errorf("secure flag '%s' expects a value but we failed to obtain one: %s", name, err))
+		p.addError(errs.ErrSecureFlagExpectsValue.WithArgs(name).Wrap(err))
 	}
 }
 
@@ -816,8 +815,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) string {
 	if valid {
 		p.registerFlagValue(flag, value, next)
 	} else {
-		p.addError(fmt.Errorf(
-			"invalid argument '%s' for flag '%s'. Accepted values: %s", next, flag, errBuf.String()))
+		p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
 	}
 
 	return value
@@ -857,8 +855,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) string {
 				errBuf.WriteString(", ")
 			}
 		}
-		p.addError(fmt.Errorf(
-			"invalid argument '%s' for flag '%s'. Accepted values: %s", next, flag, errBuf.String()))
+		p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
 	}
 
 	return value
@@ -909,9 +906,9 @@ func (p *Parser) walkFlags() {
 		if !p.shouldValidateDependencies(flagInfo) {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && p.HasCommand(cmdArg[1])) {
 				if flagInfo.Argument.Position != nil {
-					p.addError(fmt.Errorf("flag '%s' missing required positional argument at index %d", *f.Key, *flagInfo.Argument.Position))
+					p.addError(errs.ErrRequiredPositionalFlag.WithArgs(*f.Key, *flagInfo.Argument.Position))
 				} else {
-					p.addError(fmt.Errorf("flag '%s' is mandatory but missing from the command line", *f.Key))
+					p.addError(errs.ErrRequiredFlag.WithArgs(*f.Key))
 				}
 			}
 		} else {
@@ -968,12 +965,12 @@ func (p *Parser) walkCommands() {
 
 func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visited map[string]bool, depth int) {
 	if depth > p.maxDependencyDepth {
-		p.addError(fmt.Errorf("maximum dependency depth exceeded for flag '%s'", mainKey))
+		p.addError(errs.ErrRecursionDepthExceeded.WithArgs(p.maxDependencyDepth))
 		return
 	}
 
 	if visited[mainKey] {
-		p.addError(fmt.Errorf("circular dependency detected: flag '%s' is involved in a circular chain of dependencies", mainKey))
+		p.addError(errs.ErrCircularDependency.WithArgs(mainKey))
 		return
 	}
 
@@ -982,16 +979,14 @@ func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visite
 	for _, depends := range p.getDependentFlags(flagInfo.Argument) {
 		dependentFlag, found := p.getFlagInCommandPath(depends, flagInfo.CommandPath)
 		if !found {
-			p.addError(fmt.Errorf("flag '%s' depends on '%s', but it is missing from command group '%s' or global flags",
-				mainKey, depends, flagInfo.CommandPath))
+			p.addError(errs.ErrDependencyNotFound.WithArgs(mainKey, depends, flagInfo.CommandPath))
 			continue
 		}
 
 		dependKey := p.options[depends]
 		matches, allowedValues := p.checkDependencyValue(flagInfo.Argument, depends, dependKey)
 		if !matches {
-			p.addError(fmt.Errorf("flag '%s' requires flag '%s' to have one of these values: %v (got '%s')",
-				mainKey, depends, allowedValues, dependKey))
+			p.addError(errs.ErrDependencyValueNotSpecified.WithArgs(mainKey, depends, allowedValues, dependKey))
 		}
 
 		p.validateDependencies(dependentFlag, depends, visited, depth+1)
@@ -1088,7 +1083,7 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for k, v := range nestedCmdLine.bind {
 		if _, exists := p.bind[k]; exists {
-			return fmt.Errorf("conflict: flag '%s' is already bound in this CmdLineOption", k)
+			return errs.ErrFlagAlreadyExists.WithArgs(k)
 		}
 		p.bind[k] = v
 	}
@@ -1187,7 +1182,7 @@ func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg
 		if isStructOrSliceType(field) {
 			return "", "", nil // For nested structs, slices and arrays nil config is valid
 		}
-		return "", "", types.ErrNoValidTags
+		return "", "", errs.ErrNoValidTags
 	}
 	*arg = *toArgument(config)
 
@@ -1195,22 +1190,29 @@ func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg
 }
 
 func toArgument(c *types.TagConfig) *Argument {
-	return &Argument{
-		Short:          c.Short,
-		Description:    c.Description,
-		TypeOf:         c.TypeOf,
-		DefaultValue:   c.Default,
-		Required:       c.Required,
-		Secure:         c.Secure,
-		AcceptedValues: c.AcceptedValues,
-		DependencyMap:  c.DependsOn,
-		Position:       c.Position,
+	arg := NewArg(WithType(c.TypeOf),
+		WithDescription(c.Description),
+		WithDefaultValue(c.Default),
+		WithDescriptionKey(c.DescriptionKey),
+		WithAcceptedValues(c.AcceptedValues),
+		WithDependencyMap(c.DependsOn),
+		WithShortFlag(c.Short),
+		WithRequired(c.Required),
+	)
+	if c.Secure.IsSecure {
+		arg.Secure = c.Secure
 	}
+
+	if c.Position != nil {
+		arg.Position = c.Position
+	}
+
+	return arg
 }
 
 func (p *Parser) buildCommand(commandPath, description string, parent *Command) (*Command, error) {
 	if commandPath == "" {
-		return nil, fmt.Errorf("empty command path")
+		return nil, errs.ErrEmptyCommandPath
 	}
 
 	commandNames := strings.Split(commandPath, " ")
@@ -1290,7 +1292,7 @@ func (p *Parser) buildCommand(commandPath, description string, parent *Command) 
 
 func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPath string, maxDepth, currentDepth int, config ...ConfigureCmdLineFunc) (*Parser, error) {
 	if currentDepth > maxDepth {
-		return nil, fmt.Errorf("recursion depth exceeded: max depth is %d", maxDepth)
+		return nil, errs.ErrRecursionDepthExceeded.WithArgs(maxDepth)
 	}
 
 	var err error
@@ -1298,19 +1300,19 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 	for _, cfg := range config {
 		cfg(parser, &err)
 		if err != nil {
-			return nil, fmt.Errorf("error configuring parser: %w", err)
+			return nil, errs.ErrConfiguringParser.Wrap(err)
 		}
 	}
 
 	// Unwrap the value and type
 	unwrappedValue, err := util.UnwrapValue(structValue)
 	if err != nil {
-		return nil, fmt.Errorf("error unwrapping value: %w", err)
+		return nil, errs.ErrUnwrappingValue.Wrap(err)
 	}
 
 	st := util.UnwrapType(structValue.Type())
 	if st.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("only structs can be tagged")
+		return nil, errs.ErrOnlyStructsCanBeTagged
 	}
 
 	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth)
@@ -1348,9 +1350,9 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		longName, pathTag, err = unmarshalTagsToArgument(bundle, field, arg)
 		if err != nil {
 			if flagPrefix != "" {
-				parser.addError(bundle.WrapErrorf(err, "error processing field %s.%s", flagPrefix, field.Name))
+				parser.addError(errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err))
 			} else {
-				parser.addError(bundle.WrapErrorf(err, "error processing field %s", field.Name))
+				parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
 			}
 			continue
 		}
@@ -1378,7 +1380,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		if isSliceType(field) && !isBasicType(field.Type) {
 			// Process as nested structure
 			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(parser.i18n.WrapErrorf(err, "error processing slice field %s", fieldFlagPath))
+				parser.addError(errs.ErrProcessingSliceField.WithArgs(fieldFlagPath).Wrap(err))
 			}
 			continue
 		}
@@ -1394,7 +1396,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 
 			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(parser.i18n.WrapErrorf(err, "error processing nested struct %s", fieldFlagPath))
+				parser.addError(errs.ErrProcessingNestedStruct.WithArgs(fieldFlagPath).Wrap(err))
 			}
 			continue
 		}
@@ -1408,13 +1410,13 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		// Process the path tag to associate the flag with commands or global
 		if pathTag != "" {
 			if err = parser.processPathTag(pathTag, fieldValue, fullFlagName, arg); err != nil {
-				return parser, fmt.Errorf("error processing flag %s: %w", fullFlagName, err)
+				return parser, errs.ErrProcessingFlag.WithArgs(fullFlagName).Wrap(err)
 			}
 		} else {
 			// If no path specified, use current command path (if any)
 			err = parser.bindArgument(commandPath, fieldValue, fullFlagName, arg)
 			if err != nil {
-				return parser, fmt.Errorf("error processing flag %s: %w", fullFlagName, err)
+				return parser, errs.ErrProcessingFlag.WithArgs(fullFlagName).Wrap(err)
 			}
 		}
 	}
@@ -1424,7 +1426,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 
 func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, fullFlagName string, arg *Argument) (err error) {
 	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
-		p.addError(fmt.Errorf("unexpected - field pointer %s is nilskipping", fullFlagName))
+		p.addError(errs.ErrBindNil.WithArgs(fullFlagName))
 		return nil
 	}
 	// Get the interface value - if it's already a pointer, use it directly
@@ -1451,7 +1453,7 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 			err = p.setBoundVariable(arg.DefaultValue, fullFlagName)
 		}
 		if err != nil {
-			p.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+			p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
 		}
 	}
 
@@ -1480,7 +1482,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 			}
 
 			if cmd, err = p.buildCommand(parentCommand, "", pCmd); err != nil {
-				p.addError(fmt.Errorf("error processing command %s: %w", parentCommand, err))
+				p.addError(errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err))
 			}
 		}
 
@@ -1498,7 +1500,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 		if arg.DefaultValue != "" {
 			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
 			if err != nil {
-				p.addError(fmt.Errorf("error processing default value %s: %w", arg.DefaultValue, err))
+				p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
 			}
 		}
 	}
@@ -1510,14 +1512,14 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 	// Handle case where the entire value is a Command type (not a struct containing commands)
 	unwrappedValue, err := util.UnwrapValue(val)
 	if err != nil {
-		return fmt.Errorf("error unwrapping value: %w", err)
+		return errs.ErrUnwrappingValue.Wrap(err)
 	}
 
 	if unwrappedValue.Type() == reflect.TypeOf(Command{}) {
 		cmd := unwrappedValue.Interface().(Command)
 		_, err := p.buildCommand(cmd.path, cmd.Description, nil)
 		if err != nil {
-			return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmd.path, err)
+			return errs.ErrProcessingCommand.WithArgs(cmd.path).Wrap(err)
 		}
 		err = p.AddCommand(&cmd)
 		if err != nil {
@@ -1529,7 +1531,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 	// Prevent infinite recursion
 	typ := util.UnwrapType(val.Type())
 	if currentDepth > maxDepth {
-		return fmt.Errorf("max nesting depth exceeded: %d", maxDepth)
+		return errs.ErrRecursionDepthExceeded.WithArgs(maxDepth)
 	}
 
 	// Process all fields in the struct
@@ -1569,7 +1571,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 
 			buildCmd, err := p.buildCommand(cmdPath, cmd.Description, parent)
 			if err != nil {
-				return fmt.Errorf("error ensuring command hierarchy for path %s: %w", cmdPath, err)
+				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
 			}
 
 			err = p.AddCommand(buildCmd)
@@ -1584,7 +1586,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			// Parse the goopt tag for command configuration
 			config, err := parse.UnmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
-				return err
+				return errs.ErrUnmarshallingTag.WithArgs(fieldType.Name).Wrap(err)
 			}
 
 			cmdName := config.Name
@@ -1610,7 +1612,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			// Build and register the command
 			buildCmd, err := p.buildCommand(cmdPath, config.Description, parent)
 			if err != nil {
-				return fmt.Errorf("error processing command %s: %w", cmdPath, err)
+				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
 			}
 
 			err = p.AddCommand(buildCmd)
@@ -1681,16 +1683,15 @@ func (p *Parser) validateSlicePath(path string) error {
 			parentPath := strings.Join(parts[:i], ".")
 			if flagInfo, exists := p.acceptedFlags.Get(parentPath); exists {
 				if flagInfo.Argument == nil {
-					return fmt.Errorf("internal error: missing argument info for %s", parentPath)
+					return errs.ErrMissingArgumentInfo.WithArgs(parentPath)
 				}
 
 				if flagInfo.Argument.Capacity <= 0 {
-					return fmt.Errorf("slice at '%s' has no capacity set", parentPath)
+					return errs.ErrNegativeCapacity.WithArgs(parentPath, flagInfo.Argument.Capacity)
 				}
 
 				if idx < 0 || idx >= flagInfo.Argument.Capacity {
-					return fmt.Errorf("index %d out of bounds at '%s': valid range is 0-%d",
-						idx, currentPath, flagInfo.Argument.Capacity-1)
+					return errs.ErrIndexOutOfBounds.WithArgs(idx, currentPath, flagInfo.Argument.Capacity-1)
 				}
 			}
 		}
@@ -1698,7 +1699,7 @@ func (p *Parser) validateSlicePath(path string) error {
 
 	// Final check - does this path exist in our accepted flags?
 	if _, exists := p.acceptedFlags.Get(path); !exists {
-		return fmt.Errorf("unknown flag: %s", path)
+		return errs.ErrUnknownFlag.WithArgs(path)
 	}
 
 	return nil
@@ -1714,7 +1715,7 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 	// Unwrap the field value
 	unwrappedValue, err := util.UnwrapValue(fieldValue)
 	if err != nil {
-		return fmt.Errorf("error unwrapping slice field %s: %w", flagPrefix, err)
+		return errs.ErrUnwrappingValue.WithArgs(flagPrefix).Wrap(err)
 	}
 
 	// Initialize or resize slice if needed
@@ -1739,10 +1740,10 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 
 		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, commandPath, maxDepth, currentDepth+1, config...)
 		if err != nil {
-			return fmt.Errorf("error processing slice element %s[%d]: %w", flagPrefix, idx, err)
+			return errs.ErrProcessingField.WithArgs(flagPrefix, idx).Wrap(err)
 		}
 		if err = c.mergeCmdLine(nestedCmdLine); err != nil {
-			return fmt.Errorf("error merging slice element %s[%d]: %w", flagPrefix, idx, err)
+			return errs.ErrProcessingField.WithArgs(flagPrefix, idx).Wrap(err)
 		}
 	}
 
@@ -1752,12 +1753,12 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser, config ...ConfigureCmdLineFunc) error {
 	unwrappedValue, err := util.UnwrapValue(fieldValue)
 	if err != nil {
-		return fmt.Errorf("error unwrapping nested struct: %w", err)
+		return errs.ErrUnwrappingValue.WithArgs(flagPrefix).Wrap(err)
 	}
 
 	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1, config...)
 	if err != nil {
-		return fmt.Errorf("error processing nested struct %s: %w", flagPrefix, err)
+		return errs.ErrProcessingField.WithArgs(flagPrefix).Wrap(err)
 	}
 
 	err = c.mergeCmdLine(nestedCmdLine)

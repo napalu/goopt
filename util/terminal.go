@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/napalu/goopt/errs"
 	"golang.org/x/term"
 )
 
@@ -46,12 +47,12 @@ func GetSecureString(prompt string, w io.Writer, terminal TerminalReader) (strin
 		pass := string(bytes)
 		if len(pass) == 0 {
 			_, _ = fmt.Fprintln(w)
-			return "", fmt.Errorf("empty password is invalid")
+			return "", errs.ErrParseEmptyInput.WithArgs("password")
 		}
 		_, _ = fmt.Fprintln(w)
 
 		return pass, nil
 	}
 
-	return "", fmt.Errorf("not attached to a terminal. don't know how to get input from stdin")
+	return "", errs.ErrNotAttachedToTerminal.WithArgs("stdin")
 }

@@ -33,13 +33,13 @@ var (
 )
 
 type Bundle struct {
-	mu             sync.RWMutex
-	defaultLang    language.Tag
-	translations   map[language.Tag]map[string]string
-	catalog        *catalog.Builder
-	printers       map[language.Tag]*message.Printer
-	validatedLangs map[language.Tag]struct{}
-	matcher        language.Matcher
+	mu                 sync.RWMutex
+	defaultLang        language.Tag
+	translations       map[language.Tag]map[string]string
+	catalog            *catalog.Builder
+	printers           map[language.Tag]*message.Printer
+	validatedLanguages map[language.Tag]struct{}
+	matcher            language.Matcher
 }
 
 var defaultBundle *Bundle
@@ -62,23 +62,23 @@ func NewBundle() (*Bundle, error) {
 
 func NewEmptyBundle() *Bundle {
 	return &Bundle{
-		mu:             sync.RWMutex{},
-		defaultLang:    language.English,
-		translations:   make(map[language.Tag]map[string]string),
-		catalog:        catalog.NewBuilder(),
-		printers:       make(map[language.Tag]*message.Printer),
-		validatedLangs: make(map[language.Tag]struct{}),
+		mu:                 sync.RWMutex{},
+		defaultLang:        language.English,
+		translations:       make(map[language.Tag]map[string]string),
+		catalog:            catalog.NewBuilder(),
+		printers:           make(map[language.Tag]*message.Printer),
+		validatedLanguages: make(map[language.Tag]struct{}),
 	}
 }
 
 func NewBundleWithFS(fs embed.FS, dirPrefix string) (*Bundle, error) {
 	b := &Bundle{
-		defaultLang:    language.English,
-		translations:   make(map[language.Tag]map[string]string),
-		catalog:        catalog.NewBuilder(),
-		printers:       make(map[language.Tag]*message.Printer),
-		validatedLangs: make(map[language.Tag]struct{}),
-		mu:             sync.RWMutex{},
+		defaultLang:        language.English,
+		translations:       make(map[language.Tag]map[string]string),
+		catalog:            catalog.NewBuilder(),
+		printers:           make(map[language.Tag]*message.Printer),
+		validatedLanguages: make(map[language.Tag]struct{}),
+		mu:                 sync.RWMutex{},
 	}
 
 	if err := b.loadEmbeddedWithFS(fs, dirPrefix); err != nil {
@@ -97,7 +97,7 @@ func NewBundleWithFS(fs embed.FS, dirPrefix string) (*Bundle, error) {
 		return nil, fmt.Errorf("%w: %s", ErrDefaultLanguageTranslationsMissing, b.defaultLang)
 	}
 
-	b.validatedLangs[b.defaultLang] = struct{}{}
+	b.validatedLanguages[b.defaultLang] = struct{}{}
 
 	return b, nil
 }
@@ -124,20 +124,6 @@ func (b *Bundle) TL(lang language.Tag, key string, args ...interface{}) string {
 	}
 
 	return key
-}
-
-// Errorf returns an error with a localized message
-func (b *Bundle) Errorf(key string, args ...interface{}) error {
-	return errors.New(b.T(key, args...))
-}
-
-// WrapErrorf wraps an error with a localized message and format control
-func (b *Bundle) WrapErrorf(sentinel error, key string, args ...interface{}) error {
-	if !b.HasKey(b.defaultLang, key) {
-		return fmt.Errorf("i18n: missing translation %q: %w", key, sentinel)
-	}
-
-	return NewTranslatableError(sentinel, key, args...)
 }
 
 // AddLanguage adds a new language to the bundle or updates existing language if it exists
@@ -317,7 +303,7 @@ func (b *Bundle) processLangFile(fs embed.FS, lang language.Tag, path string) er
 }
 
 func (b *Bundle) validateLanguage(lang language.Tag) []error {
-	var errors []error
+	var e []error
 
 	translations, exists := b.translations[lang]
 	if !exists {
@@ -325,28 +311,28 @@ func (b *Bundle) validateLanguage(lang language.Tag) []error {
 	}
 
 	if len(translations) == 0 {
-		errors = append(errors, fmt.Errorf("%w: %s", ErrEmptyTranslations, lang))
+		e = append(e, fmt.Errorf("%w: %s", ErrEmptyTranslations, lang))
 	}
 
 	if lang != b.defaultLang {
 		defaultTranslations, exists := b.translations[b.defaultLang]
 		if !exists {
-			errors = append(errors, fmt.Errorf("%w: %s", ErrDefaultLanguageNotFound, b.defaultLang))
-			return errors
+			e = append(e, fmt.Errorf("%w: %s", ErrDefaultLanguageNotFound, b.defaultLang))
+			return e
 		}
 
 		for key := range defaultTranslations {
 			if _, exists := translations[key]; !exists {
-				errors = append(errors, fmt.Errorf("%w: %s: %q", ErrMissingKey, lang, key))
+				e = append(e, fmt.Errorf("%w: %s: %q", ErrMissingKey, lang, key))
 			}
 		}
 
 		for key := range translations {
 			if _, exists := defaultTranslations[key]; !exists {
-				errors = append(errors, fmt.Errorf("%w: %s: %q", ErrExtraKey, lang, key))
+				e = append(e, fmt.Errorf("%w: %s: %q", ErrExtraKey, lang, key))
 			}
 		}
 	}
 
-	return errors
+	return e
 }

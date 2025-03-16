@@ -176,18 +176,12 @@ type CompletionData struct {
 
 // Renderer is an interface for rendering Goopt structures
 type Renderer interface {
-	// Flag rendering
 	FlagName(f *Argument) string
 	FlagDescription(f *Argument) string
 	FlagUsage(f *Argument) string
-
-	// Command rendering
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
-
-	// Error handling
-	Error(err error) string
 }
 
 const (

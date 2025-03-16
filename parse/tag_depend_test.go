@@ -1,18 +1,20 @@
 package parse
 
 import (
+	"errors"
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/napalu/goopt/errs"
 )
 
 func TestParseDependencies(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		want      DependencyMap
-		wantErr   bool
-		errString string
+		name    string
+		input   string
+		want    DependencyMap
+		wantErr bool
+		err     error
 	}{
 		// Single dependency cases
 		{
@@ -51,40 +53,40 @@ func TestParseDependencies(t *testing.T) {
 		},
 		// Error cases
 		{
-			name:      "empty input",
-			input:     "",
-			wantErr:   true,
-			errString: "empty dependency",
+			name:    "empty input",
+			input:   "",
+			wantErr: true,
+			err:     errs.ErrParseMissingValue.WithArgs("dependency", ""),
 		},
 		{
-			name:      "malformed braces",
-			input:     "flag:input}",
-			wantErr:   true,
-			errString: "malformed braces",
+			name:    "malformed braces",
+			input:   "flag:input}",
+			wantErr: true,
+			err:     errs.ErrParseMalformedBraces.WithArgs("flag:input}"),
 		},
 		{
-			name:      "missing flag",
-			input:     "{value:json}",
-			wantErr:   true,
-			errString: "missing or empty flag",
+			name:    "missing flag",
+			input:   "{value:json}",
+			wantErr: true,
+			err:     errs.ErrParseMissingValue.WithArgs("flag", ""),
 		},
 		{
-			name:      "both value and values",
-			input:     "{flag:env,value:prod,values:[stage]}",
-			wantErr:   true,
-			errString: "cannot specify both",
+			name:    "both value and values",
+			input:   "{flag:env,value:prod,values:[stage]}",
+			wantErr: true,
+			err:     errs.ErrParseInvalidFormat.WithArgs("{flag:env,value:prod,values:[stage]}"),
 		},
 		{
-			name:      "empty value",
-			input:     "{flag:type,value:}",
-			wantErr:   true,
-			errString: "empty value",
+			name:    "empty value",
+			input:   "{flag:type,value:}",
+			wantErr: true,
+			err:     errs.ErrParseMissingValue.WithArgs("value", ""),
 		},
 		{
-			name:      "invalid format",
-			input:     "{flag=input}",
-			wantErr:   true,
-			errString: "invalid format",
+			name:    "invalid format",
+			input:   "{flag=input}",
+			wantErr: true,
+			err:     errs.ErrParseInvalidFormat.WithArgs("{flag=input}"),
 		},
 		// Edge cases for brackets and values
 		{
@@ -124,22 +126,22 @@ func TestParseDependencies(t *testing.T) {
 		},
 		// Error cases
 		{
-			name:      "unmatched brackets in values",
-			input:     "{flag:env,values:[prod,stage}",
-			wantErr:   true,
-			errString: "unmatched brackets",
+			name:    "unmatched brackets in values",
+			input:   "{flag:env,values:[prod,stage}",
+			wantErr: true,
+			err:     errs.ErrParseUnmatchedBrackets.WithArgs("{flag:env,values:[prod,stage}"),
 		},
 		{
-			name:      "nested unmatched brackets",
-			input:     "{flag:env,values:[[prod,stage]}",
-			wantErr:   true,
-			errString: "unmatched brackets",
+			name:    "nested unmatched brackets",
+			input:   "{flag:env,values:[[prod,stage]}",
+			wantErr: true,
+			err:     errs.ErrParseUnmatchedBrackets.WithArgs("{flag:env,values:[[prod,stage]}"),
 		},
 		{
-			name:      "duplicate flags",
-			input:     "{flag:env,value:prod},{flag:env,value:stage}",
-			wantErr:   true,
-			errString: "duplicate flag",
+			name:    "duplicate flags",
+			input:   "{flag:env,value:prod},{flag:env,value:stage}",
+			wantErr: true,
+			err:     errs.ErrParseDuplicateFlag.WithArgs("flag", "env"),
 		},
 		{
 			name:  "empty parts between commas",
@@ -188,16 +190,16 @@ func TestParseDependencies(t *testing.T) {
 			want:  DependencyMap{"path": []string{`C:\Program Files\[x86]`, `/usr/local/[bin]`}},
 		},
 		{
-			name:      "unbalanced nested brackets",
-			input:     "{flag:env,values:[[test]}",
-			wantErr:   true,
-			errString: "unmatched brackets",
+			name:    "unbalanced nested brackets",
+			input:   "{flag:env,values:[[test]}",
+			wantErr: true,
+			err:     errs.ErrParseUnmatchedBrackets.WithArgs("{flag:env,values:[[test}"),
 		},
 		{
-			name:      "missing outer brackets",
-			input:     "{flag:env,values:a,b,c}",
-			wantErr:   true,
-			errString: "malformed braces",
+			name:    "missing outer brackets",
+			input:   "{flag:env,values:a,b,c}",
+			wantErr: true,
+			err:     errs.ErrParseMalformedBraces.WithArgs("{flag:env,values:a,b,c}"),
 		},
 	}
 
@@ -209,8 +211,8 @@ func TestParseDependencies(t *testing.T) {
 					t.Errorf("Dependencies() error = nil, wantErr %v", tt.wantErr)
 					return
 				}
-				if !strings.Contains(err.Error(), tt.errString) {
-					t.Errorf("Dependencies() error = %v, want error containing %v", err, tt.errString)
+				if !errors.Is(err, tt.err) {
+					t.Errorf("Dependencies() error = %v, want error  %v", err, tt.err)
 				}
 				return
 			}

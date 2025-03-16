@@ -1,7 +1,9 @@
 package goopt
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/napalu/goopt/types"
@@ -37,19 +39,18 @@ func NewArgument(shortFlag string, description string, typeOf types.OptionType, 
 		descKey = descriptionKey[0]
 	}
 
-	return &Argument{
+	arg := &Argument{
 		Description:    description,
 		DescriptionKey: descKey,
 		TypeOf:         typeOf,
 		Required:       required,
-		DependsOn:      []string{},
-		OfValue:        []string{},
 		Secure:         secure,
 		Short:          shortFlag,
 		DefaultValue:   defaultValue,
-		DependencyMap:  map[string][]string{},
-		uuid:           uuid.New().String(),
 	}
+	arg.ensureInit()
+
+	return arg
 }
 
 // NewArg convenience initialization method to configure flags
@@ -58,6 +59,7 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	for _, config := range configs {
 		config(argument, nil)
 	}
+	argument.ensureInit()
 
 	return argument
 }
@@ -128,4 +130,20 @@ func (a *Argument) DisplayID() string {
 	}
 
 	return fmt.Sprintf("%s-%s", a.uuid[:8], a.DescriptionKey)
+}
+
+// Equal compares two Argument variables for equality across their exported fields
+func (a *Argument) Equal(other *Argument) bool {
+	if a == nil || other == nil {
+		return false
+	}
+
+	aj, _ := json.Marshal(a)
+	oj, _ := json.Marshal(other)
+
+	var am, om map[string]interface{}
+	_ = json.Unmarshal(aj, &am)
+	_ = json.Unmarshal(oj, &om)
+
+	return reflect.DeepEqual(am, om)
 }

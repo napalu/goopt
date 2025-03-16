@@ -1,12 +1,9 @@
 package goopt
 
 import (
-	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/napalu/goopt/i18n"
-	"github.com/napalu/goopt/types"
+	"github.com/napalu/goopt/messages"
 )
 
 type DefaultRenderer struct {
@@ -66,28 +63,6 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 	return r.parser.i18n.T(c.DescriptionKey)
 }
 
-// Error processes an error and returns a translated error message string.
-// It unwraps the error chain and translates each error message if possible.
-func (r *DefaultRenderer) Error(err error) string {
-	var messages []string
-
-	for err != nil {
-		if te, ok := err.(i18n.TranslatableError); ok {
-			msg := r.parser.i18n.T(te.Key(), te.Args()...)
-			messages = append(messages, msg)
-		} else if msg := err.Error(); msg != "" {
-			messages = append(messages, msg)
-		}
-		err = errors.Unwrap(err)
-	}
-
-	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-		messages[i], messages[j] = messages[j], messages[i]
-	}
-
-	return strings.Join(messages, ": ")
-}
-
 // FlagUsage generates a usage string for a given command-line argument.
 // The usage string includes the flag name, short name (if available), description,
 // default value (if any), and whether the flag is required, optional, or conditional.
@@ -96,7 +71,7 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 
 	usage = "--" + r.FlagName(f)
 	if f.Short != "" {
-		usage += " " + r.parser.i18n.T(types.MsgOrKey) + " -" + f.Short
+		usage += " " + r.parser.i18n.T(messages.MsgOrKey) + " -" + f.Short
 	}
 
 	description := r.FlagDescription(f)
@@ -105,14 +80,14 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 	}
 
 	if f.DefaultValue != "" {
-		usage += fmt.Sprintf(" (%s: %s)", r.parser.i18n.T(types.MsgDefaultsToKey), f.DefaultValue)
+		usage += fmt.Sprintf(" (%s: %s)", r.parser.i18n.T(messages.MsgDefaultsToKey), f.DefaultValue)
 	}
 
-	requiredOrOptional := r.parser.i18n.T(types.MsgOptionalKey)
+	requiredOrOptional := r.parser.i18n.T(messages.MsgOptionalKey)
 	if f.Required {
-		requiredOrOptional = r.parser.i18n.T(types.MsgRequiredKey)
+		requiredOrOptional = r.parser.i18n.T(messages.MsgRequiredKey)
 	} else if f.RequiredIf != nil {
-		requiredOrOptional = r.parser.i18n.T(types.MsgConditionalKey)
+		requiredOrOptional = r.parser.i18n.T(messages.MsgConditionalKey)
 	}
 
 	return usage + " (" + requiredOrOptional + ")"
