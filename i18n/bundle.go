@@ -167,7 +167,7 @@ func (b *Bundle) AddLanguage(lang language.Tag, translations map[string]string) 
 			// Partial rollback for failed key
 			delete(merged, key)
 			b.translations[lang] = merged
-			return fmt.Errorf("%w: %s: %w", ErrFailedToSetString, key, err)
+			return fmt.Errorf("%w: %s: %v", ErrFailedToSetString, key, err)
 		}
 	}
 
