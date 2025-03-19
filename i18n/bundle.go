@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -17,7 +16,7 @@ import (
 	"golang.org/x/text/message/catalog"
 )
 
-//go:embed locales/en.json locales/fr.json locales/de.json
+//go:embed locales/*.json
 var defaultLocales embed.FS
 
 var (
@@ -263,13 +262,14 @@ func (b *Bundle) loadEmbeddedWithFS(fs embed.FS, dirPrefix string) error {
 		if err != nil {
 			return fmt.Errorf("%w: %s", ErrInvalidLanguage, entry.Name())
 		}
+		filePath := dirPrefix + "/" + entry.Name() // Always use forward slashes
 		if parsedLang != b.defaultLang {
 			langEntries = append(langEntries, types.KeyValue[language.Tag, string]{
 				Key:   parsedLang,
-				Value: filepath.Join(dirPrefix, entry.Name()),
+				Value: filePath,
 			})
 		} else {
-			if err := b.processLangFile(fs, parsedLang, filepath.Join(dirPrefix, entry.Name())); err != nil {
+			if err := b.processLangFile(fs, parsedLang, filePath); err != nil {
 				return err
 			}
 		}
