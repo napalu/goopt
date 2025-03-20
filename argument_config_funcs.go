@@ -4,8 +4,8 @@ import (
 	"regexp"
 
 	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
 )
 
 // WithShortFlag represents the short form of a flag. Since by default and design, no max length is enforced,

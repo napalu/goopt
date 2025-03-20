@@ -7,10 +7,11 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/i18n"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
-	"github.com/napalu/goopt/util"
+
 	"golang.org/x/text/language"
 )
 

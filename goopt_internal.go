@@ -14,11 +14,11 @@ import (
 	"github.com/napalu/goopt/completion"
 	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/i18n"
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/internal/parse"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
-	"github.com/napalu/goopt/util"
 )
 
 func (p *Parser) parseFlag(state parse.State, currentCommandPath string) {

@@ -3,7 +3,7 @@ package goopt
 import (
 	"fmt"
 
-	"github.com/napalu/goopt/messages"
+	"github.com/napalu/goopt/internal/messages"
 )
 
 type DefaultRenderer struct {

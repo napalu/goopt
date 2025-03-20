@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
 )
 
 // DependencyMap maps flag names to their allowed values

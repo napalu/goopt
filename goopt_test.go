@@ -15,15 +15,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/i18n"
 	"github.com/napalu/goopt/internal/testutil"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
-	"golang.org/x/text/language"
-
-	"github.com/iancoleman/strcase"
 	"github.com/stretchr/testify/assert"
+
+	"golang.org/x/text/language"
 )
 
 type arrayWriter struct {

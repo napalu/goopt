@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/internal/parse"
 	"github.com/napalu/goopt/types"
 	"github.com/stretchr/testify/assert"
 )
