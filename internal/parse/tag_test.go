@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -6,12 +6,13 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/internal/parse"
 	"github.com/napalu/goopt/types"
 	"github.com/stretchr/testify/assert"
 )
 
 func FuzzParseFlags(f *testing.F) {
+	testing.Verbose()
 	// Seed corpus with edge cases
 	f.Add("-a2こんにちは")
 	f.Add("--long")            // Empty value
@@ -48,14 +49,16 @@ func FuzzParseFlags(f *testing.F) {
 		if strings.Contains(rawArgs, "-a \\'-xtra\\'") {
 			t.Logf("rawArgs: %s", rawArgs)
 		}
+		t.Logf("args: %v", args)
 		// Parse and validate invariants
 		ok := p.Parse(args) && p.GetErrorCount() == 0
 
 		// Invariant 1: Parser state consistency
 		if ok {
 
+			state := parse.NewState(args)
 			// Retrieved values match input
-			for _, arg := range p.parseState.Args() {
+			for _, arg := range state.Args() {
 				if p.isFlag(arg) {
 					name := strings.TrimLeftFunc(arg, p.prefixFunc)
 					if len(name) == 0 {

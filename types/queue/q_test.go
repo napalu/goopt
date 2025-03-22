@@ -3,7 +3,7 @@ package queue
 import (
 	"testing"
 
-	"github.com/napalu/goopt/util"
+	"github.com/napalu/goopt/internal/util"
 )
 
 func TestStackOperations(t *testing.T) {

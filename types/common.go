@@ -1,7 +1,6 @@
 package types
 
 import (
-	"errors"
 	"regexp"
 )
 
@@ -71,6 +70,7 @@ type TagConfig struct {
 	Short          string
 	TypeOf         OptionType
 	Description    string
+	DescriptionKey string
 	Default        string
 	Required       bool
 	Secure         Secure
@@ -93,13 +93,3 @@ func (r *PatternValue) Describe() string {
 // ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
-
-var (
-	ErrUnsupportedTypeConversion = errors.New("unsupported type conversion")
-	ErrCommandNotFound           = errors.New("command not found")
-	ErrFlagNotFound              = errors.New("flag not found")
-	ErrPosixIncompatible         = errors.New("posix incompatible")
-	ErrValidationFailed          = errors.New("validation failed")
-	ErrBindNilPointer            = errors.New("can't bind flag to nil")
-	ErrVariableNotAPointer       = errors.New("variable is not a pointer")
-)

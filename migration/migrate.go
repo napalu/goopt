@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/internal/parse"
 	"github.com/napalu/goopt/types"
 )
 

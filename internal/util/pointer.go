@@ -1,8 +1,9 @@
 package util
 
 import (
-	"fmt"
 	"reflect"
+
+	"github.com/napalu/goopt/errs"
 )
 
 // UnwrapValue recursively unwraps pointer and returns the underlying value
@@ -10,7 +11,7 @@ import (
 func UnwrapValue(v reflect.Value) (reflect.Value, error) {
 	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
-			return reflect.Value{}, fmt.Errorf("nil pointer encountered")
+			return reflect.Value{}, errs.ErrNilPointer
 		}
 		v = v.Elem()
 	}

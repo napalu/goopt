@@ -1,6 +1,10 @@
 package goopt
 
-import "github.com/napalu/goopt/types"
+import (
+	"github.com/napalu/goopt/i18n"
+	"github.com/napalu/goopt/types"
+	"golang.org/x/text/language"
+)
 
 // NewParserWith allows initialization of Parser using option functions. The caller should always test for error on
 // return because Parser will be nil when an error occurs during initialization.
@@ -144,5 +148,27 @@ func WithFlagNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
 func WithEnvNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.SetEnvNameConverter(converter)
+	}
+}
+
+// WithI18n allows setting the language for the parser.
+func WithLanguage(lang language.Tag) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.i18n.SetDefaultLanguage(lang)
+	}
+}
+
+// WithUserBundle allows setting the user-defined i18n bundle for the parser.
+func WithUserBundle(bundle *i18n.Bundle) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		*err = cmdLine.SetUserBundle(bundle)
+	}
+}
+
+// WithReplaceBundle allows setting a user-defined i18n bundle which will replace the default i18n bundle and be used to
+// for translations of struct field tags, error messages and so on.
+func WithReplaceBundle(rbundle *i18n.Bundle) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		*err = cmdLine.ReplaceDefaultBundle(rbundle)
 	}
 }

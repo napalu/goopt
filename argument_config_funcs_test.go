@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/internal/testutil"
 	"github.com/napalu/goopt/types"
 
 	"github.com/stretchr/testify/assert"
@@ -105,7 +107,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			input:     "--status pending",
 			wantParse: false,
 			wantWarns: nil,
-			wantErrs:  []error{fmt.Errorf("invalid argument 'pending' for flag 'status'. Accepted values: active status, inactive status")},
+			wantErrs:  []error{errs.ErrInvalidArgument.WithArgs("pending", "status", "active status, inactive status")},
 		},
 		{
 			name: "with secure flag - terminal input",
@@ -124,8 +126,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with secure prompt - terminal input",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
-					SetSecure(true),
-					SetSecurePrompt("Enter password:"),
+					WithSecurePrompt("Enter password: "),
 					WithType(types.Single),
 				))
 			},
@@ -138,14 +139,14 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 			name: "with secure flag - terminal error",
 			setupFunc: func(p *Parser) error {
 				return p.AddFlag("password", NewArg(
-					SetSecure(true),
+					WithSecurePrompt(""),
 					WithType(types.Single),
 				))
 			},
 			input:     "--password",
 			mockError: fmt.Errorf("terminal error"),
 			wantParse: false,
-			wantErrs:  []error{fmt.Errorf("secure flag 'password' expects a value but we failed to obtain one: terminal error")},
+			wantErrs:  []error{errs.ErrSecureFlagExpectsValue.WithArgs("password").Wrap(fmt.Errorf("terminal error"))},
 		},
 		{
 			name: "with pre validation filter",
@@ -230,7 +231,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 				assert.Equal(t, tt.wantWarns, opts.GetWarnings())
 			}
 			if tt.wantErrs != nil {
-				assert.Equal(t, tt.wantErrs, opts.GetErrors())
+				testutil.CompareErrors(t, tt.wantErrs, opts.GetErrors())
 			}
 		})
 	}

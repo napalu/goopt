@@ -1,10 +1,9 @@
 package parse
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 
+	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/types"
 )
 
@@ -35,12 +34,12 @@ import (
 func PatternValue(input string) (*types.PatternValue, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return nil, fmt.Errorf(errEmptyInput, "pattern value")
+		return nil, errs.ErrParseEmptyInput.WithArgs("pattern value")
 	}
 
 	// Check for proper braces
 	if !strings.HasPrefix(input, "{") || !strings.HasSuffix(input, "}") {
-		return nil, fmt.Errorf(errMalformedBraces, input)
+		return nil, errs.ErrParseMalformedBraces.WithArgs(input)
 	}
 	input = strings.Trim(input, "{}")
 
@@ -83,12 +82,12 @@ func PatternValue(input string) (*types.PatternValue, error) {
 			part := current.String()
 			key, value, found := strings.Cut(strings.TrimSpace(part), ":")
 			if !found {
-				return nil, errors.New(errInvalidFormat)
+				return nil, errs.ErrParseInvalidFormat.WithArgs(input)
 			}
 			key = strings.TrimSpace(key)
 			value = strings.TrimSpace(value)
 			if key == "" {
-				return nil, fmt.Errorf(errEmptyKey, input)
+				return nil, errs.ErrParseEmptyKey.WithArgs(input)
 			}
 			parts[key] = value
 			current.Reset()
@@ -101,12 +100,12 @@ func PatternValue(input string) (*types.PatternValue, error) {
 
 	pattern, ok := parts["pattern"]
 	if !ok || pattern == "" {
-		return nil, fmt.Errorf(errMissingValue, "pattern", input)
+		return nil, errs.ErrParseMissingValue.WithArgs("pattern", input)
 	}
 
 	desc, ok := parts["desc"]
 	if !ok || desc == "" {
-		return nil, fmt.Errorf(errMissingValue, "desc", input)
+		return nil, errs.ErrParseMissingValue.WithArgs("desc", input)
 	}
 
 	return &types.PatternValue{
@@ -122,12 +121,12 @@ func PatternValues(input string) ([]types.PatternValue, error) {
 	// Handle empty input
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return nil, fmt.Errorf(errEmptyInput, "pattern values")
+		return nil, errs.ErrParseEmptyInput.WithArgs("pattern values")
 	}
 
 	// Initial brace validation
 	if !strings.HasPrefix(input, "{") || !strings.HasSuffix(input, "}") {
-		return nil, fmt.Errorf(errMalformedBraces, input)
+		return nil, errs.ErrParseMalformedBraces.WithArgs(input)
 	}
 
 	// Split patterns while preserving escaped characters

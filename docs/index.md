@@ -40,6 +40,11 @@ goopt follows these key principles:
   - Optional POSIX-compliant flag parsing
   - Customizable flag name and command name converters
   - Positional arguments with flexible position and index constraints
+- **i18n Support**:
+  - Goopt has built-in support for internalization in English, French and German
+  - Built-in translations can be easily extended to support additional languages
+  - Support for user-defined internalization support for flag and command usage
+  - Allows overriding built-in messages if necessary
 
 ## Documentation Contents
 
@@ -50,6 +55,7 @@ goopt follows these key principles:
 - [Struct-First Approach](guides/struct-tags.md) - Struct-first approach
 - [Advanced Features](guides/advanced-features.md) - Nested access, dependencies, validation, and more
 - [Positional Arguments](guides/positional-arguments.md) - Flexible positional argument handling
+- [Internationalization](guides/internationalization.md) - Internationalization support for you CLI
 
 ### Configuration
 - [Environment Variables](configuration/environment.md) - ENV var support

@@ -17,6 +17,7 @@ package goopt
 
 import (
 	"fmt"
+
 	"io"
 	"os"
 	"path/filepath"
@@ -27,17 +28,19 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/completion"
-	"github.com/napalu/goopt/parse"
+	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/i18n"
+	"github.com/napalu/goopt/internal/parse"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
 	"github.com/napalu/goopt/types/orderedmap"
 	"github.com/napalu/goopt/types/queue"
-	"github.com/napalu/goopt/util"
 )
 
 // NewParser convenience initialization method. Use NewCmdLine to
 // configure CmdLineOption using option functions.
 func NewParser() *Parser {
-	return &Parser{
+	p := &Parser{
 		acceptedFlags:        orderedmap.NewOrderedMap[string, *FlagInfo](),
 		lookup:               map[string]string{},
 		options:              map[string]string{},
@@ -57,7 +60,11 @@ func NewParser() *Parser {
 		flagNameConverter:    DefaultFlagNameConverter,
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
+		i18n:                 i18n.Default(),
 	}
+	p.renderer = NewRenderer(p)
+
+	return p
 }
 
 // NewCmdLineOption creates a new parser with default initialization.
@@ -197,13 +204,13 @@ func (p *Parser) GetCommandExecutionError(commandName string) error {
 		return err
 	}
 
-	return fmt.Errorf("%w: %s was not found or has no associated callback", types.ErrCommandNotFound, commandName)
+	return errs.ErrCommandNotFound.WithArgs(commandName)
 }
 
 // GetCommandExecutionErrors returns the errors which occurred during execution of command callbacks
 // after ExecuteCommands has been called. Returns a KeyValue list of command name and error
 func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
-	errors := []types.KeyValue[string, error]{}
+	var errors []types.KeyValue[string, error]
 	for key, err := range p.callbackResults {
 		if err != nil {
 			errors = append(errors, types.KeyValue[string, error]{Key: key, Value: err})
@@ -223,7 +230,7 @@ func (p *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, comman
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+	return errs.ErrFlagNotFound.WithArgs(flag)
 }
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -236,7 +243,7 @@ func (p *Parser) AddFlagPostValidationFilter(flag string, proc FilterFunc, comma
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+	return errs.ErrFlagNotFound.WithArgs(flag)
 }
 
 // HasPreValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -260,7 +267,7 @@ func (p *Parser) GetPreValidationFilter(flag string, commandPath ...string) (Fil
 		}
 	}
 
-	return nil, fmt.Errorf("%w: no pre-validation filters for flag %s", types.ErrValidationFailed, flag)
+	return nil, errs.ErrNoPreValidationFilters.WithArgs(flag)
 }
 
 // HasPostValidationFilter returns true when an option has a transform/evaluate function which is called on Parse
@@ -284,7 +291,7 @@ func (p *Parser) GetPostValidationFilter(flag string, commandPath ...string) (Fi
 		}
 	}
 
-	return nil, fmt.Errorf("%w: no post-validation filters for flag %s", types.ErrValidationFailed, flag)
+	return nil, errs.ErrNoPostValidationFilters.WithArgs(flag)
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
@@ -415,7 +422,6 @@ func (p *Parser) Parse(args []string) bool {
 		success = len(p.errors) == 0
 	}
 	p.secureArguments = nil
-	p.parseState = state
 
 	return success
 }
@@ -522,7 +528,7 @@ func (p *Parser) Get(flag string, commandPath ...string) (string, bool) {
 				value = flagInfo.Argument.DefaultValue
 				err := p.setBoundVariable(value, mainKey)
 				if err != nil {
-					p.addError(fmt.Errorf("error setting bound variable value %w", err))
+					p.addError(errs.ErrSettingBoundValue.Wrap(err).WithArgs(flag))
 				}
 				found = true
 			}
@@ -546,36 +552,46 @@ func (p *Parser) GetOrDefault(flag string, defaultValue string, commandPath ...s
 func (p *Parser) GetBool(flag string, commandPath ...string) (bool, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return false, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return false, errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	val, err := strconv.ParseBool(value)
 
-	return val, err
+	if err != nil {
+		return false, errs.ErrParseBool.Wrap(err).WithArgs(value)
+	}
+
+	return val, nil
 }
 
 // GetInt attempts to convert the string value of a Flag to an int64.
 func (p *Parser) GetInt(flag string, bitSize int, commandPath ...string) (int64, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return 0, errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	val, err := strconv.ParseInt(value, 10, bitSize)
+	if err != nil {
+		return 0, errs.ErrParseInt.Wrap(err).WithArgs(value, bitSize)
+	}
 
-	return val, err
+	return val, nil
 }
 
 // GetFloat attempts to convert the string value of a Flag to a float64
 func (p *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (float64, error) {
 	value, success := p.Get(flag, commandPath...)
 	if !success {
-		return 0, fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return 0, errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	val, err := strconv.ParseFloat(value, bitSize)
+	if err != nil {
+		return 0, errs.ErrParseFloat.Wrap(err).WithArgs(value, bitSize)
+	}
 
-	return val, err
+	return val, nil
 }
 
 // GetList attempts to split the string value of a Chained Flag to a string slice
@@ -586,7 +602,7 @@ func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 		if arg.TypeOf == types.Chained {
 			value, success := p.Get(flag, commandPath...)
 			if !success {
-				return []string{}, fmt.Errorf("failed to retrieve value for flag '%s'", flag)
+				return []string{}, errs.ErrFlagValueNotRetrieved.WithArgs(flag)
 			}
 
 			listDelimFunc := p.getListDelimiterFunc()
@@ -594,7 +610,7 @@ func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 			return strings.FieldsFunc(value, listDelimFunc), nil
 		}
 
-		return []string{}, fmt.Errorf("invalid Argument type for flag '%s' - use typeOf = Chained instead", flag)
+		return []string{}, errs.ErrInvalidArgumentType.WithArgs(flag, types.Chained)
 	}
 
 	return []string{}, err
@@ -608,17 +624,37 @@ func (p *Parser) SetListDelimiterFunc(delimiterFunc types.ListDelimiterFunc) err
 		return nil
 	}
 
-	return fmt.Errorf("invalid ListDelimiterFunc (should not be null)")
+	return errs.ErrInvalidListDelimiterFunc
 }
 
 // SetArgumentPrefixes sets the flag argument prefixes
 func (p *Parser) SetArgumentPrefixes(prefixes []rune) error {
 	prefixesLen := len(prefixes)
 	if prefixesLen == 0 {
-		return fmt.Errorf("can't parse with empty argument prefix list")
+		return errs.ErrEmptyArgumentPrefixList
 	}
 
 	p.prefixes = prefixes
+
+	return nil
+}
+
+func (p *Parser) SetUserBundle(bundle *i18n.Bundle) error {
+	if bundle == nil {
+		return errs.ErrNilPointer.WithArgs("bundle")
+	}
+
+	p.userI18n = bundle
+
+	return nil
+}
+
+func (p *Parser) ReplaceDefaultBundle(bundle *i18n.Bundle) error {
+	if bundle == nil {
+		return errs.ErrNilPointer.WithArgs("bundle")
+	}
+
+	p.i18n = bundle
 
 	return nil
 }
@@ -692,7 +728,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 	argument.ensureInit()
 
 	if flag == "" {
-		return fmt.Errorf("can't set empty flag")
+		return errs.ErrEmptyFlag
 	}
 
 	// Use the helper function to generate the lookup key
@@ -700,23 +736,25 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	// Ensure no duplicate flags for the same command path or globally
 	if _, exists := p.acceptedFlags.Get(lookupFlag); exists {
-		return fmt.Errorf("flag '%s' already exists for the given command path", lookupFlag)
+		return errs.ErrFlagAlreadyExists.WithArgs(lookupFlag)
 	}
 
 	if lenS := len(argument.Short); lenS > 0 {
 		if p.posixCompatible && lenS > 1 {
-			return fmt.Errorf("%w: flag %s has short form %s which is not posix compatible (length > 1)", types.ErrPosixIncompatible, flag, argument.Short)
+			return errs.ErrPosixShortForm.WithArgs(flag, argument.Short)
 		}
 
 		// Check for short flag conflicts only for global flags
 		if len(commandPath) == 0 { // Global flag
 			if arg, exists := p.lookup[argument.Short]; exists {
-				return fmt.Errorf("short flag '%s' on global flag %s already exists as %v", argument.Short, flag, arg)
+				return errs.ErrShortFlagConflict.WithArgs(argument.Short, flag, arg)
 			}
 		}
 
 		p.lookup[argument.Short] = flag
 	}
+
+	p.lookup[argument.uuid] = flag
 
 	if argument.TypeOf == types.Empty {
 		argument.TypeOf = types.Single
@@ -728,7 +766,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 	})
 
 	if argument.Capacity < 0 {
-		return fmt.Errorf("negative capacity not allowed: %d", argument.Capacity)
+		return errs.ErrNegativeCapacity.WithArgs(flag, argument.Capacity)
 	}
 
 	if argument.Capacity > 0 {
@@ -748,7 +786,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 // BindFlagToParser is a helper function to allow passing generics to the Parser.BindFlag method
 func BindFlagToParser[T Bindable](s *Parser, data *T, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return types.ErrBindNilPointer
+		return errs.ErrNilPointer
 	}
 
 	return s.BindFlag(data, flag, argument, commandPath...)
@@ -764,7 +802,7 @@ func BindFlagToCmdLine[T Bindable](s *Parser, data *T, flag string, argument *Ar
 // CustomBindFlagToParser is a helper function to allow passing generics to the Parser.CustomBindFlag method
 func CustomBindFlagToParser[T any](s *Parser, data *T, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if s == nil {
-		return types.ErrBindNilPointer
+		return errs.ErrNilPointer
 	}
 
 	return s.CustomBindFlag(data, proc, flag, argument, commandPath...)
@@ -782,7 +820,7 @@ func CustomBindFlagToCmdLine[T any](s *Parser, data *T, proc ValueSetFunc, flag 
 // An error is returned if data cannot be bound - for compile-time safety use BindFlagToParser instead
 func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, commandPath ...string) error {
 	if bindPtr == nil {
-		return types.ErrBindNilPointer
+		return errs.ErrNilPointer
 	}
 	if ok, err := util.CanConvert(bindPtr, argument.TypeOf); !ok {
 		return err
@@ -790,12 +828,12 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 
 	v := reflect.ValueOf(bindPtr)
 	if v.Kind() != reflect.Ptr {
-		return types.ErrVariableNotAPointer
+		return errs.ErrNonPointerVar
 	}
 
 	elem := v.Elem()
 	if !elem.IsValid() {
-		return fmt.Errorf("can't bind to invalid value field")
+		return errs.ErrBindInvalidValue
 	}
 
 	lookupFlag := buildPathFlag(flag, commandPath...)
@@ -834,11 +872,11 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 // complex structures not supported by BindFlag
 func (p *Parser) CustomBindFlag(data any, proc ValueSetFunc, flag string, argument *Argument, commandPath ...string) error {
 	if reflect.TypeOf(data).Kind() != reflect.Ptr {
-		return fmt.Errorf("we expect a pointer to a variable")
+		return errs.ErrPointerExpected
 	}
 
 	if !reflect.ValueOf(data).Elem().IsValid() {
-		return fmt.Errorf("can't bind to invalid value field")
+		return errs.ErrBindInvalidValue
 	}
 
 	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
@@ -879,7 +917,7 @@ func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, com
 	for i := 0; i < lenValues; i++ {
 		re, err := regexp.Compile(acceptVal[i].Pattern)
 		if err != nil {
-			return fmt.Errorf("failed to compile pattern %s: %w", acceptVal[i].Pattern, err)
+			return errs.ErrRegexCompile.WithArgs(acceptVal[i].Pattern, err)
 		}
 		acceptVal[i].Compiled = re
 	}
@@ -906,7 +944,7 @@ func (p *Parser) GetArgument(flag string, commandPath ...string) (*Argument, err
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	v, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return nil, fmt.Errorf("option with flag %s was not set", flag)
+		return nil, errs.ErrOptionNotSet.WithArgs(flag)
 	}
 
 	return v.Argument, nil
@@ -964,7 +1002,7 @@ func (p *Parser) GetShortFlag(flag string, commandPath ...string) (string, error
 			return argument.Short, nil
 		}
 
-		return "", fmt.Errorf("flag %s has no short flag defined", flag)
+		return "", errs.ErrShortFlagUndefined.WithArgs(flag)
 	}
 
 	return "", err
@@ -1039,7 +1077,7 @@ func (p *Parser) DescribeFlag(flag, description string, commandPath ...string) e
 		return nil
 	}
 
-	return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+	return errs.ErrFlagNotFound.WithArgs(flag)
 }
 
 // GetDescription retrieves a Flag's description as set by DescribeFlag
@@ -1065,7 +1103,7 @@ func (p *Parser) SetCommand(commandPath string, configs ...ConfigureCommandFunc)
 		cmd.Set(configs...)
 		return nil
 	} else {
-		return fmt.Errorf("command path %s not found", commandPath)
+		return errs.ErrCommandNotFound.WithArgs(commandPath)
 	}
 }
 
@@ -1136,13 +1174,13 @@ func (p *Parser) DependsOnFlagValue(flag, dependsOn, ofValue string, commandPath
 // AddDependency adds a dependency without value constraints
 func (p *Parser) AddDependency(flag, dependsOn string, commandPath ...string) error {
 	if flag == "" {
-		return fmt.Errorf("can't set dependency on empty flag")
+		return errs.ErrDependencyOnEmptyFlag
 	}
 
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	// Initialize DependencyMap if needed
@@ -1159,13 +1197,13 @@ func (p *Parser) AddDependency(flag, dependsOn string, commandPath ...string) er
 // AddDependencyValue adds or updates a dependency with specific allowed values
 func (p *Parser) AddDependencyValue(flag, dependsOn string, allowedValues []string, commandPath ...string) error {
 	if flag == "" {
-		return fmt.Errorf("can't set dependency on empty flag")
+		return errs.ErrDependencyOnEmptyFlag
 	}
 
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	// Initialize DependencyMap if needed
@@ -1187,13 +1225,13 @@ func (p *Parser) AddDependencyValue(flag, dependsOn string, allowedValues []stri
 // RemoveDependency removes a dependency
 func (p *Parser) RemoveDependency(flag, dependsOn string, commandPath ...string) error {
 	if flag == "" {
-		return fmt.Errorf("can't remove dependency from empty flag")
+		return errs.ErrDependencyOnEmptyFlag
 	}
 
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	flagInfo, found := p.acceptedFlags.Get(mainKey)
 	if !found {
-		return fmt.Errorf(FmtErrorWithString, types.ErrFlagNotFound, flag)
+		return errs.ErrFlagNotFound.WithArgs(flag)
 	}
 
 	dependsOnKey := p.flagOrShortFlag(dependsOn, commandPath...)
@@ -1201,6 +1239,11 @@ func (p *Parser) RemoveDependency(flag, dependsOn string, commandPath ...string)
 		delete(flagInfo.Argument.DependencyMap, dependsOnKey)
 	}
 	return nil
+}
+
+// FlagPath returns the command part of a Flag or an empty string when not.
+func (p *Parser) FlagPath(flag string) string {
+	return getFlagPath(flag)
 }
 
 // GetErrors returns a list of the errors encountered during Parse
@@ -1236,7 +1279,7 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 			flagName = flagParts[1]
 		}
 
-		addFlagToCompletionData(&data, cmd, flagName, flagInfo)
+		addFlagToCompletionData(&data, cmd, flagName, flagInfo, p.renderer)
 	}
 
 	// Process commands
@@ -1288,7 +1331,7 @@ func (p *Parser) PrintUsageWithGroups(writer io.Writer) {
 	}
 }
 
-// PrintPositionalArgs prints all positional arguments in order
+// PrintPositionalArgs prints information about positional arguments
 func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 	var args []PositionalArgument
 
@@ -1318,10 +1361,11 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 		for _, arg := range args {
 			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (position: %d)\n",
 				arg.Value,
-				arg.Argument.Description,
+				p.renderer.FlagDescription(arg.Argument),
 				arg.Position)))
 		}
 	}
+
 }
 
 // PrintGlobalFlags prints global (non-command-specific) flags
@@ -1333,7 +1377,7 @@ func (p *Parser) PrintGlobalFlags(writer io.Writer) {
 			continue
 		}
 		if f.Value.CommandPath == "" { // Global flags have no command path
-			_, _ = writer.Write([]byte(fmt.Sprintf(" --%s %s\n", *f.Key, f.Value.Argument)))
+			_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
 		}
 	}
 }
@@ -1345,12 +1389,11 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 			kv.Value.Visit(func(cmd *Command, level int) bool {
 				// Determine the correct prefix based on command level and position
 				var prefix string
-				switch {
-				case level == 0:
+				if level == 0 {
 					prefix = config.NewCommandPrefix
-				case len(cmd.Subcommands) == 0:
+				} else if len(cmd.Subcommands) == 0 {
 					prefix = config.TerminalPrefix
-				default:
+				} else {
 					prefix = config.DefaultPrefix
 				}
 
@@ -1371,16 +1414,9 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 
 // PrintCommandSpecificFlags print flags for a specific command with the appropriate indentation
 func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
-	hasFlags := false
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
-			if !hasFlags {
-				hasFlags = true
-			}
-
-			flagParts := splitPathFlag(*f.Key)
-			flagDesc := fmt.Sprintf("--%s", flagParts[0])
-			flag := fmt.Sprintf("%s%s %s\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), flagDesc, f.Value.Argument)
+			flag := fmt.Sprintf("%s%s\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), p.renderer.FlagUsage(f.Value.Argument))
 
 			_, _ = writer.Write([]byte(flag))
 		}
@@ -1390,7 +1426,7 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (p *Parser) PrintFlags(writer io.Writer) {
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n --%s %s", *f.Key, f.Value.Argument)))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n %s\n", p.renderer.FlagUsage(f.Value.Argument))))
 	}
 }
 

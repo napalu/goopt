@@ -3,11 +3,12 @@ package goopt
 // NewCommand creates and returns a new Command object. This function takes variadic `ConfigureCommandFunc` functions to customize the created command.
 func NewCommand(configs ...ConfigureCommandFunc) *Command {
 	cmd := &Command{
-		Name:        "",
-		Subcommands: nil,
-		Callback:    nil,
-		Description: "",
-		path:        "",
+		Name:           "",
+		Subcommands:    nil,
+		Callback:       nil,
+		Description:    "",
+		DescriptionKey: "",
+		path:           "",
 	}
 
 	for _, config := range configs {
@@ -42,6 +43,13 @@ func WithCallback(callback CommandFunc) ConfigureCommandFunc {
 func WithCommandDescription(description string) ConfigureCommandFunc {
 	return func(command *Command) {
 		command.Description = description
+	}
+}
+
+// WithCommandDescriptionKey sets the description key for the command. This key is used to translate the description.
+func WithCommandDescriptionKey(descriptionKey string) ConfigureCommandFunc {
+	return func(command *Command) {
+		command.DescriptionKey = descriptionKey
 	}
 }
 

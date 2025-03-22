@@ -2,8 +2,11 @@ package util
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/napalu/goopt/errs"
 )
 
 // MockTerminal for testing
@@ -23,14 +26,14 @@ func (m *MockTerminal) IsTerminal(fd int) bool {
 
 func TestGetSecureString(t *testing.T) {
 	tests := []struct {
-		name          string
-		prompt        string
-		mockPassword  []byte
-		isTerminal    bool
-		mockErr       error
-		want          string
-		wantErr       bool
-		wantErrString string
+		name         string
+		prompt       string
+		mockPassword []byte
+		isTerminal   bool
+		mockErr      error
+		want         string
+		wantErr      bool
+		errWanted    error
 	}{
 		{
 			name:         "successful password input",
@@ -41,19 +44,19 @@ func TestGetSecureString(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:          "empty password",
-			prompt:        "Enter password: ",
-			mockPassword:  []byte(""),
-			isTerminal:    true,
-			wantErr:       true,
-			wantErrString: "empty password is invalid",
+			name:         "empty password",
+			prompt:       "Enter password: ",
+			mockPassword: []byte(""),
+			isTerminal:   true,
+			wantErr:      true,
+			errWanted:    errs.ErrParseEmptyInput.WithArgs("password"),
 		},
 		{
-			name:          "not a terminal",
-			prompt:        "Enter password: ",
-			isTerminal:    false,
-			wantErr:       true,
-			wantErrString: "not attached to a terminal",
+			name:       "not a terminal",
+			prompt:     "Enter password: ",
+			isTerminal: false,
+			wantErr:    true,
+			errWanted:  errs.ErrNotAttachedToTerminal.WithArgs("stdin"),
 		},
 	}
 
@@ -71,8 +74,8 @@ func TestGetSecureString(t *testing.T) {
 				t.Errorf("GetSecureString() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if tt.wantErr && tt.wantErrString != "" && !strings.Contains(err.Error(), tt.wantErrString) {
-				t.Errorf("GetSecureString() error = %v, wantErrString %v", err, tt.wantErrString)
+			if tt.wantErr && tt.errWanted != nil && !errors.Is(err, tt.errWanted) {
+				t.Errorf("GetSecureString() error = %v, wantErrString %v", err, tt.errWanted)
 				return
 			}
 			if got != tt.want {

@@ -1,9 +1,9 @@
 package parse
 
 import (
-	"errors"
-	"fmt"
 	"strings"
+
+	"github.com/napalu/goopt/errs"
 )
 
 // Dependency format rules:
@@ -40,12 +40,12 @@ func Dependencies(input string) (DependencyMap, error) {
 	// Handle empty input
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return nil, fmt.Errorf(errEmptyInput, "dependency")
+		return nil, errs.ErrParseMissingValue.WithArgs("dependency", input)
 	}
 
 	// Initial brace validation
 	if !strings.HasPrefix(strings.TrimSpace(input), "{") || !strings.HasSuffix(strings.TrimSpace(input), "}") {
-		return nil, fmt.Errorf(errMalformedBraces, input)
+		return nil, errs.ErrParseMalformedBraces.WithArgs(input)
 	}
 
 	// Split dependencies while preserving brackets
@@ -64,7 +64,7 @@ func Dependencies(input string) (DependencyMap, error) {
 		case ']':
 			bracketCount--
 			if bracketCount < 0 {
-				return nil, fmt.Errorf(errUnmatchedBrackets, input)
+				return nil, errs.ErrParseUnmatchedBrackets.WithArgs(input)
 			}
 			current.WriteByte(ch)
 		case '{':
@@ -73,7 +73,7 @@ func Dependencies(input string) (DependencyMap, error) {
 		case '}':
 			braceCount--
 			if braceCount < 0 {
-				return nil, fmt.Errorf(errMalformedBraces, input)
+				return nil, errs.ErrParseMalformedBraces.WithArgs(input)
 			}
 			current.WriteByte(ch)
 		case ',':
@@ -89,10 +89,10 @@ func Dependencies(input string) (DependencyMap, error) {
 	}
 
 	if bracketCount != 0 {
-		return nil, fmt.Errorf(errUnmatchedBrackets, input)
+		return nil, errs.ErrParseUnmatchedBrackets.WithArgs(input)
 	}
 	if braceCount != 0 {
-		return nil, fmt.Errorf(errMalformedBraces, input)
+		return nil, errs.ErrParseMalformedBraces.WithArgs(input)
 	}
 
 	if current.Len() > 0 {
@@ -107,7 +107,7 @@ func Dependencies(input string) (DependencyMap, error) {
 			return nil, err
 		}
 		if seenFlags[flag] {
-			return nil, fmt.Errorf(errDuplicateFlag, flag)
+			return nil, errs.ErrParseDuplicateFlag.WithArgs(flag)
 		}
 		seenFlags[flag] = true
 		result[flag] = values
@@ -120,12 +120,12 @@ func Dependencies(input string) (DependencyMap, error) {
 func Dependency(input string) (string, []string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return "", nil, fmt.Errorf(errEmptyInput, "dependency")
+		return "", nil, errs.ErrParseMissingValue.WithArgs("dependency", input)
 	}
 
 	// Validate braces
 	if !strings.HasPrefix(input, "{") || !strings.HasSuffix(input, "}") {
-		return "", nil, fmt.Errorf(errMalformedBraces, input)
+		return "", nil, errs.ErrParseMalformedBraces.WithArgs(input)
 	}
 	input = strings.Trim(input, "{} \r\n")
 
@@ -144,7 +144,7 @@ func Dependency(input string) (string, []string, error) {
 		case ']':
 			bracketCount--
 			if bracketCount < 0 {
-				return "", nil, fmt.Errorf(errUnmatchedBrackets, input)
+				return "", nil, errs.ErrParseUnmatchedBrackets.WithArgs(input)
 			}
 			current.WriteByte(ch)
 		case ',':
@@ -153,14 +153,14 @@ func Dependency(input string) (string, []string, error) {
 				key, value, found := strings.Cut(strings.TrimSpace(part), ":")
 				if !found {
 					if strings.Contains(part, "=") {
-						return "", nil, errors.New(errInvalidFormat)
+						return "", nil, errs.ErrParseInvalidFormat.WithArgs(input)
 					}
-					return "", nil, fmt.Errorf(errMalformedBraces, input)
+					return "", nil, errs.ErrParseMalformedBraces.WithArgs(input)
 				}
 				key = strings.TrimSpace(key)
 				value = strings.TrimSpace(value)
 				if key == "" {
-					return "", nil, fmt.Errorf(errEmptyKey, part)
+					return "", nil, errs.ErrParseEmptyKey.WithArgs(part)
 				}
 				parts[key] = value
 				current.Reset()
@@ -173,21 +173,21 @@ func Dependency(input string) (string, []string, error) {
 	}
 
 	if bracketCount != 0 {
-		return "", nil, fmt.Errorf(errUnmatchedBrackets, input)
+		return "", nil, errs.ErrParseUnmatchedBrackets.WithArgs(input)
 	}
 
 	flag, ok := parts["flag"]
 	if !ok || flag == "" {
-		return "", nil, fmt.Errorf(errMissingValue, "flag", input)
+		return "", nil, errs.ErrParseMissingValue.WithArgs("flag", input)
 	}
 
 	// Handle values
 	if value, hasValue := parts["value"]; hasValue {
 		if _, hasValues := parts["values"]; hasValues {
-			return "", nil, fmt.Errorf(errBothValues, input)
+			return "", nil, errs.ErrParseInvalidFormat.WithArgs(input)
 		}
 		if value == "" {
-			return "", nil, fmt.Errorf(errEmptyValue, input)
+			return "", nil, errs.ErrParseMissingValue.WithArgs("value", input)
 		}
 		return flag, []string{value}, nil
 	}

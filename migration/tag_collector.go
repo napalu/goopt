@@ -1,9 +1,9 @@
 package migration
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/napalu/goopt/errs"
 	"github.com/napalu/goopt/types/orderedmap"
 )
 
@@ -63,7 +63,7 @@ func (c *TagCollector) Parse(isGoopt func(s string) bool) error {
 	for _, tag := range tags {
 		key, value, err := parseTagKeyValue(tag)
 		if err != nil {
-			return fmt.Errorf("parsing tag %q: %w", tag, err)
+			return errs.ErrUnmarshallingTag.WithArgs(tag).Wrap(err)
 		}
 
 		if isGoopt(key) {
@@ -80,7 +80,7 @@ func (c *TagCollector) Parse(isGoopt func(s string) bool) error {
 func parseTagKeyValue(tag string) (key, value string, err error) {
 	parts := strings.SplitN(tag, ":", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid tag format: %s", tag)
+		return "", "", errs.ErrInvalidTagFormat.WithArgs(tag)
 	}
 
 	// Remove quotes from value

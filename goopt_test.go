@@ -15,11 +15,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
-
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/i18n"
+	"github.com/napalu/goopt/internal/testutil"
+	"github.com/napalu/goopt/internal/util"
+	"github.com/napalu/goopt/types"
 	"github.com/stretchr/testify/assert"
+
+	"golang.org/x/text/language"
 )
 
 type arrayWriter struct {
@@ -403,7 +407,7 @@ func TestParser_NewCmdLineFromStruct(t *testing.T) {
 	if err == nil {
 		assert.False(t, cmd.ParseString("-t true --stringOption one"), "parse should fail when a command-specific flag is required but no associated command is specified")
 		cmd.ClearAll()
-		assert.True(t, cmd.ParseString("create user type -t --stringOption one"), "parse should success when a command-specific flag is given and the associated command is specified")
+		assert.True(t, cmd.ParseString("create user type -t --stringOption one"), "parse should succeed when a command-specific flag is given and the associated command is specified")
 		assert.Equal(t, true, testOpt.IsTest, "test bool option should be true")
 		assert.Equal(t, "one", testOpt.StringOption, "should set value of StringOption")
 		assert.Equal(t, "one", cmd.GetOrDefault("stringOption", ""),
@@ -1015,7 +1019,7 @@ func TestParser_PosixCompatibleFlags(t *testing.T) {
 		Description: "posix incompatible flag",
 		TypeOf:      types.Single,
 	})
-	assert.True(t, errors.Is(err, types.ErrPosixIncompatible))
+	assert.True(t, errors.Is(err, errs.ErrPosixShortForm))
 	err = opts.AddFlag("listFlag", &Argument{
 		Short:       "f",
 		Description: "list",
@@ -2139,7 +2143,7 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			}
 
 			arg := &Argument{}
-			gotName, gotPath, err := unmarshalTagsToArgument(structField, arg)
+			gotName, gotPath, err := unmarshalTagsToArgument(nil, structField, arg)
 			if (err != nil) != tt.field.WantErr {
 				t.Errorf("unmarshalTagsToArgument() error = %v, wantErr %v", err, tt.field.WantErr)
 				return
@@ -2150,7 +2154,8 @@ func TestParser_UnmarshalTagsToArgument(t *testing.T) {
 			if gotPath != tt.field.WantPath {
 				t.Errorf("unmarshalTagsToArgument() path = %v, want %v", gotPath, tt.field.WantPath)
 			}
-			if !reflect.DeepEqual(*arg, tt.field.WantArg) {
+
+			if !arg.Equal(&tt.field.WantArg) {
 				t.Errorf("unmarshalTagsToArgument() arg = %v, want %v", *arg, tt.field.WantArg)
 			}
 		})
@@ -2779,7 +2784,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 		name        string
 		setupFunc   func(p *Parser) *FlagInfo
 		mainKey     string
-		wantErrs    []string
+		wantErrs    []error
 		description string
 	}{
 		{
@@ -2797,7 +2802,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				return flagInfo
 			},
 			mainKey:     "flag1",
-			wantErrs:    []string{"circular dependency detected"},
+			wantErrs:    []error{errs.ErrCircularDependency.WithArgs("flag1", "flag2")},
 			description: "Should detect direct circular dependencies",
 		},
 		{
@@ -2819,7 +2824,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				return flagInfo
 			},
 			mainKey:     "flag1",
-			wantErrs:    []string{"circular dependency detected"},
+			wantErrs:    []error{errs.ErrCircularDependency.WithArgs("flag1", "flag2", "flag3")},
 			description: "Should detect indirect circular dependencies",
 		},
 		{
@@ -2839,7 +2844,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				return flagInfo
 			},
 			mainKey:     "flag1",
-			wantErrs:    []string{"maximum dependency depth exceeded for flag"},
+			wantErrs:    []error{errs.ErrRecursionDepthExceeded.WithArgs("flag1")},
 			description: "Should detect when dependency chain exceeds max depth",
 		},
 		{
@@ -2853,7 +2858,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				return flagInfo
 			},
 			mainKey:     "flag1",
-			wantErrs:    []string{"flag 'flag1' depends on 'nonexistent', but it is missing from command group"},
+			wantErrs:    []error{errs.ErrDependencyNotFound.WithArgs("flag1", "nonexistent")},
 			description: "Should detect when dependent flag doesn't exist",
 		},
 		{
@@ -2890,7 +2895,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				assert.NotEmpty(t, errs, "Expected errors but got none")
 				if len(errs) > 0 {
 					for i, wantErr := range tt.wantErrs {
-						assert.Contains(t, errs[i].Error(), wantErr)
+						testutil.AssertError(t, errs[i], wantErr)
 					}
 				}
 			}
@@ -2941,6 +2946,17 @@ func TestParser_SetMaxDependencyDepth(t *testing.T) {
 }
 
 func TestParser_CommandExecution(t *testing.T) {
+	testBundle := i18n.Default()
+	sentinel := i18n.NewError("err.test_failed")
+	err := testBundle.AddLanguage(language.English, map[string]string{
+		"goopt.error.command_callback_error": "command failed '%[1]s'",
+		"err.test_failed":                    "test failed '%[1]s'",
+		"err.cmd1_failed":                    "cmd1 failed '%[1]s'",
+		"err.cmd2_failed":                    "cmd2 failed '%[1]s'",
+	})
+	if err != nil {
+		t.Fatalf("failed to add language: %v", err)
+	}
 	tests := []struct {
 		name        string
 		setupFunc   func(p *Parser) error
@@ -2955,14 +2971,14 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd := &Command{
 					Name: "test",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("test failed")
+						return sentinel.WithArgs(command.Name)
 					},
 				}
 				return p.AddCommand(cmd)
 			},
 			args:        []string{"test"},
 			execMethod:  "single",
-			wantErrs:    map[string]string{"test": "test failed"},
+			wantErrs:    map[string]string{"test": "test failed 'test'"},
 			description: "Should execute single command via ExecuteCommand",
 		},
 		{
@@ -2971,13 +2987,13 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd1 := &Command{
 					Name: "cmd1",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("cmd1 failed")
+						return errs.ErrCommandCallbackError.WithArgs(command.Name)
 					},
 				}
 				cmd2 := &Command{
 					Name: "cmd2",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("cmd2 failed")
+						return errs.ErrCommandCallbackError.WithArgs(command.Name)
 					},
 				}
 				_ = p.AddCommand(cmd1)
@@ -2986,8 +3002,8 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"cmd1", "cmd2"},
 			execMethod: "all",
 			wantErrs: map[string]string{
-				"cmd1": "cmd1 failed",
-				"cmd2": "cmd2 failed",
+				"cmd1": "command failed 'cmd1'",
+				"cmd2": "command failed 'cmd2'",
 			},
 			description: "Should execute all commands via ExecuteCommands",
 		},
@@ -2998,14 +3014,16 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd := &Command{
 					Name: "test",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return fmt.Errorf("test failed")
+						return errs.ErrCommandCallbackError.WithArgs(command.Name).Wrap(errors.New("custom error"))
 					},
 				}
 				return p.AddCommand(cmd)
 			},
-			args:        []string{"test"},
-			execMethod:  "onParse",
-			wantErrs:    map[string]string{"test": "test failed"},
+			args:       []string{"test"},
+			execMethod: "onParse",
+			wantErrs: map[string]string{
+				"test": "command failed 'test': custom error",
+			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},
 	}
@@ -3027,9 +3045,10 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedErr, exists := tt.wantErrs[kv.Key]
-					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
-					assert.Contains(t, kv.Value.Error(), expectedErr)
+					expectedKey := tt.wantErrs[kv.Key]
+					expectedMsg := testBundle.T(expectedKey)
+					renderedMsg := kv.Value.Error()
+					assert.Equal(t, expectedMsg, renderedMsg)
 				}
 			case "all":
 				errCount := p.ExecuteCommands()
@@ -3038,9 +3057,10 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedErr, exists := tt.wantErrs[kv.Key]
-					assert.True(t, exists, "Unexpected command error for %s", kv.Key)
-					assert.Contains(t, kv.Value.Error(), expectedErr)
+					expectedKey := tt.wantErrs[kv.Key]
+					expectedMsg := testBundle.T(expectedKey)
+					renderedMsg := kv.Value.Error()
+					assert.Equal(t, expectedMsg, renderedMsg)
 				}
 			case "onParse":
 				// For ExecOnParse, check parser errors instead
@@ -3050,7 +3070,8 @@ func TestParser_CommandExecution(t *testing.T) {
 				for cmdName, expectedErr := range tt.wantErrs {
 					found := false
 					for _, err := range parserErrs {
-						if strings.Contains(err.Error(), expectedErr) {
+						renderedMsg := err.Error()
+						if renderedMsg == expectedErr {
 							found = true
 							break
 						}
@@ -3211,7 +3232,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 		setup     func(*Parser)
 		path      string
 		wantError bool
-		errorMsg  string
+		err       error
 	}{
 		{
 			name: "valid single level slice access",
@@ -3234,7 +3255,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			},
 			path:      "items.3",
 			wantError: true,
-			errorMsg:  "index 3 out of bounds at 'items.3': valid range is 0-2",
+			err:       errs.ErrIndexOutOfBounds.WithArgs("items.3", 3, 2),
 		},
 		{
 			name: "nested valid path",
@@ -3263,7 +3284,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			},
 			path:      "outer.0.inner.3",
 			wantError: true,
-			errorMsg:  "index 3 out of bounds at 'outer.0.inner.3': valid range is 0-2",
+			err:       errs.ErrIndexOutOfBounds.WithArgs("outer.0.inner.3", 3, 2),
 		},
 		{
 			name: "negative index",
@@ -3274,7 +3295,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			},
 			path:      "items.-1",
 			wantError: true,
-			errorMsg:  "index -1 out of bounds",
+			err:       errs.ErrIndexOutOfBounds.WithArgs("items.-1", 3, 2),
 		},
 		{
 			name: "missing capacity",
@@ -3285,7 +3306,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			},
 			path:      "items.0",
 			wantError: true,
-			errorMsg:  "has no capacity set",
+			err:       errs.ErrNegativeCapacity.WithArgs("items.0", 0),
 		},
 		{
 			name: "unknown path",
@@ -3294,7 +3315,7 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			},
 			path:      "unknown.0",
 			wantError: true,
-			errorMsg:  "unknown flag: unknown.0", // Updated to match actual error
+			err:       errs.ErrUnknownFlag.WithArgs("unknown.0"),
 		},
 	}
 
@@ -3308,8 +3329,8 @@ func TestParser_ValidateSlicePath(t *testing.T) {
 			if tt.wantError {
 				if err == nil {
 					t.Errorf("validateSlicePath() error = nil, want error")
-				} else if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("validateSlicePath() error = %v, want error containing %q", err, tt.errorMsg)
+				} else if !errors.Is(err, tt.err) {
+					t.Errorf("validateSlicePath() error = %v, want error containing %q", err, tt.err)
 				}
 				return
 			}
@@ -3437,7 +3458,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 		setupParser   func(*Parser)
 		wantPositions []PositionalArgument
 		wantErr       bool
-		errContains   string
+		wantedErr     error
 	}{
 		{
 			name: "basic positional",
@@ -3494,8 +3515,8 @@ func TestParser_PositionalArguments(t *testing.T) {
 				_ = p.AddFlag("dest", NewArg(WithPosition(1), SetRequired(true)))
 				_ = p.AddFlag("verbose", NewArg(WithType(types.Standalone)))
 			},
-			wantErr:     true,
-			errContains: "missing required positional argument 'dest' at index 1",
+			wantErr:   true,
+			wantedErr: errs.ErrRequiredPositionalFlag.WithArgs("dest", 1),
 		},
 	}
 
@@ -3510,7 +3531,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 				errs := p.GetErrors()
 				assert.NotEmpty(t, errs)
 				if len(errs) > 0 {
-					assert.Contains(t, errs[0].Error(), tt.errContains)
+					testutil.AssertError(t, errs[0], tt.wantedErr)
 				}
 				return
 			}

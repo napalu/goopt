@@ -1,15 +1,15 @@
 package parse
 
 import (
-	"fmt"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/napalu/goopt/errs"
+	"github.com/napalu/goopt/internal/util"
 	"github.com/napalu/goopt/types"
-	"github.com/napalu/goopt/util"
 )
 
 // DependencyMap maps flag names to their allowed values
@@ -17,17 +17,6 @@ import (
 type DependencyMap map[string][]string
 
 // Common error messages
-const (
-	errEmptyInput        = "empty %s"
-	errMalformedBraces   = "malformed braces in: %s"
-	errUnmatchedBrackets = "unmatched brackets in: %s"
-	errInvalidFormat     = "invalid format in: %s"
-	errEmptyKey          = "empty key in: %s"
-	errMissingValue      = "missing or empty %s in: %s"
-	errDuplicateFlag     = "duplicate flag: %s"
-	errEmptyValue        = "empty value in: %s"
-	errBothValues        = "cannot specify both 'value' and 'values' in: %s"
-)
 
 // TypeOfFlagFromString converts a string to a types.OptionType
 func TypeOfFlagFromString(s string) types.OptionType {
@@ -78,13 +67,13 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "required":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'required' tag value for field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'required'", field.Name, value)
 			}
 			config.Required = boolVal
 		case "secure":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'secure' tag value for field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'secure'", field.Name, value)
 			}
 			if boolVal {
 				config.Secure = types.Secure{IsSecure: boolVal}
@@ -98,7 +87,7 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "accepted":
 			patterns, err := PatternValues(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'accepted' tag value for field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'accepted'", field.Name, value)
 			}
 			// Convert to PatternValue
 			config.AcceptedValues = make([]types.PatternValue, len(patterns))
@@ -112,11 +101,11 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 		case "depends":
 			deps, err := Dependencies(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'depends' tag value for field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'depends'", field.Name, value)
 			}
 			config.DependsOn = deps
 		default:
-			return nil, fmt.Errorf("unrecognized tag '%s' on field %s", tag, field.Name)
+			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", tag, field.Name)
 		}
 	}
 
@@ -178,17 +167,18 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 	for _, part := range parts {
 		key, value, found := strings.Cut(part, ":")
 		if !found {
-			return nil, fmt.Errorf("invalid tag format in field %s: %s", field.Name, part)
+			return nil, errs.ErrInvalidTagFormat.WithArgs(part)
 		}
 
 		switch key {
+		case "descKey":
+			config.DescriptionKey = value
 		case "kind":
 			switch types.Kind(value) {
 			case types.KindFlag, types.KindCommand, types.KindEmpty:
 				config.Kind = types.Kind(value)
 			default:
-				return nil, fmt.Errorf("invalid kind in field %s: %s (must be 'command', 'flag', or empty)",
-					field.Name, value)
+				return nil, errs.ErrInvalidKind.WithArgs(value)
 			}
 		case "name":
 			config.Name = value
@@ -203,13 +193,13 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		case "required":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'required' value in field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'required'", field.Name, value)
 			}
 			config.Required = boolVal
 		case "secure":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'secure' value in field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'secure'", field.Name, value)
 			}
 			if boolVal {
 				config.Secure = types.Secure{IsSecure: boolVal}
@@ -223,7 +213,7 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		case "accepted":
 			patterns, err := PatternValues(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'accepted'", field.Name, value)
 			}
 			config.AcceptedValues = make([]types.PatternValue, len(patterns))
 			for i, p := range patterns {
@@ -236,26 +226,26 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		case "depends":
 			deps, err := Dependencies(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid 'depends' value in field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'depends'", field.Name, value)
 			}
 			config.DependsOn = deps
 		case "capacity":
 			cap, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid capacity value '%s' in %q: %w", value, field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'capacity'", field.Name, value)
 			}
 			if cap < 0 {
-				return nil, fmt.Errorf("negative capacity not allowed in %q: %d", field.Name, cap)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'capacity'", field.Name, value)
 			}
 			config.Capacity = cap
 		case "pos":
 			posData, err := Position(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid position in field %s: %w", field.Name, err)
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'position'", field.Name, value)
 			}
 			config.Position = &posData.Index
 		default:
-			return nil, fmt.Errorf("unrecognized key '%s' in field %s", key, field.Name)
+			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", key, field.Name)
 		}
 	}
 
@@ -274,7 +264,7 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 func compilePattern(p types.PatternValue, fieldName string) (*types.PatternValue, error) {
 	re, err := regexp.Compile(p.Pattern)
 	if err != nil {
-		return nil, fmt.Errorf("invalid 'accepted' value in field %s: %w", fieldName, err)
+		return nil, errs.ErrInvalidAttributeForType.WithArgs("'accepted'", fieldName, p.Pattern)
 	}
 
 	return &types.PatternValue{
