@@ -77,7 +77,7 @@ jobs:
           go tool cover -func=coverage.out -o=coverage.out
 
       - name: Go Coverage Badge (v2) - Create Badge
-        working-directory: ./v2  # This ensures README.md refers to v2/README.md
+        working-directory: ./v2
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: coverage.out
