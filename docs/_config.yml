@@ -3,6 +3,57 @@ title: goopt Documentation
 baseurl: "/goopt"  
 url: "https://napalu.github.io"
 repository: "napalu/goopt" 
+
+# Configure collections for versioned documentation
+collections:
+  # Empty collection for the home page
+  docs:
+    permalink: "/:collection/:path/"
+    output: true
+  # V1 documentation collection
+  v1:
+    permalink: "/v1/:path/"
+    output: true
+  # V2 documentation collection
+  v2:
+    permalink: "/v2/:path/"
+    output: true
+
+# Just the Docs collections configuration
+just_the_docs:
+  collections:
+    v1:
+      name: "Version 1.99"
+      nav_fold: true  # Optional: fold navigation by default
+    v2:
+      name: "Version 2.0"
+      nav_fold: true  # Optional: fold navigation by default
+
+# Default values based on path
+defaults:
+  - scope:
+      path: "v1"
+      type: "v1"
+    values:
+      version: "v1"
+  - scope:
+      path: "v2"
+      type: "v2"
+    values:
+      version: "v2"
+  - scope:
+      path: ""
+    values:
+      layout: "default"
+
+# Optional: exclude version dirs from default processing
+exclude:
+  - "v1/**/*.md"
+  - "v2/**/*.md"
+  - "vendor/"
+  - "Gemfile"
+  - "Gemfile.lock"
+
 color_scheme: nil # auto switching
 color_schemes:
   dark: 
@@ -11,4 +62,3 @@ color_schemes:
     color_scheme: light 
 sass:
   sass_dir: _sass
-

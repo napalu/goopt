@@ -33,6 +33,8 @@ type Argument struct {
 
 // NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
 // configure Argument using option functions.
+//
+// Deprecated: Use NewArg instead
 func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string, descriptionKey ...string) *Argument {
 	descKey := ""
 	if len(descriptionKey) > 0 {
@@ -53,7 +55,8 @@ func NewArgument(shortFlag string, description string, typeOf types.OptionType, 
 	return arg
 }
 
-// NewArg convenience initialization method to configure flags
+// NewArg initialization method to configure flags - takes a variadic list of ConfigureArgumentFunc(s)
+// with which you can configure the Argument instance by chaining functions such as WithDescription, WithType, WithShortFlag, etc.
 func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument := &Argument{}
 	for _, config := range configs {
@@ -90,28 +93,7 @@ func (a *Argument) Set(configs ...ConfigureArgumentFunc) error {
 	return nil
 }
 
-func (a *Argument) ensureInit() {
-	if a.DependsOn == nil {
-		a.DependsOn = []string{}
-	}
-	if a.OfValue == nil {
-		a.OfValue = []string{}
-	}
-	if a.AcceptedValues == nil {
-		a.AcceptedValues = []types.PatternValue{}
-	}
-	if a.DependencyMap == nil {
-		a.DependencyMap = map[string][]string{}
-	}
-	if a.uuid == "" {
-		a.uuid = uuid.New().String()
-	}
-}
-
-func (a *Argument) isPositional() bool {
-	return a.Position != nil
-}
-
+// GetLongName returns the long name of the argument
 func (a *Argument) GetLongName(parser *Parser) string {
 	if parser == nil {
 		return ""
@@ -146,4 +128,26 @@ func (a *Argument) Equal(other *Argument) bool {
 	_ = json.Unmarshal(oj, &om)
 
 	return reflect.DeepEqual(am, om)
+}
+
+func (a *Argument) ensureInit() {
+	if a.DependsOn == nil {
+		a.DependsOn = []string{}
+	}
+	if a.OfValue == nil {
+		a.OfValue = []string{}
+	}
+	if a.AcceptedValues == nil {
+		a.AcceptedValues = []types.PatternValue{}
+	}
+	if a.DependencyMap == nil {
+		a.DependencyMap = map[string][]string{}
+	}
+	if a.uuid == "" {
+		a.uuid = uuid.New().String()
+	}
+}
+
+func (a *Argument) isPositional() bool {
+	return a.Position != nil
 }

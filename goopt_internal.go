@@ -396,11 +396,6 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	// Match and register positionals in one pass
 	for _, decl := range declaredPos {
 		if decl.index >= len(positional) {
-			/*if decl.required {
-				p.addError(
-					p.i18n.WrapErrorf(types.ErrRequiredPositionalFlag, types.ErrRequiredPositionalFlagKey, decl.key, decl.index))
-				continue
-			}*/
 			if decl.flag.Argument.DefaultValue != "" {
 				// Only extend if within reasonable bounds
 				if decl.index <= maxDeclaredIdx {
@@ -427,7 +422,6 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		pos := &positional[decl.index]
 		if pos.ArgPos != *decl.flag.Argument.Position {
-			//p.addError(p.i18n.WrapErrorf(types.ErrRequiredPositionalFlag, types.ErrRequiredPositionalFlagKey, decl.key, decl.index))
 			continue
 		}
 		pos.Argument = decl.flag.Argument
