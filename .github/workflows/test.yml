@@ -64,13 +64,10 @@ jobs:
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
 
-      - name: Go Coverage Badge (v1)
+      - name: Go Coverage Badge (v1) - Create Badge
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: coverage.out
-          # Explicitly specify the README path for v1
-          readme_path: README.md
-          update_readme: true
 
       # ===== v2 Coverage =====
       - name: Generate v2 Coverage
@@ -79,13 +76,17 @@ jobs:
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
 
-      - name: Go Coverage Badge (v2)
+      - name: Go Coverage Badge (v2) - Create Badge
+        working-directory: ./v2  # This ensures README.md refers to v2/README.md
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
-          filename: ./v2/coverage.out
-          # Explicitly specify the README path for v2
-          readme_path: ./v2/README.md
-          update_readme: true
+          filename: coverage.out
+
+      # Make sure changes are detected
+      - name: Force timestamp changes
+        run: |
+          echo "<!-- Updated: $(date) -->" >> README.md
+          echo "<!-- Updated: $(date) -->" >> v2/README.md
 
       # ===== Check files changed =====
       - name: Verify Changed files
