@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -55,24 +56,28 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		}
 		*(t) = temp
 	case *int:
-		if num, ok := ParseNumeric(value); !ok || !num.IsInt {
-			return errs.ErrParseInt.WithArgs(value)
-		} else if num.IsInt {
-			*(t) = int(num.Int)
-		} else {
-			return errs.ErrParseOverflow.WithArgs(value)
+		val, err := strconv.ParseInt(value, 0, strconv.IntSize)
+		if err != nil {
+			var numErr *strconv.NumError
+			if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+				return errs.ErrParseOverflow.WithArgs(value).Wrap(err)
+			}
+			return errs.ErrParseInt.WithArgs(value).Wrap(err)
 		}
+		*(t) = int(val)
 	case *[]int:
 		values := strings.FieldsFunc(value, delimiterFunc)
 		temp := make([]int, len(values))
 		for i, v := range values {
-			if num, ok := ParseNumeric(v); !ok || !num.IsInt {
-				return errs.ErrParseInt.WithArgs(v)
-			} else if num.IsInt {
-				temp[i] = int(num.Int)
-			} else {
-				return errs.ErrParseOverflow.WithArgs(v)
+			val, err := strconv.ParseInt(v, 0, strconv.IntSize) // Directly use native size
+			if err != nil {
+				var numErr *strconv.NumError
+				if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+					return errs.ErrParseOverflow.WithArgs(value).Wrap(err)
+				}
+				return errs.ErrParseInt.WithArgs(value).Wrap(err)
 			}
+			temp[i] = int(val)
 		}
 		*(t) = temp
 	case *int64:

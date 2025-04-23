@@ -23,7 +23,7 @@ collections:
 just_the_docs:
   collections:
     v1:
-      name: "Version 1.99"
+      name: "Version 1.xx"
       nav_fold: true  # Optional: fold navigation by default
     v2:
       name: "Version 2.0"

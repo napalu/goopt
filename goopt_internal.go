@@ -1747,7 +1747,18 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Value, maxDepth, currentDepth int, c *Parser, config ...ConfigureCmdLineFunc) error {
 	unwrappedValue, err := util.UnwrapValue(fieldValue)
 	if err != nil {
+		if errors.Is(err, errs.ErrNilPointer) {
+			// Nil pointer - this is fine
+			return nil
+		}
 		return errs.ErrUnwrappingValue.WithArgs(flagPrefix).Wrap(err)
+	}
+
+	var existingCmdDescription string
+	if commandPath != "" {
+		if existingCmd, found := c.registeredCommands.Get(commandPath); found && existingCmd.Description != "" {
+			existingCmdDescription = existingCmd.Description
+		}
 	}
 
 	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1, config...)
@@ -1759,6 +1770,10 @@ func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Valu
 	if err != nil {
 		return err
 	}
+	if cmd, ok := c.registeredCommands.Get(commandPath); ok && existingCmdDescription != "" && cmd.Description != existingCmdDescription {
+		cmd.Description = existingCmdDescription
+	}
+
 	return nil
 }
 
