@@ -234,14 +234,14 @@ func main() {
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
 ![goopt Version](https://img.shields.io/github/v/tag/napalu/goopt)
 
-goopt supports all Go versions from 1.18 onward. See our [compatibility policy]({% link _v1/compatibility/) for details.
+goopt supports all Go versions from 1.18 onward. See our [compatibility policy]({{ site.baseurl }}/v1/compatibility/) for details.
 
 ## Next Steps
 
-- [Command structure patterns]({% link _v1/guides/command-organization/) - Have a look at different ways to structure your CLI
-- [Flag structure patterns]({% link _v1/guides/flag-organization/) - Have a look at different ways to structure your flags
-- [Positional Arguments]({% link _v1/guides/positional-arguments/) - Explore positional arguments
-- [Struct Tags]({% link _v1/guides/struct-tags/) - Explore struct tags
-- [Configuration Guide]({% link _v1/configuration/index/) - Environment variables and external config
-- [Shell Completion]({% link _v1/shell/completion/) - Set up shell completions
-- [Advanced Features]({% link _v1/guides/advanced-features/) - Explore dependencies, validation, and more
+- [Command structure patterns]({{ site.baseurl }}/v1/guides/command-organization/) - Have a look at different ways to structure your CLI
+- [Flag structure patterns]({{ site.baseurl }}/v1/guides/flag-organization/) - Have a look at different ways to structure your flags
+- [Positional Arguments]({{ site.baseurl }}/v1/guides/positional-arguments/) - Explore positional arguments
+- [Struct Tags]({{ site.baseurl }}/v1/guides/struct-tags/) - Explore struct tags
+- [Configuration Guide]({{ site.baseurl }}/v1/configuration/index/) - Environment variables and external config
+- [Shell Completion]({{ site.baseurl }}/v1/shell/completion/) - Set up shell completions
+- [Advanced Features]({{ site.baseurl }}/v1/guides/advanced-features/) - Explore dependencies, validation, and more
