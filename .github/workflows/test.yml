@@ -68,6 +68,9 @@ jobs:
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: coverage.out
+          # Explicitly specify the README path for v1
+          readme_path: README.md
+          update_readme: true
 
       # ===== v2 Coverage =====
       - name: Generate v2 Coverage
@@ -80,6 +83,9 @@ jobs:
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: ./v2/coverage.out
+          # Explicitly specify the README path for v2
+          readme_path: ./v2/README.md
+          update_readme: true
 
       # ===== Check files changed =====
       - name: Verify Changed files
