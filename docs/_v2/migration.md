@@ -43,12 +43,12 @@ The following APIs have been removed:
 - `CmdLineOption` - Use `Parser`instead
 - `DependsOn` - Use `DependencyMap` instead
 - `OfValue` - Use `DependencyMap` instead
-- Single struct-tags were removed in favour of namespaced `goopt` struct-tags. See [Struct-Tags]({% link _v2/guides/struct-tags.md %}) for details.
+- Single struct-tags were removed in favour of namespaced `goopt` struct-tags. See [Struct-Tags]({{ site.baseurl }}/v2/guides/struct-tags/) for details.
 
 
 ### Changed Behaviors
--   **Flag Inheritance:** Flags defined on parent commands are now automatically inherited by and available to their subcommands in v2. Command-specific flags still override inherited flags with the same name. See [Advanced Features - Flag Inheritance]({% link _v2/guides/advanced-features.md %}#flag-inheritance) for details.
+-   **Flag Inheritance:** Flags defined on parent commands are now automatically inherited by and available to their subcommands in v2. Command-specific flags still override inherited flags with the same name. See [Advanced Features - Flag Inheritance]({{ site.baseurl }}/v2/guides/advanced-features/#flag-inheritance) for details.
 -   **Flag vs. Positional Argument Precedence:** In v2, if a configuration item can be set both via a named flag (e.g., `--output file.txt`) and positionally (e.g., via `pos:1`), the value provided by the **explicit named flag always takes precedence**. The positional value will be ignored for that specific binding, ensuring more predictable behavior consistent with common CLI conventions.
 
 
-[Back to v2 Documentation]({% link _v2/index.md %}) | [What's New]({% link _v2/whats-new.md %})
+[Back to v2 Documentation]({{ site.baseurl }}/v2/index/) | [What's New]({{ site.baseurl }}/v2/whats-new/)

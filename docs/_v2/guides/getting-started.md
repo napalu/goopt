@@ -209,7 +209,7 @@ func main() {
    
    When using the struct-first approach, flag types are often inferred from the field type. For instance, a `bool` will be mapped to a `Standalone` type,
    an array/slice of a supported type (like []string, []int) typically becomes `Chained,` a bool becomes `Standalone`, and most other basic Go types default to `Single`.  
-   You can use the option tag to override type inference when using struct-tags or specify the type `WithType()` when using the programmatic approach. See  [Advanced Features]({% link _v2/guides/advanced-features.md %}) for details.
+   You can use the option tag to override type inference when using struct-tags or specify the type `WithType()` when using the programmatic approach. See  [Advanced Features]({{ site.baseurl }}/v2/guides/advanced-features/) for details.
  
 ## 4. Core Concepts
 1. **Command Hierarchy**: 
@@ -365,16 +365,16 @@ func main() {
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
 ![goopt Version](https://img.shields.io/github/v/tag/napalu/goopt)
 
-See [Migration Guide]({% link _v2/migration.md %}) for updates between versions.
-goopt supports all Go versions from 1.18 onward. See our [compatibility policy]({% link _v2/compatibility.md %}) for details.
+See [Migration Guide]({{ site.baseurl }}/v2/migration/) for updates between versions.
+goopt supports all Go versions from 1.18 onward. See our [compatibility policy]({{ site.baseurl }}/v2/compatibility/) for details.
 
 ## 8. Next Steps
 
-- [Command structure patterns]({% link _v2/guides/command-organization.md %}) - Have a look at different ways to structure your CLI
-- [Flag structure patterns]({% link _v2/guides/flag-organization.md %}) - Have a look at different ways to structure your flags
-- [Positional Arguments]({% link _v2/guides/positional-arguments.md %}) - Explore positional arguments
-- [Struct Tags]({% link _v2/guides/struct-tags.md %}) - Explore struct tags
-- [Configuration Guide]({% link _v2/configuration/index.md %}) - Environment variables and external config
-- [Shell Completion]({% link _v2/shell/completion.md %}) - Set up shell completions
-- [Advanced Features]({% link _v2/guides/advanced-features.md %}) - Explore dependencies, validation, and more
+- [Command structure patterns]({{ site.baseurl }}/v2/guides/command-organization/) - Have a look at different ways to structure your CLI
+- [Flag structure patterns]({{ site.baseurl }}/v2/guides/flag-organization/) - Have a look at different ways to structure your flags
+- [Positional Arguments]({{ site.baseurl }}/v2/guides/positional-arguments/) - Explore positional arguments
+- [Struct Tags]({{ site.baseurl }}/v2/guides/struct-tags/) - Explore struct tags
+- [Configuration Guide]({{ site.baseurl }}/v2/configuration/index/) - Environment variables and external config
+- [Shell Completion]({{ site.baseurl }}/v2/shell/completion/) - Set up shell completions
+- [Advanced Features]({{ site.baseurl }}/v2/guides/advanced-features/) - Explore dependencies, validation, and more
 

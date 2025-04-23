@@ -257,5 +257,5 @@ Example translation file (`translations/de.json`):
 
 ## Related Topics
 
-- [Error Handling]({% link _v2/guides/advanced-features.md %}#error-handling) - Learn about structured error handling in goopt
-- [Configuration]({% link _v2/configuration/index.md %}) - External configuration and environment variables
+- [Error Handling]({{ site.baseurl }}/v2/guides/advanced-features/#error-handling) - Learn about structured error handling in goopt
+- [Configuration]({{ site.baseurl }}/v2/configuration/index/) - External configuration and environment variables

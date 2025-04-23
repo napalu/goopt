@@ -48,8 +48,6 @@ defaults:
 
 # Optional: exclude version dirs from default processing
 exclude:
-  - "v1/**/*.md"
-  - "v2/**/*.md"
   - "vendor/"
   - "Gemfile"
   - "Gemfile.lock"

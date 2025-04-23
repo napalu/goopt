@@ -59,23 +59,23 @@ goopt follows these key principles:
 ## Documentation Contents
 
 ### Guides
-- [Getting Started]({% link _v1/guides/getting-started.md %}) - Installation and basic usage
-- [Command structure patterns]({% link _v1/guides/command-organization.md %}) - Different ways to structure your CLI
-- [Flag structure patterns]({% link _v1/guides/flag-organization.md %}) - Different ways to structure your flags
-- [Struct-First Approach]({% link _v1/guides/struct-tags.md %}) - Struct-first approach
-- [Advanced Features]({% link _v1/guides/advanced-features.md %}) - Nested access, dependencies, validation, and more
-- [Positional Arguments]({% link _v1/guides/positional-arguments.md %}) - Flexible positional argument handling
-- [Internationalization]({% link _v1/guides/internationalization.md %}) - Internationalization support for your CLI
+- [Getting Started]({% link _v1/guides/getting-started/) - Installation and basic usage
+- [Command structure patterns]({% link _v1/guides/command-organization/) - Different ways to structure your CLI
+- [Flag structure patterns]({% link _v1/guides/flag-organization/) - Different ways to structure your flags
+- [Struct-First Approach]({% link _v1/guides/struct-tags/) - Struct-first approach
+- [Advanced Features]({% link _v1/guides/advanced-features/) - Nested access, dependencies, validation, and more
+- [Positional Arguments]({% link _v1/guides/positional-arguments/) - Flexible positional argument handling
+- [Internationalization]({% link _v1/guides/internationalization/) - Internationalization support for your CLI
 
 ### Configuration
-- [Environment Variables]({% link _v1/configuration/environment.md %}) - ENV var support
-- [External Configuration]({% link _v1/configuration/external-config.md %}) - Config files and defaults
+- [Environment Variables]({% link _v1/configuration/environment/) - ENV var support
+- [External Configuration]({% link _v1/configuration/external-config/) - Config files and defaults
 
 ### Integration
-- [Shell Completion]({% link _v1/shell/completion.md %}) - Setup completion for various shells
+- [Shell Completion]({% link _v1/shell/completion/) - Setup completion for various shells
 
 ## Need Help?
 
-- Check [Guides]({% link _v1/guides/index.md %}) section for detailed documentation
+- Check [Guides]({% link _v1/guides/index/) section for detailed documentation
 - Visit [GitHub repository](https://github.com/napalu/goopt) for issues and updates
 - See the [API Reference](https://pkg.go.dev/github.com/napalu/goopt) for detailed API documentation

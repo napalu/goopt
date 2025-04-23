@@ -86,6 +86,6 @@ The API has been cleaned up and modernized:
 
 ## Breaking Changes
 
-See the [Migration Guide]({% link _v2/migration.md %}) for a complete list of breaking changes and how to update your code.
+See the [Migration Guide]({{ site.baseurl }}/v2/migration/) for a complete list of breaking changes and how to update your code.
 
-[Back to v2 Documentation]({% link _v2/index.md %}) | [Migration Guide]({% link _v2/migration.md %})
+[Back to v2 Documentation]({{ site.baseurl }}/v2/index/) | [Migration Guide]({{ site.baseurl }}/v2/migration/)
