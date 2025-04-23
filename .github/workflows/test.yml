@@ -107,13 +107,27 @@ jobs:
       - name: Update v2 README
         run: |
           if [ ! -z "$V2_BADGE_LINE" ]; then
+            # Write badge to temporary file to avoid escaping issues
+            echo "$V2_BADGE_LINE" > /tmp/badge_line.txt
+            
             # Check if badge already exists in v2 README
             if grep -q '!\[Coverage\]' v2/README.md; then
-              # Replace existing badge
-              sed -i 's|!\[Coverage\].*|'"$V2_BADGE_LINE"'|' v2/README.md
+              # Create new README with badge replaced
+              awk '{
+                if ($0 ~ /!\[Coverage\]/) {
+                  system("cat /tmp/badge_line.txt")
+                } else {
+                  print $0
+                }
+              }' v2/README.md > /tmp/new_readme.md
+              mv /tmp/new_readme.md v2/README.md
             else
               # Add badge at the top of the file
-              sed -i '1s/^/'"$V2_BADGE_LINE"'\n\n/' v2/README.md
+              cat /tmp/badge_line.txt > /tmp/new_readme.md
+              echo "" >> /tmp/new_readme.md
+              echo "" >> /tmp/new_readme.md
+              cat v2/README.md >> /tmp/new_readme.md
+              mv /tmp/new_readme.md v2/README.md
             fi
           fi
           
