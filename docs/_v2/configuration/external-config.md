@@ -13,8 +13,9 @@ Variables are evaluated in the following order (from highest precedence to lowes
 1. command line flags
 2. **flag defaults from external sources (such as JSON, YAML, etc.) set via the map supplied to the `ParseWithDefaults` function**
 3. environment variables
-4. defaults set via the `SetDefaultValue` function or the `WithDefaultValue` function or via struct tag annotations
+4. defaults set via `WithDefaultValue` function or via struct tag annotations
 
+`ParseWithDefaults` allows loading defaults from any source (file, API, etc.) as long as you can populate the `map[string]string`.
 
 ## Example
 
@@ -28,7 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-    "github.com/napalu/goopt"
+    "github.com/napalu/goopt/v2"
 )
 
 func getDefaults() (map[string]string, error) {
@@ -66,7 +67,7 @@ func main() {
     var success bool
     if defaults, err := getDefaults(); err == nil {
         // whatever command line flags are not set will be set to the defaults if present
-        success = parser.ParseWithDefaults(os.Args, defaults)
+        success = parser.ParseWithDefaults(defaults, os.Args)
     } else {
         success = parser.Parse(os.Args)
     }

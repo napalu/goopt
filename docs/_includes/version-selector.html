@@ -1,0 +1,48 @@
+<div class="version-selector">
+    <label for="version-select">Version:</label>
+    <select id="version-select" onchange="window.location.href=this.value">
+        <option value="{{ site.baseurl }}/v1/index/" {% if page.collection=='v1' %}selected{% endif %}>v1.xx (Stable)
+        </option>
+        <option value="{{ site.baseurl }}/v2/index/" {% if page.collection=='v2' %}selected{% endif %}>v2.xx (Latest)
+        </option>
+        <option value="{{ site.baseurl }}/" {% if page.url=='/' %}selected{% endif %}>Home</option>
+    </select>
+</div>
+<style>
+    .version-selector {
+        margin: 1rem 0;
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+    }
+
+    [data-theme='dark'] .version-selector {
+        background-color: #212529;
+    }
+
+    [data-theme='dark'] .version-selector label {
+        color: #f8f9fa;
+    }
+
+    [data-theme='light'] .version-selector label {
+        color: #212529;
+    }
+
+    [data-theme='light'] .version-selector select {
+        background-color: #f8f9fa;
+    }
+
+
+
+    .version-selector label {
+        margin-right: 0.5rem;
+        font-weight: bold;
+    }
+
+    .version-selector select {
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+</style>

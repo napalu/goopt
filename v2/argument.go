@@ -29,28 +29,6 @@ type Argument struct {
 	uuid           string
 }
 
-// NewArgument convenience initialization method to describe Flags. Alternatively, Use NewArg to
-// configure Argument using option functions.
-func NewArgument(shortFlag string, description string, typeOf types.OptionType, required bool, secure types.Secure, defaultValue string, descriptionKey ...string) *Argument {
-	descKey := ""
-	if len(descriptionKey) > 0 {
-		descKey = descriptionKey[0]
-	}
-
-	arg := &Argument{
-		Description:    description,
-		DescriptionKey: descKey,
-		TypeOf:         typeOf,
-		Required:       required,
-		Secure:         secure,
-		Short:          shortFlag,
-		DefaultValue:   defaultValue,
-	}
-	arg.ensureInit()
-
-	return arg
-}
-
 // NewArg convenience initialization method to configure flags
 func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument := &Argument{}

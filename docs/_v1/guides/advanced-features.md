@@ -173,7 +173,11 @@ func main() {
 	parser := goopt.NewParser()
 
 	// Define a secure flag
-	parser.AddFlag("password", goopt.NewArgument("p", "password for app", types.Single, true, goopt.Secure{IsSecure: true, Prompt: "Password: "}, ""))
+	parser.AddFlag("password", goopt.NewArg(
+        goopt.WithShortFlag("p"), 
+        goopt.WithDescription( "password for app"), 
+        goopt.WithRequired(true), 
+        goopt.WithSecurePrompt("")))
 
 	// Parse the arguments
 	if parser.Parse(os.Args) {
@@ -260,8 +264,8 @@ func main() {
 	})
 
 	// Define flags for specific commands
-	parser.AddFlag("username", goopt.NewArgument("Username for user creation", types.Single), "create user")
-	parser.AddFlag("email", goopt.NewArgument("Email address for user creation", types.Single), "create user")
+	parser.AddFlag("username", goopt.NewArg(goopt.With("username"), goopt.WithDecription("Username for user creation")), "create user")
+	parser.AddFlag("email", goopt.NewArg(goopt.With("email"), goopt.WithDescription("Email address for user creation")), "create user")
 
 	// Parse the command-line arguments
 	if parser.Parse(os.Args) {

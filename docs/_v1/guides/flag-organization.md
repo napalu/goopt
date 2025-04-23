@@ -65,8 +65,8 @@ type DatabaseConfig struct {
 }
 
 type Options struct {
-    Primary   DatabaseConfig `goopt:"prefix:primary-db"`
-    Replica   DatabaseConfig `goopt:"prefix:replica-db"`
+    Primary   DatabaseConfig 
+    Replica   DatabaseConfig 
 }
 ```
 

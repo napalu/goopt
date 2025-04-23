@@ -3,7 +3,7 @@ package parse
 import (
 	"errors"
 
-	"github.com/napalu/goopt/internal/util"
+	"github.com/napalu/goopt/v2/internal/util"
 )
 
 // State represents the current state of the argument parser

@@ -1,13 +1,13 @@
 package goopt
 
 import (
+	"github.com/napalu/goopt/v2/util"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/i18n"
-	"github.com/napalu/goopt/v2/internal/util"
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/napalu/goopt/v2/types/queue"

@@ -17,6 +17,7 @@ package goopt
 
 import (
 	"fmt"
+	util2 "github.com/napalu/goopt/v2/util"
 
 	"io"
 	"os"
@@ -872,7 +873,7 @@ func (p *Parser) AcceptPattern(flag string, val types.PatternValue, commandPath 
 	return p.AcceptPatterns(flag, []types.PatternValue{val}, commandPath...)
 }
 
-// AcceptPatterns same as PatternValue but acts on a list of patterns and descriptions. When specified, the patterns defined
+// AcceptPatterns same as AcceptPattern but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the PatternValue, Parse returns false.
 func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, commandPath ...string) error {
@@ -1439,7 +1440,7 @@ func (c *Command) Visit(visitor func(cmd *Command, level int) bool, level int) {
 // this is useful for testing or mocking the terminal reader or for setting a custom terminal reader
 // the returned value is the old terminal reader, so it can be restored later
 // this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
-func (p *Parser) SetTerminalReader(t util.TerminalReader) util.TerminalReader {
+func (p *Parser) SetTerminalReader(t util2.TerminalReader) util2.TerminalReader {
 	current := p.terminalReader
 	p.terminalReader = t
 	return current
@@ -1447,7 +1448,7 @@ func (p *Parser) SetTerminalReader(t util.TerminalReader) util.TerminalReader {
 
 // GetTerminalReader returns the current terminal reader
 // this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
-func (p *Parser) GetTerminalReader() util.TerminalReader {
+func (p *Parser) GetTerminalReader() util2.TerminalReader {
 	return p.terminalReader
 }
 

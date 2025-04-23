@@ -16,15 +16,22 @@ Variables are evaluated in the following order (from highest precedence to lowes
 1. command line flags
 2. flag defaults from external sources (such as JSON, YAML, etc.) set via the map supplied to the `ParseWithDefaults` function
 3. **environment variables**
-4. defaults set via the `SetDefaultValue` function or the `WithDefaultValue` function or via struct tag annotations
-
-
+4. defaults set via the `WithDefaultValue` function or via struct tag annotations
 
 ## Usage
 
 ```go
-parser.SetEnvNameConverter(func(s string) string {
-    return DefaultFlagNameConverter(s) // DefaultFlagNameConverter is the default implementation and converts ENV var names to lowerCamelCase
-})
+package main
+
+import "github.com/napalu/goopt/v2"
+
+func main() {
+	parser := goopt.NewParser()
+	parser.SetEnvNameConverter(func(s string) string {
+		// DefaultFlagNameConverter is the default implementation and converts ENV var names to lowerCamelCase
+		return goopt.DefaultFlagNameConverter(s) 
+	})
+	
+}
 ```
 

@@ -17,7 +17,7 @@ import (
 //
 // Instead of specifying a flag 4 times, the "goopt" way would be specifying `-v 4`.
 //
-// If POSIX/GNU compatibility is desired use the SetPosix or WithPosix functions on CmdLineOption (not implemented yet).
+// If POSIX/GNU compatibility is desired, use the SetPosix or WithPosix functions on CmdLineOption (not implemented yet).
 func WithShortFlag(shortFlag string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Short = shortFlag
@@ -42,14 +42,14 @@ func WithType(typeof types.OptionType) ConfigureArgumentFunc {
 	}
 }
 
-// WithRequired allows to set a function to evaluate if a flag is required
+// WithRequired allows setting a function to evaluate if a flag is required
 func WithRequired(required bool) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Required = required
 	}
 }
 
-// WithRequiredIf allows to set a function to evaluate if a flag is required
+// WithRequiredIf allows setting a function to evaluate if a flag is required
 func WithRequiredIf(requiredIf RequiredIfFunc) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.RequiredIf = requiredIf
@@ -112,7 +112,7 @@ func WithPostValidationFilter(filter FilterFunc) ConfigureArgumentFunc {
 }
 
 // WithAcceptedValues sets the accepted values for the argument. The values can be either literal strings or regular expressions.
-// Each value can optionally have a description that will be shown in help text.
+// Each value can optionally have a description that will be shown in the help text.
 func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.AcceptedValues = values

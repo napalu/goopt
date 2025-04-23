@@ -34,92 +34,6 @@ func TypeOfFlagFromString(s string) types.OptionType {
 	}
 }
 
-func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, error) {
-	foundLegacyTag := false
-
-	config := &types.TagConfig{
-		Kind: types.KindFlag,
-	}
-
-	tagNames := []string{
-		"long", "short", "description", "required", "type", "default",
-		"secure", "prompt", "path", "accepted", "depends",
-	}
-
-	for _, tag := range tagNames {
-		value, ok := field.Tag.Lookup(tag)
-		if !ok {
-			continue
-		}
-
-		foundLegacyTag = true
-		switch tag {
-		case "long":
-			config.Name = value
-		case "short":
-			config.Short = value
-		case "description":
-			config.Description = value
-		case "type":
-			config.TypeOf = TypeOfFlagFromString(value)
-		case "default":
-			config.Default = value
-		case "required":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, errs.ErrInvalidAttributeForType.WithArgs("'required'", field.Name, value)
-			}
-			config.Required = boolVal
-		case "secure":
-			boolVal, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, errs.ErrInvalidAttributeForType.WithArgs("'secure'", field.Name, value)
-			}
-			if boolVal {
-				config.Secure = types.Secure{IsSecure: boolVal}
-			}
-		case "prompt":
-			if config.Secure.IsSecure {
-				config.Secure.Prompt = value
-			}
-		case "path":
-			config.Path = value
-		case "accepted":
-			patterns, err := PatternValues(value)
-			if err != nil {
-				return nil, errs.ErrInvalidAttributeForType.WithArgs("'accepted'", field.Name, value)
-			}
-			// Convert to PatternValue
-			config.AcceptedValues = make([]types.PatternValue, len(patterns))
-			for i, p := range patterns {
-				pv, err := compilePattern(p, field.Name)
-				if err != nil {
-					return nil, err
-				}
-				config.AcceptedValues[i] = *pv
-			}
-		case "depends":
-			deps, err := Dependencies(value)
-			if err != nil {
-				return nil, errs.ErrInvalidAttributeForType.WithArgs("'depends'", field.Name, value)
-			}
-			config.DependsOn = deps
-		default:
-			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", tag, field.Name)
-		}
-	}
-
-	if !foundLegacyTag {
-		return nil, nil
-	}
-
-	if config.TypeOf == types.Empty {
-		config.TypeOf = InferFieldType(field)
-	}
-
-	return config, nil
-}
-
 func InferFieldType(field interface{}) types.OptionType {
 	var t reflect.Type
 
@@ -230,14 +144,14 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			}
 			config.DependsOn = deps
 		case "capacity":
-			cap, err := strconv.Atoi(value)
+			kap, err := strconv.Atoi(value)
 			if err != nil {
 				return nil, errs.ErrInvalidAttributeForType.WithArgs("'capacity'", field.Name, value)
 			}
-			if cap < 0 {
+			if kap < 0 {
 				return nil, errs.ErrInvalidAttributeForType.WithArgs("'capacity'", field.Name, value)
 			}
-			config.Capacity = cap
+			config.Capacity = kap
 		case "pos":
 			posData, err := Position(value)
 			if err != nil {

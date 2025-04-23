@@ -1,30 +1,44 @@
 # goopt: a flexible and powerful command-line parser
 
-[![GoDoc](https://godoc.org/github.com/napalu/go-opt?status.svg)](https://godoc.org/github.com/napalu/goopt)
+[![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2)
+[![Go Reference v1](https://pkg.go.dev/badge/github.com/napalu/goopt.svg)](https://pkg.go.dev/github.com/napalu/goopt)
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
-![Coverage](https://img.shields.io/badge/Coverage-78.9%25-brightgreen)
+<!-- Optional: Add build status/coverage badges if you have them -->
 
 `goopt` is a flexible and powerful command-line option parser for Go applications. It provides a way to define commands, subcommands, flags, and their relationships declaratively or programmatically, offering both ease of use and extensibility.
 
-[📚 View Documentation (wip)](https://napalu.github.io/goopt)
+---
 
-## Key Features
+**Version 2 Available**
 
-- **Declarative and Programmatic Definition**: Supports both declarative struct tag parsing and programmatic definition of commands and flags.
-- **Command and Flag Grouping**: Organize commands and flags hierarchically, supporting global, command-specific, and shared flags.
-- **Flag Dependencies**: Enforce flag dependencies based on the presence or specific values of other flags.
-- **POSIX Compatibility**: Offers POSIX-compliant flag parsing, including support for short flags.
-- **Secure Flags**: Enable secure, hidden input for sensitive information like passwords.
-- **Automatic Usage Generation**: Automatically generates usage documentation based on defined flags and commands.
-- **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
+**This README describes goopt v1.x.** Version 2 (`v2`) is now the recommended version for new projects and includes significant improvements like **hierarchical flag inheritance**, API cleanup, and bug fixes.
 
+*   **New Users:** Please start with **[goopt v2](https://github.com/napalu/goopt/tree/v2)** (or check the `v2` branch/tag).
+*   **v1 Users:** Consider migrating to v2. See the **[v2 Migration Guide](https://napalu.github.io/goopt/v2/migration/)**.
 
-## Installation
+**[📚 View Full Documentation (v1 & v2)](https://napalu.github.io/goopt)**
 
-Install `goopt` via `go get`:
+---
+
+## Key Features (v1.x)
+
+*Note: v2 includes these features plus enhancements like flag inheritance.*
+
+- **Declarative and Programmatic Definition**: Supports both declarative struct tag parsing (`goopt:"..."` format) and programmatic definition.
+- **Command and Flag Grouping**: Organize commands and flags hierarchically.
+- **Flag Dependencies**: Enforce flag dependencies based on presence or specific values.
+- **POSIX Compatibility**: Offers optional POSIX-compliant flag parsing.
+- **Secure Flags**: Enable secure, hidden input for sensitive information.
+- **Automatic Usage Generation**: Generates usage documentation.
+- **Positional Arguments**: Supports arguments defined by position.
+- **i18n**: Built-in internationalization support (backported from v2).
+- **Struct Tag Parsing**: Supports the modern `goopt:"key:value;"` format (backported from v2).
+
+## Installation (v1.x)
 
 ```bash
-go get github.com/napalu/goopt
+# For the legacy v1 version:
+go get github.com/napalu/goopt # Or specify latest v1.x tag e.g. @v1.9.9
 ```
 
 ## Quick Start

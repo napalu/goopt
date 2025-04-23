@@ -25,7 +25,7 @@ Feature overview:
 - Configurable defaults through ParseWithDefaults:
   - Load defaults from any source (JSON, YAML, etc.)
   - Implement only the configuration features you need
-  - Clear precedence: ENV vars -> defaults -> CLI flags
+  - Clear precedence: Explicit ordering for configuration sources (Default values → ENV vars → config files → CLI flags) where CLI flags have the highest precedence
 - Ordered command execution
 - Type-safe flag parsing
 - Flag dependencies and validation

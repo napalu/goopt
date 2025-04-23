@@ -46,7 +46,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 		{
 			name: "with dependency map - valid value",
 			setupFunc: func(p *Parser) error {
-				err := p.AddFlag("main", NewArgument("m", "", types.Single, false, types.Secure{}, ""))
+				err := p.AddFlag("main", NewArg(WithShortFlag("m")))
 				if err != nil {
 					return err
 				}
@@ -64,7 +64,7 @@ func TestArgument_ConfigFuncs(t *testing.T) {
 		{
 			name: "with dependency map - invalid value",
 			setupFunc: func(p *Parser) error {
-				err := p.AddFlag("main", NewArgument("m", "", types.Single, false, types.Secure{}, ""))
+				err := p.AddFlag("main", NewArg(WithShortFlag("m")))
 				if err != nil {
 					return err
 				}

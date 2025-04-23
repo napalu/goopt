@@ -24,7 +24,7 @@
 Install `goopt` via `go get`:
 
 ```bash
-go get github.com/napalu/goopt
+go get github.com/napalu/goopt/v2
 ```
 
 ## Quick Start
@@ -37,7 +37,7 @@ package main
 import (
     "os"
     "fmt"
-    "github.com/napalu/goopt"
+    "github.com/napalu/goopt/v2"
 )
 
 type Config struct {
@@ -72,17 +72,17 @@ package main
 import (
     "os"
     "fmt"
-    "github.com/napalu/goopt"
+    "github.com/napalu/goopt/v2"
 )   
 
 func main() {
     parser := goopt.NewParser()
     parser.AddCommand(goopt.NewCommand(
         goopt.WithName("create"),
-        goopt.WithDescription("Create resources"),
+        goopt.WithCommandDescription("Create resources"),
     ))
     parser.AddFlag("verbose", goopt.NewArg(
-        goopt.WithShort("v"),
+        goopt.WithShortFlag("v"),
         goopt.WithDescription("Enable verbose output"),
     ))
 
