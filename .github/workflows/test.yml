@@ -15,6 +15,7 @@ on:
   pull_request:
     branches:
       - '**'  # all branches
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   test:
@@ -42,7 +43,7 @@ jobs:
         run: |
           go test ./...
 
-  update-badge:
+  update-badges:
     needs: test  # This ensures all tests pass first
     runs-on: ubuntu-latest  # Only needs to run once
     permissions:
@@ -57,29 +58,64 @@ jobs:
         with:
           go-version: stable
 
+      # ===== v1 Coverage =====
+      - name: Generate v1 Coverage
+        run: |
+          go test -v ./... -covermode=count -coverprofile=coverage.out
+          go tool cover -func=coverage.out -o=coverage.out
+
+      - name: Go Coverage Badge (v1)
+        uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
+        with:
+          filename: coverage.out
+
+      # ===== v2 Coverage =====
       - name: Generate v2 Coverage
         working-directory: ./v2
         run: |
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
 
-      - name: Go Coverage Badge
+      - name: Go Coverage Badge (v2)
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: ./v2/coverage.out
 
+      # ===== Check files changed =====
       - name: Verify Changed files
         uses: tj-actions/verify-changed-files@6ed7632824d235029086612d4330d659005af687
         id: verify-changed-files
         with:
-          files: ./v2/README.md
+          files: |
+            README.md
+            v2/README.md
 
+      - name: Debug info
+        run: |
+          echo "Files changed: ${{ steps.verify-changed-files.outputs.files_changed }}"
+          echo "Changed files: ${{ steps.verify-changed-files.outputs.changed_files }}"
+
+      # ===== Create PR if changes detected =====
       - name: Create Pull Request
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
         uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f
+        id: create-pr
         with:
           token: ${{ github.token }}
-          commit-message: "chore: Updated coverage badge"
-          title: "Update coverage badge"
-          body: "Automated PR to update coverage badge"
-          branch: chore/update-v2-coverage-badge
+          commit-message: "chore: Updated coverage badges for v1 and v2"
+          title: "Update coverage badges for v1 and v2"
+          body: |
+            Automated PR to update coverage badges
+            
+            Changed files:
+            ${{ steps.verify-changed-files.outputs.changed_files }}
+          branch: chore/update-coverage-badges
           base: main
+          delete-branch: true
+
+      - name: PR Output
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        run: |
+          echo "PR created: ${{ steps.create-pr.outputs.pull-request-created }}"
+          echo "PR number: ${{ steps.create-pr.outputs.pull-request-number }}"
+          echo "PR URL: ${{ steps.create-pr.outputs.pull-request-url }}"
