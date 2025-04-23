@@ -64,27 +64,60 @@ jobs:
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
 
-      - name: Go Coverage Badge (v1) - Create Badge
+      - name: Go Coverage Badge (v1)
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
           filename: coverage.out
+
+      # Save v1 badge for later
+      - name: Extract v1 Badge
+        run: |
+          BADGE_LINE=$(grep -n '!\[Coverage\]' README.md | tail -1 | sed 's/^[0-9]*://')
+          echo "V1_BADGE_LINE=$BADGE_LINE" >> $GITHUB_ENV
 
       # ===== v2 Coverage =====
       - name: Generate v2 Coverage
-        working-directory: ./v2
         run: |
+          cd v2
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
+          cd ..
+          cp v2/coverage.out v2_coverage.out
 
-      - name: Go Coverage Badge (v2) - Create Badge
-        working-directory: ./v2
+      - name: Go Coverage Badge (v2)
         uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
         with:
-          filename: coverage.out
+          filename: v2_coverage.out
 
-      # Make sure changes are detected
-      - name: Force timestamp changes
+      # Save v2 badge for later
+      - name: Extract v2 Badge
         run: |
+          BADGE_LINE=$(grep -n '!\[Coverage\]' README.md | tail -1 | sed 's/^[0-9]*://')
+          echo "V2_BADGE_LINE=$BADGE_LINE" >> $GITHUB_ENV
+          
+      # Restore v1 badge to main README
+      - name: Restore v1 Badge to README
+        run: |
+          # Replace the current badge with the v1 badge
+          if [ ! -z "$V1_BADGE_LINE" ]; then
+            sed -i 's|!\[Coverage\].*|'"$V1_BADGE_LINE"'|' README.md
+          fi
+
+      # Update v2 README with v2 badge
+      - name: Update v2 README
+        run: |
+          if [ ! -z "$V2_BADGE_LINE" ]; then
+            # Check if badge already exists in v2 README
+            if grep -q '!\[Coverage\]' v2/README.md; then
+              # Replace existing badge
+              sed -i 's|!\[Coverage\].*|'"$V2_BADGE_LINE"'|' v2/README.md
+            else
+              # Add badge at the top of the file
+              sed -i '1s/^/'"$V2_BADGE_LINE"'\n\n/' v2/README.md
+            fi
+          fi
+          
+          # Add timestamp to both README files to ensure they're modified
           echo "<!-- Updated: $(date) -->" >> README.md
           echo "<!-- Updated: $(date) -->" >> v2/README.md
 
