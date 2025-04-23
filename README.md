@@ -13,10 +13,10 @@
 
 **This README describes goopt v1.x.** Version 2 (`v2`) is now the recommended version for new projects and includes significant improvements like **hierarchical flag inheritance**, API cleanup, and bug fixes.
 
-*   **New Users:** Please start with **[goopt v2](https://github.com/napalu/goopt/tree/v2)** (or check the `v2` branch/tag).
-*   **v1 Users:** Consider migrating to v2. See the **[v2 Migration Guide](https://napalu.github.io/goopt/v2/migration/)**.
+*   **New Users:** Please start with [goopt v2](https://github.com/napalu/goopt/tree/main/v2).
+*   **v1 Users:** Consider migrating to v2. See the [v2 Migration Guide](https://napalu.github.io/goopt/v2/migration/).
 
-**[📚 View Full Documentation (v1 & v2)](https://napalu.github.io/goopt)**
+[📚 View Full Documentation (v1 & v2)](https://napalu.github.io/goopt)
 
 ---
 

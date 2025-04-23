@@ -6,7 +6,7 @@
 
 `goopt` is a flexible and powerful command-line option parser for Go applications. It provides a way to define commands, subcommands, flags, and their relationships declaratively or programmatically, offering both ease of use and extensibility.
 
-[📚 View Documentation (wip)](https://napalu.github.io/goopt)
+[📚 View Documentation](https://napalu.github.io/goopt)
 
 ## Key Features
 
