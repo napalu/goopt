@@ -1,5 +1,5 @@
 # goopt: a flexible and powerful command-line parser
-![Coverage](https://img.shields.io/badge/Coverage-80.9%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-78.7%25-brightgreen)
 [![Go Reference v1](https://pkg.go.dev/badge/github.com/napalu/goopt.svg)](https://pkg.go.dev/github.com/napalu/goopt)
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 
@@ -116,3 +116,4 @@ For more examples and detailed documentation, visit the [documentation site](htt
 ## Contributing
 
 Contributions are welcome! Contributions should be based on open issues (feel free to open one).
+<!-- Updated: Wed Apr 23 15:38:43 UTC 2025 -->
