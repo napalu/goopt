@@ -20,7 +20,7 @@ type Number struct {
 
 func ParseNumeric(s string) (n Number, ok bool) {
 	// Try parsing as int
-	if i, err := strconv.ParseInt(s, 0, 64); err == nil {
+	if i, err := strconv.ParseInt(s, 0, strconv.IntSize); err == nil {
 		n.Int = i
 		n.IsInt = true
 		n.IsNegative = i < 0
