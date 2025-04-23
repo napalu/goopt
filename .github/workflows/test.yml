@@ -72,7 +72,7 @@ jobs:
         uses: tj-actions/verify-changed-files@6ed7632824d235029086612d4330d659005af687
         id: verify-changed-files
         with:
-          files: README.md
+          files: ./v2/README.md
 
       - name: Create Pull Request
         if: steps.verify-changed-files.outputs.files_changed == 'true'

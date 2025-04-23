@@ -1,6 +1,6 @@
 # goopt: a flexible and powerful command-line parser
 
-[![GoDoc](https://godoc.org/github.com/napalu/go-opt?status.svg)](https://godoc.org/github.com/napalu/goopt)
+([![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2))
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 ![Coverage](https://img.shields.io/badge/Coverage-83.6%25-brightgreen)
 
