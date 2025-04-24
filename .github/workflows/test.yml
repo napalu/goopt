@@ -135,10 +135,6 @@ jobs:
             fi
           fi
           
-          # Add timestamp to both README files to ensure they're modified
-          echo "<!-- Updated: $(date) -->" >> README.md
-          echo "<!-- Updated: $(date) -->" >> v2/README.md
-
       # ===== Check files changed =====
       - name: Verify Changed files
         uses: tj-actions/verify-changed-files@6ed7632824d235029086612d4330d659005af687
