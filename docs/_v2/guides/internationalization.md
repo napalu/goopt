@@ -227,7 +227,7 @@ func main() {
     
     // Add flags with translatable descriptions
     parser.AddFlag("verbose", goopt.NewArg(
-        goopt.WithShort("v"),
+        goopt.WithShortFlag("v"),
         goopt.WithDescriptionKey("flag.verbose"),
     ))
     

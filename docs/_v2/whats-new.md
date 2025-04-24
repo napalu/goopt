@@ -21,18 +21,7 @@ goopt v2 comes with comprehensive internationalization support:
 - **Translatable error messages** for better user experience
 - **User-defined message bundles** to override built-in translations
 
-```go
-// Using the default bundle (English)
-parser := goopt.NewParser()
-
-// Setting a user-specific bundle
-userBundle := i18n.NewBundle("fr")
-parser.SetUserBundle(userBundle)
-
-// Completely replacing the default bundle
-customBundle := i18n.NewBundle("de")
-parser.ReplaceDefaultBundle(customBundle)
-```
+See [Internationalization]({{ site.baseurl }}/v2/guides/internationalization/) for details.
 
 ## Enhanced Error Handling
 Note: the error system has been backported to v1.
@@ -45,16 +34,6 @@ The error system has been completely overhauled:
 - **Improved error testing utilities** for better test coverage
 - **Standard errors package** (`errs`) with consistent error types
 
-```go
-// Error handling example
-if !parser.Parse(os.Args) {
-    fmt.Fprintln(os.Stderr, "Error parsing arguments:")
-    for _, err := range parser.GetErrors() {
-        fmt.Fprintf(os.Stderr, "  - %s\n", err)
-    }
-    os.Exit(1)
-}
-```
 
 ## Hierarchical Flag Inheritance
 
@@ -65,21 +44,13 @@ Flag handling is now fully hierarchical:
 - **Short flag resolution** - proper resolution of short flags in command hierarchies
 - **Context-aware parsing** - flag values are evaluated in the proper command context
 
-```go
-// Command with hierarchical flags example
-rootCmd := goopt.NewCommand(goopt.WithName("app"))
-rootCmd.AddFlag("verbose", goopt.NewArg(goopt.WithShort("v")))
-
-subCmd := rootCmd.AddCommand(goopt.NewCommand(goopt.WithName("sub")))
-
-// "sub" command inherits "verbose" flag from parent
-```
+See [Hierarchical flags]({{ site.baseurl }}/v2/guides/advanced-features/#flag-inheritance) for details.
 
 ## API Cleanup
 
 The API has been cleaned up and modernized:
 
-- **Removal of deprecated methods** like `Clear()` and `ClearAll()`
+- **Removal of deprecated methods**
 - **More consistent naming** throughout the codebase
 - **Better documentation** with examples and usage patterns
 - **Simplified initialization** with functional options
