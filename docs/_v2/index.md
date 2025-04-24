@@ -19,7 +19,7 @@ This is the documentation for goopt v2, which includes significant enhancements:
 - **Improved flag inheritance in command hierarchies**
 - **Cleaner API with deprecated functionality removed**
 
-[See what's new in v2]({{ site.baseurl }}/v2/whats-new/) or [read the migration guide]({{ site.baseurl }}/v2/migration/) if upgrading from v1.
+[Get-started]({{ site.baseurl }}/v2/guides/getting-started/) or [see what's new in v2]({{ site.baseurl }}/v2/whats-new/) or [read the migration guide]({{ site.baseurl }}/v2/migration/) if upgrading from v1.
 
 ## Design
 
