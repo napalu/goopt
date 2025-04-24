@@ -10,7 +10,7 @@ nav_order: 1
 
 `goopt` is a flexible and powerful command-line option parser for Go applications that supports multiple approaches to defining your CLI interface.
 
-## Version 2.0
+## Version 2.1
 
 This is the documentation for goopt v2, which includes significant enhancements:
 
