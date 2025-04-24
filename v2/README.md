@@ -9,6 +9,14 @@
 
 [📚 View Documentation](https://napalu.github.io/goopt)
 
+## Why Choose goopt? Beyond the Basics
+
+While simple CLIs are easy with goopt, its real power shines in complex applications:
+- **Deep Integration with Go Structs**: Define your entire CLI, including commands, subcommands, namespaced flags, and inheritance, directly within your Go configuration structs using goopt tags. This provides compile-time checks and a highly declarative approach not found elsewhere.
+- **True Hierarchical Flags**: Define flags at any level of your command structure (app, app service, app service start). Flags are automatically inherited by subcommands but can be precisely overridden where needed. Access flags contextually using parser.Get("flag", "app", "service").
+- **Flexible Organization**: Mix and match struct-tag definitions with programmatic configuration. Use nested structs for flag namespacing (--database.host) or embed shared configurations directly into commands.
+- **Contextual Flags**: Easily define flags that are only valid after a command, like `create --force file.txt`, without needing complex manual checks.
+
 ## Key Features
 
 - **Declarative and Programmatic Definition**: Supports both declarative struct tag parsing and programmatic definition of commands and flags.
@@ -20,7 +28,6 @@
 - **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
 - **Command Callbacks**: Define executable functions tied to specific commands with access to the command context.
 - **Struct Context Access**: Access the original configuration struct from command callbacks, enabling better separation of concerns.
-
 
 ## Installation
 
@@ -107,4 +114,4 @@ For more examples and detailed documentation, visit the [documentation site](htt
 ## Contributing
 
 Contributions are welcome! Contributions should be based on open issues (feel free to open one).
-<!-- Updated: Wed Apr 23 15:38:43 UTC 2025 -->
+
