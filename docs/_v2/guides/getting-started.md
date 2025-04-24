@@ -222,6 +222,7 @@ func main() {
    - Command-specific flags take precedence over inherited flags with the same name
    - You can access flags using their full path (`parser.Get("flag", "command", "subcommand")`)
    - Flags can be nested in structs to provide namespacing:
+   
    ```go
 
    type Config struct {
@@ -238,7 +239,7 @@ func main() {
      flags (e.g., using -h for 'host'). You have complete control over how help is implemented.
 
 ## 5. Parsing & Error Handling
-   Here's a bried example, showing how arguments, are passed, flags are evaluated, and errors are handled.
+   Here's a brief example, showing how arguments are passed, flags are evaluated, and errors are handled.
 
    ```go
 
@@ -287,7 +288,7 @@ func main() {
 
 ### Shell Completion
 
-You can add and install shell-completions for bash, zsh, fish and powershell easily from within your program
+You can add and install shell-completions for bash, zsh, fish, and powershell easily from within your program
 
 ```go
 import (
