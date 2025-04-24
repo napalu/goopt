@@ -71,7 +71,7 @@ goopt follows these key principles:
 ## Documentation Contents
 
 ### Guides
-- [Getting Started]({{ site.baseurl }}/v2/guides/) - Installation and basic usage
+- [Getting Started]({{ site.baseurl }}/v2/guides/getting-started/) - Installation and basic usage
 - [Command structure patterns]({{ site.baseurl }}/v2/guides/command-organization/) - Different ways to structure your CLI
 - [Flag structure patterns]({{ site.baseurl }}/v2/guides/flag-organization/) - Different ways to structure your flags
 - [Struct-First Approach]({{ site.baseurl }}/v2/guides/struct-tags/) - Struct-first approach
