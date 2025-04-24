@@ -226,9 +226,9 @@ func main() {
    ```go
 
    type Config struct {
-      bool Verbose `goopt:"short:v"`
-      type Update struct {
-        CheckInterval int `goopt:"name:checkInterval;short:c"` // is available from command-line as --update.checkInterval 10
+      Verbose bool `goopt:"short:v"`
+      Update struct {
+          CheckInterval int `goopt:"name:checkInterval;short:c"` // is available from command-line as --update.checkInterval 10
       }
    }
    ```
@@ -311,7 +311,6 @@ func main() {
             goopt.WithCommandDescription("Create a resource"),
             goopt.WithCallback(func(p *goopt.Parser, cmd *goopt.Command) error {
                 fmt.Println("Creating resource...")
-                // Access flags via parser.Get(), parser.GetBool(), etc.
                 return nil
             }),
       ),
@@ -344,7 +343,6 @@ func main() {
       // Assign the callback function
       opts.Create.Exec = func(p *goopt.Parser, cmd *goopt.Command) error {
 		  fmt.Println("Creating resource...")
-          // Access flags via parser.Get() or the struct itself
           return nil
       }
       
@@ -388,7 +386,7 @@ type Options struct {
 
 // Define a callback that can access the struct
 func createHandler(p *goopt.Parser, cmd *goopt.Command) error {
-   // Access the original struct (Go 1.18+)
+   // avoids global variables or passing context manually
    opts, ok := goopt.GetStructContextAs[*Options](p)
    if !ok {
       return fmt.Errorf("invalid struct context")
