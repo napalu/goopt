@@ -565,3 +565,115 @@ parser.PrintCommandsUsing(os.Stdout, config)
 
 parser.PrintPositionalArgs(os.Stdout)
 ```
+
+## Command Callbacks with Struct Context
+
+When using struct-based configuration, goopt provides a way to access the original struct from command callbacks, which is especially useful when organizing callbacks in separate packages. This allows you to maintain clean separation of concerns.
+
+### Accessing the Struct Context
+
+The parser stores the original struct passed to `NewParserFromStruct` or `NewParserFromInterface`, which you can retrieve in two ways:
+```go
+// 1. Non-generic method 
+structCtx := parser.GetStructCtx() 
+cfg, ok := structCtx.(*MyConfig)
+if !ok { 
+	return fmt.Errorf("invalid struct context type") 
+}
+
+// 2. Generic function (Go 1.18+) 
+cfg, ok := goopt.GetStructCtxAs[*MyConfig](parser)
+if !ok { 
+	return fmt.Errorf("invalid struct context type") 
+}
+```
+
+### Organizing Command Callbacks in Separate Packages
+
+This feature is particularly useful when organizing command handlers in separate packages:
+
+```go
+// In myapp/types.go
+package myapp
+
+import "github.com/napalu/goopt/v2"
+
+type Config struct {
+	Verbose bool   `goopt:"short:v;desc:Enable verbose output"`
+	Create  struct {
+		File struct {
+			Output string `goopt:"short:o;desc:Output file;required:true"`
+			Exec   goopt.CommandFunc // Store the callback function here
+		} `goopt:"kind:command;desc:Create a file"`
+	} `goopt:"kind:command;desc:Create commands"`
+}
+```
+
+```go
+// In main.go
+package main
+
+import (
+    "fmt"
+    "os"
+    
+    "github.com/napalu/goopt/v2"
+    "myapp/handlers"
+	"myapp/types"
+)
+
+
+func main() {
+    cfg := &types.Config{}
+    
+    // Assign the callback from the handlers package
+    cfg.Create.File.Exec = handlers.CreateFileHandler
+    
+    parser, err := goopt.NewParserFromStruct(cfg, goopt.WithExecOnParse(true)) // Execute the callback on successful parse
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
+    
+    if !parser.Parse(os.Args) {
+        for _, err := range parser.GetErrors() {
+            fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+        }
+        parser.PrintUsageWithGroups(os.Stdout)
+        os.Exit(1)
+    }
+}
+```
+
+```go 
+// In handlers/file.go
+package handlers
+
+import (
+    "fmt"
+    
+    "github.com/napalu/goopt/v2"
+    "myapp/types"
+)
+
+// CreateFileHandler handles file creation
+func CreateFileHandler(p *goopt.Parser, cmd *goopt.Command) error {
+    // Access the original struct using the generic function (Go 1.18+)
+    cfg, ok := goopt.GetStructContextAs[*types.Config](p)
+    if !ok {
+        return fmt.Errorf("invalid struct context type")
+    }
+    
+    // Now you have access to all configuration values
+    if cfg.Verbose {
+        fmt.Println("Creating file in verbose mode")
+    }
+    
+    fmt.Printf("Creating file: %s\n", cfg.Create.File.Output)
+    
+    // Perform file creation...
+    return nil
+}
+```
+
+This pattern allows for better code organization in large applications, separating command handling logic from CLI definition while maintaining type safety.

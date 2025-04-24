@@ -284,7 +284,143 @@ func main() {
 }
 ```
 
-## 6. Optional Features
+## 6. Command Callbacks
+
+goopt allows you to define callback functions that execute when specific commands are run. These callbacks provide a clean way to organize your command implementation logic.
+
+### Defining Command Callbacks
+
+You can define command callbacks in two ways:
+
+#### 1. Programmatically with functional options:
+
+```go
+package main
+
+import (
+	"fmt"
+   "github.com/napalu/goopt/v2"
+)
+
+func main() {
+	parser := goopt.NewParser()
+    // create a new command with callback
+	parser.AddCommand(
+        goopt.NewCommand(
+			goopt.WithName("create"),
+            goopt.WithCommandDescription("Create a resource"),
+            goopt.WithCallback(func(p *goopt.Parser, cmd *goopt.Command) error {
+                fmt.Println("Creating resource...")
+                // Access flags via parser.Get(), parser.GetBool(), etc.
+                return nil
+            }),
+      ),
+   )
+}
+
+
+```
+#### 2. Using a struct field of type `goopt.CommandFunc`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"github.com/napalu/goopt/v2"
+)
+
+type Options struct {
+   Create struct {
+      Output string `goopt:"short:o;desc:Output file;required:true"`
+      Exec   goopt.CommandFunc // Store the callback function
+   } `goopt:"kind:command;desc:Create a resource"`
+}
+
+func main() {
+      opts := &Options{}
+      
+      // Assign the callback function
+      opts.Create.Exec = func(p *goopt.Parser, cmd *goopt.Command) error {
+		  fmt.Println("Creating resource...")
+          // Access flags via parser.Get() or the struct itself
+          return nil
+      }
+      
+      parser, _ := goopt.NewParserFromStruct(opts)
+      
+      // Configure parser to execute callbacks on successful parse
+      parser.SetExecOnParse(true)
+      
+      // Parse arguments and execute callbacks automatically
+      if !parser.Parse(os.Args) { 
+		  // Handle errors...
+      }
+}
+```
+
+### Executing Command Callbacks
+
+There are two ways to execute command callbacks:
+1. **Automatically during parsing**: Set `parser.SetExecOnParse(true)` before parsing, or use `goopt.WithExecOnParse(true)` when creating the parser.
+2. **Manually after parsing**: Call after a successful parse. `parser.ExecuteCommands()`
+
+## 7. Command Callbacks with Struct Context
+When defining callbacks for commands, you can access the original struct from any callback function:
+
+```go
+package main
+
+import (
+   "fmt"
+   "os"
+   "github.com/napalu/goopt/v2"
+)
+
+type Options struct {
+   Verbose bool `goopt:"short:v;desc:Enable verbose output"`
+   Create struct {
+      Output string `goopt:"short:o;desc:Output file;required:true"`
+      Exec   goopt.CommandFunc // Store the callback function
+   } `goopt:"kind:command;desc:Create a resource"`
+}
+
+// Define a callback that can access the struct
+func createHandler(p *goopt.Parser, cmd *goopt.Command) error {
+   // Access the original struct (Go 1.18+)
+   opts, ok := goopt.GetStructContextAs[*Options](p)
+   if !ok {
+      return fmt.Errorf("invalid struct context")
+   }
+
+   // Use the struct fields
+   fmt.Printf("Creating resource: %s\n", opts.Create.Output)
+   if opts.Verbose {
+      fmt.Println("Verbose mode enabled")
+   }
+
+   return nil
+}
+
+func main() {
+   opts := &Options{}
+   opts.Create.Exec = createHandler // Assign the callback
+
+   parser, _ := goopt.NewParserFromStruct(opts, goopt.WithExecOnParse(true)) // Auto-execute callback after parsing
+
+   if !parser.Parse(os.Args) {
+      // Handle errors
+      for _, err := range parser.GetErrors() {
+         fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+      }
+      parser.PrintUsage(os.Stdout)
+      os.Exit(1)
+   }
+}
+```
+
+## 8. Optional Features
 
 ### Shell Completion
 
@@ -322,6 +458,7 @@ func main() {
     // ... rest of your code ...
 }
 ```
+This pattern is especially useful for organizing callbacks in separate packages. See [Advanced Features: Command Callbacks with Struct Context]({{ site.baseurl }}/v2/guides/advanced-features/#command-callbacks-with-struct-context) for more details.
 
 
 ### Environment Variables

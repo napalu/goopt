@@ -88,7 +88,12 @@ func NewParserFromStruct[T any](structWithTags *T, config ...ConfigureCmdLineFun
 
 // NewParserFromStructWithLevel parses a struct and binds its fields to command-line flags up to maxDepth levels
 func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int, config ...ConfigureCmdLineFunc) (*Parser, error) {
-	return newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0, config...)
+	p, err := newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0, config...)
+	if p != nil {
+		p.structCtx = structWithTags
+	}
+
+	return p, err
 }
 
 // NewParserFromInterface creates a new parser from an interface{} that should be a struct or a pointer to a struct
@@ -101,9 +106,15 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 		v = ptr
 	}
 
-	return newParserFromReflectValue(v, "", "", 5, 0, config...)
+	p, err := newParserFromReflectValue(v, "", "", 5, 0, config...)
+	if p != nil {
+		p.structCtx = i
+	}
+
+	return p, err
 }
 
+// SetExecOnParse executes command callbacks as soon as the command and associated flags have been parsed.
 func (p *Parser) SetExecOnParse(value bool) {
 	p.callbackOnParse = value
 }
@@ -131,6 +142,34 @@ func (p *Parser) SetEnvNameConverter(converter NameConversionFunc) NameConversio
 	p.envNameConverter = converter
 
 	return oldConverter
+}
+
+// GetStructCtx returns the current struct context stored within the Parser instance.
+// The struct context is a pointer to the struct that was supplied to NewParserFromStruct, NewParserFromStructWithLevel
+// or NewParserFromInterface.
+func (p *Parser) GetStructCtx() interface{} {
+	return p.structCtx
+}
+
+// HasStructCtx returns true if the Parser instance has a struct context stored.
+// The struct context is a pointer to the struct that was supplied to NewParserFromStruct, NewParserFromStructWithLevel
+// or NewParserFromInterface.
+func (p *Parser) HasStructCtx() bool {
+	return p.structCtx != nil
+}
+
+// GetStructCtxAs returns the current struct context stored within the Parser instance as a specific type.
+// The struct context is a pointer to the struct that was supplied to NewParserFromStruct, NewParserFromStructWithLevel
+// or NewParserFromInterface.
+func GetStructCtxAs[T any](p *Parser) (T, bool) {
+	var zero T
+
+	if p == nil || p.structCtx == nil {
+		return zero, false
+	}
+
+	val, ok := p.structCtx.(T)
+	return val, ok
 }
 
 // ExecuteCommands command callbacks are placed on a FIFO queue during parsing until ExecuteCommands is called.

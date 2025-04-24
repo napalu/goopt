@@ -2731,7 +2731,7 @@ func TestParser_ProcessStructCommands(t *testing.T) {
 				val = val.Elem()
 			}
 
-			err := parser.processStructCommands(val, "", 0, 10)
+			err := parser.processStructCommands(val, "", 0, 10, nil)
 			assert.NoError(t, err, "processStructCommands should not error")
 
 			var gotCmds []string
@@ -5567,6 +5567,309 @@ func TestParser_ScalableShortFlagResolution(t *testing.T) {
 	value, found := parser.Get("verbose", "parent child")
 	assert.True(t, found)
 	assert.Equal(t, "true", value)
+}
+
+func TestParser_StructCallbackOnTerminalCommand(t *testing.T) {
+	t.Run("Callback on terminal command should be executed", func(t *testing.T) {
+		type Commands struct {
+			Create struct {
+				Name    string
+				Execute CommandFunc
+			} `goopt:"kind:command;name:create;desc:Create something"`
+		}
+
+		executed := false
+		cmds := &Commands{}
+		cmds.Create.Execute = func(cmdLine *Parser, command *Command) error {
+			executed = true
+			return nil
+		}
+
+		parser, err := NewParserFromStruct(cmds)
+		assert.NoError(t, err)
+		parser.SetExecOnParse(true)
+
+		// Parse with the create command
+		result := parser.ParseString("create")
+		assert.True(t, result)
+		assert.True(t, executed, "Callback should have been executed")
+	})
+
+	t.Run("Callback on non-terminal command should return error", func(t *testing.T) {
+		type Commands struct {
+			Create struct {
+				Execute CommandFunc
+				User    struct {
+					Username string `goopt:"short:u;desc:User name"`
+				} `goopt:"kind:command;name:user;desc:Create user"`
+			} `goopt:"kind:command;name:create;desc:Create resources"`
+		}
+
+		executed := false
+		cmds := &Commands{}
+		cmds.Create.Execute = func(cmdLine *Parser, command *Command) error {
+			executed = true
+			return nil
+		}
+
+		parser, err := NewParserFromStruct(cmds)
+		assert.NoError(t, err)
+		parser.SetExecOnParse(true)
+		assert.False(t, parser.ParseString("create user --username foo"))
+		assert.Len(t, parser.GetErrors(), 1, "Should set error for callback on non-terminal command")
+		assert.True(t, errors.Is(parser.GetErrors()[0], errs.ErrProcessingCommand))
+		assert.False(t, executed, "Callback should not have been executed")
+	})
+
+	t.Run("Multiple callbacks in different terminal commands", func(t *testing.T) {
+		type Commands struct {
+			Create struct {
+				Execute CommandFunc
+			} `goopt:"kind:command;name:create;desc:Create resources"`
+
+			Delete struct {
+				Execute CommandFunc
+			} `goopt:"kind:command;name:delete;desc:Delete resources"`
+		}
+
+		createExecuted := false
+		deleteExecuted := false
+
+		cmds := &Commands{}
+		cmds.Create.Execute = func(cmdLine *Parser, command *Command) error {
+			createExecuted = true
+			return nil
+		}
+		cmds.Delete.Execute = func(cmdLine *Parser, command *Command) error {
+			deleteExecuted = true
+			return nil
+		}
+
+		parser, err := NewParserFromStruct(cmds)
+		assert.NoError(t, err)
+		parser.SetExecOnParse(true)
+		// Parse with the create command
+		result := parser.ParseString("create")
+		assert.True(t, result)
+		assert.True(t, createExecuted, "Create callback should have been executed")
+		assert.False(t, deleteExecuted, "Delete callback should not have been executed")
+
+		// Reset flags
+		createExecuted = false
+		deleteExecuted = false
+		// Parse with the delete command
+		result = parser.Parse([]string{"program", "delete"})
+		assert.True(t, result)
+		assert.False(t, createExecuted, "Create callback should not have been executed")
+		assert.True(t, deleteExecuted, "Delete callback should have been executed")
+	})
+
+	t.Run("Deep nested callbacks work correctly", func(t *testing.T) {
+		type Commands struct {
+			Resources struct {
+				Create struct {
+					User struct {
+						Admin struct {
+							Execute CommandFunc
+						} `goopt:"kind:command;name:admin;desc:Create admin user"`
+					} `goopt:"kind:command;name:user;desc:Create user"`
+				} `goopt:"kind:command;name:create;desc:Create resources"`
+			} `goopt:"kind:command;name:resources;desc:Manage resources"`
+		}
+
+		executed := false
+		cmdPath := ""
+
+		cmds := &Commands{}
+		cmds.Resources.Create.User.Admin.Execute = func(cmdLine *Parser, command *Command) error {
+			executed = true
+			cmdPath = command.Path()
+			return nil
+		}
+
+		parser, err := NewParserFromStruct(cmds)
+		assert.NoError(t, err)
+		parser.SetExecOnParse(true)
+		// Parse with the full command path
+		result := parser.ParseString("resources create user admin")
+		assert.True(t, result)
+		assert.True(t, executed, "Deeply nested callback should have been executed")
+		assert.Equal(t, "resources create user admin", cmdPath, "Command path should be correct")
+	})
+
+	t.Run("Callback receives correct command and parser", func(t *testing.T) {
+		type Commands struct {
+			Create struct {
+				Execute CommandFunc
+			} `goopt:"kind:command;name:create;desc:Create resources"`
+		}
+
+		var receivedParser *Parser
+		var receivedCommand *Command
+
+		cmds := &Commands{}
+		cmds.Create.Execute = func(cmdLine *Parser, command *Command) error {
+			receivedParser = cmdLine
+			receivedCommand = command
+			return nil
+		}
+
+		parser, err := NewParserFromStruct(cmds)
+		assert.NoError(t, err)
+		parser.SetExecOnParse(true)
+		// Parse with the create command
+		result := parser.ParseString("create")
+		assert.True(t, result)
+
+		// Verify that the callback received the correct parser instance
+		assert.Equal(t, parser, receivedParser, "Should receive the same parser instance")
+
+		// Verify that the correct command was passed
+		assert.NotNil(t, receivedCommand, "Command should not be nil")
+		assert.Equal(t, "create", receivedCommand.Name, "Should receive the create command")
+	})
+}
+
+func TestParser_TestStructContext(t *testing.T) {
+	// Define a test struct
+	type TestConfig struct {
+		Verbose bool   `goopt:"short:v;desc:Enable verbose output"`
+		Output  string `goopt:"short:o;desc:Output file"`
+	}
+
+	t.Run("StructContext with NewParserFromStruct", func(t *testing.T) {
+		// Create a struct and parser
+		cfg := &TestConfig{
+			Verbose: false,
+			Output:  "default.txt",
+		}
+		parser, err := NewParserFromStruct(cfg)
+		if err != nil {
+			t.Fatalf("Failed to create parser: %v", err)
+		}
+
+		// Check HasStructCtx
+		if !parser.HasStructCtx() {
+			t.Error("HasStructCtx() returned false, expected true")
+		}
+
+		// Check GetStructCtx
+		structCtx := parser.GetStructCtx()
+		if structCtx == nil {
+			t.Fatal("GetStructCtx() returned nil, expected *TestConfig")
+		}
+
+		// Check type assertion
+		gotCfg, ok := structCtx.(*TestConfig)
+		if !ok {
+			t.Errorf("GetStructCtx() returned wrong type, expected *TestConfig")
+		}
+
+		// Verify it's the same struct we passed in
+		if gotCfg != cfg {
+			t.Errorf("GetStructCtx() returned different struct instance, expected same instance")
+		}
+
+		// Check the values
+		if gotCfg.Verbose != cfg.Verbose || gotCfg.Output != cfg.Output {
+			t.Errorf("GetStructCtx() returned struct with incorrect values")
+		}
+
+		// Test generic GetStructCtxAs
+		typedCfg, ok := GetStructCtxAs[*TestConfig](parser)
+		if !ok {
+			t.Errorf("GetStructCtxAs[*TestConfig]() returned ok=false, expected true")
+		}
+
+		// Verify it's the same struct we passed in
+		if typedCfg != cfg {
+			t.Errorf("GetStructCtxAs[*TestConfig]() returned different struct instance, expected same instance")
+		}
+
+		// Try with wrong type
+		_, ok = GetStructCtxAs[*int](parser)
+		if ok {
+			t.Errorf("GetStructCtxAs[*int]() returned ok=true, expected false for wrong type")
+		}
+	})
+
+	t.Run("StructContext with NewParser", func(t *testing.T) {
+		// Create parser without struct
+		parser := NewParser()
+
+		// Check HasStructCtx
+		if parser.HasStructCtx() {
+			t.Error("HasStructCtx() returned true, expected false")
+		}
+
+		// Check GetStructCtx
+		structCtx := parser.GetStructCtx()
+		if structCtx != nil {
+			t.Errorf("GetStructCtx() returned %v, expected nil", structCtx)
+		}
+
+		// Check generic GetStructCtxAs
+		_, ok := GetStructCtxAs[*TestConfig](parser)
+		if ok {
+			t.Errorf("GetStructCtxAs[*TestConfig]() returned ok=true, expected false for nil struct context")
+		}
+	})
+
+	t.Run("GetStructCtxAs with nil parser", func(t *testing.T) {
+		// Test with nil parser
+		var parser *Parser = nil
+		_, ok := GetStructCtxAs[*TestConfig](parser)
+		if ok {
+			t.Errorf("GetStructCtxAs[*TestConfig](nil) returned ok=true, expected false")
+		}
+	})
+
+	t.Run("Command callback with struct context", func(t *testing.T) {
+		// Create a struct with a command that has a callback
+		type CommandConfig struct {
+			Verbose bool `goopt:"short:v;desc:Enable verbose output"`
+			Create  struct {
+				Output string `goopt:"short:o;desc:Output file"`
+				Exec   CommandFunc
+			} `goopt:"kind:command;desc:Create a resource"`
+		}
+
+		var callbackCalled bool
+		var callbackConfig *CommandConfig
+
+		// Create the config and set the callback
+		cfg := &CommandConfig{
+			Verbose: true,
+		}
+		cfg.Create.Output = "test.txt"
+		cfg.Create.Exec = func(p *Parser, cmd *Command) error {
+			callbackCalled = true
+			// Try to get the struct context
+			config, ok := GetStructCtxAs[*CommandConfig](p)
+			if !ok {
+				t.Errorf("Failed to get struct context in callback")
+				return nil
+			}
+			callbackConfig = config
+			return nil
+		}
+
+		// Create parser and execute callback
+		parser, err := NewParserFromStruct(cfg, WithExecOnParse(true))
+		if err != nil {
+			t.Fatalf("Failed to create parser: %v", err)
+		}
+
+		assert.True(t, parser.ParseString("create"))
+
+		// Verify callback was called and had access to config
+		if !callbackCalled {
+			t.Errorf("Command callback was not executed")
+		}
+		if callbackConfig != cfg {
+			t.Errorf("Callback received wrong struct context")
+		}
+	})
 }
 
 // Helper function for comparing string slices
