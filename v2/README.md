@@ -18,6 +18,8 @@
 - **Secure Flags**: Enable secure, hidden input for sensitive information like passwords.
 - **Automatic Usage Generation**: Automatically generates usage documentation based on defined flags and commands.
 - **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
+- **Command Callbacks**: Define executable functions tied to specific commands with access to the command context.
+- **Struct Context Access**: Access the original configuration struct from command callbacks, enabling better separation of concerns.
 
 
 ## Installation

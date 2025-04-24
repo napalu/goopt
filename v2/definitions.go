@@ -139,6 +139,7 @@ type Parser struct {
 	userI18n             *i18n.Bundle
 	currentLanguage      language.Tag
 	renderer             Renderer
+	structCtx            any
 }
 
 // CompletionData is used to store information for command line completion
@@ -160,10 +161,6 @@ type Renderer interface {
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
 }
-
-const (
-	FmtErrorWithString = "%w: %s"
-)
 
 type commandCallback struct {
 	callback  CommandFunc

@@ -55,6 +55,17 @@ The API has been cleaned up and modernized:
 - **Better documentation** with examples and usage patterns
 - **Simplified initialization** with functional options
 
+## Command Callbacks with Struct Context
+
+goopt v2 enhances command callbacks with the ability to access the original configuration struct:
+
+- **Type-safe struct access** - Command callbacks can retrieve the original struct used to initialize the parser
+- **Generic helper function** - Use `GetStructContextAs[T]()` to retrieve the struct in a type-safe manner
+- **Better code organization** - Separate command handling logic from CLI definition while maintaining type safety
+- **Package separation** - Organize command handlers in separate packages while maintaining access to configuration
+
+See [Command Callbacks with Struct Context]({{ site.baseurl }}/v2/guides/advanced-features/#command-callbacks-with-struct-context) for details on implementation and usage.
+
 ## Breaking Changes
 
 See the [Migration Guide]({{ site.baseurl }}/v2/migration/) for a complete list of breaking changes and how to update your code.

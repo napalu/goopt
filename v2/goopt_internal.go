@@ -1365,7 +1365,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		return nil, errs.ErrOnlyStructsCanBeTagged
 	}
 
-	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth)
+	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth, nil)
 	if err != nil {
 		parser.addError(err)
 	}
@@ -1562,7 +1562,11 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 	return nil
 }
 
-func (p *Parser) processStructCommands(val reflect.Value, currentPath string, currentDepth, maxDepth int) error {
+func (p *Parser) processStructCommands(val reflect.Value, currentPath string, currentDepth, maxDepth int, callbackMap map[string]CommandFunc) error {
+	if callbackMap == nil {
+		callbackMap = make(map[string]CommandFunc)
+	}
+
 	// Handle case where the entire value is a Command type (not a struct containing commands)
 	unwrappedValue, err := util.UnwrapValue(val)
 	if err != nil {
@@ -1603,6 +1607,15 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				continue
 			}
 			fieldValue = field.Elem()
+		}
+
+		if field.Type().AssignableTo(reflect.TypeOf(CommandFunc(nil))) && field.IsValid() && !field.IsZero() {
+			// Only store if we're in a command context (currentPath is not empty)
+			if currentPath != "" {
+				callbackFunc := field.Interface().(CommandFunc)
+				callbackMap[currentPath] = callbackFunc
+			}
+			continue // Skip further processing for this field
 		}
 
 		// Process Command fields first - these are explicit command definitions
@@ -1675,14 +1688,30 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			}
 
 			// Process nested structure with updated path
-			if err := p.processStructCommands(fieldValue, cmdPath, currentDepth+1, maxDepth); err != nil {
+			if err := p.processStructCommands(fieldValue, cmdPath, currentDepth+1, maxDepth, callbackMap); err != nil {
 				return err
 			}
 		} else if fieldValue.Kind() == reflect.Struct {
 			// Process non-command struct fields for nested commands
-			if err := p.processStructCommands(fieldValue, currentPath, currentDepth+1, maxDepth); err != nil {
+			if err := p.processStructCommands(fieldValue, currentPath, currentDepth+1, maxDepth, callbackMap); err != nil {
 				return err
 			}
+		}
+	}
+
+	for cmdPath, callback := range callbackMap {
+		// Get the command by path
+		cmd, ok := p.registeredCommands.Get(cmdPath)
+		if !ok {
+			return errs.ErrCommandNotFound.WithArgs(cmdPath)
+		}
+
+		// Check if this is a terminal command (no subcommands)
+		if len(cmd.Subcommands) == 0 {
+			// we can safely ignore the error because we know the command exists
+			_ = p.SetCommand(cmdPath, WithCallback(callback))
+		} else {
+			return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(fmt.Errorf("cannot set callback for non-terminal command"))
 		}
 	}
 

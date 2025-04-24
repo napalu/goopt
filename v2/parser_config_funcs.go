@@ -144,7 +144,7 @@ func WithEnvNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
 	}
 }
 
-// WithI18n allows setting the language for the parser.
+// WithLanguage allows setting the language for the parser.
 func WithLanguage(lang language.Tag) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.i18n.SetDefaultLanguage(lang)
