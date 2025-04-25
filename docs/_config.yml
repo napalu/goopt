@@ -26,7 +26,7 @@ just_the_docs:
       name: "Version 1.xx"
       nav_fold: true  # Optional: fold navigation by default
     v2:
-      name: "Version 2.0"
+      name: "Version 2.xx"
       nav_fold: true  # Optional: fold navigation by default
 
 # Default values based on path
