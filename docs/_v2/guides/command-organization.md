@@ -75,7 +75,7 @@ type Options struct {
 - Good for complex command hierarchies
 
 ### Trade-offs:
-- Can't easily share flags between commands
+- Flags can only be shared between commands sharing the same parents
 - More nested structures
 - Can lead to deeper type hierarchies
 

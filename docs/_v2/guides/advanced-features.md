@@ -31,7 +31,7 @@ goopt v2 uses a more structured and consistent tag format:
 | Slice Capacity | `capacity:value` | `goopt:"capacity:5"` |
 | Accepted Values | `accepted:{pattern:regex,desc:description}` | `goopt:"accepted:{pattern:json|yaml,desc:Format type}"` |
 | Dependencies | `depends:{flag:name,values:[val1,val2]}` | `goopt:"depends:{flag:format,values:[json,yaml]}"` |
-| Positional | `pos:{idx:value}` | `goopt:"pos:{idx:0}"` |
+| Positional | `pos:value` | `goopt:"pos:0"` |
 
 ### Complex Tag Formats
 
@@ -202,7 +202,7 @@ func main() {
 Secure flags:
 - Hide user input (no echoing to terminal)
 - Can display an optional prompt
-- Are cleared from memory after use
+- Are cleared from memory after use (this only applies to secure flags defined "programmatically" and not bound to a struct)
 
 ## Dependency Validation
 
@@ -303,7 +303,7 @@ import (
 func main() {
     parser := goopt.NewParser()
 
-    // Define commands using the builder pattern
+    // Define commands using the function option pattern
     parser.AddCommand(
         goopt.NewCommand(
             goopt.WithName("create"),
@@ -436,10 +436,10 @@ func main() {
 	}
 
 	// --- Example Command Lines ---
-	// 1. ./myapp service start                  (LogLevel=DEBUG, Port=8080, Workers=4)
-	// 2. ./myapp service stop --force           (LogLevel=INFO, Port=8080, Force=true)
-	// 3. ./myapp -l WARN service start -p 9090 (LogLevel=DEBUG, Port=9090, Workers=4) <- Global -l WARN ignored for start
-	// 4. ./myapp -l WARN service stop           (LogLevel=WARN, Port=8080, Force=false) <- Global -l WARN used for stop
+	// 1. ./myapp service start                     (LogLevel=DEBUG, Port=8080, Workers=4)
+	// 2. ./myapp service stop --force              (LogLevel=INFO, Port=8080, Force=true)
+	// 3. ./myapp -l WARN service start -p 9090     (LogLevel=DEBUG, Port=9090, Workers=4) <- Global -l WARN ignored for start
+	// 4. ./myapp -l WARN service stop              (LogLevel=WARN, Port=8080, Force=false) <- Global -l WARN used for stop
 
 	if !parser.Parse(os.Args) {
 		fmt.Fprintln(os.Stderr, "Error: Invalid command-line arguments.")

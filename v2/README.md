@@ -13,8 +13,8 @@
 
 While simple CLIs are easy with goopt, its real power shines in complex applications:
 - **Deep Integration with Go Structs**: Define your entire CLI, including commands, subcommands, namespaced flags, and inheritance, directly within your Go configuration structs using goopt tags. This provides compile-time checks and a highly declarative approach not found elsewhere.
-- **True Hierarchical Flags**: Define flags at any level of your command structure (app, app service, app service start). Flags are automatically inherited by subcommands but can be precisely overridden where needed. Access flags contextually using parser.Get("flag", "app", "service").
-- **Flexible Organization**: Mix and match struct-tag definitions with programmatic configuration. Use nested structs for flag namespacing (--database.host) or embed shared configurations directly into commands.
+- **True Hierarchical Flags**: Define flags at any level of your command structure (app, app service, app service start). Flags are automatically inherited by subcommands but can be precisely overridden where needed.
+- **Flexible Organization**: Mix and match struct-tag definitions with programmatic configuration. Use nested structs for flag namespacing or embed shared configurations directly into commands.
 - **Contextual Flags**: Easily define flags that are only valid after a command, like `create --force file.txt`, without needing complex manual checks.
 
 ## Key Features

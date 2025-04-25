@@ -25,14 +25,14 @@ type Config struct {
 | `name` | Long name for the flag/command | `name:output` |
 | `short` | Short name (single-char for POSIX mode) | `short:o` |
 | `desc` | Description shown in help | `desc:Output file` |
-| `type` | Flag type | `type:single\|standalone\|chained\|file` |
-| `required` | Whether flag is required | `required:true\|false` |
+| `type` | Flag type | `type:single|standalone|chained|file` |
+| `required` | Whether flag is required | `required:true|false` |
 | `default` | Default value | `default:stdout` |
-| `secure` | For password input | `secure:true\|false` |
+| `secure` | For password input | `secure:true|false` |
 | `prompt` | Prompt text for secure input | `prompt:Password:` |
 | `capacity` | Slice capacity for nested structs | `capacity:3` |
 | `pos` | Position requirements | `pos:0` |
-| `accepted` | Accepted values/patterns | `accepted:{pattern:json\|yaml,desc:Format}` |
+| `accepted` | Accepted values/patterns | `accepted:{pattern:json|yaml,desc:Format}` |
 | `depends` | Flag dependencies | `depends:{flag:output,values:[json]}` |
 
 ## Position Tag
