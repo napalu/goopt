@@ -202,7 +202,7 @@ func (p *Parser) ensureInit() {
 		p.rawArgs = map[string]string{}
 	}
 	if p.callbackQueue == nil {
-		p.callbackQueue = queue.New[commandCallback]()
+		p.callbackQueue = queue.New[*Command]()
 	}
 	if p.callbackResults == nil {
 		p.callbackResults = map[string]error{}
@@ -665,6 +665,10 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 			cmdQueue.Push(cmd)
 		}
 
+		if cmd.Callback == nil && cmd.callbackLocation.IsValid() {
+			cmd.Callback = cmd.callbackLocation.Interface().(CommandFunc)
+		}
+
 		// Queue the command callback (if any) after the command is fully recognized
 		if cmd.Callback != nil {
 			p.queueCommandCallback(cmd)
@@ -677,10 +681,7 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 
 func (p *Parser) queueCommandCallback(cmd *Command) {
 	if cmd.Callback != nil {
-		p.callbackQueue.Push(commandCallback{
-			callback:  cmd.Callback,
-			arguments: []interface{}{p, cmd},
-		})
+		p.callbackQueue.Push(cmd)
 	}
 }
 
@@ -1609,11 +1610,22 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			fieldValue = field.Elem()
 		}
 
-		if field.Type().AssignableTo(reflect.TypeOf(CommandFunc(nil))) && field.IsValid() && !field.IsZero() {
+		if field.Type().AssignableTo(reflect.TypeOf(CommandFunc(nil))) {
 			// Only store if we're in a command context (currentPath is not empty)
 			if currentPath != "" {
-				callbackFunc := field.Interface().(CommandFunc)
-				callbackMap[currentPath] = callbackFunc
+				cmd, ok := p.registeredCommands.Get(currentPath)
+				if !ok {
+					return errs.ErrCommandNotFound.WithArgs(currentPath)
+				}
+
+				// If the callback is already set (non-nil), use it directly
+				if field.IsValid() && !field.IsZero() {
+					callbackFunc := field.Interface().(CommandFunc)
+					callbackMap[currentPath] = callbackFunc
+				} else {
+					// Store the field reference for later checking
+					cmd.callbackLocation = field
+				}
 			}
 			continue // Skip further processing for this field
 		}

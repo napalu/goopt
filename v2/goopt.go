@@ -52,7 +52,7 @@ func NewParser() *Parser {
 		commandOptions:       orderedmap.NewOrderedMap[string, bool](),
 		positionalArgs:       []PositionalArgument{},
 		listFunc:             matchChainedSeparators,
-		callbackQueue:        queue.New[commandCallback](),
+		callbackQueue:        queue.New[*Command](),
 		callbackResults:      map[string]error{},
 		secureArguments:      orderedmap.NewOrderedMap[string, *types.Secure](),
 		prefixes:             []rune{'-'},
@@ -114,9 +114,15 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 	return p, err
 }
 
-// SetExecOnParse executes command callbacks as soon as the command and associated flags have been parsed.
+// SetExecOnParse executes command callbacks as soon as the command and associated flags have been parsed *during* the
+// Parse call. This is useful for executing commands which may require setting configuration or flag values
+// during command execution.
 func (p *Parser) SetExecOnParse(value bool) {
 	p.callbackOnParse = value
+}
+
+func (p *Parser) SetExecOnParseComplete(value bool) {
+	p.callbackOnParseComplete = value
 }
 
 // SetCommandNameConverter allows setting a custom name converter for command names
@@ -177,16 +183,12 @@ func GetStructCtxAs[T any](p *Parser) (T, bool) {
 func (p *Parser) ExecuteCommands() int {
 	callbackErrors := 0
 	for p.callbackQueue.Len() > 0 {
-		call, _ := p.callbackQueue.Pop()
-		if call.callback != nil && len(call.arguments) == 2 {
-			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
-			cmd, cmdOk := call.arguments[1].(*Command)
-			if cmdLineOk && cmdOk {
-				err := call.callback(cmdLine, cmd)
-				p.callbackResults[cmd.path] = err
-				if err != nil {
-					callbackErrors++
-				}
+		cmd, _ := p.callbackQueue.Pop()
+		if cmd.Callback != nil {
+			err := cmd.Callback(p, cmd)
+			p.callbackResults[cmd.path] = err
+			if err != nil {
+				callbackErrors++
 			}
 		}
 	}
@@ -198,16 +200,12 @@ func (p *Parser) ExecuteCommands() int {
 // Returns the error which occurred during execution of a command callback.
 func (p *Parser) ExecuteCommand() error {
 	if p.callbackQueue.Len() > 0 {
-		call, _ := p.callbackQueue.Pop()
-		if call.callback != nil && len(call.arguments) == 2 {
-			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
-			cmd, cmdOk := call.arguments[1].(*Command)
-			if cmdLineOk && cmdOk {
-				err := call.callback(cmdLine, cmd)
-				p.callbackResults[cmd.path] = err
-				if err != nil {
-					return err
-				}
+		cmd, _ := p.callbackQueue.Pop()
+		if cmd.Callback != nil {
+			err := cmd.Callback(p, cmd)
+			p.callbackResults[cmd.path] = err
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -414,7 +412,7 @@ func (p *Parser) Parse(args []string) bool {
 			if lastCommandPath != "" && p.callbackOnParse {
 				err := p.ExecuteCommand()
 				if err != nil {
-					p.addError(err)
+					p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
 				}
 				lastCommandPath = ""
 			}
@@ -437,7 +435,7 @@ func (p *Parser) Parse(args []string) bool {
 	if p.callbackOnParse && lastCommandPath != "" {
 		err := p.ExecuteCommand()
 		if err != nil {
-			p.addError(err)
+			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
 		}
 	}
 
@@ -451,7 +449,16 @@ func (p *Parser) Parse(args []string) bool {
 		for f := p.secureArguments.Front(); f != nil; f = f.Next() {
 			p.processSecureFlag(*f.Key, f.Value)
 		}
+		if p.callbackOnParseComplete && !p.callbackOnParse {
+			numErrs := p.ExecuteCommands()
+			if numErrs > 0 {
+				for _, kv := range p.GetCommandExecutionErrors() {
+					p.addError(errs.ErrProcessingCommand.Wrap(kv.Value).WithArgs(kv.Key))
+				}
+			}
+		}
 		success = len(p.errors) == 0
+
 	}
 	p.secureArguments = nil
 

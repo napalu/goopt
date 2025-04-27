@@ -566,6 +566,138 @@ parser.PrintCommandsUsing(os.Stdout, config)
 parser.PrintPositionalArgs(os.Stdout)
 ```
 
+## Command Callbacks
+
+Command callbacks provide a way to execute code when specific commands are recognized. The goopt library offers several ways to control when these callbacks are executed, giving you flexible control over your command execution flow.
+
+### Callback Execution Control
+
+You can control when command callbacks are executed using three primary approaches:
+
+#### 1. During Parsing
+
+When `ExecOnParse` is enabled (it's `false` by default), callbacks are executed immediately when their corresponding command is recognized during the parsing process.
+
+```go
+package main
+
+import (
+	"github.com/napalu/goopt/v2"
+)
+
+type Example struct {
+	Create struct {
+		Exec goopt.CommandFunc
+		User struct {
+			Exec goopt.CommandFunc
+        } `goopt:"kind:command"`
+    } `goopt:"kind:command"`
+}
+func main() {
+	opts := &Example{}
+	// from a tagged struct 
+	parser, _ := goopt.NewParserFromStruct(opts, goopt.WithExecOnParse(true))
+	// Or when creating the parser 
+	// parser := goopt.NewParser(goopt.WithExecOnParse(true))
+
+	//  or enable execution during parsing 
+	parser.SetExecOnParse(true)
+}
+```
+
+This is useful when you need to handle commands as they're encountered, such as when:
+- Performing validation that might affect subsequent command parsing
+- Implementing interactive commands that need immediate user feedback
+- Processing commands in a strict sequence where earlier commands set up state for later ones
+
+#### 2. After Parsing Completes
+
+When `ExecOnParseComplete` is enabled, callbacks are executed after the entire command line has been parsed successfully.
+
+```go
+package main
+
+import (
+	"github.com/napalu/goopt/v2"
+)
+
+type Example struct {
+	Create struct {
+		Exec goopt.CommandFunc
+		User struct {
+			Exec goopt.CommandFunc
+        } `goopt:"kind:command"`
+    } `goopt:"kind:command"`
+}
+func main() {
+	opts := &Example{}
+	// from a tagged struct 
+	parser, _ := goopt.NewParserFromStruct(opts, goopt.WithExecOnParseComplete(true))
+	// Or when creating the parser 
+	// parser := goopt.NewParser(goopt.WithExecOnParseComplete(true))
+
+	//  or enable execution during parsing 
+	parser.SetExecOnParseComplete(true)
+}
+```
+
+Note: This setting only has effect when `ExecOnParse` is `false` (which is the default). If `ExecOnParse` is `true`, command callbacks are executed during parsing, and `ExecOnParseComplete` has no effect.
+
+This approach is beneficial when:
+- All command arguments need to be validated before any actions are taken
+- Commands depend on global state that might be set by flags or other commands
+- You want to collect all actions and execute them in a batch after validation
+
+#### 3. Manual Execution
+
+For maximum control, you can manually execute command callbacks after parsing:
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/napalu/goopt/v2"
+)
+
+type Example struct {
+	Create struct {
+		Exec goopt.CommandFunc
+		User struct {
+			Exec goopt.CommandFunc
+		} `goopt:"kind:command"`
+	} `goopt:"kind:command"`
+}
+
+func main() {
+	opts := &Example{}
+	// from a tagged struct 
+	parser, _ := goopt.NewParserFromStruct(opts)
+
+	numErr := parser.ExecuteCommands()
+	if numErr > 0 {
+		for _, kv := range parser.GetCommandExecutionErrors() {
+			fmt.Printf("error on command %s: %s", kv.Key, kv.Value.Error())
+		}
+	}
+}
+```
+
+This gives you complete control over:
+- When commands are executed
+- Which commands are executed
+- Execution order (though by default they execute in the order they appear on the command line)
+- Error handling and recovery between command executions
+
+### Execution Order and Parent Commands
+
+When multiple commands appear in a command path (such as `app create user`), their callbacks are executed in the sequence they appear on the command line:
+
+1. First, the callback for `create` (if present)
+2. Then, the callback for `create user`
+
+This natural ordering allows parent commands to perform setup operations before their subcommands run.
+
 ## Command Callbacks with Struct Context
 
 When using struct-based configuration, goopt provides a way to access the original struct from command callbacks, which is especially useful when organizing callbacks in separate packages. This allows you to maintain clean separation of concerns.
