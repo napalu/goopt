@@ -512,7 +512,7 @@ func main() {
 }
 ```
 
-## 7. Version Compatibility
+## 9. Version Compatibility
 
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
 ![goopt Version](https://img.shields.io/github/v/tag/napalu/goopt)
@@ -520,7 +520,7 @@ func main() {
 See [Migration Guide]({{ site.baseurl }}/v2/migration/) for updates between versions.
 goopt supports all Go versions from 1.18 onward. See our [compatibility policy]({{ site.baseurl }}/v2/compatibility/) for details.
 
-## 8. Next Steps
+## 10. Next Steps
 
 - [Command structure patterns]({{ site.baseurl }}/v2/guides/command-organization/) - Have a look at different ways to structure your CLI
 - [Flag structure patterns]({{ site.baseurl }}/v2/guides/flag-organization/) - Have a look at different ways to structure your flags
