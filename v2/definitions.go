@@ -3,6 +3,7 @@ package goopt
 import (
 	"github.com/napalu/goopt/v2/util"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -93,14 +94,15 @@ type PositionalArgument struct {
 
 // Command defines commands and sub-commands
 type Command struct {
-	Name           string
-	NameKey        string
-	Subcommands    []Command
-	Callback       CommandFunc
-	Description    string
-	DescriptionKey string
-	topLevel       bool
-	path           string
+	Name             string
+	NameKey          string
+	Subcommands      []Command
+	Callback         CommandFunc
+	Description      string
+	DescriptionKey   string
+	topLevel         bool
+	path             string
+	callbackLocation reflect.Value // stores reference to a field which may contain a CommandFunc in the future
 }
 
 // FlagInfo is used to store information about a flag
@@ -111,35 +113,36 @@ type FlagInfo struct {
 
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
-	posixCompatible      bool
-	prefixes             []rune
-	listFunc             types.ListDelimiterFunc
-	acceptedFlags        *orderedmap.OrderedMap[string, *FlagInfo]
-	lookup               map[string]string
-	options              map[string]string
-	errors               []error
-	bind                 map[string]any
-	customBind           map[string]ValueSetFunc
-	registeredCommands   *orderedmap.OrderedMap[string, *Command]
-	commandOptions       *orderedmap.OrderedMap[string, bool]
-	positionalArgs       []PositionalArgument
-	rawArgs              map[string]string
-	callbackQueue        *queue.Q[commandCallback]
-	callbackResults      map[string]error
-	callbackOnParse      bool
-	secureArguments      *orderedmap.OrderedMap[string, *types.Secure]
-	envNameConverter     NameConversionFunc
-	commandNameConverter NameConversionFunc
-	flagNameConverter    NameConversionFunc
-	terminalReader       util.TerminalReader
-	stderr               io.Writer
-	stdout               io.Writer
-	maxDependencyDepth   int
-	i18n                 *i18n.Bundle
-	userI18n             *i18n.Bundle
-	currentLanguage      language.Tag
-	renderer             Renderer
-	structCtx            any
+	posixCompatible         bool
+	prefixes                []rune
+	listFunc                types.ListDelimiterFunc
+	acceptedFlags           *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup                  map[string]string
+	options                 map[string]string
+	errors                  []error
+	bind                    map[string]any
+	customBind              map[string]ValueSetFunc
+	registeredCommands      *orderedmap.OrderedMap[string, *Command]
+	commandOptions          *orderedmap.OrderedMap[string, bool]
+	positionalArgs          []PositionalArgument
+	rawArgs                 map[string]string
+	callbackQueue           *queue.Q[*Command]
+	callbackResults         map[string]error
+	callbackOnParse         bool // *during* parse process
+	callbackOnParseComplete bool // *after* parse process
+	secureArguments         *orderedmap.OrderedMap[string, *types.Secure]
+	envNameConverter        NameConversionFunc
+	commandNameConverter    NameConversionFunc
+	flagNameConverter       NameConversionFunc
+	terminalReader          util.TerminalReader
+	stderr                  io.Writer
+	stdout                  io.Writer
+	maxDependencyDepth      int
+	i18n                    *i18n.Bundle
+	userI18n                *i18n.Bundle
+	currentLanguage         language.Tag
+	renderer                Renderer
+	structCtx               any
 }
 
 // CompletionData is used to store information for command line completion
@@ -160,11 +163,6 @@ type Renderer interface {
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
-}
-
-type commandCallback struct {
-	callback  CommandFunc
-	arguments []any
 }
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies

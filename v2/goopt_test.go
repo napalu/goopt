@@ -2990,7 +2990,7 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"test"},
 			execMethod: "onParse",
 			wantErrs: map[string]string{
-				"test": "command failed 'test': custom error",
+				"test": "error processing command test: command failed 'test': custom error",
 			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},

@@ -84,10 +84,18 @@ func WithCustomBindFlag[T any](flag string, bindVar *T, proc ValueSetFunc, argum
 	}
 }
 
-// WithExecOnParse specifies whether Command callbacks should be executed during Parse as they are encountered.
+// WithExecOnParse specifies whether Command callbacks should be executed during Parse as soon as they are encountered.
 func WithExecOnParse(value bool) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.SetExecOnParse(value)
+	}
+}
+
+// WithExecOnParseComplete specifies whether Command callbacks should be executed after a successful Parse. Note:
+// setting this has no effect if WithExecOnParse(true) is set.
+func WithExecOnParseComplete(value bool) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetExecOnParseComplete(value)
 	}
 }
 

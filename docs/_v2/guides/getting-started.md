@@ -214,8 +214,9 @@ func main() {
 ## 4. Core Concepts
 1. **Command Hierarchy**: 
    - Parent commands act as containers for subcommands
-   - Only terminal commands (commands without subcommands) are executable
    - Commands form paths like "create user" or "create group"
+   - Command callbacks are executed in order of appearance on the command line
+   - Both parent commands and their subcommands can have callbacks that will be executed
 
 2. **Flag Inheritance**:
    - Flags added to a parent command are inherited by all subcommands
@@ -360,9 +361,24 @@ func main() {
 
 ### Executing Command Callbacks
 
-There are two ways to execute command callbacks:
-1. **Automatically during parsing**: Set `parser.SetExecOnParse(true)` before parsing, or use `goopt.WithExecOnParse(true)` when creating the parser.
-2. **Manually after parsing**: Call after a successful parse. `parser.ExecuteCommands()`
+There are three ways to execute command callbacks:
+
+1. **Automatically during parsing**: Set `parser.SetExecOnParse(true)` before parsing, or use `goopt.WithExecOnParse(true)` when creating the parser. With this setting, command callbacks are executed as soon as they are recognized during parsing.
+2. **Automatically after parsing**: Set `parser.SetExecOnParseComplete(true)` before parsing or use `goopt.WithExecOnParseComplete(true)` when creating the parser. This setting executes all command callbacks at the end of the parsing process. Note: `ExecOnParseComplete` only has effect when `ExecOnParse` is false (which is the default).
+3. **Manually after parsing**: Call `parser.ExecuteCommands()` after a successful parse to execute all callbacks at once.
+
+#### Command Execution Order
+
+When multiple commands are present in a command path (like "create user"), their callbacks are executed in the order they appear on the command line:
+
+1. First the callback for "create" (if present)
+2. Then the callback for "create user"
+
+This allows parent commands to perform setup operations before their subcommands run.
+
+For more advanced execution control options, see [Advanced Features: Command Callbacks]({{ site.baseurl }}/v2/guides/advanced-features/#command-callbacks).
+
+
 
 ## 7. Command Callbacks with Struct Context
 When defining callbacks for commands, you can access the original struct from any callback function:
