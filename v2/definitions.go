@@ -98,6 +98,7 @@ type Command struct {
 	NameKey          string
 	Subcommands      []Command
 	Callback         CommandFunc
+	ExecOnParse      bool
 	Description      string
 	DescriptionKey   string
 	topLevel         bool

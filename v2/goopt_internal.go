@@ -464,6 +464,22 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	p.positionalArgs = newResult
 }
 
+func (p *Parser) evalExecOnParse(lastCommandPath string) string {
+	if p.callbackOnParse {
+		err := p.ExecuteCommand()
+		if err != nil {
+			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
+		}
+	} else if cmd, ok := p.getCommand(lastCommandPath); ok && cmd.Callback != nil && cmd.ExecOnParse {
+		err := p.ExecuteCommand()
+		if err != nil {
+			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
+		}
+	}
+
+	return ""
+}
+
 func (p *Parser) evalFlagWithPath(state parse.State, currentCommandPath string) {
 	if p.posixCompatible {
 		p.parsePosixFlag(state, currentCommandPath)

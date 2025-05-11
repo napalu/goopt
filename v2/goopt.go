@@ -409,12 +409,8 @@ func (p *Parser) Parse(args []string) bool {
 				envInserted[currentCommandPath]++
 			}
 
-			if lastCommandPath != "" && p.callbackOnParse {
-				err := p.ExecuteCommand()
-				if err != nil {
-					p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
-				}
-				lastCommandPath = ""
+			if lastCommandPath != "" {
+				lastCommandPath = p.evalExecOnParse(lastCommandPath)
 			}
 
 			if terminating {
@@ -432,11 +428,8 @@ func (p *Parser) Parse(args []string) bool {
 	}
 
 	// Execute any remaining command callback after parsing is done
-	if p.callbackOnParse && lastCommandPath != "" {
-		err := p.ExecuteCommand()
-		if err != nil {
-			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
-		}
+	if lastCommandPath != "" {
+		lastCommandPath = p.evalExecOnParse(lastCommandPath)
 	}
 
 	// Validate all processed options

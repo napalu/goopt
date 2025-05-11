@@ -576,7 +576,7 @@ You can control when command callbacks are executed using three primary approach
 
 #### 1. During Parsing
 
-When `ExecOnParse` is enabled (it's `false` by default), callbacks are executed immediately when their corresponding command is recognized during the parsing process.
+When `ExecOnParse` is enabled (it's `false` by default), callbacks are executed immediately when their corresponding command is recognized during the parsing process. 
 
 ```go
 package main
@@ -609,6 +609,37 @@ This is useful when you need to handle commands as they're encountered, such as 
 - Performing validation that might affect subsequent command parsing
 - Implementing interactive commands that need immediate user feedback
 - Processing commands in a strict sequence where earlier commands set up state for later ones
+
+ExecOnParse applies to all callbacks so this may not always be desired. An alternative is to set the command's `ExecOnParse` flag to true. Commands which have this flag set will be automatically called once the command context has been resolved, allowing
+for selective automatic command execution.
+
+```go
+package main
+
+import (
+	"github.com/napalu/goopt/v2"
+	"os"
+)
+
+type Example struct {
+	Create struct {
+		Exec goopt.CommandFunc
+		User struct {
+			Exec        goopt.CommandFunc
+			ExecOnParse bool
+		} `goopt:"kind:command"`
+	} `goopt:"kind:command"`
+}
+
+func main() {
+	opts := &Example{}
+	opts.Create.User.ExecOnParse = true // set 'create user' command to "autocall"
+	// from a tagged struct 
+	parser, _ := goopt.NewParserFromStruct(opts)
+
+	parser.Parse(os.Args) // the command 'create user' will be automatically called if supplied on the command line
+}
+```
 
 #### 2. After Parsing Completes
 

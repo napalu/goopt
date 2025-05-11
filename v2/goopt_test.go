@@ -2994,6 +2994,25 @@ func TestParser_CommandExecution(t *testing.T) {
 			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},
+		{
+			name: "execute on parse",
+			setupFunc: func(p *Parser) error {
+				cmd := &Command{
+					Name:        "test",
+					ExecOnParse: true,
+					Callback: func(cmdLine *Parser, command *Command) error {
+						return errs.ErrCommandCallbackError.WithArgs(command.Name).Wrap(errors.New("custom error"))
+					},
+				}
+				return p.AddCommand(cmd)
+			},
+			args:       []string{"test"},
+			execMethod: "onParse",
+			wantErrs: map[string]string{
+				"test": "error processing command test: command failed 'test': custom error",
+			},
+			description: "Should execute commands during Parse when ExecOnParse is true",
+		},
 	}
 
 	for _, tt := range tests {

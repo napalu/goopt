@@ -84,3 +84,11 @@ func WithOverwriteSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 		}
 	}
 }
+
+// WithExecuteOnParse sets the ExecOnParse property of the command. The callback, if defined, will be called as
+// soon the command context has been fully parses.
+func WithExecuteOnParse(cmdExecOnParse bool) ConfigureCommandFunc {
+	return func(command *Command) {
+		command.ExecOnParse = cmdExecOnParse
+	}
+}
