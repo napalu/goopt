@@ -1,0 +1,51 @@
+{
+  "i18n.demo.app_desc": "goopt v2の国際化機能のデモンストレーション",
+  "i18n.demo.lang_desc": "表示言語を設定 (en, es, ja, fr, de)",
+  "i18n.demo.verbose_desc": "詳細出力を有効にする",
+  "i18n.demo.help_desc": "ヘルプテキストを表示",
+
+  "i18n.demo.user_desc": "ユーザー管理コマンド",
+  "i18n.demo.user.list_desc": "すべてのユーザーを一覧表示",
+  "i18n.demo.user.list.all_desc": "管理者以外のユーザーを含むすべてのユーザーを表示",
+  "i18n.demo.user.list.format_desc": "出力形式 (tableまたはjson)",
+  "i18n.demo.user.list.executing": "ユーザーを一覧表示しています...",
+  "i18n.demo.user.list.options": "オプション: すべて表示=%[1]v, 形式=%[2]s\n",
+  "i18n.demo.user.list.header": "ユーザー名  メール                    管理者",
+  
+  "i18n.demo.user.create_desc": "新しいユーザーを作成",
+  "i18n.demo.user.create.username_desc": "新しいユーザーのユーザー名",
+  "i18n.demo.user.create.email_desc": "新しいユーザーのメールアドレス",
+  "i18n.demo.user.create.admin_desc": "ユーザーに管理者権限を付与",
+  "i18n.demo.user.create.executing": "ユーザーを作成しています...",
+  "i18n.demo.user.create.creating": "ユーザー '%[1]s' をメール '%[2]s' で作成しています\n",
+  "i18n.demo.user.create.with_admin": "  -> 管理者権限を付与しています",
+  "i18n.demo.user.create.success": "✓ ユーザー '%[1]s' が正常に作成されました\n",
+  
+  "i18n.demo.user.delete_desc": "既存のユーザーを削除",
+  "i18n.demo.user.delete.username_desc": "削除するユーザーのユーザー名",
+  "i18n.demo.user.delete.force_desc": "確認プロンプトをスキップ",
+  "i18n.demo.user.delete.executing": "ユーザーを削除しています...",
+  "i18n.demo.user.delete.confirm": "⚠️  ユーザー '%[1]s' が削除されます。確認するには --force を使用してください。\n",
+  "i18n.demo.user.delete.deleting": "ユーザー '%[1]s' を削除しています...\n",
+  "i18n.demo.user.delete.success": "✓ ユーザー '%[1]s' が正常に削除されました\n",
+  
+  "i18n.demo.db_desc": "データベース管理コマンド",
+  "i18n.demo.db.backup_desc": "データベースのバックアップを作成",
+  "i18n.demo.db.backup.output_desc": "バックアップの出力ファイル",
+  "i18n.demo.db.backup.compress_desc": "バックアップファイルを圧縮",
+  "i18n.demo.db.backup.executing": "データベースのバックアップを開始しています...",
+  "i18n.demo.db.backup.backing_up": "データベースを '%[1]s' にバックアップしています\n",
+  "i18n.demo.db.backup.with_compression": "  -> 圧縮が有効です",
+  "i18n.demo.db.backup.success": "✓ データベースが '%[1]s' に正常にバックアップされました\n",
+  
+  "i18n.demo.db.restore_desc": "バックアップからデータベースを復元",
+  "i18n.demo.db.restore.input_desc": "復元するバックアップファイル",
+  "i18n.demo.db.restore.drop_desc": "復元前に既存のデータベースを削除",
+  "i18n.demo.db.restore.executing": "データベースの復元を開始しています...",
+  "i18n.demo.db.restore.dropping": "⚠️  既存のデータベースを削除しています...",
+  "i18n.demo.db.restore.restoring": "'%[1]s' からデータベースを復元しています\n",
+  "i18n.demo.db.restore.success": "✓ データベースが '%[1]s' から正常に復元されました\n",
+  
+  "i18n.demo.yes": "はい",
+  "i18n.demo.no": "いいえ"
+}

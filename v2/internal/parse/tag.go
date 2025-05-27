@@ -172,6 +172,7 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		config.TypeOf = InferFieldType(field)
 	}
 
+
 	return config, nil
 }
 

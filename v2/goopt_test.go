@@ -1227,7 +1227,7 @@ func TestParser_PrintUsageWithGroups(t *testing.T) {
 	writer := newArrayWriter()
 	opts.PrintUsageWithGroups(writer)
 
-	expectedOutput := `usage: ` + os.Args[0] + `
+	expectedOutput := `Usage: ` + os.Args[0] + `
 
 Global Flags:
 
@@ -5024,9 +5024,9 @@ func TestParser_PrintPositionalArgs(t *testing.T) {
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (position: 0)
- dest "Destination file" (position: 1)
- optional "Optional file" (position: 5)
+ source "Source file" (positional: 0)
+ dest "Destination file" (positional: 1)
+ optional "Optional file" (positionalq: 5)
 `,
 		},
 		{
@@ -5046,8 +5046,8 @@ Positional Arguments:
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (position: 0)
- dest "Destination file" (position: 1)
+ source "Source file" (positional: 0)
+ dest "Destination file" (positional: 1)
 `,
 		},
 	}

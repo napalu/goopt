@@ -289,7 +289,7 @@ func TestLoadEmbeddedErrors(t *testing.T) {
 	// - empty.json (empty file)
 	// - invalid.json (malformed JSON)
 	// - dir/ (directory)
-	err := b.loadEmbeddedWithFS(badFS, "testdata_bad")
+	err := b.LoadFromFS(badFS, "testdata_bad")
 	if err.Error() != bundleErr.Error() {
 		t.Error("Expected errors loading test data")
 	}

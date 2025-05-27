@@ -1,3 +1,15 @@
+// Package i18n provides internationalization support.
+//
+// There are two ways to manage translations:
+//
+//  1. System-wide through i18n.Default() and i18n.SetDefault():
+//     This affects all new components that use i18n.Default()
+//
+//  2. Instance-level through parser.GetSystemBundle() or parser.ReplaceDefaultBundle():
+//     This affects only a specific parser instance
+//
+// Note that changing the system bundle via i18n.SetDefault() will not affect
+// existing parser instances that have already been created.
 package i18n
 
 import (
@@ -41,18 +53,44 @@ type Bundle struct {
 	matcher            language.Matcher
 }
 
-var defaultBundle *Bundle
-
-func init() {
-	var err error
-	defaultBundle, err = NewBundleWithFS(defaultLocales, "locales")
-	if err != nil {
-		panic("failed to load embedded locales: " + err.Error())
-	}
-}
+var (
+	defaultBundleOnce sync.Once
+	defaultBundle     *Bundle
+	defaultBundleMu   sync.RWMutex
+)
 
 func Default() *Bundle {
-	return defaultBundle
+	defaultBundleMu.RLock()
+	bundle := defaultBundle
+	defaultBundleMu.RUnlock()
+
+	if bundle != nil {
+		return bundle
+	}
+
+	defaultBundleOnce.Do(func() {
+		var err error
+		bundle, err = NewBundleWithFS(defaultLocales, "locales")
+		if err != nil {
+			panic("failed to load embedded locales: " + err.Error())
+		}
+
+		defaultBundleMu.Lock()
+		defaultBundle = bundle
+		defaultBundleMu.Unlock()
+	})
+
+	defaultBundleMu.RLock()
+	bundle = defaultBundle
+	defaultBundleMu.RUnlock()
+
+	return bundle
+}
+
+func SetDefault(bundle *Bundle) {
+	defaultBundleMu.Lock()
+	defaultBundle = bundle
+	defaultBundleMu.Unlock()
 }
 
 func NewBundle() (*Bundle, error) {
@@ -80,7 +118,7 @@ func NewBundleWithFS(fs embed.FS, dirPrefix string) (*Bundle, error) {
 		mu:                 sync.RWMutex{},
 	}
 
-	if err := b.loadEmbeddedWithFS(fs, dirPrefix); err != nil {
+	if err := b.LoadFromFS(fs, dirPrefix); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +283,11 @@ func (b *Bundle) SetDefaultLanguage(lang language.Tag) {
 	b.defaultLang = lang
 }
 
-func (b *Bundle) loadEmbeddedWithFS(fs embed.FS, dirPrefix string) error {
+func (b *Bundle) GetDefaultLanguage() language.Tag {
+	return b.defaultLang
+}
+
+func (b *Bundle) LoadFromFS(fs embed.FS, dirPrefix string) error {
 	entries, err := fs.ReadDir(dirPrefix)
 	if err != nil {
 		return err

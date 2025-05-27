@@ -17,7 +17,10 @@ package goopt
 
 import (
 	"fmt"
-	util2 "github.com/napalu/goopt/v2/util"
+	"github.com/napalu/goopt/v2/input"
+	"github.com/napalu/goopt/v2/internal/messages"
+	"golang.org/x/text/language"
+	"sync"
 
 	"io"
 	"os"
@@ -62,6 +65,7 @@ func NewParser() *Parser {
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
 		i18n:                 i18n.Default(),
+		mu:                   sync.Mutex{},
 	}
 	p.renderer = NewRenderer(p)
 
@@ -123,6 +127,10 @@ func (p *Parser) SetExecOnParse(value bool) {
 
 func (p *Parser) SetExecOnParseComplete(value bool) {
 	p.callbackOnParseComplete = value
+}
+
+func (p *Parser) SetSystemLanguage(lang language.Tag) {
+	p.i18n.SetDefaultLanguage(lang)
 }
 
 // SetCommandNameConverter allows setting a custom name converter for command names
@@ -688,14 +696,30 @@ func (p *Parser) SetUserBundle(bundle *i18n.Bundle) error {
 	return nil
 }
 
+// ReplaceDefaultBundle replaces the default i18n bundle in the parser with the specified bundle.
+// If the provided bundle is nil, it returns an ErrNilPointer error. Updates the global message provider.
 func (p *Parser) ReplaceDefaultBundle(bundle *i18n.Bundle) error {
 	if bundle == nil {
 		return errs.ErrNilPointer.WithArgs("bundle")
 	}
 
-	p.i18n = bundle
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
+	p.i18n = bundle
+	m := i18n.NewBundleMessageProvider(bundle)
+	i18n.SetDefaultMessageProvider(m)
+	errs.UpdateMessageProvider(m)
 	return nil
+}
+
+func (p *Parser) GetSystemBundle() *i18n.Bundle {
+	return p.i18n
+}
+
+// GetUserBundle returns the user-defined i18n bundle if available, otherwise returns nil.
+func (p *Parser) GetUserBundle() *i18n.Bundle {
+	return p.userI18n
 }
 
 // GetWarnings returns a string slice of all warnings (non-fatal errors) - a warning is set when optional dependencies
@@ -1302,25 +1326,25 @@ func (p *Parser) GenerateCompletion(shell, programName string) string {
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
 func (p *Parser) PrintUsage(writer io.Writer) {
-	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s", []byte(os.Args[0]))))
+	_, _ = writer.Write([]byte(fmt.Sprintf("%s\n", p.i18n.T(messages.MsgUsageKey, os.Args[0]))))
 	p.PrintPositionalArgs(writer)
 	p.PrintFlags(writer)
 	if p.registeredCommands.Count() > 0 {
-		_, _ = writer.Write([]byte("\ncommands:\n"))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgCommandsKey))))
 		p.PrintCommands(writer)
 	}
 }
 
 // PrintUsageWithGroups pretty prints accepted Flags and show command-specific Flags grouped by Commands to io.Writer.
 func (p *Parser) PrintUsageWithGroups(writer io.Writer) {
-	_, _ = writer.Write([]byte(fmt.Sprintf("usage: %s\n", os.Args[0])))
+	_, _ = writer.Write([]byte(fmt.Sprintf("%s\n", p.i18n.T(messages.MsgUsageKey, os.Args[0]))))
 
 	p.PrintPositionalArgs(writer)
 	p.PrintGlobalFlags(writer)
 
 	// Print command-specific flags and commands
 	if p.registeredCommands.Count() > 0 {
-		_, _ = writer.Write([]byte("\nCommands:\n"))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgCommandsKey))))
 		p.PrintCommandsWithFlags(writer, &PrettyPrintConfig{
 			NewCommandPrefix:     " +  ",
 			DefaultPrefix:        " │─ ",
@@ -1357,11 +1381,12 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 
 	// Print args with indices
 	if len(args) > 0 {
-		_, _ = writer.Write([]byte("\nPositional Arguments:\n"))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgPositionalArgumentsKey))))
 		for _, arg := range args {
-			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (position: %d)\n",
+			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (%s: %d)\n",
 				arg.Value,
 				p.renderer.FlagDescription(arg.Argument),
+				p.i18n.T(messages.MsgPositionalKey),
 				arg.Position)))
 		}
 	}
@@ -1370,7 +1395,7 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 
 // PrintGlobalFlags prints global (non-command-specific) flags
 func (p *Parser) PrintGlobalFlags(writer io.Writer) {
-	_, _ = writer.Write([]byte("\nGlobal Flags:\n\n"))
+	_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n\n", p.i18n.T(messages.MsgGlobalFlagsKey))))
 
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.Argument.isPositional() {
@@ -1398,7 +1423,7 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 				}
 
 				// Print the command itself with proper indentation
-				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.path, cmd.Description)
+				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.path, p.renderer.CommandDescription(cmd))
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
@@ -1458,7 +1483,7 @@ func (p *Parser) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig)
 					start = config.TerminalPrefix
 				}
 				command := fmt.Sprintf("%s%s %s \"%s\"\n", start, strings.Repeat(config.OuterLevelBindPrefix, level),
-					cmd.Name, cmd.Description)
+					cmd.Name, p.renderer.CommandDescription(cmd))
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
@@ -1486,7 +1511,7 @@ func (c *Command) Visit(visitor func(cmd *Command, level int) bool, level int) {
 // this is useful for testing or mocking the terminal reader or for setting a custom terminal reader
 // the returned value is the old terminal reader, so it can be restored later
 // this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
-func (p *Parser) SetTerminalReader(t util2.TerminalReader) util2.TerminalReader {
+func (p *Parser) SetTerminalReader(t input.TerminalReader) input.TerminalReader {
 	current := p.terminalReader
 	p.terminalReader = t
 	return current
@@ -1494,7 +1519,7 @@ func (p *Parser) SetTerminalReader(t util2.TerminalReader) util2.TerminalReader 
 
 // GetTerminalReader returns the current terminal reader
 // this is a low-level function and should not be used by most users - by default terminal reader is nil and the real terminal is used
-func (p *Parser) GetTerminalReader() util2.TerminalReader {
+func (p *Parser) GetTerminalReader() input.TerminalReader {
 	return p.terminalReader
 }
 
