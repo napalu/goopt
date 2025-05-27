@@ -5026,7 +5026,7 @@ func TestParser_PrintPositionalArgs(t *testing.T) {
 Positional Arguments:
  source "Source file" (positional: 0)
  dest "Destination file" (positional: 1)
- optional "Optional file" (positionalq: 5)
+ optional "Optional file" (positional: 5)
 `,
 		},
 		{
