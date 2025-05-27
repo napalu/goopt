@@ -5872,6 +5872,46 @@ func TestParser_TestStructContext(t *testing.T) {
 	})
 }
 
+func TestParserI18n(t *testing.T) {
+	p := NewParser()
+
+	// Test language methods
+	p.SetSystemLanguage(language.Spanish)
+
+	bundle := i18n.NewEmptyBundle()
+	p.SetUserBundle(bundle)
+
+	if p.GetUserBundle() != bundle {
+		t.Error("GetUserBundle() failed")
+	}
+
+	// Test GetSystemBundle()
+	if p.GetSystemBundle() == nil {
+		t.Error("GetSystemBundle() should not be nil")
+	}
+}
+
+func TestUtilityMethods(t *testing.T) {
+	p := NewParser()
+	p.AddFlag("test", NewArg())
+
+	// Test DescribeFlag/GetDescription
+	p.DescribeFlag("test", "Test flag")
+	if p.GetDescription("test") != "Test flag" {
+		t.Error("Description methods failed")
+	}
+
+	// Test Remove
+	if !p.Remove("test") {
+		t.Error("Remove() should return true")
+	}
+
+	// Test HasPositionalArgs
+	if p.HasPositionalArgs() {
+		t.Error("HasPositionalArgs() should be false")
+	}
+}
+
 // Helper function for comparing string slices
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {

@@ -1175,9 +1175,10 @@ func (p *Parser) SetFlag(flag, value string, commandPath ...string) error {
 // Remove used to remove a defined-flag at runtime - returns false if the Flag was not found and true on removal.
 func (p *Parser) Remove(flag string, commandPath ...string) bool {
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
-	_, found := p.options[mainKey]
+	_, found := p.acceptedFlags.Get(mainKey)
 	if found {
 		delete(p.options, mainKey)
+		p.acceptedFlags.Delete(mainKey)
 
 		return true
 	}

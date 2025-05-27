@@ -354,3 +354,37 @@ func TestAddLanguage_UpdatesExistingTranslations(t *testing.T) {
 		t.Errorf("Expected %q, got %q", updated, v)
 	}
 }
+
+func TestBundleDefaults(t *testing.T) {
+	// Test Default() singleton
+	b1 := Default()
+	b2 := Default()
+	if b1 != b2 {
+		t.Error("Default() should return same instance")
+	}
+
+	// Test SetDefault()
+	custom := NewEmptyBundle()
+	SetDefault(custom)
+	if Default() != custom {
+		t.Error("SetDefault() didn't update default bundle")
+	}
+}
+
+func TestTranslations(t *testing.T) {
+	b := NewEmptyBundle()
+	b.AddLanguage(language.English, map[string]string{
+		"test.key":    "Hello %s",
+		"test.simple": "Simple",
+	})
+
+	// Test T()
+	if b.T("test.simple") != "Simple" {
+		t.Error("T() failed")
+	}
+
+	// Test TL()
+	if b.TL(language.English, "test.key", "World") != "Hello World" {
+		t.Error("TL() with args failed")
+	}
+}
