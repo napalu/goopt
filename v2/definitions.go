@@ -1,10 +1,11 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/v2/util"
+	"github.com/napalu/goopt/v2/input"
 	"io"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/iancoleman/strcase"
@@ -12,8 +13,6 @@ import (
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/napalu/goopt/v2/types/queue"
-
-	"golang.org/x/text/language"
 )
 
 type Bindable interface {
@@ -135,15 +134,15 @@ type Parser struct {
 	envNameConverter        NameConversionFunc
 	commandNameConverter    NameConversionFunc
 	flagNameConverter       NameConversionFunc
-	terminalReader          util.TerminalReader
+	terminalReader          input.TerminalReader
 	stderr                  io.Writer
 	stdout                  io.Writer
 	maxDependencyDepth      int
 	i18n                    *i18n.Bundle
 	userI18n                *i18n.Bundle
-	currentLanguage         language.Tag
 	renderer                Renderer
 	structCtx               any
+	mu                      sync.Mutex
 }
 
 // CompletionData is used to store information for command line completion

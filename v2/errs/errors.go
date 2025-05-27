@@ -2,6 +2,7 @@ package errs
 
 import (
 	"github.com/napalu/goopt/v2/i18n"
+	"sync"
 )
 
 // Core parser errors
@@ -108,3 +109,128 @@ var (
 	ErrParseMissingValue      = i18n.NewError(ErrParseMissingValueKey)
 	ErrParseNegativeIndex     = i18n.NewError(ErrParseNegativeIndexKey)
 )
+
+type builtInErrors struct {
+	mu  sync.Mutex
+	All []i18n.TranslatableError
+}
+
+var sysErrors = &builtInErrors{
+	All: []i18n.TranslatableError{
+		ErrUnsupportedType,
+		ErrCommandNotFound,
+		ErrCommandNoCallback,
+		ErrFlagNotFound,
+		ErrPosixIncompatible,
+		ErrValidationFailed,
+		ErrBindNil,
+		ErrNonPointerVar,
+		ErrRequiredFlag,
+		ErrRequiredPositionalFlag,
+		ErrInvalidArgumentType,
+		ErrFlagValueNotRetrieved,
+		ErrEmptyArgumentPrefixList,
+		ErrEmptyFlag,
+		ErrFlagAlreadyExists,
+		ErrPosixShortForm,
+		ErrShortFlagConflict,
+		ErrInvalidListDelimiterFunc,
+		ErrBindInvalidValue,
+		ErrPointerExpected,
+		ErrOptionNotSet,
+		ErrLanguageUnavailable,
+		ErrShortFlagUndefined,
+		ErrDependencyOnEmptyFlag,
+		ErrRemoveDependencyFromEmpty,
+		ErrSettingBoundValue,
+		ErrCommandCallbackError,
+		ErrNegativeCapacity,
+		ErrUnsupportedTypeConversion,
+		ErrNoPreValidationFilters,
+		ErrNoPostValidationFilters,
+		ErrEmptyCommandPath,
+		ErrRecursionDepthExceeded,
+		ErrConfiguringParser,
+		ErrFieldBinding,
+		ErrUnwrappingValue,
+		ErrOnlyStructsCanBeTagged,
+		ErrProcessingFieldWithPrefix,
+		ErrProcessingField,
+		ErrProcessingFlag,
+		ErrProcessingSliceField,
+		ErrProcessingNestedStruct,
+		ErrProcessingCommand,
+		ErrUnmarshallingTag,
+		ErrMissingPropertyOnLevel,
+		ErrNilPointer,
+		ErrNoValidTags,
+		ErrInvalidAttributeForType,
+		ErrNotFoundPathForFlag,
+		ErrNotFilePathForFlag,
+		ErrFlagFileOperation,
+		ErrFlagExpectsValue,
+		ErrCommandExpectsSubcommand,
+		ErrSecureFlagExpectsValue,
+		ErrInvalidArgument,
+		ErrCircularDependency,
+		ErrDependencyNotFound,
+		ErrDependencyValueNotSpecified,
+		ErrMissingArgumentInfo,
+		ErrIndexOutOfBounds,
+		ErrUnknownFlag,
+		ErrPositionMustBeNonNegative,
+		ErrUnknownFlagInCommandPath,
+		ErrInvalidTagFormat,
+		ErrInvalidKind,
+		ErrNotAttachedToTerminal,
+		ErrParseBool,
+		ErrParseInt,
+		ErrParseFloat,
+		ErrRegexCompile,
+		ErrFileOperation,
+		ErrParseDuration,
+		ErrParseTime,
+		ErrParseComplex,
+		ErrParseList,
+		ErrParseInt64,
+		ErrParseInt32,
+		ErrParseInt16,
+		ErrParseInt8,
+		ErrParseOverflow,
+		ErrParseFloat64,
+		ErrParseFloat32,
+		ErrParseUint,
+		ErrParseUint64,
+		ErrParseUint32,
+		ErrParseUint16,
+		ErrParseUint8,
+		ErrParseUintptr,
+		ErrWrapped,
+		ErrParseDuplicateFlag,
+		ErrParseEmptyInput,
+		ErrParseMalformedBraces,
+		ErrParseUnmatchedBrackets,
+		ErrParseInvalidFormat,
+		ErrParseEmptyKey,
+		ErrParseMissingValue,
+		ErrParseNegativeIndex,
+	},
+}
+
+// UpdateMessageProvider updates the default message provider for all built-in errors.
+// This is useful for setting a custom message provider for all built-in errors.
+//
+// Example:
+//
+//	provider := i18n.NewBundleMessageProvider(bundle)
+//	errs.UpdateMessageProvider(provider)
+//
+//	// Now all built-in errors will use the custom message provider.
+func UpdateMessageProvider(provider i18n.MessageProvider) {
+	i18n.SetDefaultMessageProvider(provider)
+	sysErrors.mu.Lock()
+	for _, e := range sysErrors.All {
+		e.SetProvider(provider)
+	}
+	sysErrors.mu.Unlock()
+}

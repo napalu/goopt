@@ -16,11 +16,47 @@ type TranslatableError interface {
 	Unwrap() error
 	WithArgs(args ...interface{}) TranslatableError
 	Wrap(err error) TranslatableError
+	Is(target error) bool
+	SetProvider(provider MessageProvider)
 }
 
 // MessageProvider defines an interface for getting default messages
 type MessageProvider interface {
 	GetMessage(key string) string
+}
+
+// BundleMessageProvider implements MessageProvider using a bundle
+type BundleMessageProvider struct {
+	bundle *Bundle
+}
+
+// NewBundleMessageProvider creates a new provider with a bundle
+func NewBundleMessageProvider(bundle *Bundle) *BundleMessageProvider {
+	return &BundleMessageProvider{
+		bundle: bundle,
+	}
+}
+
+// GetMessage returns the message for the given key from the bundle
+func (p *BundleMessageProvider) GetMessage(key string) string {
+	if p.bundle == nil {
+		return key
+	}
+
+	if translations, ok := p.bundle.translations[p.bundle.GetDefaultLanguage()]; ok {
+		if translation, ok := translations[key]; ok {
+			return translation
+		}
+	}
+
+	// Fallback to English
+	if translations, ok := p.bundle.translations[language.English]; ok {
+		if translation, ok := translations[key]; ok {
+			return translation
+		}
+	}
+
+	return key
 }
 
 // TrError represents a translatable error with optional formatting arguments
@@ -45,27 +81,15 @@ type TrError struct {
 	messageProvider MessageProvider
 }
 
-// DefaultMessageProvider implements MessageProvider using the bundle
-type DefaultMessageProvider struct {
-	bundle *Bundle
-	lang   language.Tag
-}
-
-func (p *DefaultMessageProvider) GetMessage(key string) string {
-	if msg, ok := p.bundle.translations[p.lang][key]; ok {
-		return msg
-	}
-	return key
-}
-
 // NewError creates a new translatable error with a key
 func NewError(key string) *TrError {
-	defaultMsg := getDefaultProvider().GetMessage(key)
+	provider := getDefaultProvider()
+	defaultMsg := provider.GetMessage(key)
 	sentinel := errors.New(defaultMsg)
 	return &TrError{
 		sentinel:        sentinel,
 		key:             key,
-		messageProvider: getDefaultProvider(),
+		messageProvider: provider,
 	}
 }
 
@@ -129,6 +153,10 @@ func (e *TrError) Unwrap() error {
 	return e.wrapped
 }
 
+func (e *TrError) SetProvider(provider MessageProvider) {
+	e.messageProvider = provider
+}
+
 // Package-level provider management
 var (
 	defaultProvider    MessageProvider
@@ -155,10 +183,7 @@ func getDefaultProvider() MessageProvider {
 	defer defaultProviderMux.Unlock()
 
 	if defaultProvider == nil {
-		defaultProvider = &DefaultMessageProvider{
-			bundle: Default(),
-			lang:   language.English,
-		}
+		defaultProvider = NewBundleMessageProvider(Default())
 	}
 	return defaultProvider
 }

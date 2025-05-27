@@ -3,7 +3,7 @@ package goopt
 import (
 	"errors"
 	"fmt"
-	util2 "github.com/napalu/goopt/v2/util"
+	"github.com/napalu/goopt/v2/input"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -835,7 +835,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	} else {
 		prompt = config.Prompt
 	}
-	if pass, err := util2.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader()); err == nil {
+	if pass, err := input.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader()); err == nil {
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
 			p.addError(errs.ErrProcessingFlag.WithArgs(name).Wrap(err))
@@ -1416,10 +1416,12 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		}
 		longName, pathTag, err = unmarshalTagsToArgument(bundle, field, arg)
 		if err != nil {
-			if flagPrefix != "" {
-				parser.addError(errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err))
-			} else {
-				parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+			if !isFunction(field) {
+				if flagPrefix != "" {
+					parser.addError(errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err))
+				} else {
+					parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+				}
 			}
 			continue
 		}
@@ -1985,6 +1987,15 @@ func isNestedSlicePath(path string) bool {
 
 func isStructOrSliceType(field reflect.StructField) bool {
 	return isSliceType(field) || isStructType(field)
+}
+
+func isFunction(field reflect.StructField) bool {
+	unwrappedType := util.UnwrapType(field.Type)
+	if unwrappedType.Kind() == reflect.Func {
+		return true
+	}
+
+	return false
 }
 
 func isStructType(field reflect.StructField) bool {

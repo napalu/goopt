@@ -28,6 +28,7 @@ While simple CLIs are easy with goopt, its real power shines in complex applicat
 - **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
 - **Command Callbacks**: Define executable functions tied to specific commands with access to the command context.
 - **Struct Context Access**: Access the original configuration struct from command callbacks, enabling better separation of concerns.
+- **Internationalization (i18n)**: Built-in support for translating command descriptions, flag descriptions, error messages, and help text into multiple languages.
 
 ## Installation
 
@@ -102,6 +103,41 @@ func main() {
     }
 }
 ```
+
+## Examples
+
+The `examples/` directory contains complete, runnable examples demonstrating various goopt features:
+
+- **i18n-demo**: Comprehensive internationalization example showing how to create a multi-language CLI application with translated commands, flags, and messages
+- **file-stats**: Simple example showing positional arguments and basic flag usage
+- **simple-service**: Demonstrates hierarchical commands and flag inheritance
+
+## Internationalization (i18n)
+
+goopt provides built-in support for creating CLIs in multiple languages:
+
+```go
+type Config struct {
+    User struct {
+        Create struct {
+            Username string `goopt:"short:u;descKey:user.create.username_desc;required:true"`
+            Exec     goopt.CommandFunc
+        } `goopt:"kind:command;name:create;descKey:user.create_desc"`
+    } `goopt:"kind:command;name:user;descKey:user_desc"`
+}
+
+// Load translations
+bundle, _ := i18n.NewBundleWithFS(locales, "locales")
+parser, _ := goopt.NewParserFromStruct(cfg, goopt.WithUserBundle(bundle))
+```
+
+Key i18n features:
+- Use `descKey` in struct tags to reference translation keys
+- Automatic translation of error messages and help text
+- Support for multiple languages with easy runtime switching
+- Separation of system and user translation bundles
+
+See the [i18n-demo example](examples/i18n-demo) for a complete implementation.
 
 For more examples and detailed documentation, visit the [documentation site](https://napalu.github.io/goopt).
 

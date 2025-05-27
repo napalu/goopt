@@ -1227,7 +1227,7 @@ func TestParser_PrintUsageWithGroups(t *testing.T) {
 	writer := newArrayWriter()
 	opts.PrintUsageWithGroups(writer)
 
-	expectedOutput := `usage: ` + os.Args[0] + `
+	expectedOutput := `Usage: ` + os.Args[0] + `
 
 Global Flags:
 
@@ -5043,9 +5043,9 @@ func TestParser_PrintPositionalArgs(t *testing.T) {
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (position: 0)
- dest "Destination file" (position: 1)
- optional "Optional file" (position: 5)
+ source "Source file" (positional: 0)
+ dest "Destination file" (positional: 1)
+ optional "Optional file" (positional: 5)
 `,
 		},
 		{
@@ -5065,8 +5065,8 @@ Positional Arguments:
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (position: 0)
- dest "Destination file" (position: 1)
+ source "Source file" (positional: 0)
+ dest "Destination file" (positional: 1)
 `,
 		},
 	}
@@ -5889,6 +5889,46 @@ func TestParser_TestStructContext(t *testing.T) {
 			t.Errorf("Callback received wrong struct context")
 		}
 	})
+}
+
+func TestParserI18n(t *testing.T) {
+	p := NewParser()
+
+	// Test language methods
+	p.SetSystemLanguage(language.Spanish)
+
+	bundle := i18n.NewEmptyBundle()
+	p.SetUserBundle(bundle)
+
+	if p.GetUserBundle() != bundle {
+		t.Error("GetUserBundle() failed")
+	}
+
+	// Test GetSystemBundle()
+	if p.GetSystemBundle() == nil {
+		t.Error("GetSystemBundle() should not be nil")
+	}
+}
+
+func TestUtilityMethods(t *testing.T) {
+	p := NewParser()
+	p.AddFlag("test", NewArg())
+
+	// Test DescribeFlag/GetDescription
+	p.DescribeFlag("test", "Test flag")
+	if p.GetDescription("test") != "Test flag" {
+		t.Error("Description methods failed")
+	}
+
+	// Test Remove
+	if !p.Remove("test") {
+		t.Error("Remove() should return true")
+	}
+
+	// Test HasPositionalArgs
+	if p.HasPositionalArgs() {
+		t.Error("HasPositionalArgs() should be false")
+	}
 }
 
 // Helper function for comparing string slices

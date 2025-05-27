@@ -289,7 +289,7 @@ func TestLoadEmbeddedErrors(t *testing.T) {
 	// - empty.json (empty file)
 	// - invalid.json (malformed JSON)
 	// - dir/ (directory)
-	err := b.loadEmbeddedWithFS(badFS, "testdata_bad")
+	err := b.LoadFromFS(badFS, "testdata_bad")
 	if err.Error() != bundleErr.Error() {
 		t.Error("Expected errors loading test data")
 	}
@@ -352,5 +352,39 @@ func TestAddLanguage_UpdatesExistingTranslations(t *testing.T) {
 	// Verify updated value
 	if v := p.Sprintf(key); v != updated {
 		t.Errorf("Expected %q, got %q", updated, v)
+	}
+}
+
+func TestBundleDefaults(t *testing.T) {
+	// Test Default() singleton
+	b1 := Default()
+	b2 := Default()
+	if b1 != b2 {
+		t.Error("Default() should return same instance")
+	}
+
+	// Test SetDefault()
+	custom := NewEmptyBundle()
+	SetDefault(custom)
+	if Default() != custom {
+		t.Error("SetDefault() didn't update default bundle")
+	}
+}
+
+func TestTranslations(t *testing.T) {
+	b := NewEmptyBundle()
+	b.AddLanguage(language.English, map[string]string{
+		"test.key":    "Hello %s",
+		"test.simple": "Simple",
+	})
+
+	// Test T()
+	if b.T("test.simple") != "Simple" {
+		t.Error("T() failed")
+	}
+
+	// Test TL()
+	if b.TL(language.English, "test.key", "World") != "Hello World" {
+		t.Error("TL() with args failed")
 	}
 }

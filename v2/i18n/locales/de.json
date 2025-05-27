@@ -103,5 +103,9 @@
     "goopt.msg.conditional": "bedingt",
     "goopt.msg.defaults_to": "Standardwert",
     "goopt.msg.positional": "positional",
-    "goopt.msg.or": "oder"
+    "goopt.msg.or": "oder",
+    "goopt.msg.usage": "Verwendung: %[1]s",
+    "goopt.msg.commands": "Befehle",
+    "goopt.msg.global_flags": "Globale Flags",
+    "goopt.msg.positional_arguments": "Positionsargumente"
 }

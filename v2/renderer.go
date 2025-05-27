@@ -2,7 +2,7 @@ package goopt
 
 import (
 	"fmt"
-
+	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/internal/messages"
 )
 
@@ -19,8 +19,9 @@ func NewRenderer(parser *Parser) *DefaultRenderer {
 // Otherwise, it retrieves the long name of the flag and returns it.
 // If the long name contains a comand-path, it only returns the flag part of the path.
 func (r *DefaultRenderer) FlagName(f *Argument) string {
+	bundle := r.GetBundle()
 	if f.NameKey != "" {
-		return r.parser.i18n.T(f.NameKey)
+		return bundle.T(f.NameKey)
 	}
 
 	longName := f.GetLongName(r.parser)
@@ -36,16 +37,18 @@ func (r *DefaultRenderer) FlagName(f *Argument) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the flag's Description field.
 func (r *DefaultRenderer) FlagDescription(f *Argument) string {
+	bundle := r.GetBundle()
 	if f.DescriptionKey == "" {
 		return f.Description
 	}
 
-	return r.parser.i18n.T(f.DescriptionKey)
+	return bundle.T(f.DescriptionKey)
 }
 
 func (r *DefaultRenderer) CommandName(c *Command) string {
+	bundle := r.GetBundle()
 	if c.NameKey != "" {
-		return r.parser.i18n.T(c.NameKey)
+		return bundle.T(c.NameKey)
 	}
 
 	return c.Name
@@ -60,7 +63,8 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 		return c.Description
 	}
 
-	return r.parser.i18n.T(c.DescriptionKey)
+	bundle := r.GetBundle()
+	return bundle.T(c.DescriptionKey)
 }
 
 // FlagUsage generates a usage string for a given command-line argument.
@@ -102,4 +106,16 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	usage += " \"" + r.CommandDescription(c) + "\""
 
 	return usage
+}
+
+func (r *DefaultRenderer) GetBundle() *i18n.Bundle {
+	if r.parser == nil {
+		return nil
+	}
+
+	if r.parser.userI18n != nil {
+		return r.parser.userI18n
+	}
+
+	return r.parser.i18n
 }

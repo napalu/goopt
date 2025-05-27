@@ -14,12 +14,16 @@ const (
 
 // UIMessages contains keys for user interface messages
 const (
-	MsgOptionalKey    = MessagePrefixKey + ".optional"
-	MsgRequiredKey    = MessagePrefixKey + ".required"
-	MsgConditionalKey = MessagePrefixKey + ".conditional"
-	MsgDefaultsToKey  = MessagePrefixKey + ".defaults_to"
-	MsgPositionalKey  = MessagePrefixKey + ".positional"
-	MsgOrKey          = MessagePrefixKey + ".or"
+	MsgOptionalKey            = MessagePrefixKey + ".optional"
+	MsgRequiredKey            = MessagePrefixKey + ".required"
+	MsgConditionalKey         = MessagePrefixKey + ".conditional"
+	MsgDefaultsToKey          = MessagePrefixKey + ".defaults_to"
+	MsgPositionalKey          = MessagePrefixKey + ".positional"
+	MsgOrKey                  = MessagePrefixKey + ".or"
+	MsgUsageKey               = MessagePrefixKey + ".usage"
+	MsgCommandsKey            = MessagePrefixKey + ".commands"
+	MsgGlobalFlagsKey         = MessagePrefixKey + ".global_flags"
+	MsgPositionalArgumentsKey = MessagePrefixKey + ".positional_arguments"
 )
 
 // Help message keys - placeholders for future expansion
