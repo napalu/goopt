@@ -2,53 +2,6 @@
 
 This example demonstrates the comprehensive internationalization (i18n) features of goopt v2, showcasing how to build a fully localized CLI application that supports multiple languages.
 
-## Key Features Demonstrated
-
-### 1. **Struct Tag Translation Keys (`descKey`)**
-- Uses `descKey` instead of `desc` to reference translation keys
-- Example: `goopt:"short:u;descKey:i18n.demo.user.create.username_desc;required:true"`
-- Enables automatic translation of all descriptions
-
-### 2. **Embedded Translation Files**
-- User translations: `//go:embed locales/*.json` for application-specific messages
-- System translations: `//go:embed system-locales/*.json` for extending goopt's built-in languages
-- Clean separation between system and application translations
-
-### 3. **Dual Bundle System**
-- System bundle: `i18n.Default()` handles goopt's internal messages
-- User bundle: Custom translations for application-specific content
-- Shows how to extend system languages without modifying goopt core
-
-### 4. **CommandFunc Pattern**
-- Commands defined with `Exec goopt.CommandFunc` field
-- Command execution via `parser.ExecuteCommands()`
-- Access to parser context with `goopt.GetStructCtxAs[*Config](parser)`
-
-### 5. **Runtime Language Switching**
-- Language flag (`--lang`) for selecting display language
-- Dynamic bundle language updates after parsing
-- Synchronized language switching for both system and user bundles
-
-### 6. **Translator Integration**
-- `i18n.Translator` interface embedded in config struct (with `ignore:"true"`)
-- Direct access to translations in command functions via `cfg.TR.T(key, args...)`
-- Clean separation of translation logic from business logic
-
-### 7. **Comprehensive Localization**
-- Command descriptions and names
-- Flag descriptions and validation messages
-- Error messages (including required field errors)
-- Help text section headers (Usage, Commands, Global Flags)
-- Status indicators (required, optional, default value)
-- Command output messages
-
-### 8. **Multi-Language Support**
-- English (en) - default
-- Spanish (es)
-- Japanese (ja)
-- French (fr)
-- German (de)
-
 ## Project Structure
 
 ```
