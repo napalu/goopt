@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -5942,6 +5943,307 @@ func stringSliceEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestParser_GetStdout(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdout io.Writer
+	}{
+		{
+			name:   "default stdout",
+			stdout: nil,
+		},
+		{
+			name:   "custom stdout",
+			stdout: &bytes.Buffer{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+
+			if tt.stdout != nil {
+				p.SetStdout(tt.stdout)
+			}
+
+			got := p.GetStdout()
+
+			if tt.stdout != nil && got != tt.stdout {
+				t.Errorf("GetStdout() = %v, want %v", got, tt.stdout)
+			}
+		})
+	}
+}
+
+func TestParser_GetShortFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(*Parser)
+		flag        string
+		commandPath []string
+		want        string
+		wantErr     bool
+	}{
+		{
+			name: "existing short flag",
+			setup: func(p *Parser) {
+				p.AddFlag("verbose", NewArg(WithShortFlag("v")))
+			},
+			flag: "verbose",
+			want: "v",
+		},
+		{
+			name: "no short flag defined",
+			setup: func(p *Parser) {
+				p.AddFlag("verbose", NewArg())
+			},
+			flag:    "verbose",
+			wantErr: true,
+		},
+		{
+			name:    "non-existent flag",
+			setup:   func(p *Parser) {},
+			flag:    "nonexistent",
+			wantErr: true,
+		},
+		{
+			name: "flag in command path",
+			setup: func(p *Parser) {
+				cmd := NewCommand(WithName("test"))
+				p.AddCommand(cmd)
+				p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone)), "test")
+			},
+			flag:        "verbose",
+			commandPath: []string{"test"},
+			want:        "v",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			tt.setup(p)
+
+			got, err := p.GetShortFlag(tt.flag, tt.commandPath...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetShortFlag() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if got != tt.want {
+				t.Errorf("GetShortFlag() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParser_FlagPath(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+		want string
+	}{
+		{
+			name: "simple flag",
+			flag: "verbose",
+			want: "",
+		},
+		{
+			name: "flag with command path",
+			flag: "verbose@cmd.subcmd",
+			want: "cmd.subcmd",
+		},
+		{
+			name: "flag with single command",
+			flag: "verbose@cmd",
+			want: "cmd",
+		},
+		{
+			name: "empty flag",
+			flag: "",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			if got := p.FlagPath(tt.flag); got != tt.want {
+				t.Errorf("FlagPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArgument_DisplayID(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  *Argument
+		want string
+	}{
+		{
+			name: "positional argument",
+			arg: &Argument{
+				Position: util.NewOfType(0),
+			},
+			want: "pos0",
+		},
+		{
+			name: "positional argument at position 5",
+			arg: &Argument{
+				Position: util.NewOfType(5),
+			},
+			want: "pos5",
+		},
+		{
+			name: "non-positional with uuid and description key",
+			arg: &Argument{
+				uuid:           "12345678-abcd-efgh-ijkl-mnopqrstuvwx",
+				DescriptionKey: "mykey",
+			},
+			want: "12345678-mykey",
+		},
+		{
+			name: "non-positional with uuid only",
+			arg: &Argument{
+				uuid:           "abcdefgh-1234-5678-90ab-cdefghijklmn",
+				DescriptionKey: "",
+			},
+			want: "abcdefgh-",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.arg.DisplayID(); got != tt.want {
+				t.Errorf("DisplayID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParser_SetExecOnParseComplete(t *testing.T) {
+	p := NewParser()
+	
+	// Set the value and ensure no panic
+	p.SetExecOnParseComplete(true)
+	
+	if !p.callbackOnParseComplete {
+		t.Error("SetExecOnParseComplete(true) should set callbackOnParseComplete to true")
+	}
+}
+
+func TestParser_GetPreValidationFilter(t *testing.T) {
+	p := NewParser()
+	
+	// Add a flag with a pre-validation filter
+	p.AddFlag("test", NewArg(WithPreValidationFilter(strings.ToUpper)))
+	
+	// Get the filter
+	filter, err := p.GetPreValidationFilter("test")
+	if err != nil {
+		t.Errorf("GetPreValidationFilter returned error: %v", err)
+	}
+	
+	if filter == nil {
+		t.Error("GetPreValidationFilter should return the filter")
+	}
+	
+	// Test the filter works
+	if filter("hello") != "HELLO" {
+		t.Error("Filter should convert to uppercase")
+	}
+}
+
+func TestParser_GetPostValidationFilter(t *testing.T) {
+	p := NewParser()
+	
+	// Add a flag with a post-validation filter
+	p.AddFlag("test", NewArg(WithPostValidationFilter(strings.ToLower)))
+	
+	// Get the filter
+	filter, err := p.GetPostValidationFilter("test")
+	if err != nil {
+		t.Errorf("GetPostValidationFilter returned error: %v", err)
+	}
+	
+	if filter == nil {
+		t.Error("GetPostValidationFilter should return the filter")
+	}
+	
+	// Test the filter works
+	if filter("HELLO") != "hello" {
+		t.Error("Filter should convert to lowercase")
+	}
+}
+
+func TestParser_GetAcceptPatterns(t *testing.T) {
+	p := NewParser()
+	
+	// Add a flag with accept patterns
+	p.AddFlag("test", NewArg(WithAcceptedValues([]types.PatternValue{
+		{Pattern: "^[0-9]+$", Description: "numbers only"},
+		{Pattern: "^[a-z]+$", Description: "lowercase letters only"},
+	})))
+	
+	// Get the patterns
+	patterns, err := p.GetAcceptPatterns("test")
+	if err != nil {
+		t.Errorf("GetAcceptPatterns returned error: %v", err)
+	}
+	
+	if len(patterns) != 2 {
+		t.Errorf("Expected 2 patterns, got %d", len(patterns))
+	}
+}
+
+func TestCommand_AddSubcommand(t *testing.T) {
+	cmd := NewCommand(WithName("parent"))
+	
+	// Add a subcommand
+	subcmd := NewCommand(WithName("child"))
+	cmd.AddSubcommand(subcmd)
+	
+	if len(cmd.Subcommands) != 1 {
+		t.Error("AddSubcommand should add the subcommand")
+	}
+	
+	if cmd.Subcommands[0].Name != "child" {
+		t.Error("Subcommand should have the correct name")
+	}
+}
+
+func TestCommand_WithCommandDescriptionKey(t *testing.T) {
+	cmd := NewCommand(
+		WithName("test"),
+		WithCommandDescriptionKey("test.command.desc"),
+	)
+	
+	if cmd.DescriptionKey != "test.command.desc" {
+		t.Errorf("Expected DescriptionKey 'test.command.desc', got '%s'", cmd.DescriptionKey)
+	}
+}
+
+func TestParser_DependsOnFlag(t *testing.T) {
+	p := NewParser()
+	
+	// Add flags
+	p.AddFlag("verbose", NewArg())
+	p.AddFlag("debug", NewArg())
+	
+	// Test adding dependency
+	err := p.DependsOnFlag("debug", "verbose")
+	if err != nil {
+		t.Errorf("DependsOnFlag should not return error for valid flags: %v", err)
+	}
+	
+	// Test adding dependency for non-existent flag
+	err = p.DependsOnFlag("nonexistent", "verbose")
+	if err == nil {
+		t.Error("DependsOnFlag should return error for non-existent flag")
+	}
 }
 
 func TestMain(m *testing.M) {
