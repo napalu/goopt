@@ -1445,7 +1445,7 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (p *Parser) PrintFlags(writer io.Writer) {
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n %s\n", p.renderer.FlagUsage(f.Value.Argument))))
+		_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
 	}
 }
 

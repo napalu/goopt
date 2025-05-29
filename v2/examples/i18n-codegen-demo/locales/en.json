@@ -1,0 +1,16 @@
+{
+  "app.app_config.convert.from_desc": "Source format",
+  "app.app_config.convert.to_desc": "Target format",
+  "app.app_config.convert_desc": "Convert between formats",
+  "app.app_config.help_desc": "Display help information",
+  "app.app_config.output_desc": "Output file path",
+  "app.app_config.process.compress_desc": "Compress output",
+  "app.app_config.process.format_desc": "Output format (json, xml, csv)",
+  "app.app_config.process.input_file_desc": "Input file to process",
+  "app.app_config.process.validate.schema_desc": "Schema file for validation",
+  "app.app_config.process.validate.strict_desc": "Enable strict validation",
+  "app.app_config.process.validate_desc": "Validate the processed data",
+  "app.app_config.process_desc": "Process input files",
+  "app.app_config.verbose_desc": "Enable verbose output",
+  "app.app_config.workers_desc": "Number of worker threads"
+}

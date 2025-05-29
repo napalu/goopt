@@ -1,9 +1,13 @@
 package main
 
+// Build the tool first: cd ../../cmd/goopt-i18n-gen && go build
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go -p messages
+
 import (
 	"embed"
 	"fmt"
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/examples/i18n-demo/messages"
 	"github.com/napalu/goopt/v2/i18n"
 	"golang.org/x/text/language"
 	"os"
@@ -148,10 +152,10 @@ func executeUserList(parser *goopt.Parser, _ *goopt.Command) error {
 		return fmt.Errorf("failed to get config from parser")
 	}
 
-	fmt.Println(cfg.TR.T("i18n.demo.user.list.executing"))
+	fmt.Println(cfg.TR.T(messages.Keys.I18nDemoUserList.Executing))
 
 	if cfg.Verbose {
-		fmt.Printf(cfg.TR.T("i18n.demo.user.list.options", cfg.User.List.ShowAll, cfg.User.List.Format))
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserList.Options, cfg.User.List.ShowAll, cfg.User.List.Format))
 	}
 
 	// Simulate listing users
@@ -166,13 +170,13 @@ func executeUserList(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	if cfg.User.List.Format == "table" {
-		fmt.Println("\n" + cfg.TR.T("i18n.demo.user.list.header"))
+		fmt.Println("\n" + cfg.TR.T(messages.Keys.I18nDemoUserList.Header))
 		fmt.Println("----------------------------------------")
 		for _, user := range users {
 			if cfg.User.List.ShowAll || user.admin {
-				adminStr := cfg.TR.T("i18n.demo.no")
+				adminStr := cfg.TR.T(messages.Keys.I18nDemo.No)
 				if user.admin {
-					adminStr = cfg.TR.T("i18n.demo.yes")
+					adminStr = cfg.TR.T(messages.Keys.I18nDemo.Yes)
 				}
 				fmt.Printf("%-10s %-25s %s\n", user.username, user.email, adminStr)
 			}
@@ -203,18 +207,18 @@ func executeUserCreate(parser *goopt.Parser, _ *goopt.Command) error {
 		return fmt.Errorf("failed to get config from parser")
 	}
 
-	fmt.Println(cfg.TR.T("i18n.demo.user.create.executing"))
+	fmt.Println(cfg.TR.T(messages.Keys.I18nDemoUserCreate.Executing))
 
 	if cfg.Verbose {
-		fmt.Printf(cfg.TR.T("i18n.demo.user.create.creating",
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserCreate.Creating,
 			cfg.User.Create.Username, cfg.User.Create.Email))
 		if cfg.User.Create.Admin {
-			fmt.Println(cfg.TR.T("i18n.demo.user.create.with_admin"))
+			fmt.Println(cfg.TR.T(messages.Keys.I18nDemoUserCreate.WithAdmin))
 		}
 	}
 
 	// Simulate user creation
-	fmt.Printf(cfg.TR.T("i18n.demo.user.create.success", cfg.User.Create.Username))
+	fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserCreate.Success, cfg.User.Create.Username))
 
 	return nil
 }
@@ -225,19 +229,19 @@ func executeUserDelete(parser *goopt.Parser, _ *goopt.Command) error {
 		return fmt.Errorf("failed to get config from parser")
 	}
 
-	fmt.Println(cfg.TR.T("i18n.demo.user.delete.executing"))
+	fmt.Println(cfg.TR.T(messages.Keys.I18nDemoUserDelete.Executing))
 
 	if !cfg.User.Delete.Force {
-		fmt.Printf(cfg.TR.T("i18n.demo.user.delete.confirm", cfg.User.Delete.Username))
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserDelete.Confirm, cfg.User.Delete.Username))
 		return nil
 	}
 
 	if cfg.Verbose {
-		fmt.Printf(cfg.TR.T("i18n.demo.user.delete.deleting", cfg.User.Delete.Username))
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserDelete.Deleting, cfg.User.Delete.Username))
 	}
 
 	// Simulate user deletion
-	fmt.Printf(cfg.TR.T("i18n.demo.user.delete.success", cfg.User.Delete.Username))
+	fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoUserDelete.Success, cfg.User.Delete.Username))
 
 	return nil
 }
@@ -248,17 +252,17 @@ func executeDatabaseBackup(parser *goopt.Parser, _ *goopt.Command) error {
 		return fmt.Errorf("failed to get config from parser")
 	}
 
-	fmt.Println(cfg.TR.T("i18n.demo.db.backup.executing"))
+	fmt.Println(cfg.TR.T(messages.Keys.I18nDemoDbBackup.Executing))
 
 	if cfg.Verbose {
-		fmt.Printf(cfg.TR.T("i18n.demo.db.backup.backing_up", cfg.Database.Backup.Output))
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoDbBackup.BackingUp, cfg.Database.Backup.Output))
 		if cfg.Database.Backup.Compress {
-			fmt.Println(cfg.TR.T("i18n.demo.db.backup.with_compression"))
+			fmt.Println(cfg.TR.T(messages.Keys.I18nDemoDbBackup.WithCompression))
 		}
 	}
 
 	// Simulate backup
-	fmt.Printf(cfg.TR.T("i18n.demo.db.backup.success", cfg.Database.Backup.Output))
+	fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoDbBackup.Success, cfg.Database.Backup.Output))
 
 	return nil
 }
@@ -269,18 +273,18 @@ func executeDatabaseRestore(parser *goopt.Parser, _ *goopt.Command) error {
 		return fmt.Errorf("failed to get config from parser")
 	}
 
-	fmt.Println(cfg.TR.T("i18n.demo.db.restore.executing"))
+	fmt.Println(cfg.TR.T(messages.Keys.I18nDemoDbRestore.Executing))
 
 	if cfg.Database.Restore.DropFirst {
-		fmt.Println(cfg.TR.T("i18n.demo.db.restore.dropping"))
+		fmt.Println(cfg.TR.T(messages.Keys.I18nDemoDbRestore.Dropping))
 	}
 
 	if cfg.Verbose {
-		fmt.Printf(cfg.TR.T("i18n.demo.db.restore.restoring", cfg.Database.Restore.Input))
+		fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoDbRestore.Restoring, cfg.Database.Restore.Input))
 	}
 
 	// Simulate restore
-	fmt.Printf(cfg.TR.T("i18n.demo.db.restore.success", cfg.Database.Restore.Input))
+	fmt.Printf(cfg.TR.T(messages.Keys.I18nDemoDbRestore.Success, cfg.Database.Restore.Input))
 
 	return nil
 }
