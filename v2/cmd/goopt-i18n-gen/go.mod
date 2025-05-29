@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/iancoleman/strcase v0.3.0
-	github.com/napalu/goopt/v2 v2.1.3
+	github.com/napalu/goopt/v2 v2.1.4
 	golang.org/x/text v0.25.0
 )
 
@@ -16,4 +16,3 @@ require (
 	golang.org/x/term v0.32.0 // indirect
 )
 
-replace github.com/napalu/goopt/v2 => ../..
