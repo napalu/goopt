@@ -297,6 +297,7 @@ goopt-i18n-gen -l fr -i "locales/*.json" generate -o messages/keys.go
 ### Usage
 
 1. Create your translation file (e.g., `locales/en.json`):
+
 ```json
 {
   "app.name": "My Application",
@@ -307,6 +308,7 @@ goopt-i18n-gen -l fr -i "locales/*.json" generate -o messages/keys.go
 ```
 
 2. Generate the constants:
+
 ```bash
 # For single locale
 goopt-i18n-gen -i locales/en.json generate -o messages/keys.go -p messages
@@ -316,6 +318,7 @@ goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go -p messages
 ```
 
 3. Use the generated constants in your code:
+
 ```go
 package main
 
@@ -648,8 +651,8 @@ import (
 )
 
 func main() {
-    // Load translations
-    bundle, _ := i18n.NewBundle("locales", "en")
+    // Load translations assuming your json files are in locales folder
+	bundle, err := i18n.NewBundleWithFS(userLocales, "locales")
     
     // Create parser with translations
     cfg := AppConfig{}
