@@ -14,6 +14,9 @@ This example demonstrates the "360° i18n workflow" using `goopt-i18n-gen` to au
 ### Using Make (Recommended)
 
 ```bash
+# First, build the tool (only needed once)
+make build-tool
+
 # Complete 360° workflow demo
 make demo-360
 
@@ -41,17 +44,23 @@ goopt-i18n-gen -i "locales/en.json,locales/de.json,locales/fr.json" generate -o 
 The example includes several go:generate directives for different workflow stages:
 
 ```go
+// For development within the goopt repository:
 // Step 1: Initial analysis and stub generation
-//go:generate goopt-i18n-gen -i locales/en.json audit -d -g --key-prefix app
+//go:generate go run ../../cmd/goopt-i18n-gen -i locales/en.json audit -d -g --key-prefix app
 
 // Step 2: Validation during development  
-//go:generate goopt-i18n-gen -i locales/en.json validate -s main.go
+//go:generate go run ../../cmd/goopt-i18n-gen -i locales/en.json validate -s main.go
 
 // Step 3: Final generation
-//go:generate goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
+//go:generate go run ../../cmd/goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
 
 // Step 4: CI/CD strict validation
-//go:generate goopt-i18n-gen -i locales/en.json validate -s main.go --strict
+//go:generate go run ../../cmd/goopt-i18n-gen -i locales/en.json validate -s main.go --strict
+
+// Or if not working with the cloned repo:
+// First install: go install github.com/napalu/goopt/v2/cmd/goopt-i18n-gen@latest
+// Then use:
+//go:generate goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
 ```
 
 Comment/uncomment the appropriate directive for your current workflow stage.
@@ -63,7 +72,7 @@ Comment/uncomment the appropriate directive for your current workflow stage.
 Use the init command to create the initial setup:
 
 ```bash
-../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json init
+go run ../../cmd/goopt-i18n-gen -i locales/en.json init
 ```
 
 Or manually:
@@ -81,7 +90,7 @@ Run goopt-i18n-gen to analyze your struct and generate descKey suggestions:
 
 ```bash
 # From the i18n-codegen-demo directory
-../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json audit \
+go run ../../cmd/goopt-i18n-gen -i locales/en.json audit \
   -d -g \
   --key-prefix app
 
@@ -92,7 +101,7 @@ Run goopt-i18n-gen to analyze your struct and generate descKey suggestions:
 # - Show you exactly which tags to add to your struct
 
 # To audit specific files:
-../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json audit \
+go run ../../cmd/goopt-i18n-gen -i locales/en.json audit \
   -d -g \
   --key-prefix app \
   --files "main.go,config.go"
@@ -129,7 +138,7 @@ Verbose bool `goopt:"short:v;descKey:app.app_config.verbose_desc"`
 Use the `-u` flag to automatically update your source files:
 
 ```bash
-../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json audit \
+go run ../../cmd/goopt-i18n-gen -i locales/en.json audit \
   -d -g -u \
   --key-prefix app
 ```
@@ -147,7 +156,7 @@ Once all descKey tags are added, generate the constants file:
 ```bash
 go generate
 # Or run directly:
-../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
+go run ../../cmd/goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
 ```
 
 ### Step 5: Use in Your Code

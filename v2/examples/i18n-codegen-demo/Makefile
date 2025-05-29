@@ -1,7 +1,10 @@
 # Makefile for goopt-i18n-gen 360° workflow
 
 # Variables
+# For development: build the tool first with 'make build-tool'
 I18N_GEN := ../../cmd/goopt-i18n-gen/goopt-i18n-gen
+# Alternative: Use go run (slower but no build needed)
+# I18N_GEN := cd ../../cmd/goopt-i18n-gen && go run .
 LOCALE_FILE := locales/en.json
 OUTPUT_FILE := messages/messages.go
 PACKAGE := messages
@@ -12,6 +15,7 @@ SOURCE_FILES := main.go
 .PHONY: help
 help:
 	@echo "goopt-i18n-gen 360° Workflow Targets:"
+	@echo "  make build-tool  - Build goopt-i18n-gen tool (run this first!)"
 	@echo "  make init        - Initialize empty translation file"
 	@echo "  make analyze     - Find fields without descKeys and generate suggestions (Step 1)"
 	@echo "  make analyze-update - Same as analyze but auto-updates source files! (Step 1b)"
@@ -21,14 +25,23 @@ help:
 	@echo "  make clean       - Remove generated files"
 	@echo ""
 	@echo "Typical workflow:"
+	@echo "  0. make build-tool           - Build the tool first!"
 	@echo "  1. make init analyze-update  - Fully automated 360° workflow!"
 	@echo "  2. make generate             - Generate the constants file"
 	@echo "  3. make validate             - Ensure everything is properly set up"
 	@echo ""
 	@echo "Or manually:"
+	@echo "  0. make build-tool    - Build the tool first!"
 	@echo "  1. make init analyze  - Start fresh and see suggestions"
 	@echo "  2. Add descKey tags to your struct manually"
 	@echo "  3. make generate      - Generate the constants file"
+
+# Build the goopt-i18n-gen tool
+.PHONY: build-tool
+build-tool:
+	@echo "Building goopt-i18n-gen tool..."
+	@cd ../../cmd/goopt-i18n-gen && go build
+	@echo "✓ Tool built successfully"
 
 # Initialize empty translation file
 .PHONY: init

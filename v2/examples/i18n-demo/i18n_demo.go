@@ -1,5 +1,6 @@
 package main
 
+// Build the tool first: cd ../../cmd/goopt-i18n-gen && go build
 //go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go -p messages
 
 import (
