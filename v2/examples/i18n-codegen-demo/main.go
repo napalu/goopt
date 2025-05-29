@@ -43,21 +43,22 @@ type AppConfig struct {
 }
 
 // 360° Workflow go:generate directives:
+// Build the tool first: cd ../../cmd/goopt-i18n-gen && go build
 
-// Option 1: FULLY AUTOMATED - analyze and auto-update source files
-//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json -o messages/messages.go -p messages -s main.go -d -g -u --key-prefix app
+// Step 1: FULLY AUTOMATED - analyze and auto-update source files with descKeys
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json audit -d -g -u --key-prefix app
 
-// Option 2: MANUAL - just show suggestions
-//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json -o messages/messages.go -p messages -s main.go -d -g --key-prefix app
+// Step 1b: MANUAL - just show suggestions without updating files
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json audit -d -g --key-prefix app
 
 // Step 2: Validate all descKeys have translations (for development)
-//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json -o messages/messages.go -p messages -s main.go -v
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json validate -s main.go
 
-// Step 3: Final generation - just generate the constants file
-//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json -o messages/messages.go -p messages
+// Step 3: Final generation - generate the constants file
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json generate -o messages/messages.go -p messages
 
 // Step 4: CI/CD validation - ensure all descKeys have translations (strict mode)
-//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json -o messages/messages.go -p messages -s main.go -v --strict
+//go:generate ../../cmd/goopt-i18n-gen/goopt-i18n-gen -i locales/en.json validate -s main.go --strict
 
 func main() {
 	cfg := AppConfig{}

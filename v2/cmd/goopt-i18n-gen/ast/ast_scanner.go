@@ -11,8 +11,20 @@ import (
 	"strings"
 
 	"github.com/iancoleman/strcase"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
+	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/internal/parse"
 )
+
+// Scanner handles AST-based source file scanning with i18n support
+type Scanner struct {
+	tr i18n.Translator
+}
+
+// NewScanner creates a new AST scanner with the given translator
+func NewScanner(tr i18n.Translator) *Scanner {
+	return &Scanner{tr: tr}
+}
 
 // DescKeyReference represents a descKey found in source code
 type DescKeyReference struct {
@@ -35,13 +47,13 @@ type FieldWithoutDescKey struct {
 }
 
 // ScanGoFiles scans Go source files for descKey references in struct tags
-func ScanGoFiles(files []string) ([]DescKeyReference, error) {
+func (s *Scanner) ScanGoFiles(files []string) ([]DescKeyReference, error) {
 	var refs []DescKeyReference
 
 	for _, file := range files {
 		fileRefs, err := scanFile(file)
 		if err != nil {
-			return nil, fmt.Errorf("error scanning %s: %w", file, err)
+			return nil, fmt.Errorf(s.tr.T(messages.Keys.AppAst.FailedScanFile), file, err)
 		}
 		refs = append(refs, fileRefs...)
 	}
@@ -168,7 +180,7 @@ func ValidateDescKeys(refs []DescKeyReference, translations map[string]string) [
 }
 
 // GenerateMissingKeys creates stub entries for missing translation keys
-func GenerateMissingKeys(missing []DescKeyReference) map[string]string {
+func (s *Scanner) GenerateMissingKeys(missing []DescKeyReference) map[string]string {
 	stubs := make(map[string]string)
 	caser := cases.Title(language.Und)
 	for _, ref := range missing {
@@ -180,20 +192,20 @@ func GenerateMissingKeys(missing []DescKeyReference) map[string]string {
 		defaultText := strcase.ToDelimited(lastPart, ' ')
 		defaultText = caser.String(defaultText)
 
-		stubs[ref.Key] = fmt.Sprintf("[TODO] %s", defaultText)
+		stubs[ref.Key] = s.tr.T(messages.Keys.AppAst.TodoPrefix, defaultText)
 	}
 
 	return stubs
 }
 
 // ScanForMissingDescKeys finds goopt fields without descKey tags
-func ScanForMissingDescKeys(files []string) ([]FieldWithoutDescKey, error) {
+func (s *Scanner) ScanForMissingDescKeys(files []string) ([]FieldWithoutDescKey, error) {
 	var fields []FieldWithoutDescKey
 
 	for _, file := range files {
 		fileFields, err := scanFileForMissingDescKeys(file)
 		if err != nil {
-			return nil, fmt.Errorf("error scanning %s: %w", file, err)
+			return nil, fmt.Errorf(s.tr.T(messages.Keys.AppAst.FailedScanFile), file, err)
 		}
 		fields = append(fields, fileFields...)
 	}

@@ -28,6 +28,7 @@ func main() {
 	cfg.Validate.Exec = commands.ExecuteValidate
 	cfg.Audit.Exec = commands.ExecuteAudit
 	cfg.Init.Exec = commands.ExecuteInit
+	cfg.Add.Exec = commands.ExecuteAdd
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")

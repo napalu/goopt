@@ -391,6 +391,7 @@ goopt-i18n-gen uses a command-based structure:
 - `generate`: Generate Go constants from JSON files
 - `audit`: Audit goopt fields for missing descKey tags
 - `validate`: Check that all descKey references have translations
+- `add`: Add translation keys to locale files programmatically
 
 **Global options:**
 - `-i, --input`: Input JSON files (comma-separated or wildcards, required)
@@ -417,6 +418,13 @@ goopt-i18n-gen uses a command-based structure:
 - `-s, --scan`: Go source files to scan for descKey references
 - `--strict`: Exit with error if validation fails (for CI/CD)
 - `-g, --generate-missing`: Generate stub entries for missing keys
+
+**Add command options:**
+- `-k, --key`: Single key to add
+- `-V, --value`: Value for the key (defaults to key name if not provided)
+- `-F, --from-file`: JSON file containing key-value pairs to add
+- `-m, --mode`: How to handle existing keys (skip, replace, error) - default: skip
+- `-n, --dry-run`: Show what would be added without modifying files
 
 ### Validation Workflow
 
@@ -485,10 +493,10 @@ The validate command scans your Go source files to find all `descKey` references
 
 5. **Type-Safe References**: Always use the generated constants instead of string literals:
    ```go
-   // ❌ Avoid
+   // Avoid
    bundle.T("user.create.success", username)
    
-   // ✅ Preferred
+   // Prefer
    bundle.T(messages.Keys.UserCreate.Success, username)
    ```
 
@@ -731,13 +739,83 @@ See the [i18n-codegen-demo example](https://github.com/napalu/goopt/tree/v2/exam
 
 The example includes a step-by-step README showing the entire workflow in action.
 
-### Tips for Success
+### Adding Keys with the add Command
+
+The `add` command provides a programmatic way to add translation keys to your locale files, particularly useful when:
+- Adding new features that require multiple translation keys
+- Synchronizing keys across multiple locale files
+- Automating translation key management in build scripts
+
+#### Example: Adding Keys for a New Feature
+
+```bash
+# 1. Create a JSON file with all keys for your new feature
+cat > search-feature.json <<EOF
+{
+  "app.search.title": "Search",
+  "app.search.placeholder": "Enter search terms...",
+  "app.search.button": "Search",
+  "app.search.no_results": "No results found for '%s'",
+  "app.search.error": "Search failed: %v"
+}
+EOF
+
+# 2. Add these keys to all locale files
+goopt-i18n-gen -i "locales/*.json" add -F search-feature.json
+
+# Result:
+# - en.json: Gets the exact values from search-feature.json
+# - de.json: Gets "[TODO] Search" for "app.search.title", etc.
+# - fr.json: Gets "[TODO] Search" for "app.search.title", etc.
+```
+
+#### Smart Language Detection
+
+The add command automatically detects the language from the filename and prefixes non-English values with `[TODO]`:
+
+```bash
+# Adding a single key
+goopt-i18n-gen -i "locales/*.json" add -k "app.welcome" -V "Welcome to our app"
+
+# Results:
+# en.json: "app.welcome": "Welcome to our app"
+# de.json: "app.welcome": "[TODO] Welcome to our app"
+# fr.json: "app.welcome": "[TODO] Welcome to our app"
+```
+
+#### Conflict Resolution Modes
+
+Control how the add command handles existing keys:
+
+```bash
+# Skip existing keys (default)
+goopt-i18n-gen -i "locales/*.json" add -k "app.title" -V "New Title"
+
+# Replace existing keys
+goopt-i18n-gen -i "locales/*.json" add -k "app.title" -V "New Title" -m replace
+
+# Error on existing keys
+goopt-i18n-gen -i "locales/*.json" add -k "app.title" -V "New Title" -m error
+```
+
+#### Dry Run for Safety
+
+Always preview changes before applying them:
+
+```bash
+# See what would be changed without modifying files
+goopt-i18n-gen -i "locales/*.json" add -F new-keys.json -n
+```
+
+### Tips
 
 1. **Start Small**: Begin with one package or module
 2. **Review Generated Keys**: Ensure the generated key names match your naming conventions
 3. **Customize Prefixes**: Use `--key-prefix` to match your project structure
 4. **Add to CI/CD**: Use `--strict` mode to ensure new code includes descKeys
 5. **Document Your Process**: Add the goopt-i18n-gen commands to your project documentation
+6. **Use add for Bulk Updates**: Collect new feature keys in JSON files and add them all at once
+7. **Preview with Dry Run**: Always use `-n` flag first to review changes
 
 ## Related Topics
 

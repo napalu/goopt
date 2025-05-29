@@ -143,6 +143,37 @@ Options:
 - `--strict`: Exit with error if validation fails
 - `-g, --generate-missing`: Generate stub entries for missing keys
 
+### `add`
+Add translation keys to locale files programmatically.
+
+```bash
+# Add a single key
+goopt-i18n-gen -i "locales/*.json" add -k "app.feature.enabled" -V "Feature is enabled"
+
+# Add keys from a JSON file
+goopt-i18n-gen -i "locales/*.json" add -F new-keys.json
+
+# Dry run to preview changes
+goopt-i18n-gen -i "locales/*.json" add -F keys.json -n
+
+# Replace existing keys
+goopt-i18n-gen -i "locales/*.json" add -k "app.title" -V "New Title" -m replace
+```
+
+Options:
+- `-k, --key`: Single key to add
+- `-V, --value`: Value for the key (defaults to key name if not provided)
+- `-F, --from-file`: JSON file containing key-value pairs to add
+- `-m, --mode`: How to handle existing keys (skip, replace, error) - default: skip
+- `-n, --dry-run`: Show what would be added without modifying files
+
+Features:
+- **Smart Language Detection**: Automatically detects language from filename (en.json → English)
+- **TODO Prefixing**: Non-English locales get [TODO] prefix for new values
+- **Bulk Operations**: Add multiple keys at once from a JSON file
+- **Safe by Default**: Skip mode prevents accidental overwrites
+- **Preview Changes**: Dry run shows exactly what will be modified
+
 ## Global Options
 
 - `-i, --input`: Input JSON files (comma-separated or wildcards, required)
@@ -167,7 +198,7 @@ graph LR
     F --> A
 ```
 
-**⚠️ CRITICAL - The Chicken-and-Egg Problem**: 
+**The Chicken-and-Egg Problem**: 
 - If you add descKeys before translations exist, goopt will display raw keys like "app.global.help_desc" instead of actual translations
 - Always generate translations (`scan -g`) BEFORE updating source (`scan -u`)
 - To fix a broken state where keys are showing: run `validate -s "*.go" -g` to auto-generate missing translations
@@ -284,6 +315,40 @@ goopt-i18n-gen -i "locales/*.json" validate -s "*.go"
 goopt-i18n-gen -i "locales/*.json" validate -s "*.go" --strict
 ```
 
+### Adding New Features with the add Command
+
+When developing new features, use the `add` command to efficiently manage translations:
+
+```bash
+# 1. Create a JSON file with new feature translations
+cat > feature-keys.json <<EOF
+{
+  "app.feature.title": "Advanced Search",
+  "app.feature.query_label": "Search query",
+  "app.feature.filters_label": "Search filters",
+  "app.feature.results_empty": "No results found",
+  "app.feature.results_count": "Found %d results"
+}
+EOF
+
+# 2. Add to all locale files at once (with [TODO] prefix for non-English)
+goopt-i18n-gen -i "locales/*.json" add -F feature-keys.json
+
+# 3. Preview what would be added (dry run)
+goopt-i18n-gen -i "locales/*.json" add -F feature-keys.json -n
+
+# 4. For quick single-key additions during development
+goopt-i18n-gen -i "locales/*.json" add -k "app.feature.help_text" -V "Click here for help"
+
+# 5. Update existing keys across all locales
+goopt-i18n-gen -i "locales/*.json" add -k "app.title" -V "My App v2.0" -m replace
+```
+
+Result in locale files:
+- `en.json`: Gets exact values from the JSON file
+- `de.json`: Gets `"[TODO] Advanced Search"` for `app.feature.title`
+- `fr.json`: Gets `"[TODO] Advanced Search"` for `app.feature.title`
+
 ## Integration with go:generate
 
 Add these directives to your main.go:
@@ -313,6 +378,7 @@ go generate ./...
 3. **Run validation in CI/CD**: Use `--strict` flag to catch missing translations
 4. **Commit generated files**: Include the generated constants file in version control
 5. **Use wildcards for multi-locale**: Process all translations together to ensure consistency
+6. **Use add command for bulk updates**: When adding features, collect all new keys in a JSON file and add them at once
 
 ## Advanced Features
 
@@ -440,7 +506,7 @@ When renaming commands or making structural changes to goopt-i18n-gen itself, yo
 
 ### Other Maintenance Notes
 
-- The tool uses its own i18n system (eating its own dog food)
+- The tool uses its own i18n system (eat-your-dog-food)
 - Always test with multiple locales after changes
-- Remember that goopt's bundle validation requires all locales to have identical keys
+- Keep in mind that goopt's bundle validation requires all locales to have identical keys
 - The generated messages file is committed to avoid bootstrap issues

@@ -200,7 +200,8 @@ func ExecuteValidate(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	// Scan for descKey references
-	refs, err := ast.ScanGoFiles(files)
+	scanner := ast.NewScanner(cfg.TR)
+	refs, err := scanner.ScanGoFiles(files)
 	if err != nil {
 		log.Fatalf("Failed to scan Go files: %v", err)
 	}
@@ -225,7 +226,7 @@ func ExecuteValidate(parser *goopt.Parser, _ *goopt.Command) error {
 
 			// Generate missing keys if requested
 			if cfg.Validate.GenerateMissing {
-				stubs := ast.GenerateMissingKeys(missing)
+				stubs := scanner.GenerateMissingKeys(missing)
 				fmt.Printf("\n")
 				fmt.Println(cfg.TR.T(messages.Keys.AppValidate.GeneratingStubs, inputFile) + ":")
 				for key, value := range stubs {
@@ -286,7 +287,8 @@ func ExecuteAudit(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	// Scan for fields without descKey tags
-	fieldsWithoutKeys, err := ast.ScanForMissingDescKeys(files)
+	scanner := ast.NewScanner(cfg.TR)
+	fieldsWithoutKeys, err := scanner.ScanForMissingDescKeys(files)
 	if err != nil {
 		log.Fatalf("Failed to scan for missing descKeys: %v", err)
 	}
@@ -378,7 +380,8 @@ func ExecuteAudit(parser *goopt.Parser, _ *goopt.Command) error {
 	if cfg.Audit.AutoUpdate {
 		fmt.Println()
 		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.AutoUpdating))
-		if err := ast.UpdateSourceFiles(fieldsWithoutKeys, generatedKeys, cfg.Audit.BackupDir); err != nil {
+		updater := ast.NewUpdater(cfg.TR)
+		if err := updater.UpdateSourceFiles(fieldsWithoutKeys, generatedKeys, cfg.Audit.BackupDir); err != nil {
 			fmt.Println(cfg.TR.T(messages.Keys.AppWarning.UpdateFailed, err))
 		}
 	} else {

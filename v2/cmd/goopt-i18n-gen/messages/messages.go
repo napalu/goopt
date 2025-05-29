@@ -4,6 +4,86 @@ package messages
 
 // Keys provides compile-time safe access to translation keys
 var Keys = struct {
+	AppAdd struct {
+		AddingKey string
+
+		AddingKeyTodo string
+
+		BothSingleAndFile string
+
+		DryRunSummary string
+
+		DryRunWouldAdd string
+
+		DryRunWouldReplace string
+
+		DryRunWouldSkip string
+
+		FailedParseKeysFile string
+
+		FailedReadKeysFile string
+
+		FoundKeysInFile string
+
+		InvalidMode string
+
+		KeyExistsError string
+
+		KeyExistsReplace string
+
+		KeyExistsSkip string
+
+		MissingValue string
+
+		NoKeys string
+
+		ProcessingLocale string
+
+		ReadingKeysFile string
+
+		Summary string
+
+		UpdatedFile string
+	}
+
+	AppAst struct {
+		AllFilesUpdated string
+
+		BackupCreated string
+
+		FailedCreateBackup string
+
+		FailedCreateBackupDir string
+
+		FailedCreateTemp string
+
+		FailedParseFile string
+
+		FailedScanFile string
+
+		FailedSyncTemp string
+
+		FailedUpdate string
+
+		FailedUpdateCount string
+
+		FailedUpdateFile string
+
+		FailedWriteFormatted string
+
+		FileUpdated string
+
+		RestoreCommand string
+
+		RestoreHint string
+
+		SomeFilesFailed string
+
+		TodoPrefix string
+
+		UpdateError string
+	}
+
 	AppAudit struct {
 		AllFieldsHaveKeys string
 
@@ -46,6 +126,30 @@ var Keys = struct {
 		UpdatingFiles string
 	}
 
+	AppCmdAdd struct {
+		DryRunDesc string
+
+		FromFileDesc string
+
+		KeyDesc string
+
+		ModeDesc string
+
+		ValueDesc string
+	}
+
+	AppCmd struct {
+		AddDesc string
+
+		AuditDesc string
+
+		GenerateDesc string
+
+		InitDesc string
+
+		ValidateDesc string
+	}
+
 	AppCmdAudit struct {
 		AutoUpdateDesc string
 
@@ -58,16 +162,6 @@ var Keys = struct {
 		GenerateMissing string
 
 		KeyPrefixDesc string
-	}
-
-	AppCmd struct {
-		AuditDesc string
-
-		GenerateDesc string
-
-		InitDesc string
-
-		ValidateDesc string
 	}
 
 	AppCmdGenerate struct {
@@ -213,6 +307,164 @@ var Keys = struct {
 	}
 }{
 
+	AppAdd: struct {
+		AddingKey string
+
+		AddingKeyTodo string
+
+		BothSingleAndFile string
+
+		DryRunSummary string
+
+		DryRunWouldAdd string
+
+		DryRunWouldReplace string
+
+		DryRunWouldSkip string
+
+		FailedParseKeysFile string
+
+		FailedReadKeysFile string
+
+		FoundKeysInFile string
+
+		InvalidMode string
+
+		KeyExistsError string
+
+		KeyExistsReplace string
+
+		KeyExistsSkip string
+
+		MissingValue string
+
+		NoKeys string
+
+		ProcessingLocale string
+
+		ReadingKeysFile string
+
+		Summary string
+
+		UpdatedFile string
+	}{
+
+		AddingKey: "app.add.adding_key",
+
+		AddingKeyTodo: "app.add.adding_key_todo",
+
+		BothSingleAndFile: "app.add.both_single_and_file",
+
+		DryRunSummary: "app.add.dry_run_summary",
+
+		DryRunWouldAdd: "app.add.dry_run_would_add",
+
+		DryRunWouldReplace: "app.add.dry_run_would_replace",
+
+		DryRunWouldSkip: "app.add.dry_run_would_skip",
+
+		FailedParseKeysFile: "app.add.failed_parse_keys_file",
+
+		FailedReadKeysFile: "app.add.failed_read_keys_file",
+
+		FoundKeysInFile: "app.add.found_keys_in_file",
+
+		InvalidMode: "app.add.invalid_mode",
+
+		KeyExistsError: "app.add.key_exists_error",
+
+		KeyExistsReplace: "app.add.key_exists_replace",
+
+		KeyExistsSkip: "app.add.key_exists_skip",
+
+		MissingValue: "app.add.missing_value",
+
+		NoKeys: "app.add.no_keys",
+
+		ProcessingLocale: "app.add.processing_locale",
+
+		ReadingKeysFile: "app.add.reading_keys_file",
+
+		Summary: "app.add.summary",
+
+		UpdatedFile: "app.add.updated_file",
+	},
+
+	AppAst: struct {
+		AllFilesUpdated string
+
+		BackupCreated string
+
+		FailedCreateBackup string
+
+		FailedCreateBackupDir string
+
+		FailedCreateTemp string
+
+		FailedParseFile string
+
+		FailedScanFile string
+
+		FailedSyncTemp string
+
+		FailedUpdate string
+
+		FailedUpdateCount string
+
+		FailedUpdateFile string
+
+		FailedWriteFormatted string
+
+		FileUpdated string
+
+		RestoreCommand string
+
+		RestoreHint string
+
+		SomeFilesFailed string
+
+		TodoPrefix string
+
+		UpdateError string
+	}{
+
+		AllFilesUpdated: "app.ast.all_files_updated",
+
+		BackupCreated: "app.ast.backup_created",
+
+		FailedCreateBackup: "app.ast.failed_create_backup",
+
+		FailedCreateBackupDir: "app.ast.failed_create_backup_dir",
+
+		FailedCreateTemp: "app.ast.failed_create_temp",
+
+		FailedParseFile: "app.ast.failed_parse_file",
+
+		FailedScanFile: "app.ast.failed_scan_file",
+
+		FailedSyncTemp: "app.ast.failed_sync_temp",
+
+		FailedUpdate: "app.ast.failed_update",
+
+		FailedUpdateCount: "app.ast.failed_update_count",
+
+		FailedUpdateFile: "app.ast.failed_update_file",
+
+		FailedWriteFormatted: "app.ast.failed_write_formatted",
+
+		FileUpdated: "app.ast.file_updated",
+
+		RestoreCommand: "app.ast.restore_command",
+
+		RestoreHint: "app.ast.restore_hint",
+
+		SomeFilesFailed: "app.ast.some_files_failed",
+
+		TodoPrefix: "app.ast.todo_prefix",
+
+		UpdateError: "app.ast.update_error",
+	},
+
 	AppAudit: struct {
 		AllFieldsHaveKeys string
 
@@ -296,6 +548,52 @@ var Keys = struct {
 		UpdatingFiles: "app.audit.updating_files",
 	},
 
+	AppCmdAdd: struct {
+		DryRunDesc string
+
+		FromFileDesc string
+
+		KeyDesc string
+
+		ModeDesc string
+
+		ValueDesc string
+	}{
+
+		DryRunDesc: "app.cmd.add.dry_run_desc",
+
+		FromFileDesc: "app.cmd.add.from_file_desc",
+
+		KeyDesc: "app.cmd.add.key_desc",
+
+		ModeDesc: "app.cmd.add.mode_desc",
+
+		ValueDesc: "app.cmd.add.value_desc",
+	},
+
+	AppCmd: struct {
+		AddDesc string
+
+		AuditDesc string
+
+		GenerateDesc string
+
+		InitDesc string
+
+		ValidateDesc string
+	}{
+
+		AddDesc: "app.cmd.add_desc",
+
+		AuditDesc: "app.cmd.audit_desc",
+
+		GenerateDesc: "app.cmd.generate_desc",
+
+		InitDesc: "app.cmd.init_desc",
+
+		ValidateDesc: "app.cmd.validate_desc",
+	},
+
 	AppCmdAudit: struct {
 		AutoUpdateDesc string
 
@@ -321,25 +619,6 @@ var Keys = struct {
 		GenerateMissing: "app.cmd.audit.generate_missing",
 
 		KeyPrefixDesc: "app.cmd.audit.key_prefix_desc",
-	},
-
-	AppCmd: struct {
-		AuditDesc string
-
-		GenerateDesc string
-
-		InitDesc string
-
-		ValidateDesc string
-	}{
-
-		AuditDesc: "app.cmd.audit_desc",
-
-		GenerateDesc: "app.cmd.generate_desc",
-
-		InitDesc: "app.cmd.init_desc",
-
-		ValidateDesc: "app.cmd.validate_desc",
 	},
 
 	AppCmdGenerate: struct {

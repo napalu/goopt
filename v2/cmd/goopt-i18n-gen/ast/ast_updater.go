@@ -11,14 +11,27 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
+	"github.com/napalu/goopt/v2/i18n"
 )
 
+// Updater handles AST-based source file updates with i18n support
+type Updater struct {
+	tr i18n.Translator
+}
+
+// NewUpdater creates a new AST updater with the given translator
+func NewUpdater(tr i18n.Translator) *Updater {
+	return &Updater{tr: tr}
+}
+
 // UpdateSourceFiles automatically adds descKey tags to source files
-func UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, generatedKeys map[string]string, backupDir string) error {
+func (u *Updater) UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, generatedKeys map[string]string, backupDir string) error {
 	// Create backup directory with timestamp
 	sessionDir := filepath.Join(backupDir, fmt.Sprintf("session_%s", time.Now().Format("20060102_150405")))
 	if err := os.MkdirAll(sessionDir, 0755); err != nil {
-		return fmt.Errorf("failed to create backup directory: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateBackupDir), err)
 	}
 
 	// Group fields by file
@@ -30,38 +43,40 @@ func UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, generatedKeys map[s
 	// Process each file
 	var updateErrors []error
 	for filename, fields := range fileUpdates {
-		if err := updateFile(filename, fields, generatedKeys, sessionDir); err != nil {
-			updateErrors = append(updateErrors, fmt.Errorf("failed to update %s: %w", filename, err))
+		if err := u.updateFile(filename, fields, generatedKeys, sessionDir); err != nil {
+			updateErrors = append(updateErrors, fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdateFile), filename, err))
 		}
 	}
 
 	// If all updates succeeded, we can optionally remove the backup directory
 	if len(updateErrors) == 0 {
-		fmt.Printf("\n✅ All files updated successfully. Backups saved in: %s\n", sessionDir)
-		fmt.Printf("💡 To restore original files: cp %s/* .\n", sessionDir)
+		fmt.Println()
+		fmt.Println(u.tr.T(messages.Keys.AppAst.AllFilesUpdated, sessionDir))
+		fmt.Println(u.tr.T(messages.Keys.AppAst.RestoreHint, sessionDir))
 	} else {
-		fmt.Printf("\n⚠️  Some files failed to update. Backups preserved in: %s\n", sessionDir)
+		fmt.Println()
+		fmt.Println(u.tr.T(messages.Keys.AppAst.SomeFilesFailed, sessionDir))
 		for _, err := range updateErrors {
-			fmt.Printf("  - %v\n", err)
+			fmt.Println(u.tr.T(messages.Keys.AppAst.UpdateError, err))
 		}
-		return fmt.Errorf("failed to update %d files", len(updateErrors))
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdateCount), len(updateErrors))
 	}
 
 	return nil
 }
 
-func updateFile(filename string, fields []FieldWithoutDescKey, generatedKeys map[string]string, backupDir string) error {
+func (u *Updater) updateFile(filename string, fields []FieldWithoutDescKey, generatedKeys map[string]string, backupDir string) error {
 	// Create backup
 	backupPath := filepath.Join(backupDir, filepath.Base(filename))
 	if err := copyFile(filename, backupPath); err != nil {
-		return fmt.Errorf("failed to create backup: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateBackup), err)
 	}
 
 	// Parse the file
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("failed to parse file: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedParseFile), err)
 	}
 
 	// Create a map of line numbers to fields for quick lookup
@@ -89,7 +104,7 @@ func updateFile(filename string, fields []FieldWithoutDescKey, generatedKeys map
 	// Write the modified AST to a temporary file
 	tempFile, err := os.CreateTemp(filepath.Dir(filename), ".goopt-i18n-*.tmp")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateTemp), err)
 	}
 	tempPath := tempFile.Name()
 	defer os.Remove(tempPath) // Clean up temp file
@@ -97,12 +112,12 @@ func updateFile(filename string, fields []FieldWithoutDescKey, generatedKeys map
 	// Use go/format to ensure proper formatting
 	if err := format.Node(tempFile, fset, file); err != nil {
 		tempFile.Close()
-		return fmt.Errorf("failed to write formatted code: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedWriteFormatted), err)
 	}
 
 	if err := tempFile.Sync(); err != nil {
 		tempFile.Close()
-		return fmt.Errorf("failed to sync temp file: %w", err)
+		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedSyncTemp), err)
 	}
 	tempFile.Close()
 
@@ -110,11 +125,11 @@ func updateFile(filename string, fields []FieldWithoutDescKey, generatedKeys map
 	if err := os.Rename(tempPath, filename); err != nil {
 		// Fallback to copy if rename fails (e.g., cross-device)
 		if err := copyFile(tempPath, filename); err != nil {
-			return fmt.Errorf("failed to update file: %w", err)
+			return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdate), err)
 		}
 	}
 
-	fmt.Printf("✓ Updated %s\n", filename)
+	fmt.Println(u.tr.T(messages.Keys.AppAst.FileUpdated, filename))
 	return nil
 }
 

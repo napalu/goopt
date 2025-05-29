@@ -38,6 +38,16 @@ type InitCmd struct {
 	Exec  goopt.CommandFunc
 }
 
+// AddCmd command configuration
+type AddCmd struct {
+	Key      string `goopt:"short:k;desc:Single key to add;descKey:app.cmd.add.key_desc"`
+	Value    string `goopt:"short:V;desc:Value for the key;descKey:app.cmd.add.value_desc"`
+	FromFile string `goopt:"short:F;desc:JSON file containing keys to add;descKey:app.cmd.add.from_file_desc"`
+	Mode     string `goopt:"short:m;desc:How to handle existing keys (skip, replace, error);default:skip;descKey:app.cmd.add.mode_desc"`
+	DryRun   bool   `goopt:"short:n;desc:Show what would be added without modifying files;descKey:app.cmd.add.dry_run_desc"`
+	Exec     goopt.CommandFunc
+}
+
 // AppConfig main application configuration
 type AppConfig struct {
 	Input    []string        `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.global.input_desc"`
@@ -48,5 +58,6 @@ type AppConfig struct {
 	Validate ValidateCmd     `goopt:"kind:command;name:validate;desc:Check that all descKey references have translations;descKey:app.cmd.validate_desc"`
 	Audit    AuditCmd        `goopt:"kind:command;name:audit;desc:Audit goopt fields for missing descKey tags;descKey:app.cmd.audit_desc"`
 	Init     InitCmd         `goopt:"kind:command;name:init;desc:Initialize a new i18n setup;descKey:app.cmd.init_desc"`
+	Add      AddCmd          `goopt:"kind:command;name:add;desc:Add new translation keys to locale files;descKey:app.cmd.add_desc"`
 	TR       i18n.Translator `ignore:"true"` // Translator for messages
 }
