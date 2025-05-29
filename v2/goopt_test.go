@@ -4231,7 +4231,7 @@ func TestParser_PrintFlags(t *testing.T) {
 		{
 			name: "all flags",
 			expectedOutput: []string{
-				"\n --log-level or -l \"Set logging level\" (required)",
+				"--log-level or -l \"Set logging level\" (required)",
 				"\n --debug or -d \"Enable debug mode\" (optional)",
 				"\n --tags \"List of tags\" (optional)",
 			},
@@ -6126,10 +6126,10 @@ func TestArgument_DisplayID(t *testing.T) {
 
 func TestParser_SetExecOnParseComplete(t *testing.T) {
 	p := NewParser()
-	
+
 	// Set the value and ensure no panic
 	p.SetExecOnParseComplete(true)
-	
+
 	if !p.callbackOnParseComplete {
 		t.Error("SetExecOnParseComplete(true) should set callbackOnParseComplete to true")
 	}
@@ -6137,20 +6137,20 @@ func TestParser_SetExecOnParseComplete(t *testing.T) {
 
 func TestParser_GetPreValidationFilter(t *testing.T) {
 	p := NewParser()
-	
+
 	// Add a flag with a pre-validation filter
 	p.AddFlag("test", NewArg(WithPreValidationFilter(strings.ToUpper)))
-	
+
 	// Get the filter
 	filter, err := p.GetPreValidationFilter("test")
 	if err != nil {
 		t.Errorf("GetPreValidationFilter returned error: %v", err)
 	}
-	
+
 	if filter == nil {
 		t.Error("GetPreValidationFilter should return the filter")
 	}
-	
+
 	// Test the filter works
 	if filter("hello") != "HELLO" {
 		t.Error("Filter should convert to uppercase")
@@ -6159,20 +6159,20 @@ func TestParser_GetPreValidationFilter(t *testing.T) {
 
 func TestParser_GetPostValidationFilter(t *testing.T) {
 	p := NewParser()
-	
+
 	// Add a flag with a post-validation filter
 	p.AddFlag("test", NewArg(WithPostValidationFilter(strings.ToLower)))
-	
+
 	// Get the filter
 	filter, err := p.GetPostValidationFilter("test")
 	if err != nil {
 		t.Errorf("GetPostValidationFilter returned error: %v", err)
 	}
-	
+
 	if filter == nil {
 		t.Error("GetPostValidationFilter should return the filter")
 	}
-	
+
 	// Test the filter works
 	if filter("HELLO") != "hello" {
 		t.Error("Filter should convert to lowercase")
@@ -6181,19 +6181,19 @@ func TestParser_GetPostValidationFilter(t *testing.T) {
 
 func TestParser_GetAcceptPatterns(t *testing.T) {
 	p := NewParser()
-	
+
 	// Add a flag with accept patterns
 	p.AddFlag("test", NewArg(WithAcceptedValues([]types.PatternValue{
 		{Pattern: "^[0-9]+$", Description: "numbers only"},
 		{Pattern: "^[a-z]+$", Description: "lowercase letters only"},
 	})))
-	
+
 	// Get the patterns
 	patterns, err := p.GetAcceptPatterns("test")
 	if err != nil {
 		t.Errorf("GetAcceptPatterns returned error: %v", err)
 	}
-	
+
 	if len(patterns) != 2 {
 		t.Errorf("Expected 2 patterns, got %d", len(patterns))
 	}
@@ -6201,15 +6201,15 @@ func TestParser_GetAcceptPatterns(t *testing.T) {
 
 func TestCommand_AddSubcommand(t *testing.T) {
 	cmd := NewCommand(WithName("parent"))
-	
+
 	// Add a subcommand
 	subcmd := NewCommand(WithName("child"))
 	cmd.AddSubcommand(subcmd)
-	
+
 	if len(cmd.Subcommands) != 1 {
 		t.Error("AddSubcommand should add the subcommand")
 	}
-	
+
 	if cmd.Subcommands[0].Name != "child" {
 		t.Error("Subcommand should have the correct name")
 	}
@@ -6220,7 +6220,7 @@ func TestCommand_WithCommandDescriptionKey(t *testing.T) {
 		WithName("test"),
 		WithCommandDescriptionKey("test.command.desc"),
 	)
-	
+
 	if cmd.DescriptionKey != "test.command.desc" {
 		t.Errorf("Expected DescriptionKey 'test.command.desc', got '%s'", cmd.DescriptionKey)
 	}
@@ -6228,17 +6228,17 @@ func TestCommand_WithCommandDescriptionKey(t *testing.T) {
 
 func TestParser_DependsOnFlag(t *testing.T) {
 	p := NewParser()
-	
+
 	// Add flags
 	p.AddFlag("verbose", NewArg())
 	p.AddFlag("debug", NewArg())
-	
+
 	// Test adding dependency
 	err := p.DependsOnFlag("debug", "verbose")
 	if err != nil {
 		t.Errorf("DependsOnFlag should not return error for valid flags: %v", err)
 	}
-	
+
 	// Test adding dependency for non-existent flag
 	err = p.DependsOnFlag("nonexistent", "verbose")
 	if err == nil {
