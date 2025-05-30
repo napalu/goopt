@@ -7,9 +7,9 @@ import (
 	"embed"
 	"fmt"
 	"github.com/napalu/goopt/v2"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/commands"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/translations"
 	"github.com/napalu/goopt/v2/i18n"
 	"golang.org/x/text/language"
 	"log"
@@ -24,11 +24,11 @@ func main() {
 	cfg := &options.AppConfig{}
 
 	// Assign command functions
-	cfg.Generate.Exec = commands.ExecuteGenerate
-	cfg.Validate.Exec = commands.ExecuteValidate
-	cfg.Audit.Exec = commands.ExecuteAudit
-	cfg.Init.Exec = commands.ExecuteInit
-	cfg.Add.Exec = commands.ExecuteAdd
+	cfg.Generate.Exec = translations.Generate
+	cfg.Validate.Exec = translations.Validate
+	cfg.Audit.Exec = translations.Audit
+	cfg.Init.Exec = translations.Init
+	cfg.Add.Exec = translations.Add
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")
