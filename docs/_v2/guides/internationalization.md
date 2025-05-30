@@ -429,6 +429,19 @@ goopt-i18n-gen uses a command-based structure:
 - `-m, --mode`: How to handle existing keys (skip, replace, error) - default: skip
 - `-n, --dry-run`: Show what would be added without modifying files
 
+**Extract command options:**
+- `-s, --files`: Go files to scan (default: **/*.go)
+- `-m, --match-only`: Regex to match strings for inclusion
+- `-S, --skip-match`: Regex to match strings for exclusion
+- `-P, --key-prefix`: Prefix for generated keys (default: app.extracted)
+- `-l, --min-length`: Minimum string length (default: 2)
+- `-n, --dry-run`: Preview what would be extracted
+- `-u, --auto-update`: Update source files (add comments or replace strings)
+- `--tr-pattern`: Translator pattern for replacements (e.g. tr.T)
+- `--keep-comments`: Keep i18n comments after replacement
+- `--clean-comments`: Remove all i18n-* comments
+- `--backup-dir`: Directory for backup files (default: .goopt-i18n-backup)
+
 ### Validation Workflow
 
 The validate command scans your Go source files to find all `descKey` references and ensures they have translations:
@@ -741,6 +754,127 @@ See the [i18n-codegen-demo example](https://github.com/napalu/goopt/tree/v2/exam
 - Building a fully internationalized CLI
 
 The example includes a step-by-step README showing the entire workflow in action.
+
+### Extracting Hardcoded Strings with the extract Command
+
+The `extract` command is a powerful tool for migrating existing Go codebases to internationalization. It can automatically find hardcoded strings, generate translation keys, and even transform your source code to use i18n.
+
+#### Key Features
+
+- **AST-based extraction**: Analyzes Go code structure, not just regex patterns
+- **Smart filtering**: Automatically skips constants, comments, and non-user-facing strings
+- **Format function handling**: Intelligently transforms Printf, Sprintf, Errorf, etc.
+- **String concatenation detection**: Extracts concatenated strings in format functions as single entries
+- **Auto-update modes**: Can add TODO comments or directly replace strings with translation calls
+- **Safe operation**: Creates backups and supports dry-run mode
+
+#### Basic Extraction Workflow
+
+```bash
+# 1. Preview what will be extracted
+goopt-i18n-gen -v -i "locales/*.json" extract -n
+
+# 2. Extract strings and update locale files
+goopt-i18n-gen -i "locales/*.json" extract
+
+# 3. Generate constants for the new keys
+goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go
+```
+
+#### Comment-Based Migration (Recommended for Large Codebases)
+
+This approach adds comments next to strings, allowing manual review:
+
+```bash
+# Step 1: Add TODO comments to all extractable strings
+goopt-i18n-gen -i "locales/*.json" extract -u
+
+# Your code now has comments like:
+# fmt.Println("Starting server...") // i18n-todo: app.extracted.starting_server
+
+# Step 2: Review and manually update high-priority strings
+# Change some to:
+# fmt.Println(tr.T(messages.Keys.App.Server.Starting)) // i18n-done
+
+# Step 3: Mark strings to skip
+# fmt.Println("DEBUG: raw data") // i18n-skip
+
+# Step 4: Auto-transform remaining TODOs
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+
+# Step 5: Clean up comments
+goopt-i18n-gen -i "locales/*.json" extract --clean-comments
+```
+
+#### Direct Transformation Workflow
+
+For smaller codebases or when you're confident about the changes:
+
+```bash
+# Preview transformations
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T" -n
+
+# Apply transformations
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+```
+
+#### Format Function Transformations
+
+The extract command intelligently handles format functions:
+
+```go
+// Before extraction
+fmt.Printf("User %s logged in at %v", username, time.Now())
+fmt.Sprintf("Welcome %s!", name)
+fmt.Errorf("failed to process: %v", err)
+fmt.Fprintf(os.Stderr, "Error: %s", msg)
+
+// After extraction with --tr-pattern "tr.T"
+fmt.Print(tr.T(messages.Keys.AppExtracted.UserSLoggedInAtV, username, time.Now()))
+tr.T(messages.Keys.AppExtracted.WelcomeS, name)
+errors.New(tr.T(messages.Keys.AppExtracted.FailedToProcessV, err))
+fmt.Fprint(os.Stderr, tr.T(messages.Keys.AppExtracted.ErrorS, msg))
+```
+
+#### Advanced Filtering
+
+```bash
+# Extract only user-visible strings (containing spaces)
+goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*"
+
+# Extract only error messages
+goopt-i18n-gen -i "locales/*.json" extract -m "(?i)error|fail|unable|cannot" -P app.errors
+
+# Exclude debug/test strings
+goopt-i18n-gen -i "locales/*.json" extract -S "(?i)debug|test|todo"
+
+# Extract from specific packages
+goopt-i18n-gen -i "locales/*.json" extract -s "internal/api/**/*.go" -P app.api
+```
+
+#### Complete Migration Example
+
+```bash
+# 1. Initial scan to understand scope
+goopt-i18n-gen -v -i "locales/*.json" extract -m ".*\\s+.*" -l 3 -n > strings-review.txt
+
+# 2. Add TODO comments for review
+goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*" -l 3 -u
+git add -A && git commit -m "Add i18n TODO comments"
+
+# 3. Package-by-package migration
+goopt-i18n-gen -i "locales/*.json" extract -s "internal/api/**/*.go" -u --tr-pattern "tr.T"
+go test ./internal/api/...
+
+# 4. Complete remaining packages
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+
+# 5. Generate constants and clean up
+goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go
+goopt-i18n-gen -i "locales/*.json" extract --clean-comments
+```
+
+For a detailed workflow guide, see the [EXTRACT_WORKFLOW.md](https://github.com/napalu/goopt/blob/v2/cmd/goopt-i18n-gen/EXTRACT_WORKFLOW.md) documentation.
 
 ### Adding Keys with the add Command
 

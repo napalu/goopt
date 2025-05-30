@@ -174,6 +174,62 @@ Features:
 - **Safe by Default**: Skip mode prevents accidental overwrites
 - **Preview Changes**: Dry run shows exactly what will be modified
 
+### `extract`
+Extract string literals from Go source files for translation and optionally update source code.
+
+```bash
+# Extract all strings from Go files
+goopt-i18n-gen -i "locales/*.json" extract
+
+# Extract only strings with spaces (likely user-facing)
+goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*"
+
+# Exclude test strings and constants  
+goopt-i18n-gen -i "locales/*.json" extract -S "^TEST_|_test$"
+
+# Custom prefix and minimum length
+goopt-i18n-gen -i "locales/*.json" extract -P app.ui -l 5
+
+# Dry run with verbose output
+goopt-i18n-gen -v -i "locales/*.json" extract -n
+
+# Auto-update: Add TODO comments to source files
+goopt-i18n-gen -i "locales/*.json" extract -u
+
+# Auto-update: Replace strings with translation calls
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+
+# Clean up i18n comments after manual review
+goopt-i18n-gen -i "locales/*.json" extract --clean-comments
+```
+
+Options:
+- `-s, --files`: Go files to scan (default: **/*.go)
+- `-m, --match-only`: Regex to match strings for inclusion
+- `-S, --skip-match`: Regex to match strings for exclusion
+- `-P, --key-prefix`: Prefix for generated keys (default: app.extracted)
+- `-l, --min-length`: Minimum string length (default: 2)
+- `-n, --dry-run`: Preview what would be extracted
+- `-u, --auto-update`: Update source files (add comments or replace strings)
+- `--tr-pattern`: Translator pattern for replacements (e.g. tr.T)
+- `--keep-comments`: Keep i18n comments after replacement
+- `--clean-comments`: Remove all i18n-* comments
+- `--backup-dir`: Directory for backup files (default: .goopt-i18n-backup)
+
+Features:
+- **AST-based extraction**: Analyzes Go code structure, not just regex
+- **Smart filtering**: Automatically skips constants, generated files, and comments
+- **Deduplication**: Same string in multiple places gets one key
+- **Location tracking**: Shows where each string was found (with -v flag on global options)
+- **Auto-update modes**:
+  - Without `--tr-pattern`: Adds `// i18n-todo:` comments next to strings
+  - With `--tr-pattern`: Replaces strings with translation calls
+- **Format function handling**: Intelligently transforms Printf → Print, Sprintf → direct call, etc.
+- **String concatenation**: Detects and extracts concatenated strings in format functions
+- **Method awareness**: Shows which method/function contains each string
+- **Iterative workflow**: Use comments first, then gradually replace with actual calls
+- **Safe defaults**: Uses `app.extracted` prefix to clearly mark auto-extracted strings
+
 ## Global Options
 
 - `-i, --input`: Input JSON files (comma-separated or wildcards, required)
@@ -315,6 +371,98 @@ goopt-i18n-gen -i "locales/*.json" validate -s "*.go"
 goopt-i18n-gen -i "locales/*.json" validate -s "*.go" --strict
 ```
 
+### Extracting and Migrating Hardcoded Strings
+
+The `extract` command provides a powerful workflow for migrating existing code to i18n:
+
+#### Basic Extraction Workflow
+
+```bash
+# 1. Preview what will be extracted (dry run with verbose)
+goopt-i18n-gen -v -i "locales/*.json" extract -m ".*\\s+.*" -l 5 -n
+
+# 2. Extract and update locale files
+goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*" -l 5
+
+# 3. Generate constants for the new keys
+goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go -p messages
+```
+
+#### Automated Migration Workflow
+
+```bash
+# Step 1: Add TODO comments to all extractable strings
+goopt-i18n-gen -i "locales/*.json" extract -u
+
+# Your code now has comments like:
+# fmt.Println("Hello world") // i18n-todo: app.extracted.hello_world
+
+# Step 2: Review and manually update some strings, marking them done
+# fmt.Println(tr.T(messages.Keys.App.Greeting)) // i18n-done
+
+# Step 3: Auto-replace remaining TODOs with translation calls
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+
+# Step 4: Clean up any remaining comments
+goopt-i18n-gen -i "locales/*.json" extract --clean-comments
+```
+
+#### Advanced Extraction Patterns
+
+```bash
+# Extract error messages with custom prefix
+goopt-i18n-gen -i "locales/*.json" extract -m "(?i)error|fail" -P app.errors
+
+# Extract UI labels (capitalized strings ending with colon)
+goopt-i18n-gen -i "locales/*.json" extract -m "^[A-Z][a-z].*:$" -P app.ui.labels
+
+# Extract from specific packages only
+goopt-i18n-gen -i "locales/*.json" extract -s "internal/ui/**/*.go" -P app.ui
+
+# Exclude test files and mocks
+goopt-i18n-gen -i "locales/*.json" extract -S "_test\.go$|mock" 
+```
+
+#### Format Function Transformation
+
+The extract command intelligently handles format functions:
+
+```go
+// Before extraction
+fmt.Printf("User %s logged in at %v", username, time.Now())
+fmt.Sprintf("Welcome %s!", name)
+fmt.Errorf("failed to process: %v", err)
+
+// After extraction with --tr-pattern "tr.T"
+fmt.Print(tr.T(messages.Keys.AppExtracted.UserSLoggedInAtV, username, time.Now()))
+tr.T(messages.Keys.AppExtracted.WelcomeS, name)
+errors.New(tr.T(messages.Keys.AppExtracted.FailedToProcessV, err))
+```
+
+#### Iterative Migration Strategy
+
+1. **Phase 1 - Discovery**: Use dry run to understand scope
+   ```bash
+   goopt-i18n-gen -v -i "locales/*.json" extract -n | grep occurrences | wc -l
+   ```
+
+2. **Phase 2 - Comment Injection**: Add TODO comments for review
+   ```bash
+   goopt-i18n-gen -i "locales/*.json" extract -u
+   git diff  # Review changes
+   ```
+
+3. **Phase 3 - Gradual Migration**: Work package by package
+   ```bash
+   # Extract and transform one package at a time
+   goopt-i18n-gen -i "locales/*.json" extract -s "pkg/auth/**/*.go" -u --tr-pattern "tr.T"
+   ```
+
+4. **Phase 4 - Cleanup**: Remove processed comments
+   ```bash
+   goopt-i18n-gen -i "locales/*.json" extract --clean-comments
+   ```
+
 ### Adding New Features with the add Command
 
 When developing new features, use the `add` command to efficiently manage translations:
@@ -379,6 +527,8 @@ go generate ./...
 4. **Commit generated files**: Include the generated constants file in version control
 5. **Use wildcards for multi-locale**: Process all translations together to ensure consistency
 6. **Use add command for bulk updates**: When adding features, collect all new keys in a JSON file and add them at once
+7. **Extract before manual i18n**: Use the extract command to find hardcoded strings before manually adding translations
+8. **Review extracted strings**: Always use dry-run (-n) first to review what will be extracted
 
 ## Advanced Features
 

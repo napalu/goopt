@@ -20,7 +20,7 @@ goopt v2 comes with comprehensive internationalization support:
 - **Extensible translation system** for adding custom languages
 - **Translatable error messages** for better user experience
 - **User-defined message bundles** to override built-in translations
-
+- **Powerful tools for i18n workflows** to help internationalize new projects or migrate existing projects 
 See [Internationalization]({{ site.baseurl }}/v2/guides/internationalization/) for details.
 
 ## Enhanced Error Handling
