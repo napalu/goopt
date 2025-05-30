@@ -83,6 +83,56 @@ func (se *StringExtractor) ExtractFromFiles(pattern string) error {
 	return nil
 }
 
+// ExtractFromString extracts strings from Go source code string
+func (se *StringExtractor) ExtractFromString(filename, source string) error {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, filename, source, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	se.currentPkg = node.Name.Name
+
+	// Visit all nodes in the AST
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncDecl:
+			// Build function name including receiver if it's a method
+			funcName := x.Name.Name
+			if x.Recv != nil && len(x.Recv.List) > 0 {
+				// Get receiver type
+				recvType := ""
+				if starExpr, ok := x.Recv.List[0].Type.(*ast.StarExpr); ok {
+					// Pointer receiver
+					if ident, ok := starExpr.X.(*ast.Ident); ok {
+						recvType = "*" + ident.Name
+					}
+				} else if ident, ok := x.Recv.List[0].Type.(*ast.Ident); ok {
+					// Value receiver
+					recvType = ident.Name
+				}
+				if recvType != "" {
+					funcName = recvType + "." + funcName
+				}
+			}
+			se.extractFromFunction(fset, filename, funcName, x.Body)
+			return false // Don't descend further, we'll handle the body
+		case *ast.FuncLit:
+			// Anonymous function
+			se.extractFromFunction(fset, filename, "anonymous", x.Body)
+			return false
+		case *ast.GenDecl:
+			// Skip const and var declarations at package level
+			if x.Tok == token.CONST || x.Tok == token.VAR {
+				return false
+			}
+		}
+		return true
+	})
+
+	return nil
+}
+
 // extractFromFile extracts strings from a single file
 func (se *StringExtractor) extractFromFile(filename string) error {
 	// Skip generated files

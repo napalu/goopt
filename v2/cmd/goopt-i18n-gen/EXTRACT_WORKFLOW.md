@@ -40,12 +40,17 @@ goopt-i18n-gen -i "locales/*.json" extract -m "(?i)error|fail|unable|cannot"
 # Exclude debug/test strings
 goopt-i18n-gen -i "locales/*.json" extract -S "(?i)debug|test|todo"
 
+# Exclude slog/structured logging field names (recommended for slog users)
+goopt-i18n-gen -i "locales/*.json" extract -S "^[^\s]+$"
+
 # Minimum length to avoid single characters
 goopt-i18n-gen -i "locales/*.json" extract -l 5
 
 # Combine filters
 goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*" -S "^TEST_" -l 3
 ```
+
+**Note for slog users**: See [SLOG_USAGE.md](SLOG_USAGE.md) for detailed patterns to exclude structured logging field names.
 
 ### 3. Extraction and Key Generation
 

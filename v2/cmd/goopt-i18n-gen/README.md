@@ -229,6 +229,7 @@ Features:
 - **Method awareness**: Shows which method/function contains each string
 - **Iterative workflow**: Use comments first, then gradually replace with actual calls
 - **Safe defaults**: Uses `app.extracted` prefix to clearly mark auto-extracted strings
+- **Structured logging support**: Works well with slog - see [SLOG_USAGE.md](SLOG_USAGE.md) for recommended patterns
 
 ## Global Options
 
