@@ -2,7 +2,7 @@ module file-stats
 
 go 1.23.4
 
-require github.com/napalu/goopt/v2 v2.0.0
+require github.com/napalu/goopt/v2 v2.1.4
 
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
@@ -14,4 +14,3 @@ require (
 	golang.org/x/text v0.21.0 // indirect
 )
 
-replace github.com/napalu/goopt/v2 => ../../
