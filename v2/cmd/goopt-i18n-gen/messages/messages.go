@@ -25,6 +25,8 @@ var Keys = struct {
 
 		FoundKeysInFile string
 
+		GlobError string
+
 		InvalidMode string
 
 		KeyExistsError string
@@ -42,6 +44,8 @@ var Keys = struct {
 		ReadingKeysFile string
 
 		Summary string
+
+		Updated string
 
 		UpdatedFile string
 	}
@@ -143,6 +147,8 @@ var Keys = struct {
 
 		AuditDesc string
 
+		ExtractDesc string
+
 		GenerateDesc string
 
 		InitDesc string
@@ -162,6 +168,32 @@ var Keys = struct {
 		GenerateMissing string
 
 		KeyPrefixDesc string
+	}
+
+	AppCmdExtract struct {
+		AutoUpdateDesc string
+
+		BackupDirDesc string
+
+		CleanCommentsDesc string
+
+		DryRunDesc string
+
+		FilesDesc string
+
+		KeepCommentsDesc string
+
+		KeyPrefixDesc string
+
+		MatchOnlyDesc string
+
+		MinLengthDesc string
+
+		SkipMatchDesc string
+
+		TrPatternDesc string
+
+		VerboseDesc string
 	}
 
 	AppCmdGenerate struct {
@@ -228,6 +260,60 @@ var Keys = struct {
 		ParseError string
 
 		ValidationFailed string
+	}
+
+	AppExtract struct {
+		Added string
+
+		ApplyingReplacements string
+
+		AutoUpdateMode string
+
+		BackupLocation string
+
+		CleanComplete string
+
+		CleaningComments string
+
+		DryRunMode string
+
+		FileError string
+
+		FoundComments string
+
+		FoundCommentsToClean string
+
+		FoundReplacements string
+
+		FoundStrings string
+
+		GlobError string
+
+		InFunction string
+
+		InvalidRegex string
+
+		Key string
+
+		Keys string
+
+		NoCommentsFound string
+
+		NoReplacements string
+
+		NoStringsFound string
+
+		Occurrences string
+
+		ScanningFiles string
+
+		UniqueStrings string
+
+		UpdateComplete string
+
+		UpdateError string
+
+		UpdatingFiles string
 	}
 
 	AppGenerate struct {
@@ -328,6 +414,8 @@ var Keys = struct {
 
 		FoundKeysInFile string
 
+		GlobError string
+
 		InvalidMode string
 
 		KeyExistsError string
@@ -345,6 +433,8 @@ var Keys = struct {
 		ReadingKeysFile string
 
 		Summary string
+
+		Updated string
 
 		UpdatedFile string
 	}{
@@ -369,6 +459,8 @@ var Keys = struct {
 
 		FoundKeysInFile: "app.add.found_keys_in_file",
 
+		GlobError: "app.add.glob_error",
+
 		InvalidMode: "app.add.invalid_mode",
 
 		KeyExistsError: "app.add.key_exists_error",
@@ -386,6 +478,8 @@ var Keys = struct {
 		ReadingKeysFile: "app.add.reading_keys_file",
 
 		Summary: "app.add.summary",
+
+		Updated: "app.add.updated",
 
 		UpdatedFile: "app.add.updated_file",
 	},
@@ -576,6 +670,8 @@ var Keys = struct {
 
 		AuditDesc string
 
+		ExtractDesc string
+
 		GenerateDesc string
 
 		InitDesc string
@@ -586,6 +682,8 @@ var Keys = struct {
 		AddDesc: "app.cmd.add_desc",
 
 		AuditDesc: "app.cmd.audit_desc",
+
+		ExtractDesc: "app.cmd.extract_desc",
 
 		GenerateDesc: "app.cmd.generate_desc",
 
@@ -619,6 +717,57 @@ var Keys = struct {
 		GenerateMissing: "app.cmd.audit.generate_missing",
 
 		KeyPrefixDesc: "app.cmd.audit.key_prefix_desc",
+	},
+
+	AppCmdExtract: struct {
+		AutoUpdateDesc string
+
+		BackupDirDesc string
+
+		CleanCommentsDesc string
+
+		DryRunDesc string
+
+		FilesDesc string
+
+		KeepCommentsDesc string
+
+		KeyPrefixDesc string
+
+		MatchOnlyDesc string
+
+		MinLengthDesc string
+
+		SkipMatchDesc string
+
+		TrPatternDesc string
+
+		VerboseDesc string
+	}{
+
+		AutoUpdateDesc: "app.cmd.extract.auto_update_desc",
+
+		BackupDirDesc: "app.cmd.extract.backup_dir_desc",
+
+		CleanCommentsDesc: "app.cmd.extract.clean_comments_desc",
+
+		DryRunDesc: "app.cmd.extract.dry_run_desc",
+
+		FilesDesc: "app.cmd.extract.files_desc",
+
+		KeepCommentsDesc: "app.cmd.extract.keep_comments_desc",
+
+		KeyPrefixDesc: "app.cmd.extract.key_prefix_desc",
+
+		MatchOnlyDesc: "app.cmd.extract.match_only_desc",
+
+		MinLengthDesc: "app.cmd.extract.min_length_desc",
+
+		SkipMatchDesc: "app.cmd.extract.skip_match_desc",
+
+		TrPatternDesc: "app.cmd.extract.tr_pattern_desc",
+
+		VerboseDesc: "app.cmd.extract.verbose_desc",
 	},
 
 	AppCmdGenerate: struct {
@@ -746,6 +895,113 @@ var Keys = struct {
 		ParseError: "app.error.parse_error",
 
 		ValidationFailed: "app.error.validation_failed",
+	},
+
+	AppExtract: struct {
+		Added string
+
+		ApplyingReplacements string
+
+		AutoUpdateMode string
+
+		BackupLocation string
+
+		CleanComplete string
+
+		CleaningComments string
+
+		DryRunMode string
+
+		FileError string
+
+		FoundComments string
+
+		FoundCommentsToClean string
+
+		FoundReplacements string
+
+		FoundStrings string
+
+		GlobError string
+
+		InFunction string
+
+		InvalidRegex string
+
+		Key string
+
+		Keys string
+
+		NoCommentsFound string
+
+		NoReplacements string
+
+		NoStringsFound string
+
+		Occurrences string
+
+		ScanningFiles string
+
+		UniqueStrings string
+
+		UpdateComplete string
+
+		UpdateError string
+
+		UpdatingFiles string
+	}{
+
+		Added: "app.extract.added",
+
+		ApplyingReplacements: "app.extract.applying_replacements",
+
+		AutoUpdateMode: "app.extract.auto_update_mode",
+
+		BackupLocation: "app.extract.backup_location",
+
+		CleanComplete: "app.extract.clean_complete",
+
+		CleaningComments: "app.extract.cleaning_comments",
+
+		DryRunMode: "app.extract.dry_run_mode",
+
+		FileError: "app.extract.file_error",
+
+		FoundComments: "app.extract.found_comments",
+
+		FoundCommentsToClean: "app.extract.found_comments_to_clean",
+
+		FoundReplacements: "app.extract.found_replacements",
+
+		FoundStrings: "app.extract.found_strings",
+
+		GlobError: "app.extract.glob_error",
+
+		InFunction: "app.extract.in_function",
+
+		InvalidRegex: "app.extract.invalid_regex",
+
+		Key: "app.extract.key",
+
+		Keys: "app.extract.keys",
+
+		NoCommentsFound: "app.extract.no_comments_found",
+
+		NoReplacements: "app.extract.no_replacements",
+
+		NoStringsFound: "app.extract.no_strings_found",
+
+		Occurrences: "app.extract.occurrences",
+
+		ScanningFiles: "app.extract.scanning_files",
+
+		UniqueStrings: "app.extract.unique_strings",
+
+		UpdateComplete: "app.extract.update_complete",
+
+		UpdateError: "app.extract.update_error",
+
+		UpdatingFiles: "app.extract.updating_files",
 	},
 
 	AppGenerate: struct {

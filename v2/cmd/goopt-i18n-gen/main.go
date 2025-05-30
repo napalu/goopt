@@ -29,6 +29,7 @@ func main() {
 	cfg.Audit.Exec = translations.Audit
 	cfg.Init.Exec = translations.Init
 	cfg.Add.Exec = translations.Add
+	cfg.Extract.Exec = translations.Extract
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")

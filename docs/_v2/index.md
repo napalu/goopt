@@ -59,6 +59,7 @@ goopt follows these key principles:
   - Built-in translations can be easily extended to support additional languages
   - Support for user-defined internalization support for flag and command usage
   - Allows overriding built-in messages if necessary
+  - Powerful `extract` command in goopt-i18n-gen for migrating hardcoded strings to i18n
 - **Enhanced Error Handling**:
   - Structured, translatable errors with context
   - Improved error testing utilities
