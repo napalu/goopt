@@ -734,7 +734,7 @@ goopt-i18n-gen -i "locales/*.json" validate -s "*.go"
 goopt-i18n-gen -i "locales/*.json" validate -s "*.go" --strict
 ```
 
-**Critical: Why generate translations before adding descKeys?**
+**Important: Why generate translations before adding descKeys?**
 - If you add descKeys first, goopt will try to use them immediately
 - Without translations, it displays raw keys (e.g., "app.global.help_desc")
 - This creates a broken intermediate state
@@ -747,7 +747,7 @@ goopt-i18n-gen -i "locales/*.json" validate -s "*.go" --strict
 
 ### Example: Complete 360° Workflow
 
-See the [i18n-codegen-demo example](https://github.com/napalu/goopt/tree/v2/examples/i18n-codegen-demo) for a complete demonstration of:
+See the [i18n-codegen-demo example](https://github.com/napalu/goopt/tree/main/v2/examples/i18n-codegen-demo) for a complete demonstration of:
 - Starting with a plain goopt application
 - Running the 360° analysis
 - Applying generated descKeys
@@ -874,7 +874,7 @@ goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go
 goopt-i18n-gen -i "locales/*.json" extract --clean-comments
 ```
 
-For a detailed workflow guide, see the [EXTRACT_WORKFLOW.md](https://github.com/napalu/goopt/blob/v2/cmd/goopt-i18n-gen/EXTRACT_WORKFLOW.md) documentation.
+For a detailed workflow guide, see the [EXTRACT_WORKFLOW.md](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/EXTRACT_WORKFLOW.md) documentation.
 
 ### Adding Keys with the add Command
 

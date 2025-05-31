@@ -24,7 +24,7 @@ type StringLocation struct {
 type ExtractedString struct {
 	Value          string
 	Locations      []StringLocation
-	IsFormatString bool   // Whether this string is from a format function
+	IsFormatString bool // Whether this string is from a format function
 }
 
 // StringExtractor extracts string literals from Go source files
@@ -93,8 +93,16 @@ func (se *StringExtractor) ExtractFromString(filename, source string) error {
 
 	se.currentPkg = node.Name.Name
 
+	// Build a map of lines with i18n-skip comments
+	skipLines := se.findSkipCommentLines(fset, node)
+
 	// Visit all nodes in the AST
 	ast.Inspect(node, func(n ast.Node) bool {
+		// Check if this node should be skipped
+		if se.shouldSkipNode(fset, n, skipLines) {
+			return false // Don't descend into this node
+		}
+
 		switch x := n.(type) {
 		case *ast.FuncDecl:
 			// Build function name including receiver if it's a method
@@ -115,11 +123,11 @@ func (se *StringExtractor) ExtractFromString(filename, source string) error {
 					funcName = recvType + "." + funcName
 				}
 			}
-			se.extractFromFunction(fset, filename, funcName, x.Body)
+			se.extractFromFunction(fset, filename, funcName, x.Body, skipLines)
 			return false // Don't descend further, we'll handle the body
 		case *ast.FuncLit:
 			// Anonymous function
-			se.extractFromFunction(fset, filename, "anonymous", x.Body)
+			se.extractFromFunction(fset, filename, "anonymous", x.Body, skipLines)
 			return false
 		case *ast.GenDecl:
 			// Skip const and var declarations at package level
@@ -153,8 +161,16 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 
 	se.currentPkg = node.Name.Name
 
+	// Build a map of lines with i18n-skip comments
+	skipLines := se.findSkipCommentLines(fset, node)
+
 	// Visit all nodes in the AST
 	ast.Inspect(node, func(n ast.Node) bool {
+		// Check if this node should be skipped
+		if se.shouldSkipNode(fset, n, skipLines) {
+			return false // Don't descend into this node
+		}
+
 		switch x := n.(type) {
 		case *ast.FuncDecl:
 			// Build function name including receiver if it's a method
@@ -175,11 +191,11 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 					funcName = recvType + "." + funcName
 				}
 			}
-			se.extractFromFunction(fset, filename, funcName, x.Body)
+			se.extractFromFunction(fset, filename, funcName, x.Body, make(map[int]bool))
 			return false // Don't descend further, we'll handle the body
 		case *ast.FuncLit:
 			// Anonymous function
-			se.extractFromFunction(fset, filename, "anonymous", x.Body)
+			se.extractFromFunction(fset, filename, "anonymous", x.Body, make(map[int]bool))
 			return false
 		case *ast.GenDecl:
 			// Skip const and var declarations at package level
@@ -194,12 +210,17 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 }
 
 // extractFromFunction extracts strings from a function body
-func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, funcName string, body *ast.BlockStmt) {
+func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, funcName string, body *ast.BlockStmt, skipLines map[int]bool) {
 	if body == nil {
 		return
 	}
 
 	ast.Inspect(body, func(n ast.Node) bool {
+		// Check if this node should be skipped
+		if se.shouldSkipNode(fset, n, skipLines) {
+			return false
+		}
+
 		switch node := n.(type) {
 		case *ast.CallExpr:
 			// Use generic detector to check for format functions
@@ -214,7 +235,7 @@ func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, fu
 						Function: funcName,
 						Context:  "format_function",
 					}
-					
+
 					// Add to our collection
 					if existing, ok := se.strings[formatInfo.FormatString]; ok {
 						existing.Locations = append(existing.Locations, location)
@@ -226,7 +247,7 @@ func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, fu
 							IsFormatString: true,
 						}
 					}
-					
+
 					// Don't process children since we handled the format string
 					return false
 				}
@@ -235,7 +256,7 @@ func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, fu
 			if node.Kind == token.STRING {
 				// Get the actual string value (remove quotes)
 				value := strings.Trim(node.Value, "`\"")
-				
+
 				// Apply filters
 				if !se.shouldExtract(value) {
 					return true
@@ -302,7 +323,7 @@ func (se *StringExtractor) isGeneratedFile(filename string) bool {
 
 	// Look for generated code marker in first 1KB
 	header := string(content[:min(len(content), 1024)])
-	return strings.Contains(header, "Code generated") || 
+	return strings.Contains(header, "Code generated") ||
 		strings.Contains(header, "DO NOT EDIT")
 }
 
@@ -328,18 +349,18 @@ func (se *StringExtractor) getFunctionName(call *ast.CallExpr) string {
 // isFormatFunctionCall checks if a call expression is a format function
 func (se *StringExtractor) isFormatFunctionCall(call *ast.CallExpr) bool {
 	funcName := se.getFunctionName(call)
-	
+
 	// Check if it's a known format function
 	formatFunctions := map[string]bool{
-		"fmt.Printf":   true,
-		"fmt.Sprintf":  true,
-		"fmt.Fprintf":  true,
-		"fmt.Errorf":   true,
-		"log.Printf":   true,
-		"log.Fatalf":   true,
-		"log.Panicf":   true,
+		"fmt.Printf":  true,
+		"fmt.Sprintf": true,
+		"fmt.Fprintf": true,
+		"fmt.Errorf":  true,
+		"log.Printf":  true,
+		"log.Fatalf":  true,
+		"log.Panicf":  true,
 	}
-	
+
 	return formatFunctions[funcName]
 }
 
@@ -349,27 +370,27 @@ func (se *StringExtractor) extractFromFormatCall(fset *token.FileSet, filename, 
 	funcInfo := se.getFunctionName(call)
 	argIndex := 0
 	minArgs := 1
-	
+
 	if strings.HasSuffix(funcInfo, ".Fprintf") {
-		argIndex = 1  // Fprintf has writer as first arg
+		argIndex = 1 // Fprintf has writer as first arg
 		minArgs = 2
 	}
-	
+
 	if len(call.Args) < minArgs {
 		return false
 	}
-	
+
 	// Try to extract the format string (handling concatenation)
 	formatStr, ok := se.extractConcatenatedString(call.Args[argIndex])
 	if !ok || formatStr == "" {
 		return false
 	}
-	
+
 	// Apply filters
 	if !se.shouldExtract(formatStr) {
 		return false
 	}
-	
+
 	// Get location info
 	pos := fset.Position(call.Pos())
 	location := StringLocation{
@@ -378,7 +399,7 @@ func (se *StringExtractor) extractFromFormatCall(fset *token.FileSet, filename, 
 		Function: funcName,
 		Context:  "format_function", // Mark this as from a format function
 	}
-	
+
 	// Add to our collection
 	if existing, ok := se.strings[formatStr]; ok {
 		existing.Locations = append(existing.Locations, location)
@@ -390,7 +411,7 @@ func (se *StringExtractor) extractFromFormatCall(fset *token.FileSet, filename, 
 			IsFormatString: true,
 		}
 	}
-	
+
 	return true
 }
 
@@ -421,4 +442,52 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// findSkipCommentLines finds all lines that have i18n-skip comments
+func (se *StringExtractor) findSkipCommentLines(fset *token.FileSet, file *ast.File) map[int]bool {
+	skipLines := make(map[int]bool)
+
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.Contains(strings.ToLower(c.Text), "i18n-skip") {
+				pos := fset.Position(c.Pos())
+				skipLines[pos.Line] = true
+				
+				// Check if this is a standalone comment (comment before pattern)
+				// by seeing if there's likely no code on the same line
+				// We do this by checking if the comment starts at column 1-10 (allowing for indentation)
+				if pos.Column <= 10 || strings.HasPrefix(c.Text, "/*") {
+					// This is likely a standalone comment, so skip the next line too
+					skipLines[pos.Line+1] = true
+				}
+			}
+		}
+	}
+
+	return skipLines
+}
+
+// shouldSkipNode checks if a node should be skipped based on comments
+func (se *StringExtractor) shouldSkipNode(fset *token.FileSet, node ast.Node, skipLines map[int]bool) bool {
+	if node == nil {
+		return false
+	}
+
+	pos := fset.Position(node.Pos())
+
+	// Check if this line has a skip comment (inline or from previous line)
+	if skipLines[pos.Line] {
+		return true
+	}
+
+	// For string literals, also check the end position for inline comments
+	if lit, ok := node.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		endPos := fset.Position(lit.End())
+		if skipLines[endPos.Line] {
+			return true
+		}
+	}
+
+	return false
 }
