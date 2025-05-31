@@ -191,11 +191,11 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 					funcName = recvType + "." + funcName
 				}
 			}
-			se.extractFromFunction(fset, filename, funcName, x.Body, make(map[int]bool))
+			se.extractFromFunction(fset, filename, funcName, x.Body, skipLines)
 			return false // Don't descend further, we'll handle the body
 		case *ast.FuncLit:
 			// Anonymous function
-			se.extractFromFunction(fset, filename, "anonymous", x.Body, make(map[int]bool))
+			se.extractFromFunction(fset, filename, "anonymous", x.Body, skipLines)
 			return false
 		case *ast.GenDecl:
 			// Skip const and var declarations at package level
@@ -453,7 +453,7 @@ func (se *StringExtractor) findSkipCommentLines(fset *token.FileSet, file *ast.F
 			if strings.Contains(strings.ToLower(c.Text), "i18n-skip") {
 				pos := fset.Position(c.Pos())
 				skipLines[pos.Line] = true
-				
+
 				// Check if this is a standalone comment (comment before pattern)
 				// by seeing if there's likely no code on the same line
 				// We do this by checking if the comment starts at column 1-10 (allowing for indentation)
