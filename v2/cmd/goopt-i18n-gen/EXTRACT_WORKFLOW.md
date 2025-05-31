@@ -188,14 +188,66 @@ goopt-i18n-gen -v -i "locales/*.json" extract -u --tr-pattern "tr.T" -n
 git diff
 ```
 
-### 3. Handle Special Cases
+### 3. Handle Special Cases with i18n-skip
 
-Some strings shouldn't be translated:
-- Technical identifiers
-- Protocol strings
-- Debug output
+Some strings shouldn't be translated. Use the `// i18n-skip` directive to exclude them:
 
-Mark these with `// i18n-skip` during the comment phase.
+#### Basic Usage
+
+```go
+// Inline skip - affects only the current line
+query := "SELECT * FROM users WHERE id = ?" // i18n-skip
+msg := "User found"  // This will be extracted
+
+// Comment before - affects the next line
+// i18n-skip
+apiKey := "sk-1234567890abcdef"
+msg := "API initialized"  // This will be extracted
+```
+
+#### Common Use Cases
+
+```go
+// SQL queries
+// i18n-skip
+db.Query(`
+    SELECT u.id, u.name, u.email
+    FROM users u
+    WHERE u.active = true
+`)
+
+// Regular expressions
+// i18n-skip
+emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+
+// Configuration keys
+config.Get("database.pool.maxSize") // i18n-skip
+
+// Technical identifiers
+const APIVersion = "v2.1.0" // i18n-skip
+
+// Template syntax
+// i18n-skip
+tmpl := "{{.Name}} - {{.Date}}"
+```
+
+#### Multi-line Support
+
+```go
+// String concatenation
+// i18n-skip
+query := "SELECT u.id, u.name, u.email " +
+    "FROM users u " +
+    "JOIN orders o ON u.id = o.user_id " +
+    "WHERE u.active = true"
+
+// Format functions
+// i18n-skip
+log.Printf("Debug: User %s performed action %s at %s",
+    username, action, timestamp)
+```
+
+**Note**: The directive is case-insensitive and works with block comments (`/* i18n-skip */`). For patterns like slog field names, consider using `--skip-match "^[^\s]+$"` instead of marking each one individually.
 
 ### 4. Backup Your Code
 
