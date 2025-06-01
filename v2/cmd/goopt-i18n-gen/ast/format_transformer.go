@@ -17,6 +17,8 @@ type FormatTransformer struct {
 	requiredImports map[string]bool    // tracks imports needed
 	transformed     bool               // tracks if any transformations were made
 	detector        *FormatDetector    // generic format function detector
+	packagePath     string             // path to the messages package
+	userFacingOnly  bool               // if true, only transform known user-facing functions
 }
 
 // NewFormatTransformer creates a new format transformer
@@ -27,7 +29,19 @@ func NewFormatTransformer(stringMap map[string]string) *FormatTransformer {
 		requiredImports: make(map[string]bool),
 		transformed:     false,
 		detector:        NewFormatDetector(),
+		packagePath:     "./messages", // default value
+		userFacingOnly:  true,         // default to only transforming known user-facing functions
 	}
+}
+
+// SetMessagePackagePath sets the path to the messages package
+func (ft *FormatTransformer) SetMessagePackagePath(path string) {
+	ft.packagePath = path
+}
+
+// SetUserFacingOnly sets whether to only transform known user-facing functions
+func (ft *FormatTransformer) SetUserFacingOnly(userFacingOnly bool) {
+	ft.userFacingOnly = userFacingOnly
 }
 
 // TransformFile transforms format functions in a file
@@ -57,41 +71,45 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 		return true
 	}
 
-	// Use generic detector to identify format calls
+	// First try format functions
 	formatInfo := ft.detector.DetectFormatCall(call)
-	if formatInfo == nil {
+	if formatInfo != nil {
+		// Check if we have a translation key for this string
+		quotedStr := fmt.Sprintf("%q", formatInfo.FormatString)
+		key, exists := ft.stringMap[quotedStr]
+		if !exists {
+			return true // No translation key for this string
+		}
+
+		// Get transformation type
+		transformType := ft.detector.SuggestTransformation(formatInfo)
+		
+		// Transform based on type
+		switch transformType {
+		case "Print":
+			ft.transformGenericPrintf(call, formatInfo, key)
+		case "Direct":
+			ft.transformGenericDirect(call, formatInfo, key)
+		case "Fprint":
+			ft.transformGenericFprintf(call, formatInfo, key)
+		case "Error":
+			ft.transformGenericErrorf(call, formatInfo, key)
+		case "Wrapf":
+			ft.transformGenericWrapf(call, formatInfo, key)
+		default:
+			// For unknown patterns, try generic transformation
+			if formatInfo.IsVariadic {
+				ft.transformGenericPrintf(call, formatInfo, key)
+			}
+		}
+
+		ft.transformed = true
+		ft.requiredImports["messages"] = true
 		return true
 	}
 
-	// Check if we have a translation key for this string
-	quotedStr := fmt.Sprintf("%q", formatInfo.FormatString)
-	key, exists := ft.stringMap[quotedStr]
-	if !exists {
-		return true // No translation key for this string
-	}
-
-	// Get transformation type
-	transformType := ft.detector.SuggestTransformation(formatInfo)
-	
-	// Transform based on type
-	switch transformType {
-	case "Print":
-		ft.transformGenericPrintf(call, formatInfo, key)
-	case "Direct":
-		ft.transformGenericDirect(call, formatInfo, key)
-	case "Fprint":
-		ft.transformGenericFprintf(call, formatInfo, key)
-	case "Error":
-		ft.transformGenericErrorf(call, formatInfo, key)
-	default:
-		// For unknown patterns, try generic transformation
-		if formatInfo.IsVariadic {
-			ft.transformGenericPrintf(call, formatInfo, key)
-		}
-	}
-
-	ft.transformed = true
-	ft.requiredImports["messages"] = true
+	// If not a format function, check for regular function calls with string literals
+	ft.transformRegularFunctionCall(call)
 
 	return true
 }
@@ -386,7 +404,7 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
 				Kind:  token.STRING,
-				Value: `"./messages"`,
+				Value: fmt.Sprintf(`"%s"`, ft.packagePath),
 			},
 		})
 	}
@@ -627,6 +645,42 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 	}
 }
 
+// transformGenericWrapf handles Wrapf-style functions (errors.Wrapf)
+func (ft *FormatTransformer) transformGenericWrapf(call *ast.CallExpr, info *FormatCallInfo, key string) {
+	// For errors.Wrapf(err, "format %s", arg), transform to errors.Wrapf(err, "%s", tr.T(key, arg))
+	// Keep the function name as-is, just replace format string with "%s" and create tr.T call
+	
+	// Replace format string with "%s"
+	call.Args[info.FormatStringIndex] = &ast.BasicLit{
+		Kind:  token.STRING,
+		Value: `"%s"`,
+	}
+	
+	// Extract format arguments (everything after the format string)
+	var formatArgs []ast.Expr
+	for i, arg := range call.Args {
+		if i > info.FormatStringIndex {
+			formatArgs = append(formatArgs, arg)
+		}
+	}
+	
+	// Create tr.T call
+	trCall := ft.createTrCall(key, formatArgs)
+	
+	// Build new arguments: preserve everything before format string, add "%s", add tr.T call
+	newArgs := make([]ast.Expr, 0, info.FormatStringIndex+2)
+	
+	// Add arguments before format string (e.g., the error for errors.Wrapf)
+	for i := 0; i < info.FormatStringIndex; i++ {
+		newArgs = append(newArgs, call.Args[i])
+	}
+	
+	// Add the "%s" format string and tr.T call
+	newArgs = append(newArgs, call.Args[info.FormatStringIndex], trCall)
+	
+	call.Args = newArgs
+}
+
 // extractFormatArgs extracts the format arguments from a call
 func (ft *FormatTransformer) extractFormatArgs(call *ast.CallExpr, info *FormatCallInfo) []ast.Expr {
 	var args []ast.Expr
@@ -636,6 +690,120 @@ func (ft *FormatTransformer) extractFormatArgs(call *ast.CallExpr, info *FormatC
 		}
 	}
 	return args
+}
+
+// transformRegularFunctionCall handles regular function calls with string literals
+func (ft *FormatTransformer) transformRegularFunctionCall(call *ast.CallExpr) {
+	// Check each argument for string literals
+	for i, arg := range call.Args {
+		if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			// Check if we have a translation key for this string
+			// Note: The string has already been filtered by regex patterns during extraction
+			key, exists := ft.stringMap[lit.Value]
+			if !exists {
+				continue
+			}
+
+			// Determine function name
+			funcName := ft.getFunctionName(call)
+			
+			// Check if we should transform this function
+			if ft.userFacingOnly {
+				// In user-facing only mode, check against known user-facing functions
+				if !ft.isUserFacingFunction(funcName) {
+					continue
+				}
+			}
+			// If not in user-facing only mode, transform all functions with string literals
+			
+			// Replace the string literal with tr.T call
+			call.Args[i] = ft.createTrCall(key, nil)
+			ft.transformed = true
+			ft.requiredImports["messages"] = true
+			ft.requiredImports["i18n"] = true
+		}
+	}
+}
+
+// isUserFacingFunction checks if a function is known to display user-facing text
+func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
+	// Check exact matches first (package.Function)
+	exactMatches := map[string]bool{
+		// fmt package - display functions
+		"fmt.Print":    true,
+		"fmt.Println":  true,
+		"fmt.Fprint":   true,
+		"fmt.Fprintln": true,
+		"fmt.Sprint":   true,
+		"fmt.Sprintln": true,
+		
+		// log package - logging functions
+		"log.Print":   true,
+		"log.Println": true,
+		"log.Fatal":   true,
+		"log.Fatalln": true,
+		"log.Panic":   true,
+		"log.Panicln": true,
+		
+		// errors package
+		"errors.New": true,
+	}
+	
+	if exactMatches[funcName] {
+		return true
+	}
+	
+	// Check method names (anything.MethodName)
+	// This handles logger.Info(), slog.Info(), customLogger.Error(), etc.
+	parts := strings.Split(funcName, ".")
+	if len(parts) == 2 {
+		methodName := parts[1]
+		
+		// Common logging method names
+		loggingMethods := map[string]bool{
+			// Logging levels
+			"Info":    true,
+			"Error":   true,
+			"Warn":    true,
+			"Warning": true,
+			"Debug":   true,
+			"Trace":   true,
+			"Fatal":   true,
+			"Panic":   true,
+			
+			// Common logging methods
+			"Log":     true,
+			"Logf":    true,
+			"Print":   true,
+			"Println": true,
+			"Printf":  true,
+			
+			// Message methods (for structured loggers)
+			"Msg":  true,
+			"Send": true,
+		}
+		
+		if loggingMethods[methodName] {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// getFunctionName extracts the full function name from a call expression
+func (ft *FormatTransformer) getFunctionName(call *ast.CallExpr) string {
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		// pkg.Function or receiver.Method
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			return ident.Name + "." + fun.Sel.Name
+		}
+	case *ast.Ident:
+		// Simple function name
+		return fun.Name
+	}
+	return ""
 }
 
 // formatNode converts an AST node back to source code

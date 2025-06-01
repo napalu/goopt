@@ -219,12 +219,18 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		ApplyReplacements() error
 	}
 
+	// Build package path (use relative path with ./ prefix if not absolute)
+	packagePath := extractCmd.Package
+	if packagePath != "" && !strings.HasPrefix(packagePath, "/") && !strings.HasPrefix(packagePath, "./") {
+		packagePath = "./" + packagePath
+	}
+
 	if extractCmd.TrPattern != "" {
 		// Use AST-based replacer for format function handling
-		replacer = ast.NewTransformationReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir)
+		replacer = ast.NewTransformationReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir, packagePath)
 	} else {
 		// Use simple replacer for comment mode
-		replacer = ast.NewCommentReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir)
+		replacer = ast.NewCommentReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir, packagePath)
 	}
 
 	// Build key map (reverse of translations map)
@@ -309,7 +315,11 @@ func cleanI18nComments(config *options.AppConfig) error {
 	}
 
 	// Create replacer in clean mode
-	replacer := ast.NewCommentReplacer(tr, "", false, true, extractCmd.BackupDir)
+	packagePath := extractCmd.Package
+	if packagePath != "" && !strings.HasPrefix(packagePath, "/") && !strings.HasPrefix(packagePath, "./") {
+		packagePath = "./" + packagePath
+	}
+	replacer := ast.NewCommentReplacer(tr, "", false, true, extractCmd.BackupDir, packagePath)
 
 	if err := replacer.ProcessFiles(filesToProcess); err != nil {
 		return err

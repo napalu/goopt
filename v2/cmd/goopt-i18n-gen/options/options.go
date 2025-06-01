@@ -51,13 +51,14 @@ type AddCmd struct {
 // ExtractCmd handles the extract command configuration
 type ExtractCmd struct {
 	Files         string `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.cmd.extract.files_desc"`
-	MatchOnly     string `goopt:"short:m;desc:Regex to match strings for inclusion;descKey:app.cmd.extract.match_only_desc"`
+	MatchOnly     string `goopt:"short:M;desc:Regex to match strings for inclusion;descKey:app.cmd.extract.match_only_desc"`
 	SkipMatch     string `goopt:"short:S;desc:Regex to match strings for exclusion;descKey:app.cmd.extract.skip_match_desc"`
 	KeyPrefix     string `goopt:"short:P;desc:Prefix for generated keys;default:app.extracted;descKey:app.cmd.extract.key_prefix_desc"`
 	MinLength     int    `goopt:"short:l;desc:Minimum string length;default:2;descKey:app.cmd.extract.min_length_desc"`
 	DryRun        bool   `goopt:"short:n;desc:Preview what would be extracted;descKey:app.cmd.extract.dry_run_desc"`
 	AutoUpdate    bool   `goopt:"short:u;desc:Update source files (add comments or replace strings);descKey:app.cmd.extract.auto_update_desc"`
 	TrPattern     string `goopt:"desc:Translator pattern for replacements (e.g. tr.T);descKey:app.cmd.extract.tr_pattern_desc"`
+	Package       string `goopt:"short:p;desc:Package name for imports;default:messages;descKey:app.cmd.extract.package_desc"`
 	KeepComments  bool   `goopt:"desc:Keep i18n comments after replacement;descKey:app.cmd.extract.keep_comments_desc"`
 	CleanComments bool   `goopt:"desc:Remove all i18n-* comments;descKey:app.cmd.extract.clean_comments_desc"`
 	BackupDir     string `goopt:"desc:Directory for backup files;default:.goopt-i18n-backup;descKey:app.cmd.extract.backup_dir_desc"`

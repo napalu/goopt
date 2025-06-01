@@ -34,6 +34,10 @@ func NewFormatDetector() *FormatDetector {
 			"log.Fatalf":   0,
 			"log.Panicf":   0,
 			
+			// errors package
+			"errors.Errorf": 0,
+			"errors.Wrapf":  1, // error is first, format string is second
+			
 			// Common logging libraries
 			"logger.Infof":  0,
 			"logger.Debugf": 0,
@@ -169,6 +173,9 @@ func (fd *FormatDetector) SuggestTransformation(info *FormatCallInfo) string {
 	case "Errorf":
 		// Special handling for error wrapping
 		return "Error"
+	case "Wrapf":
+		// Special handling for error wrapping with format
+		return "Wrapf"
 	default:
 		// For unknown functions, keep the same style
 		if strings.HasSuffix(base, "f") {

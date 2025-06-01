@@ -32,18 +32,23 @@ type CommentReplacer struct {
 	keepComments  bool
 	cleanComments bool
 	backupDir     string
+	packagePath   string
 	replacements  []Replacement
 	keyMap        map[string]string // maps strings to keys
 }
 
 // NewCommentReplacer creates a new comment replacer
-func NewCommentReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments bool, backupDir string) *CommentReplacer {
+func NewCommentReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments bool, backupDir, packagePath string) *CommentReplacer {
+	if packagePath == "" {
+		packagePath = "./messages" // default for backwards compatibility
+	}
 	return &CommentReplacer{
 		tr:            tr,
 		trPattern:     trPattern,
 		keepComments:  keepComments,
 		cleanComments: cleanComments,
 		backupDir:     backupDir,
+		packagePath:   packagePath,
 		keyMap:        make(map[string]string),
 	}
 }
@@ -146,7 +151,18 @@ func (cr *CommentReplacer) createTranslationCall(key, value string) string {
 		constantPath = append(constantPath, pascalCase)
 	}
 	
-	fullKey := "messages.Keys." + strings.Join(constantPath, ".")
+	// Extract package name from path (e.g., "./custompackage" -> "custompackage")
+	packageName := cr.packagePath
+	if strings.HasPrefix(packageName, "./") {
+		packageName = packageName[2:]
+	}
+	if strings.HasPrefix(packageName, "/") {
+		// For absolute paths, use just the last component
+		parts := strings.Split(packageName, "/")
+		packageName = parts[len(parts)-1]
+	}
+	
+	fullKey := packageName + ".Keys." + strings.Join(constantPath, ".")
 	
 	pattern := cr.trPattern
 	if pattern == "" {
@@ -188,19 +204,62 @@ func (cr *CommentReplacer) findI18nComments(fset *token.FileSet, filename string
 
 // findI18nTodoComments finds i18n-todo comments that should be removed after replacement
 func (cr *CommentReplacer) findI18nTodoComments(fset *token.FileSet, filename string, node *ast.File) {
+	// Build a map of string positions for strings we're replacing
+	stringPositions := make(map[token.Pos]bool)
+	for _, r := range cr.replacements {
+		if r.File == filename && !r.IsComment {
+			stringPositions[r.Pos] = true
+		}
+	}
+	
+	// Find all string literals and their positions
+	stringLiterals := make(map[token.Pos]*ast.BasicLit)
+	ast.Inspect(node, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			stringLiterals[lit.Pos()] = lit
+		}
+		return true
+	})
+	
 	for _, cg := range node.Comments {
 		for _, c := range cg.List {
 			if strings.Contains(c.Text, "i18n-todo:") {
-				// Check if this comment is associated with a string we're replacing
-				// This is a simplified check - in practice we'd need to match positions
-				cr.replacements = append(cr.replacements, Replacement{
-					File:        filename,
-					Pos:         c.Pos(),
-					End:         c.End(),
-					Original:    c.Text,
-					Replacement: "", // Empty means remove
-					IsComment:   true,
-				})
+				// Check if this comment is on the same line as a string we're replacing
+				commentPos := fset.Position(c.Pos())
+				shouldRemove := false
+				
+				// Look for string literals on the same line
+				for strPos, lit := range stringLiterals {
+					strStartPos := fset.Position(strPos)
+					strEndPos := fset.Position(lit.End())
+					
+					// Check if comment is on the same line as string start OR end
+					if strStartPos.Line == commentPos.Line || strEndPos.Line == commentPos.Line {
+						// Check if this string is being replaced
+						if stringPositions[strPos] {
+							shouldRemove = true
+							break
+						}
+						
+						// Also check if the string value matches one we're replacing
+						value := strings.Trim(lit.Value, "`\"")
+						if _, hasKey := cr.keyMap[value]; hasKey {
+							shouldRemove = true
+							break
+						}
+					}
+				}
+				
+				if shouldRemove {
+					cr.replacements = append(cr.replacements, Replacement{
+						File:        filename,
+						Pos:         c.Pos(),
+						End:         c.End(),
+						Original:    c.Text,
+						Replacement: "", // Empty means remove
+						IsComment:   true,
+					})
+				}
 			}
 		}
 	}
@@ -346,7 +405,79 @@ func hasImport(node *ast.File, pkg string) bool {
 }
 
 func addImportToContent(content, importPath string) string {
-	// Simplified import addition - real implementation would use AST
+	// Parse the content to get an AST
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, "", content, parser.ParseComments)
+	if err != nil {
+		// Fallback to string manipulation if parsing fails
+		return addImportToContentFallback(content, importPath)
+	}
+	
+	// Check if import already exists
+	if hasImport(node, importPath) {
+		return content
+	}
+	
+	// Create new import spec
+	newImport := &ast.ImportSpec{
+		Path: &ast.BasicLit{
+			Kind:  token.STRING,
+			Value: fmt.Sprintf("%q", importPath),
+		},
+	}
+	
+	// Find or create import declaration
+	var importDecl *ast.GenDecl
+	for _, decl := range node.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			importDecl = genDecl
+			break
+		}
+	}
+	
+	if importDecl == nil {
+		// Create new import declaration
+		importDecl = &ast.GenDecl{
+			Tok: token.IMPORT,
+			Lparen: token.Pos(1), // This will be adjusted by go/format
+			Specs: []ast.Spec{newImport},
+			Rparen: token.Pos(1), // This will be adjusted by go/format
+		}
+		
+		// Insert after package declaration
+		// Find the position after package declaration
+		insertPos := 1 // after package decl
+		for i, decl := range node.Decls {
+			if _, ok := decl.(*ast.GenDecl); ok {
+				// Skip other GenDecls that might be before functions
+				continue
+			}
+			insertPos = i
+			break
+		}
+		
+		newDecls := make([]ast.Decl, 0, len(node.Decls)+1)
+		newDecls = append(newDecls, node.Decls[:insertPos]...)
+		newDecls = append(newDecls, importDecl)
+		newDecls = append(newDecls, node.Decls[insertPos:]...)
+		node.Decls = newDecls
+	} else {
+		// Add to existing import block
+		importDecl.Specs = append(importDecl.Specs, newImport)
+	}
+	
+	// Format the AST back to source code
+	var buf strings.Builder
+	if err := format.Node(&buf, fset, node); err != nil {
+		// Fallback if formatting fails
+		return addImportToContentFallback(content, importPath)
+	}
+	
+	return buf.String()
+}
+
+// addImportToContentFallback is the fallback string manipulation method
+func addImportToContentFallback(content, importPath string) string {
 	importLine := fmt.Sprintf("\t\"%s\"\n", importPath)
 	
 	// Find import block
@@ -366,13 +497,17 @@ func addImportToContent(content, importPath string) string {
 		return content[:packageEnd] + "\n\nimport (\n" + importLine + ")\n" + content[packageEnd:]
 	}
 	
+	// Last resort: find end of package line
+	packageLineEnd := strings.Index(content, "\n")
+	if packageLineEnd >= 0 {
+		return content[:packageLineEnd] + "\n\nimport (\n" + importLine + ")\n" + content[packageLineEnd+1:]
+	}
+	
 	return content
 }
 
 func (cr *CommentReplacer) getMessagePackagePath() string {
-	// This would need to be configurable or detected
-	// For now, assume relative import
-	return "./messages"
+	return cr.packagePath
 }
 
 func formatFile(filename string) error {

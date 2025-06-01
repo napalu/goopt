@@ -189,6 +189,8 @@ var Keys = struct {
 
 		MinLengthDesc string
 
+		PackageDesc string
+
 		SkipMatchDesc string
 
 		TrPatternDesc string
@@ -314,6 +316,22 @@ var Keys = struct {
 		UpdateError string
 
 		UpdatingFiles string
+	}
+
+	AppExtracted struct {
+		FailedToConnectToDatabase string
+
+		HelloWorld string
+
+		John string
+
+		Ok string
+
+		StatusS string
+
+		UserSLoggedIn string
+
+		WelcomeToOurApplication string
 	}
 
 	AppGenerate struct {
@@ -738,6 +756,8 @@ var Keys = struct {
 
 		MinLengthDesc string
 
+		PackageDesc string
+
 		SkipMatchDesc string
 
 		TrPatternDesc string
@@ -762,6 +782,8 @@ var Keys = struct {
 		MatchOnlyDesc: "app.cmd.extract.match_only_desc",
 
 		MinLengthDesc: "app.cmd.extract.min_length_desc",
+
+		PackageDesc: "app.cmd.extract.package_desc",
 
 		SkipMatchDesc: "app.cmd.extract.skip_match_desc",
 
@@ -1002,6 +1024,37 @@ var Keys = struct {
 		UpdateError: "app.extract.update_error",
 
 		UpdatingFiles: "app.extract.updating_files",
+	},
+
+	AppExtracted: struct {
+		FailedToConnectToDatabase string
+
+		HelloWorld string
+
+		John string
+
+		Ok string
+
+		StatusS string
+
+		UserSLoggedIn string
+
+		WelcomeToOurApplication string
+	}{
+
+		FailedToConnectToDatabase: "app.extracted.failed_to_connect_to_database",
+
+		HelloWorld: "app.extracted.hello__world",
+
+		John: "app.extracted.john",
+
+		Ok: "app.extracted.ok",
+
+		StatusS: "app.extracted.status___s",
+
+		UserSLoggedIn: "app.extracted.user__s_logged_in",
+
+		WelcomeToOurApplication: "app.extracted.welcome_to_our_application",
 	},
 
 	AppGenerate: struct {

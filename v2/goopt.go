@@ -792,14 +792,25 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 			return errs.ErrPosixShortForm.WithArgs(flag, argument.Short)
 		}
 
-		// Check for short flag conflicts only for global flags
-		if len(commandPath) == 0 { // Global flag
-			if arg, exists := p.lookup[argument.Short]; exists {
-				return errs.ErrShortFlagConflict.WithArgs(argument.Short, flag, arg)
+		// NEW: Use context-aware conflict checking
+		if conflictingFlag, hasConflict := p.checkShortFlagConflict(argument.Short, lookupFlag, commandPath...); hasConflict {
+			// Determine the context of the conflict
+			conflictContext := ""
+			if strings.Contains(conflictingFlag, "@") {
+				parts := strings.Split(conflictingFlag, "@")
+				if len(parts) > 1 {
+					conflictContext = " in context '" + parts[1] + "'"
+				}
 			}
+			currentContext := ""
+			if len(commandPath) > 0 {
+				currentContext = " in context '" + strings.Join(commandPath, " ") + "'"
+			}
+
+			return errs.ErrShortFlagConflictContext.WithArgs(argument.Short, conflictingFlag, conflictContext, flag, currentContext)
 		}
 
-		p.lookup[argument.Short] = flag
+		p.storeShortFlag(argument.Short, lookupFlag, commandPath...)
 	}
 
 	p.lookup[argument.uuid] = flag

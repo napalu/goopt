@@ -113,17 +113,17 @@ func example() {
 	log.Print(tr.T(messages.Keys.App.Extracted.ErrorCodeD, 500))`,
 		},
 		{
-			name: "should not transform non-format functions",
+			name: "should not transform strings not in translation map",
 			input: `package main
 
 import "fmt"
 
 func example() {
-	fmt.Println("Hello world")
-	fmt.Print("Direct print")
+	fmt.Println("This string is not in the map")
+	fmt.Print("Neither is this one")
 }`,
-			expected: `fmt.Println("Hello world")
-	fmt.Print("Direct print")`,
+			expected: `fmt.Println("This string is not in the map")
+	fmt.Print("Neither is this one")`,
 		},
 		{
 			name: "should not transform unknown strings",

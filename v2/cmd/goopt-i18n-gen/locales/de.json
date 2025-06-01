@@ -81,6 +81,7 @@
   "app.cmd.extract.key_prefix_desc": "[TODO] Prefix for generated keys",
   "app.cmd.extract.match_only_desc": "[TODO] Regex to match strings for inclusion",
   "app.cmd.extract.min_length_desc": "[TODO] Minimum string length",
+  "app.cmd.extract.package_desc": "Paketname für Importe",
   "app.cmd.extract.skip_match_desc": "[TODO] Regex to match strings for exclusion",
   "app.cmd.extract.tr_pattern_desc": "[TODO] Translator pattern for replacements (e.g. tr.T)",
   "app.cmd.extract.verbose_desc": "[TODO] Show source locations for each string",
