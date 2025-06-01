@@ -81,6 +81,7 @@
   "app.cmd.extract.key_prefix_desc": "Prefix for generated keys",
   "app.cmd.extract.match_only_desc": "Regex to match strings for inclusion",
   "app.cmd.extract.min_length_desc": "Minimum string length",
+  "app.cmd.extract.package_desc": "Package name for imports",
   "app.cmd.extract.skip_match_desc": "Regex to match strings for exclusion",
   "app.cmd.extract.tr_pattern_desc": "Translator pattern for replacements (e.g. tr.T)",
   "app.cmd.extract.verbose_desc": "Show source locations for each string",

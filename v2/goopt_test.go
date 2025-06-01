@@ -6246,6 +6246,170 @@ func TestParser_DependsOnFlag(t *testing.T) {
 	}
 }
 
+// TestParser_ShortFlagScoping verifies that short flags can be reused across different command contexts
+func TestParser_ShortFlagScoping(t *testing.T) {
+	parser := NewParser()
+
+	// Add commands
+	parser.AddCommand(&Command{
+		Name:        "generate",
+		Description: "Generate command",
+		Callback: func(p *Parser, c *Command) error {
+			// Verify we get the correct package value for generate
+			pkg, found := p.Get("gen-package", "generate")
+			assert.True(t, found)
+			assert.Equal(t, "gen-pkg-value", pkg)
+			return nil
+		},
+	})
+
+	parser.AddCommand(&Command{
+		Name:        "extract",
+		Description: "Extract command",
+		Callback: func(p *Parser, c *Command) error {
+			// Verify we get the correct package value for extract
+			pkg, found := p.Get("ext-package", "extract")
+			assert.True(t, found)
+			assert.Equal(t, "ext-pkg-value", pkg)
+			return nil
+		},
+	})
+
+	// Add flags with same short flag -p for different commands
+	err := parser.AddFlag("gen-package", NewArg(WithShortFlag("p"), WithDescription("Package for generate")), "generate")
+	assert.Nil(t, err, "Should be able to add -p for generate command")
+
+	err = parser.AddFlag("ext-package", NewArg(WithShortFlag("p"), WithDescription("Package for extract")), "extract")
+	assert.Nil(t, err, "Should be able to add -p for extract command")
+
+	// Test parsing with context-specific short flags
+	assert.True(t, parser.ParseString("generate -p gen-pkg-value"))
+	assert.Empty(t, parser.GetErrors())
+	assert.Equal(t, 0, parser.ExecuteCommands())
+
+	parser.ClearErrors()
+
+	assert.True(t, parser.ParseString("extract -p ext-pkg-value"))
+	assert.Empty(t, parser.GetErrors())
+	assert.Equal(t, 0, parser.ExecuteCommands())
+}
+
+// TestParser_ShortFlagGlobalVsCommand tests interaction between global and command short flags
+func TestParser_ShortFlagGlobalVsCommand(t *testing.T) {
+	parser := NewParser()
+
+	// Add global flag with -v
+	err := parser.AddFlag("verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone)))
+	assert.Nil(t, err)
+
+	// Add command
+	parser.AddCommand(&Command{
+		Name: "test",
+		Callback: func(p *Parser, c *Command) error {
+			// Check global flag is accessible
+			verbose, _ := p.GetBool("verbose")
+			assert.True(t, verbose, "Global verbose should be true")
+			return nil
+		},
+	})
+
+	// Try to add command flag with same short flag - should fail with global conflict
+	err = parser.AddFlag("version", NewArg(WithShortFlag("v")), "test")
+	assert.NotNil(t, err, "Should not be able to add -v for command when global -v exists")
+	if err != nil {
+		assert.Error(t, err, errs.ErrShortFlagConflictContext)
+	}
+}
+
+// TestParser_ShortFlagHierarchy tests short flag resolution in nested commands
+func TestParser_ShortFlagHierarchy(t *testing.T) {
+	parser := NewParser()
+
+	// Create nested command structure
+	parser.AddCommand(&Command{
+		Name: "app",
+		Subcommands: []Command{
+			{
+				Name: "db",
+				Subcommands: []Command{
+					{
+						Name: "migrate",
+						Callback: func(p *Parser, c *Command) error {
+							// Should resolve flags in order: migrate -> db -> app -> global
+							force, _ := p.GetBool("force", c.Path())
+							dryRun, _ := p.GetBool("dry-run", c.Path())
+							verbose, _ := p.GetBool("verbose", c.Path())
+
+							assert.True(t, force, "Should get migrate-level force")
+							assert.True(t, dryRun, "Should get db-level dry-run")
+							assert.True(t, verbose, "Should get app-level verbose")
+							return nil
+						},
+					},
+				},
+			},
+		},
+	})
+
+	// Add flags at different levels
+	parser.AddFlag("verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone)), "app")
+	parser.AddFlag("dry-run", NewArg(WithShortFlag("n"), WithType(types.Standalone)), "app db")
+	parser.AddFlag("force", NewArg(WithShortFlag("f"), WithType(types.Standalone)), "app db migrate")
+
+	// Parse and verify
+	assert.True(t, parser.ParseString("app db migrate -f -n -v"))
+	assert.Empty(t, parser.GetErrors())
+	assert.Equal(t, 0, parser.ExecuteCommands())
+}
+
+// TestParser_ShortFlagMultipleCommands tests multiple commands with overlapping short flags
+func TestParser_ShortFlagMultipleCommands(t *testing.T) {
+	parser := NewParser()
+
+	commands := []string{"list", "show", "get", "describe"}
+	for _, cmd := range commands {
+		cmdName := cmd // Capture for closure
+		parser.AddCommand(&Command{
+			Name: cmdName,
+			Callback: func(p *Parser, c *Command) error {
+				format, _ := p.Get(cmdName+"-format", cmdName)
+				assert.Equal(t, cmdName+"-json", format)
+				return nil
+			},
+		})
+
+		// Each command has its own -f flag
+		err := parser.AddFlag(cmd+"-format", NewArg(WithShortFlag("f")), cmd)
+		assert.Nil(t, err, "Should be able to add -f for %s command", cmd)
+	}
+
+	// Test each command
+	for _, cmd := range commands {
+		parser.ClearErrors()
+		cmdStr := cmd + " -f " + cmd + "-json"
+		assert.True(t, parser.ParseString(cmdStr))
+		assert.Empty(t, parser.GetErrors())
+		assert.Equal(t, 0, parser.ExecuteCommands())
+	}
+}
+
+// TestParser_ShortFlagBackwardCompatibility ensures old code still works
+func TestParser_ShortFlagBackwardCompatibility(t *testing.T) {
+	parser := NewParser()
+
+	// Old style: only global flags with short forms
+	parser.AddFlag("verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone)))
+	parser.AddFlag("output", NewArg(WithShortFlag("o")))
+
+	// Should work as before
+	assert.True(t, parser.ParseString("-v -o output.txt"))
+	verbose, _ := parser.GetBool("verbose")
+	output, _ := parser.Get("output")
+
+	assert.True(t, verbose)
+	assert.Equal(t, "output.txt", output)
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }

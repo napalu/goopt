@@ -21,20 +21,26 @@ type TransformationReplacer struct {
 	keepComments       bool
 	cleanComments      bool
 	backupDir          string
+	packagePath        string
 	keyMap             map[string]string // maps strings to keys
 	formatTransformer  *FormatTransformer
 	simpleReplacements []Replacement // for non-format strings
 	filesToProcess     []string      // files that need processing
+	parentStack        []ast.Node    // track parent nodes during AST walking
 }
 
 // NewTransformationReplacer creates a new string replacer with AST-based format transformation
-func NewTransformationReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments bool, backupDir string) *TransformationReplacer {
+func NewTransformationReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments bool, backupDir, packagePath string) *TransformationReplacer {
+	if packagePath == "" {
+		packagePath = "./messages" // default for backwards compatibility
+	}
 	return &TransformationReplacer{
 		tr:            tr,
 		trPattern:     trPattern,
 		keepComments:  keepComments,
 		cleanComments: cleanComments,
 		backupDir:     backupDir,
+		packagePath:   packagePath,
 		keyMap:        make(map[string]string),
 	}
 }
@@ -50,11 +56,12 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 		quotedStr := fmt.Sprintf("%q", str)
 
 		// Convert key format for AST usage
-		// app.extracted.hello_world -> messages.Keys.App.Extracted.HelloWorld
+		// app.extracted.hello_world -> packageName.Keys.App.Extracted.HelloWorld
 		quotedKeyMap[quotedStr] = sr.convertKeyToASTFormat(key)
 	}
 
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
+	sr.formatTransformer.SetMessagePackagePath(sr.packagePath)
 }
 
 // ProcessFiles processes the given files
@@ -95,11 +102,12 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 		return nil
 	}
 
-	// Find strings to add comments to
-	ast.Inspect(node, func(n ast.Node) bool {
+	// Find strings to add comments to using custom walker that tracks parents
+	sr.walkASTWithParents(node, func(n ast.Node, parents []ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.BasicLit:
 			if x.Kind == token.STRING {
+				sr.parentStack = parents
 				sr.processStringLiteralForComment(fset, filename, x)
 			}
 		}
@@ -111,8 +119,8 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 
 // processStringLiteralForComment processes a string literal for comment addition
 func (sr *TransformationReplacer) processStringLiteralForComment(fset *token.FileSet, filename string, lit *ast.BasicLit) {
-	// Skip if this is inside a format function (will be handled by format transformer)
-	if sr.isInFormatFunction(lit) {
+	// Skip if this is inside a user-facing function (will be handled by format transformer)
+	if sr.isInUserFacingFunction(lit) {
 		return
 	}
 
@@ -139,10 +147,130 @@ func (sr *TransformationReplacer) processStringLiteralForComment(fset *token.Fil
 	})
 }
 
-// isInFormatFunction checks if a string literal is inside a format function
-func (sr *TransformationReplacer) isInFormatFunction(lit *ast.BasicLit) bool {
-	// This is a simplified check - in a real implementation we'd walk up the AST
-	// For now, we'll handle all strings
+// isInUserFacingFunction checks if a string literal is inside a function that displays user-facing text
+// This includes format functions (Printf, Errorf) and regular display functions (Print, Log, Msg)
+func (sr *TransformationReplacer) isInUserFacingFunction(lit *ast.BasicLit) bool {
+	// Walk up the parent stack to find if we're in a user-facing function call
+	for i := len(sr.parentStack) - 1; i >= 0; i-- {
+		parent := sr.parentStack[i]
+		
+		if callExpr, ok := parent.(*ast.CallExpr); ok {
+			// Check if this is a user-facing function
+			funcName := sr.getFunctionName(callExpr)
+			
+			// List of known functions that display user-facing text
+			userFacingFunctions := map[string]bool{
+				"fmt.Printf":    true,
+				"fmt.Sprintf":   true,
+				"fmt.Fprintf":   true,
+				"fmt.Errorf":    true,
+				"log.Printf":    true,
+				"log.Fatalf":    true,
+				"log.Panicf":    true,
+				"errors.Errorf": true,
+				"errors.Wrapf":  true,
+			}
+			
+			// Check for method chain patterns (e.g., logger.Info().Msg())
+			if sr.isChainedLoggingCall(callExpr, lit) {
+				return true
+			}
+			
+			if userFacingFunctions[funcName] {
+				// Check if our literal is the format string (first or second argument)
+				for idx, arg := range callExpr.Args {
+					if arg == lit {
+						// For Fprintf and Wrapf, format string is second argument
+						if (strings.HasSuffix(funcName, ".Fprintf") || strings.HasSuffix(funcName, ".Wrapf")) && idx == 1 {
+							return true
+						}
+						// For others, format string is first argument
+						if !strings.HasSuffix(funcName, ".Fprintf") && !strings.HasSuffix(funcName, ".Wrapf") && idx == 0 {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return false
+}
+
+// isChainedLoggingCall checks for chained logging patterns like logger.Info().Msg("text")
+func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *ast.BasicLit) bool {
+	// Check if the function name ends with logging methods
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		methodName := sel.Sel.Name
+		
+		// Check for message methods that take a string
+		// These are methods that commonly take user-facing strings
+		messageMethods := map[string]bool{
+			"Msg":    true,
+			"Msgf":   true,
+			"Send":   true,  // for zerolog
+			"Str":    true,  // for field methods like .Str("key", "value") - first arg only
+			"Error":  true,  // some loggers use .Error("message")
+			"Warn":   true,
+			"Warnf":  true,
+			"Info":   true,
+			"Infof":  true,
+			"Debug":  true,
+			"Debugf": true,
+			"Trace":  true,
+			"Tracef": true,
+			"Fatal":  true,
+			"Fatalf": true,
+			"Panic":  true,
+			"Panicf": true,
+		}
+		
+		if messageMethods[methodName] {
+			// Check if our literal is an argument to this method
+			for idx, arg := range call.Args {
+				if arg == lit {
+					// For Str() method, only first argument is a translatable key
+					if methodName == "Str" && idx > 0 {
+						continue
+					}
+					return true
+				}
+			}
+		}
+		
+		// Check if this is a chained call (e.g., logger.Info().Msg())
+		if chainedCall, ok := sel.X.(*ast.CallExpr); ok {
+			// Common logger level methods that return a chainable object
+			if chainedSel, ok := chainedCall.Fun.(*ast.SelectorExpr); ok {
+				levelMethods := map[string]bool{
+					"Info":    true,
+					"Error":   true,
+					"Err":     true, // zerolog style
+					"Warn":    true,
+					"Debug":   true,
+					"Trace":   true,
+					"Fatal":   true,
+					"Panic":   true,
+					"WithLevel": true,
+					"Log":     true,
+				}
+				
+				if levelMethods[chainedSel.Sel.Name] && messageMethods[methodName] {
+					// This is a chained logging call
+					for idx, arg := range call.Args {
+						if arg == lit {
+							// For Str() method, only first argument is a translatable key
+							if methodName == "Str" && idx > 0 {
+								continue
+							}
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	
 	return false
 }
 
@@ -351,7 +479,18 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 		astParts = append(astParts, pascalCase)
 	}
 
-	return "messages.Keys." + strings.Join(astParts, ".")
+	// Extract package name from path (e.g., "./custompackage" -> "custompackage")
+	packageName := sr.packagePath
+	if strings.HasPrefix(packageName, "./") {
+		packageName = packageName[2:]
+	}
+	if strings.HasPrefix(packageName, "/") {
+		// For absolute paths, use just the last component
+		parts := strings.Split(packageName, "/")
+		packageName = parts[len(parts)-1]
+	}
+
+	return packageName + ".Keys." + strings.Join(astParts, ".")
 }
 
 // findI18nComments finds all i18n-* comments for cleaning
@@ -386,4 +525,183 @@ func toPascalCaseV2(s string) string {
 		}
 	}
 	return strings.Join(parts, "")
+}
+
+// walkASTWithParents walks the AST while tracking parent nodes
+func (sr *TransformationReplacer) walkASTWithParents(node ast.Node, visit func(ast.Node, []ast.Node) bool) {
+	var parents []ast.Node
+	
+	var walk func(ast.Node) bool
+	walk = func(n ast.Node) bool {
+		if n == nil {
+			return false
+		}
+		
+		// Call the visitor function
+		if !visit(n, parents) {
+			return false
+		}
+		
+		// Add current node to parent stack for children
+		parents = append(parents, n)
+		defer func() {
+			parents = parents[:len(parents)-1]
+		}()
+		
+		// Walk children based on node type
+		switch x := n.(type) {
+		case *ast.File:
+			for _, decl := range x.Decls {
+				walk(decl)
+			}
+		case *ast.GenDecl:
+			for _, spec := range x.Specs {
+				walk(spec)
+			}
+		case *ast.FuncDecl:
+			if x.Recv != nil {
+				for _, field := range x.Recv.List {
+					walk(field.Type)
+				}
+			}
+			walk(x.Type)
+			if x.Body != nil {
+				walk(x.Body)
+			}
+		case *ast.BlockStmt:
+			for _, stmt := range x.List {
+				walk(stmt)
+			}
+		case *ast.CallExpr:
+			walk(x.Fun)
+			for _, arg := range x.Args {
+				walk(arg)
+			}
+		case *ast.ReturnStmt:
+			for _, result := range x.Results {
+				walk(result)
+			}
+		case *ast.AssignStmt:
+			for _, lhs := range x.Lhs {
+				walk(lhs)
+			}
+			for _, rhs := range x.Rhs {
+				walk(rhs)
+			}
+		case *ast.ExprStmt:
+			walk(x.X)
+		case *ast.IfStmt:
+			if x.Init != nil {
+				walk(x.Init)
+			}
+			walk(x.Cond)
+			walk(x.Body)
+			if x.Else != nil {
+				walk(x.Else)
+			}
+		case *ast.BinaryExpr:
+			walk(x.X)
+			walk(x.Y)
+		case *ast.UnaryExpr:
+			walk(x.X)
+		case *ast.ParenExpr:
+			walk(x.X)
+		case *ast.SelectorExpr:
+			walk(x.X)
+		case *ast.IndexExpr:
+			walk(x.X)
+			walk(x.Index)
+		case *ast.CompositeLit:
+			if x.Type != nil {
+				walk(x.Type)
+			}
+			for _, elt := range x.Elts {
+				walk(elt)
+			}
+		case *ast.KeyValueExpr:
+			walk(x.Key)
+			walk(x.Value)
+		case *ast.ForStmt:
+			if x.Init != nil {
+				walk(x.Init)
+			}
+			if x.Cond != nil {
+				walk(x.Cond)
+			}
+			if x.Post != nil {
+				walk(x.Post)
+			}
+			walk(x.Body)
+		case *ast.RangeStmt:
+			if x.Key != nil {
+				walk(x.Key)
+			}
+			if x.Value != nil {
+				walk(x.Value)
+			}
+			walk(x.X)
+			walk(x.Body)
+		case *ast.SwitchStmt:
+			if x.Init != nil {
+				walk(x.Init)
+			}
+			if x.Tag != nil {
+				walk(x.Tag)
+			}
+			walk(x.Body)
+		case *ast.CaseClause:
+			for _, expr := range x.List {
+				walk(expr)
+			}
+			for _, stmt := range x.Body {
+				walk(stmt)
+			}
+		case *ast.ValueSpec:
+			if x.Type != nil {
+				walk(x.Type)
+			}
+			for _, value := range x.Values {
+				walk(value)
+			}
+		case *ast.FieldList:
+			if x != nil {
+				for _, field := range x.List {
+					walk(field.Type)
+				}
+			}
+		case *ast.Field:
+			walk(x.Type)
+		case *ast.DeferStmt:
+			walk(x.Call)
+		case *ast.GoStmt:
+			walk(x.Call)
+		case *ast.FuncLit:
+			if x.Type != nil {
+				walk(x.Type)
+			}
+			if x.Body != nil {
+				walk(x.Body)
+			}
+		// Add more node types as needed
+		}
+		
+		return true
+	}
+	
+	walk(node)
+}
+
+// getFunctionName extracts the function name from a call expression
+func (sr *TransformationReplacer) getFunctionName(call *ast.CallExpr) string {
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		// Handle pkg.Function or receiver.Method
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			return ident.Name + "." + fun.Sel.Name
+		}
+	case *ast.Ident:
+		// Handle local function calls
+		return fun.Name
+	}
+	return ""
 }

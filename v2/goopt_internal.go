@@ -503,36 +503,9 @@ func (p *Parser) flagOrShortFlag(flag string, commandPath ...string) string {
 		return globalFlag
 	}
 
-	// Check if it's a short flag
-	item, isShortFlag := p.lookup[flag]
-	if isShortFlag {
-		// Look for the flag in the current command context
-		longPathFlag := buildPathFlag(item, commandPath...)
-		if _, found := p.acceptedFlags.Get(longPathFlag); found {
-			return longPathFlag
-		}
-
-		// Look for the flag in parent command contexts
-		if len(commandPath) > 0 && commandPath[0] != "" {
-			pathString := strings.Join(commandPath, " ")
-			pathParts := strings.Split(pathString, " ")
-
-			for i := len(pathParts) - 1; i > 0; i-- {
-				parentPath := strings.Join(pathParts[:i], " ")
-				parentLongFlag := buildPathFlag(item, parentPath)
-				if _, found := p.acceptedFlags.Get(parentLongFlag); found {
-					return parentLongFlag
-				}
-			}
-		}
-
-		// If still not found with command path, try the global version
-		if _, found := p.acceptedFlags.Get(item); found {
-			return item
-		}
-
-		// Return the mapped long flag name as fallback
-		return item
+	// NEW: Use context-aware short flag lookup
+	if longFlag, found := p.shortFlagLookup(flag, commandPath...); found {
+		return longFlag
 	}
 
 	// Try parent paths for the original flag
@@ -1741,7 +1714,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			// we can safely ignore the error because we know the command exists
 			_ = p.SetCommand(cmdPath, WithCallback(callback))
 		} else {
-			return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(fmt.Errorf("cannot set callback for non-terminal command"))
+			return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(errs.ErrCallbackOnNonTerminalCommand)
 		}
 	}
 
@@ -2033,4 +2006,94 @@ func isBasicType(t reflect.Type) bool {
 	default:
 		return false
 	}
+}
+
+// shortFlagLookup performs context-aware lookup of short flags
+// It checks from most specific (with full command path) to least specific (global)
+func (p *Parser) shortFlagLookup(shortFlag string, commandPath ...string) (longFlag string, found bool) {
+	// If not a short flag, return early
+	if len(shortFlag) == 0 || len(shortFlag) > 1 && p.posixCompatible {
+		return "", false
+	}
+
+	// Try with full command context first
+	if len(commandPath) > 0 {
+		contextualKey := buildPathFlag(shortFlag, commandPath...)
+		if longFlag, found = p.lookup[contextualKey]; found {
+			return longFlag, true
+		}
+
+		// Try parent contexts (walk up the command hierarchy)
+		pathString := strings.Join(commandPath, " ")
+		pathParts := strings.Split(pathString, " ")
+
+		for i := len(pathParts) - 1; i > 0; i-- {
+			parentPath := pathParts[:i]
+			parentKey := buildPathFlag(shortFlag, parentPath...)
+			if longFlag, found = p.lookup[parentKey]; found {
+				return longFlag, true
+			}
+		}
+	}
+
+	// Try global context (no command path)
+	if longFlag, found = p.lookup[shortFlag]; found {
+		return longFlag, true
+	}
+
+	return "", false
+}
+
+// storeShortFlag stores a short flag with proper context in the lookup table
+func (p *Parser) storeShortFlag(shortFlag, longFlag string, commandPath ...string) {
+	if len(shortFlag) == 0 {
+		return
+	}
+
+	// Store with context using @ notation
+	contextualKey := buildPathFlag(shortFlag, commandPath...)
+	p.lookup[contextualKey] = longFlag
+
+	// For backward compatibility, also store without context if it's global
+	if len(commandPath) == 0 {
+		p.lookup[shortFlag] = longFlag
+	}
+}
+
+// checkShortFlagConflict checks if a short flag would conflict in any context
+func (p *Parser) checkShortFlagConflict(shortFlag, newFlag string, commandPath ...string) (conflictingFlag string, hasConflict bool) {
+	if len(shortFlag) == 0 {
+		return "", false
+	}
+
+	// Check exact context
+	contextualKey := buildPathFlag(shortFlag, commandPath...)
+	if existingFlag, exists := p.lookup[contextualKey]; exists && existingFlag != newFlag {
+		return existingFlag, true
+	}
+
+	// If this is a global flag, check if it conflicts with any command-specific usage
+	if len(commandPath) == 0 {
+		// Check all entries in lookup table for conflicts
+		for key, value := range p.lookup {
+			// Skip non-short flag entries (UUIDs, etc)
+			if len(key) > 1 && !strings.Contains(key, "@") {
+				continue
+			}
+
+			// Check if this is the same short flag in a different context
+			parts := strings.Split(key, "@")
+			if parts[0] == shortFlag && value != newFlag {
+				return value, true
+			}
+		}
+	} else {
+		// If this is a command flag, check if there's a global flag with the same short
+		if globalFlag, exists := p.lookup[shortFlag]; exists {
+			// This is a global short flag, so it conflicts
+			return globalFlag, true
+		}
+	}
+
+	return "", false
 }
