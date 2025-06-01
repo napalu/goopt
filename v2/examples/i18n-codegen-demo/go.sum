@@ -10,6 +10,7 @@ github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47
 github.com/mattn/go-runewidth v0.0.10/go.mod h1:RAqKPSqVFrSLVXbA8x7dzmKdmGzieGRCM46jaSJTDAk=
 github.com/napalu/goopt/v2 v2.2.2 h1:ga7ALn2j9cDEe37/5h1y7m3Q3htDk+++67p5K7CUtzQ=
 github.com/napalu/goopt/v2 v2.2.2/go.mod h1:sb8+fSnazYa5Tfd+AUX0gXHszgwqStSL9nNV/KRHLSw=
+github.com/napalu/goopt/v2 v2.2.3/go.mod h1:sb8+fSnazYa5Tfd+AUX0gXHszgwqStSL9nNV/KRHLSw=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/scylladb/termtables v0.0.0-20191203121021-c4c0b6d42ff4/go.mod h1:C1a7PQSMz9NShzorzCiG2fk9+xuCgLkPeCvMHYR2OWg=

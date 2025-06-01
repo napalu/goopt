@@ -3,7 +3,7 @@ module github.com/napalu/goopt/v2/examples/i18n-demo
 go 1.18
 
 require (
-	github.com/napalu/goopt/v2 v2.2.2
+	github.com/napalu/goopt/v2 v2.2.3
 	golang.org/x/text v0.21.0
 )
 

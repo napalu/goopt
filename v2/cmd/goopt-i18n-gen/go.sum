@@ -18,6 +18,7 @@ github.com/mattn/go-isatty v0.0.19/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D
 github.com/mattn/go-runewidth v0.0.10/go.mod h1:RAqKPSqVFrSLVXbA8x7dzmKdmGzieGRCM46jaSJTDAk=
 github.com/napalu/goopt/v2 v2.2.2 h1:ga7ALn2j9cDEe37/5h1y7m3Q3htDk+++67p5K7CUtzQ=
 github.com/napalu/goopt/v2 v2.2.2/go.mod h1:sb8+fSnazYa5Tfd+AUX0gXHszgwqStSL9nNV/KRHLSw=
+github.com/napalu/goopt/v2 v2.2.3/go.mod h1:sb8+fSnazYa5Tfd+AUX0gXHszgwqStSL9nNV/KRHLSw=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
