@@ -3,6 +3,7 @@ package ast
 import (
 	"go/ast"
 	"go/token"
+	"regexp"
 	"strings"
 )
 
@@ -19,25 +20,28 @@ type FormatCallInfo struct {
 type FormatDetector struct {
 	// Known patterns for common libraries
 	knownPatterns map[string]int // function name -> format string arg index
+	// Custom patterns registered by regex
+	customPatterns map[string]int // regex pattern -> format string arg index
 }
 
 // NewFormatDetector creates a new format detector
 func NewFormatDetector() *FormatDetector {
 	return &FormatDetector{
+		customPatterns: make(map[string]int),
 		knownPatterns: map[string]int{
 			// Standard library
-			"fmt.Printf":   0,
-			"fmt.Sprintf":  0,
-			"fmt.Fprintf":  1, // writer is first
-			"fmt.Errorf":   0,
-			"log.Printf":   0,
-			"log.Fatalf":   0,
-			"log.Panicf":   0,
-			
+			"fmt.Printf":  0,
+			"fmt.Sprintf": 0,
+			"fmt.Fprintf": 1, // writer is first
+			"fmt.Errorf":  0,
+			"log.Printf":  0,
+			"log.Fatalf":  0,
+			"log.Panicf":  0,
+
 			// errors package
 			"errors.Errorf": 0,
 			"errors.Wrapf":  1, // error is first, format string is second
-			
+
 			// Common logging libraries
 			"logger.Infof":  0,
 			"logger.Debugf": 0,
@@ -49,27 +53,65 @@ func NewFormatDetector() *FormatDetector {
 	}
 }
 
+// RegisterCustomFormatPattern registers a custom format function pattern
+// pattern: regex pattern to match function names (e.g., ".*\.MsgAll$")
+// formatArgIndex: index of the format string argument (0-based)
+func (fd *FormatDetector) RegisterCustomFormatPattern(pattern string, formatArgIndex int) error {
+	// Validate the regex
+	if _, err := regexp.Compile(pattern); err != nil {
+		return err
+	}
+	fd.customPatterns[pattern] = formatArgIndex
+	return nil
+}
+
 // DetectFormatCall analyzes a call expression to detect if it's a format function
 func (fd *FormatDetector) DetectFormatCall(call *ast.CallExpr) *FormatCallInfo {
 	funcName := fd.getFunctionName(call)
-	
-	// First, check known patterns
+
+	// First, check custom patterns
+	for pattern, argIndex := range fd.customPatterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue // Skip invalid patterns
+		}
+		if re.MatchString(funcName) {
+			if argIndex >= len(call.Args) {
+				continue // Not enough arguments
+			}
+
+			formatStr, ok := fd.extractString(call.Args[argIndex])
+			if !ok {
+				continue // No string literal at expected position
+			}
+
+			return &FormatCallInfo{
+				Call:              call,
+				FormatStringIndex: argIndex,
+				FormatString:      formatStr,
+				IsVariadic:        argIndex < len(call.Args)-1 || call.Ellipsis != token.NoPos,
+				FunctionName:      funcName,
+			}
+		}
+	}
+
+	// Then check known patterns
 	if knownIndex, ok := fd.knownPatterns[funcName]; ok {
 		if knownIndex >= len(call.Args) {
 			return nil
 		}
-		
+
 		formatStr, ok := fd.extractString(call.Args[knownIndex])
 		if !ok {
 			return nil
 		}
-		
+
 		// Verify it has format specifiers
 		if !strings.Contains(formatStr, "%") {
 			// Some functions like Printf can be used without format specifiers
 			// but we'll still treat them as format functions
 		}
-		
+
 		return &FormatCallInfo{
 			Call:              call,
 			FormatStringIndex: knownIndex,
@@ -78,7 +120,7 @@ func (fd *FormatDetector) DetectFormatCall(call *ast.CallExpr) *FormatCallInfo {
 			FunctionName:      funcName,
 		}
 	}
-	
+
 	// If not in known patterns, try to detect generically
 	return fd.detectGeneric(call, funcName)
 }
@@ -89,18 +131,18 @@ func (fd *FormatDetector) detectGeneric(call *ast.CallExpr, funcName string) *Fo
 	// 1. Function name ends with 'f' (common convention)
 	// 2. Has at least one string literal with % format specifiers
 	// 3. Has more arguments than just the format string
-	
+
 	if !strings.HasSuffix(funcName, "f") && !strings.HasSuffix(funcName, "Printf") {
 		return nil
 	}
-	
+
 	// Look for a string literal with format specifiers
 	for i, arg := range call.Args {
 		if str, ok := fd.extractString(arg); ok && strings.Contains(str, "%") {
 			// Found a format string!
 			// Check if there are arguments after it (for variadic)
 			isVariadic := i < len(call.Args)-1 || call.Ellipsis != token.NoPos
-			
+
 			return &FormatCallInfo{
 				Call:              call,
 				FormatStringIndex: i,
@@ -110,7 +152,7 @@ func (fd *FormatDetector) detectGeneric(call *ast.CallExpr, funcName string) *Fo
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -159,7 +201,7 @@ func (fd *FormatDetector) getFunctionName(call *ast.CallExpr) string {
 // SuggestTransformation suggests how to transform a format call
 func (fd *FormatDetector) SuggestTransformation(info *FormatCallInfo) string {
 	base := fd.getBaseFunctionName(info.FunctionName)
-	
+
 	switch base {
 	case "Printf", "Fatalf", "Panicf":
 		// These print/exit, so we change Printf -> Print, Fatalf -> Fatal, etc.

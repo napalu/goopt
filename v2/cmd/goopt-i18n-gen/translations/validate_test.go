@@ -24,7 +24,7 @@ func TestValidate(t *testing.T) {
 			name: "all keys valid",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create locale file with all required keys
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
@@ -34,7 +34,7 @@ func TestValidate(t *testing.T) {
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				// Create Go file that references these keys
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
@@ -49,10 +49,10 @@ type User struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, localeData)
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -62,7 +62,7 @@ type User struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -75,7 +75,7 @@ type User struct {
 			name: "missing translations",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create locale file missing some keys
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
@@ -84,7 +84,7 @@ type User struct {
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				// Create Go file that references all keys
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
@@ -99,10 +99,10 @@ type User struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, localeData)
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -112,7 +112,7 @@ type User struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -125,14 +125,14 @@ type User struct {
 			name: "strict mode with missing translations",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
 					"app.name": "Test App",
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -142,14 +142,14 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, localeData)
 				// Add message keys for error messages
 				bundle.AddLanguage(language.English, map[string]string{
 					"app.error.validation_failed": "Validation failed: missing translation keys in one or more files",
 				})
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -159,7 +159,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -170,14 +170,14 @@ type Config struct {
 			name: "generate missing translations",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
 					"existing.key": "Existing",
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -187,10 +187,10 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, localeData)
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -201,7 +201,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -211,11 +211,11 @@ type Config struct {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if _, exists := data["new.key"]; !exists {
 					t.Error("missing key should have been generated")
 				}
-				
+
 				// The value might be the format string if translations are not loaded properly
 				if !strings.Contains(data["new.key"], "New field") && data["new.key"] != "app.ast.todo_prefix" {
 					t.Errorf("generated key has wrong value: %q", data["new.key"])
@@ -226,7 +226,7 @@ type Config struct {
 			name: "wildcard file patterns",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
 					"app.key1": "Key 1",
@@ -234,7 +234,7 @@ type Config struct {
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				// Create multiple Go files
 				goFile1 := filepath.Join(tempDir, "file1.go")
 				goContent1 := `package test
@@ -243,7 +243,7 @@ type Config1 struct {
 }
 `
 				os.WriteFile(goFile1, []byte(goContent1), 0644)
-				
+
 				goFile2 := filepath.Join(tempDir, "file2.go")
 				goContent2 := `package test
 type Config2 struct {
@@ -251,10 +251,10 @@ type Config2 struct {
 }
 `
 				os.WriteFile(goFile2, []byte(goContent2), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, localeData)
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -264,7 +264,7 @@ type Config2 struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -277,12 +277,12 @@ type Config2 struct {
 			name: "no files to scan",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Validate: options.ValidateCmd{
@@ -292,7 +292,7 @@ type Config2 struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -303,7 +303,7 @@ type Config2 struct {
 			name: "multiple locale files",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create multiple locale files
 				enFile := filepath.Join(tempDir, "en.json")
 				enData := map[string]string{
@@ -312,7 +312,7 @@ type Config2 struct {
 				}
 				data, _ := json.Marshal(enData)
 				os.WriteFile(enFile, data, 0644)
-				
+
 				frFile := filepath.Join(tempDir, "fr.json")
 				frData := map[string]string{
 					"app.name": "Nom de l'App",
@@ -320,7 +320,7 @@ type Config2 struct {
 				}
 				data, _ = json.Marshal(frData)
 				os.WriteFile(frFile, data, 0644)
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 type Config struct {
@@ -329,11 +329,11 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				bundle.AddLanguage(language.English, enData)
 				bundle.AddLanguage(language.French, frData)
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{enFile, frFile},
 					Validate: options.ValidateCmd{
@@ -343,7 +343,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Validate.Exec = Validate
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -357,14 +357,14 @@ type Config struct {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, cfg, tempDir := tt.setup()
-			
+
 			err := Validate(parser, nil)
-			
+
 			if (err != nil) != tt.wantError {
 				t.Errorf("Validate() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
-			
+
 			if !tt.wantError && tt.validate != nil {
 				tt.validate(t, tempDir, cfg)
 			}

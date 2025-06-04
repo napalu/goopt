@@ -93,7 +93,6 @@ func (se *StringExtractor) ExtractFromString(filename, source string) error {
 
 	se.currentPkg = node.Name.Name
 
-	// Build a map of lines with i18n-skip comments
 	skipLines := se.findSkipCommentLines(fset, node)
 
 	// Visit all nodes in the AST
@@ -130,8 +129,20 @@ func (se *StringExtractor) ExtractFromString(filename, source string) error {
 			se.extractFromFunction(fset, filename, "anonymous", x.Body, skipLines)
 			return false
 		case *ast.GenDecl:
-			// Skip const and var declarations at package level
-			if x.Tok == token.CONST || x.Tok == token.VAR {
+			// Process var declarations to find strings in errors.New() and similar calls
+			if x.Tok == token.VAR {
+				for _, spec := range x.Specs {
+					if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+						for _, value := range valueSpec.Values {
+							// Process each value to find string literals
+							se.extractFromNode(fset, filename, "package-level var", value, skipLines)
+						}
+					}
+				}
+				return false
+			}
+			// Skip const declarations
+			if x.Tok == token.CONST {
 				return false
 			}
 		}
@@ -161,7 +172,6 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 
 	se.currentPkg = node.Name.Name
 
-	// Build a map of lines with i18n-skip comments
 	skipLines := se.findSkipCommentLines(fset, node)
 
 	// Visit all nodes in the AST
@@ -198,8 +208,20 @@ func (se *StringExtractor) extractFromFile(filename string) error {
 			se.extractFromFunction(fset, filename, "anonymous", x.Body, skipLines)
 			return false
 		case *ast.GenDecl:
-			// Skip const and var declarations at package level
-			if x.Tok == token.CONST || x.Tok == token.VAR {
+			// Process var declarations to find strings in errors.New() and similar calls
+			if x.Tok == token.VAR {
+				for _, spec := range x.Specs {
+					if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+						for _, value := range valueSpec.Values {
+							// Process each value to find string literals
+							se.extractFromNode(fset, filename, "package-level var", value, skipLines)
+						}
+					}
+				}
+				return false
+			}
+			// Skip const declarations
+			if x.Tok == token.CONST {
 				return false
 			}
 		}
@@ -444,7 +466,6 @@ func min(a, b int) int {
 	return b
 }
 
-// findSkipCommentLines finds all lines that have i18n-skip comments
 func (se *StringExtractor) findSkipCommentLines(fset *token.FileSet, file *ast.File) map[int]bool {
 	skipLines := make(map[int]bool)
 
@@ -490,4 +511,106 @@ func (se *StringExtractor) shouldSkipNode(fset *token.FileSet, node ast.Node, sk
 	}
 
 	return false
+}
+
+// extractFromNode extracts strings from any AST node (used for var declarations)
+func (se *StringExtractor) extractFromNode(fset *token.FileSet, filename, context string, node ast.Node, skipLines map[int]bool) {
+	if node == nil {
+		return
+	}
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		// Check if this node should be skipped
+		if se.shouldSkipNode(fset, n, skipLines) {
+			return false
+		}
+
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			// Check for format functions and errors.New
+			if formatInfo := se.detector.DetectFormatCall(x); formatInfo != nil {
+				// Extract the format string
+				if se.shouldExtract(formatInfo.FormatString) {
+					// Get location info
+					pos := fset.Position(x.Pos())
+					location := StringLocation{
+						File:     filename,
+						Line:     pos.Line,
+						Function: context,
+						Context:  "format_function",
+					}
+
+					// Add to our collection
+					if existing, ok := se.strings[formatInfo.FormatString]; ok {
+						existing.Locations = append(existing.Locations, location)
+						existing.IsFormatString = true
+					} else {
+						se.strings[formatInfo.FormatString] = &ExtractedString{
+							Value:          formatInfo.FormatString,
+							Locations:      []StringLocation{location},
+							IsFormatString: true,
+						}
+					}
+					return false
+				}
+			} else {
+				// Check for non-format functions like errors.New
+				if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
+					if ident, ok := sel.X.(*ast.Ident); ok {
+						funcName := ident.Name + "." + sel.Sel.Name
+						if funcName == "errors.New" && len(x.Args) > 0 {
+							// Extract string from first argument
+							if lit, ok := x.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+								value := strings.Trim(lit.Value, "`\"")
+								if se.shouldExtract(value) {
+									pos := fset.Position(lit.Pos())
+									location := StringLocation{
+										File:     filename,
+										Line:     pos.Line,
+										Function: context,
+										Context:  "error",
+									}
+
+									if existing, ok := se.strings[value]; ok {
+										existing.Locations = append(existing.Locations, location)
+									} else {
+										se.strings[value] = &ExtractedString{
+											Value:          value,
+											Locations:      []StringLocation{location},
+											IsFormatString: false,
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		case *ast.BasicLit:
+			if x.Kind == token.STRING {
+				// Extract raw string literals not in function calls
+				value := strings.Trim(x.Value, "`\"")
+				if se.shouldExtract(value) {
+					pos := fset.Position(x.Pos())
+					location := StringLocation{
+						File:     filename,
+						Line:     pos.Line,
+						Function: context,
+						Context:  "literal",
+					}
+
+					if existing, ok := se.strings[value]; ok {
+						existing.Locations = append(existing.Locations, location)
+					} else {
+						se.strings[value] = &ExtractedString{
+							Value:          value,
+							Locations:      []StringLocation{location},
+							IsFormatString: false,
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
 }

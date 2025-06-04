@@ -15,7 +15,7 @@ import (
 func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		return fmt.Errorf(messages.Keys.AppError.FailedToGetConfig)
 	}
 
 	// Expand input files
@@ -45,13 +45,13 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, pattern := range cfg.Validate.Scan {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			log.Fatalf("Failed to expand pattern %s: %v", pattern, err)
+			log.Fatalf(messages.Keys.AppError.FailedToExpandPattern, pattern, err)
 		}
 		files = append(files, matches...)
 	}
 
 	if len(files) == 0 {
-		fmt.Println(cfg.TR.T(messages.Keys.AppValidate.NoFiles))
+		fmt.Println(cfg.TR.T(messages.Keys.AppError.NoFiles))
 		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.NoFiles))
 	}
 

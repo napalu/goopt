@@ -9,13 +9,13 @@ import (
 func TestErrorWrappingHandling(t *testing.T) {
 	// String map for testing
 	stringMap := map[string]string{
-		`"connection failed: %w"`:        "messages.Keys.ConnectionFailedW",
-		`"failed to read file %s: %w"`:   "messages.Keys.FailedToReadFileSW",
-		`"database error"`:               "messages.Keys.DatabaseError",
-		`"invalid input: %v"`:            "messages.Keys.InvalidInputV",
-		`"operation failed on %s: %w"`:   "messages.Keys.OperationFailedOnSW",
-		`"multiple errors: %w, %w"`:      "messages.Keys.MultipleErrorsWW",
-		`"failed to read file %s"`:       "messages.Keys.FailedToReadFileS",
+		`"connection failed: %w"`:      "messages.Keys.ConnectionFailedW",
+		`"failed to read file %s: %w"`: "messages.Keys.FailedToReadFileSW",
+		`"database error"`:             "messages.Keys.DatabaseError",
+		`"invalid input: %v"`:          "messages.Keys.InvalidInputV",
+		`"operation failed on %s: %w"`: "messages.Keys.OperationFailedOnSW",
+		`"multiple errors: %w, %w"`:    "messages.Keys.MultipleErrorsWW",
+		`"failed to read file %s"`:     "messages.Keys.FailedToReadFileS",
 	}
 
 	tests := []struct {
@@ -127,7 +127,7 @@ func TestErrorWrappingEdgeCases(t *testing.T) {
 			},
 		},
 		{
-			name:  "multiple error wraps in format string", 
+			name:  "multiple error wraps in format string",
 			input: `fmt.Errorf("multiple errors: %w, %w", err1, err2)`,
 			contains: []string{
 				"fmt.Errorf",

@@ -9,16 +9,16 @@ import (
 func TestErrorHandlingDecisionFlow(t *testing.T) {
 	stringMap := map[string]string{
 		// Error scenarios
-		`"database connection failed: %w"`:        "messages.Keys.DatabaseConnectionFailedW",
-		`"validation failed"`:                     "messages.Keys.ValidationFailed", 
-		`"timeout occurred: %v"`:                  "messages.Keys.TimeoutOccurredV",
-		`"failed to process %s: %w"`:              "messages.Keys.FailedToProcessSW",
-		`"context info: %s"`:                      "messages.Keys.ContextInfoS",
-		
-		// Non-error scenarios  
-		`"user logged in: %s"`:                    "messages.Keys.UserLoggedInS",
-		`"processing item %d"`:                    "messages.Keys.ProcessingItemD",
-		`"result: %v"`:                            "messages.Keys.ResultV",
+		`"database connection failed: %w"`: "messages.Keys.DatabaseConnectionFailedW",
+		`"validation failed"`:              "messages.Keys.ValidationFailed",
+		`"timeout occurred: %v"`:           "messages.Keys.TimeoutOccurredV",
+		`"failed to process %s: %w"`:       "messages.Keys.FailedToProcessSW",
+		`"context info: %s"`:               "messages.Keys.ContextInfoS",
+
+		// Non-error scenarios
+		`"user logged in: %s"`: "messages.Keys.UserLoggedInS",
+		`"processing item %d"`: "messages.Keys.ProcessingItemD",
+		`"result: %v"`:         "messages.Keys.ResultV",
 	}
 
 	tests := []struct {
@@ -26,7 +26,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 		code                string
 		expectErrorHandling bool
 		expectErrorWrap     bool
-		expectFuncChange    bool // Whether function name should change
+		expectFuncChange    bool     // Whether function name should change
 		expectedOutput      []string // Patterns that should appear
 		forbiddenOutput     []string // Patterns that should NOT appear
 		description         string
@@ -161,9 +161,9 @@ func test() {
 			if tt.expectErrorHandling {
 				// Should either have errors.New or preserve error function with proper handling
 				hasErrorsNew := strings.Contains(resultStr, "errors.New")
-				hasErrorWrap := strings.Contains(resultStr, "%w") 
+				hasErrorWrap := strings.Contains(resultStr, "%w")
 				hasWrapf := strings.Contains(resultStr, "Wrapf")
-				
+
 				if !hasErrorsNew && !hasErrorWrap && !hasWrapf {
 					t.Error("Error handling should result in errors.New, %w preservation, or Wrapf")
 				}
@@ -189,7 +189,7 @@ func TestErrorDetectionPrecedence(t *testing.T) {
 			expectType:   "Error",
 		},
 		{
-			name:         "Wrapf always detected as wrap regardless of pattern", 
+			name:         "Wrapf always detected as wrap regardless of pattern",
 			functionName: "lib.Wrapf",
 			formatString: "context message",
 			expectError:  true,
@@ -204,7 +204,7 @@ func TestErrorDetectionPrecedence(t *testing.T) {
 		},
 		{
 			name:         "Generic function ending in f not treated as error",
-			functionName: "logger.Infof", 
+			functionName: "logger.Infof",
 			formatString: "info message: %s",
 			expectError:  false,
 			expectType:   "Print",

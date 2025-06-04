@@ -14,14 +14,34 @@ import (
 	"github.com/napalu/goopt/v2/i18n"
 )
 
+// Replacement represents a string replacement to be made
+type Replacement struct {
+	File        string
+	Pos         token.Pos
+	End         token.Pos
+	Original    string
+	Key         string
+	Replacement string
+	IsComment   bool
+}
+
+// TransformationConfig holds configuration for the TransformationReplacer
+type TransformationConfig struct {
+	Translator           i18n.Translator
+	TrPattern            string
+	KeepComments         bool
+	CleanComments        bool
+	IsUpdateMode         bool
+	TransformMode        string   // "user-facing", "with-comments", "all-marked", "all"
+	BackupDir            string
+	PackagePath          string
+	UserFacingRegex      []string // regex patterns to identify user-facing functions
+	FormatFunctionRegex  []string // regex patterns with format arg index (pattern:index)
+}
+
 // TransformationReplacer handles replacing strings with translation calls using AST transformation
 type TransformationReplacer struct {
-	tr                 i18n.Translator
-	trPattern          string
-	keepComments       bool
-	cleanComments      bool
-	backupDir          string
-	packagePath        string
+	config             *TransformationConfig
 	keyMap             map[string]string // maps strings to keys
 	formatTransformer  *FormatTransformer
 	simpleReplacements []Replacement // for non-format strings
@@ -30,18 +50,13 @@ type TransformationReplacer struct {
 }
 
 // NewTransformationReplacer creates a new string replacer with AST-based format transformation
-func NewTransformationReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments bool, backupDir, packagePath string) *TransformationReplacer {
-	if packagePath == "" {
-		packagePath = "./messages" // default for backwards compatibility
+func NewTransformationReplacer(config *TransformationConfig) *TransformationReplacer {
+	if config.PackagePath == "" {
+		config.PackagePath = "messages" // default (will be resolved to full module path)
 	}
 	return &TransformationReplacer{
-		tr:            tr,
-		trPattern:     trPattern,
-		keepComments:  keepComments,
-		cleanComments: cleanComments,
-		backupDir:     backupDir,
-		packagePath:   packagePath,
-		keyMap:        make(map[string]string),
+		config: config,
+		keyMap: make(map[string]string),
 	}
 }
 
@@ -61,7 +76,24 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 	}
 
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
-	sr.formatTransformer.SetMessagePackagePath(sr.packagePath)
+	sr.formatTransformer.SetMessagePackagePath(sr.config.PackagePath)
+	sr.formatTransformer.SetTransformMode(sr.config.TransformMode)
+	
+	// Set user-facing regex patterns
+	if len(sr.config.UserFacingRegex) > 0 {
+		if err := sr.formatTransformer.SetUserFacingRegexes(sr.config.UserFacingRegex); err != nil {
+			// Log error but continue - we'll fall back to default behavior
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		}
+	}
+	
+	// Set format function patterns
+	if len(sr.config.FormatFunctionRegex) > 0 {
+		if err := sr.formatTransformer.SetFormatFunctionPatterns(sr.config.FormatFunctionRegex); err != nil {
+			// Log error but continue
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		}
+	}
 }
 
 // ProcessFiles processes the given files
@@ -83,9 +115,10 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 		return err
 	}
 
-	// If we're using tr pattern (direct replacement mode), use format transformer
-	if sr.trPattern != "" {
-		// This will be handled in ApplyReplacements
+	// If we're in update mode (direct replacement), use format transformer
+	if sr.config.IsUpdateMode {
+		// The actual transformation will be handled in ApplyReplacements
+		// Comment removal will happen after transformation if needed
 		return nil
 	}
 
@@ -97,7 +130,7 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 	}
 
 	// If clean comments mode, just find and remove i18n comments
-	if sr.cleanComments {
+	if sr.config.CleanComments {
 		sr.findI18nComments(fset, filename, node)
 		return nil
 	}
@@ -119,10 +152,8 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 
 // processStringLiteralForComment processes a string literal for comment addition
 func (sr *TransformationReplacer) processStringLiteralForComment(fset *token.FileSet, filename string, lit *ast.BasicLit) {
-	// Skip if this is inside a user-facing function (will be handled by format transformer)
-	if sr.isInUserFacingFunction(lit) {
-		return
-	}
+	// In comment mode, we want to add comments to ALL strings that have keys
+	// Don't skip user-facing functions - we're just adding comments, not transforming
 
 	// Get the actual string value (remove quotes)
 	value := strings.Trim(lit.Value, "`\"")
@@ -133,8 +164,15 @@ func (sr *TransformationReplacer) processStringLiteralForComment(fset *token.Fil
 		return
 	}
 
-	// Create comment
-	replacement := fmt.Sprintf("%s // i18n-todo: %s", lit.Value, sr.createTranslationCall(key, value))
+	// Skip multi-line raw string literals (backtick strings with newlines)
+	// These can break syntax when comments are added inline
+	if strings.HasPrefix(lit.Value, "`") && strings.Contains(lit.Value, "\n") {
+		return
+	}
+
+	// Create more helpful comment based on context
+	comment := sr.createCommentForContext(key, value, lit)
+	replacement := fmt.Sprintf("%s /* i18n-todo: %s */", lit.Value, comment)
 
 	sr.simpleReplacements = append(sr.simpleReplacements, Replacement{
 		File:        filename,
@@ -153,11 +191,11 @@ func (sr *TransformationReplacer) isInUserFacingFunction(lit *ast.BasicLit) bool
 	// Walk up the parent stack to find if we're in a user-facing function call
 	for i := len(sr.parentStack) - 1; i >= 0; i-- {
 		parent := sr.parentStack[i]
-		
+
 		if callExpr, ok := parent.(*ast.CallExpr); ok {
 			// Check if this is a user-facing function
 			funcName := sr.getFunctionName(callExpr)
-			
+
 			// List of known functions that display user-facing text
 			userFacingFunctions := map[string]bool{
 				"fmt.Printf":    true,
@@ -167,15 +205,16 @@ func (sr *TransformationReplacer) isInUserFacingFunction(lit *ast.BasicLit) bool
 				"log.Printf":    true,
 				"log.Fatalf":    true,
 				"log.Panicf":    true,
+				"errors.New":    true,
 				"errors.Errorf": true,
 				"errors.Wrapf":  true,
 			}
-			
+
 			// Check for method chain patterns (e.g., logger.Info().Msg())
 			if sr.isChainedLoggingCall(callExpr, lit) {
 				return true
 			}
-			
+
 			if userFacingFunctions[funcName] {
 				// Check if our literal is the format string (first or second argument)
 				for idx, arg := range callExpr.Args {
@@ -193,7 +232,7 @@ func (sr *TransformationReplacer) isInUserFacingFunction(lit *ast.BasicLit) bool
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -202,15 +241,15 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 	// Check if the function name ends with logging methods
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		methodName := sel.Sel.Name
-		
+
 		// Check for message methods that take a string
 		// These are methods that commonly take user-facing strings
 		messageMethods := map[string]bool{
 			"Msg":    true,
 			"Msgf":   true,
-			"Send":   true,  // for zerolog
-			"Str":    true,  // for field methods like .Str("key", "value") - first arg only
-			"Error":  true,  // some loggers use .Error("message")
+			"Send":   true, // for zerolog
+			"Str":    true, // for field methods like .Str("key", "value") - first arg only
+			"Error":  true, // some loggers use .Error("message")
 			"Warn":   true,
 			"Warnf":  true,
 			"Info":   true,
@@ -224,7 +263,7 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 			"Panic":  true,
 			"Panicf": true,
 		}
-		
+
 		if messageMethods[methodName] {
 			// Check if our literal is an argument to this method
 			for idx, arg := range call.Args {
@@ -237,24 +276,24 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 				}
 			}
 		}
-		
+
 		// Check if this is a chained call (e.g., logger.Info().Msg())
 		if chainedCall, ok := sel.X.(*ast.CallExpr); ok {
 			// Common logger level methods that return a chainable object
 			if chainedSel, ok := chainedCall.Fun.(*ast.SelectorExpr); ok {
 				levelMethods := map[string]bool{
-					"Info":    true,
-					"Error":   true,
-					"Err":     true, // zerolog style
-					"Warn":    true,
-					"Debug":   true,
-					"Trace":   true,
-					"Fatal":   true,
-					"Panic":   true,
+					"Info":      true,
+					"Error":     true,
+					"Err":       true, // zerolog style
+					"Warn":      true,
+					"Debug":     true,
+					"Trace":     true,
+					"Fatal":     true,
+					"Panic":     true,
 					"WithLevel": true,
-					"Log":     true,
+					"Log":       true,
 				}
-				
+
 				if levelMethods[chainedSel.Sel.Name] && messageMethods[methodName] {
 					// This is a chained logging call
 					for idx, arg := range call.Args {
@@ -270,18 +309,18 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 			}
 		}
 	}
-	
+
 	return false
 }
 
 // ApplyReplacements applies all collected replacements
 func (sr *TransformationReplacer) ApplyReplacements() error {
 	// Create backup directory
-	if err := os.MkdirAll(sr.backupDir, 0755); err != nil {
+	if err := os.MkdirAll(sr.config.BackupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	if sr.trPattern != "" {
+	if sr.config.IsUpdateMode {
 		// Use format transformer for direct replacement mode
 		return sr.applyFormatTransformations()
 	}
@@ -420,7 +459,7 @@ func (sr *TransformationReplacer) applySimpleToFile(filename string, replacement
 
 // getFilesToProcess returns all unique files that need processing
 func (sr *TransformationReplacer) getFilesToProcess() []string {
-	if sr.trPattern != "" {
+	if sr.config.IsUpdateMode {
 		// For AST transformation mode, use the files we were given
 		return sr.filesToProcess
 	}
@@ -446,7 +485,7 @@ func (sr *TransformationReplacer) createBackup(filename string, content []byte) 
 	backupName := fmt.Sprintf("%s_%s.go",
 		strings.TrimSuffix(filepath.Base(filename), ".go"),
 		time.Now().Format("20060102_150405"))
-	backupPath := filepath.Join(sr.backupDir, backupName)
+	backupPath := filepath.Join(sr.config.BackupDir, backupName)
 	return os.WriteFile(backupPath, content, 0644)
 }
 
@@ -455,13 +494,13 @@ func (sr *TransformationReplacer) createTranslationCall(key, value string) strin
 	// Convert key to Go constant path
 	astKey := sr.convertKeyToASTFormat(key)
 
-	pattern := sr.trPattern
+	pattern := sr.config.TrPattern
 	if pattern == "" {
 		pattern = "tr.T"
 	}
 
 	// For comment mode, indicate format strings need arguments
-	if sr.trPattern == "" && strings.Contains(value, "%") {
+	if sr.config.TrPattern == "" && strings.Contains(value, "%") {
 		return fmt.Sprintf("%s(%s, ...)", pattern, astKey)
 	}
 
@@ -479,13 +518,17 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 		astParts = append(astParts, pascalCase)
 	}
 
-	// Extract package name from path (e.g., "./custompackage" -> "custompackage")
-	packageName := sr.packagePath
+	// Extract package name from path
+	// Examples:
+	// "./messages" -> "messages"
+	// "messages" -> "messages"
+	// "github.com/user/project/messages" -> "messages"
+	packageName := sr.config.PackagePath
 	if strings.HasPrefix(packageName, "./") {
 		packageName = packageName[2:]
 	}
-	if strings.HasPrefix(packageName, "/") {
-		// For absolute paths, use just the last component
+	// For any path with slashes (module paths or absolute paths), use just the last component
+	if strings.Contains(packageName, "/") {
 		parts := strings.Split(packageName, "/")
 		packageName = parts[len(parts)-1]
 	}
@@ -493,7 +536,6 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 	return packageName + ".Keys." + strings.Join(astParts, ".")
 }
 
-// findI18nComments finds all i18n-* comments for cleaning
 func (sr *TransformationReplacer) findI18nComments(fset *token.FileSet, filename string, node *ast.File) {
 	for _, cg := range node.Comments {
 		for _, c := range cg.List {
@@ -530,24 +572,24 @@ func toPascalCaseV2(s string) string {
 // walkASTWithParents walks the AST while tracking parent nodes
 func (sr *TransformationReplacer) walkASTWithParents(node ast.Node, visit func(ast.Node, []ast.Node) bool) {
 	var parents []ast.Node
-	
+
 	var walk func(ast.Node) bool
 	walk = func(n ast.Node) bool {
 		if n == nil {
 			return false
 		}
-		
+
 		// Call the visitor function
 		if !visit(n, parents) {
 			return false
 		}
-		
+
 		// Add current node to parent stack for children
 		parents = append(parents, n)
 		defer func() {
 			parents = parents[:len(parents)-1]
 		}()
-		
+
 		// Walk children based on node type
 		switch x := n.(type) {
 		case *ast.File:
@@ -682,12 +724,12 @@ func (sr *TransformationReplacer) walkASTWithParents(node ast.Node, visit func(a
 			if x.Body != nil {
 				walk(x.Body)
 			}
-		// Add more node types as needed
+			// Add more node types as needed
 		}
-		
+
 		return true
 	}
-	
+
 	walk(node)
 }
 
@@ -704,4 +746,186 @@ func (sr *TransformationReplacer) getFunctionName(call *ast.CallExpr) string {
 		return fun.Name
 	}
 	return ""
+}
+
+// createCommentForContext creates more helpful comment based on context
+func (sr *TransformationReplacer) createCommentForContext(key, value string, lit *ast.BasicLit) string {
+	// Check if we're in a format function context
+	if sr.isInFormatFunction(lit) {
+		// For format strings, we need to show the arguments should go inside tr.T()
+		// and the format function should change to non-format version
+		return sr.createFormatFunctionComment(key, value, lit)
+	}
+
+	// For regular strings, just show the simple transformation
+	astKey := sr.convertKeyToASTFormat(key)
+	pattern := sr.config.TrPattern
+	if pattern == "" {
+		pattern = "tr.T"
+	}
+	return fmt.Sprintf("%s(%s)", pattern, astKey)
+}
+
+// isInFormatFunction checks if the literal is in a format function call
+func (sr *TransformationReplacer) isInFormatFunction(lit *ast.BasicLit) bool {
+	// Walk up the parent stack to find if we're in a format function
+	for i := len(sr.parentStack) - 1; i >= 0; i-- {
+		parent := sr.parentStack[i]
+
+		if callExpr, ok := parent.(*ast.CallExpr); ok {
+			funcName := sr.getFunctionName(callExpr)
+
+			// Check if this is a format function
+			if strings.HasSuffix(funcName, "f") || strings.Contains(funcName, "Printf") || strings.Contains(funcName, "Sprintf") {
+				// Check if our literal is the format string
+				for idx, arg := range callExpr.Args {
+					if arg == lit {
+						// For Fprintf, format string is second argument
+						if strings.Contains(funcName, "Fprintf") && idx == 1 {
+							return true
+						}
+						// For most format functions, format string is first argument
+						if !strings.Contains(funcName, "Fprintf") && idx == 0 {
+							return true
+						}
+					}
+				}
+			}
+
+			// Check for chained method calls with format methods
+			if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
+				methodName := sel.Sel.Name
+				if strings.HasSuffix(methodName, "f") {
+					// Check if our literal is the format string (first argument)
+					if len(callExpr.Args) > 0 && callExpr.Args[0] == lit {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// createFormatFunctionComment creates a comment showing how to transform format functions
+func (sr *TransformationReplacer) createFormatFunctionComment(key, value string, lit *ast.BasicLit) string {
+	astKey := sr.convertKeyToASTFormat(key)
+	pattern := sr.config.TrPattern
+	if pattern == "" {
+		pattern = "tr.T"
+	}
+
+	// Find the parent call expression to get the arguments
+	var formatCall *ast.CallExpr
+	var formatFuncName string
+
+	for i := len(sr.parentStack) - 1; i >= 0; i-- {
+		if call, ok := sr.parentStack[i].(*ast.CallExpr); ok {
+			// Check if this call contains our literal as the format string
+			for idx, arg := range call.Args {
+				if arg == lit {
+					formatCall = call
+					formatFuncName = sr.getSimpleFunctionName(call)
+					// Verify this is the format string position
+					if strings.Contains(formatFuncName, "Fprintf") && idx != 1 {
+						continue
+					}
+					if !strings.Contains(formatFuncName, "Fprintf") && idx != 0 {
+						continue
+					}
+					break
+				}
+			}
+			if formatCall != nil {
+				break
+			}
+		}
+	}
+
+	if formatCall == nil || formatFuncName == "" {
+		// Fallback to simple format
+		return fmt.Sprintf("%s(%s, ...)", pattern, astKey)
+	}
+
+	// Get the suggested non-format function name
+	nonFormatFunc := sr.getNonFormatFunctionName(formatFuncName)
+
+	// Count the number of format arguments (other than the format string)
+	numArgs := 0
+	for _, arg := range formatCall.Args {
+		if arg != lit {
+			numArgs++
+		}
+	}
+
+	if numArgs == 0 {
+		// No arguments, just show the simple transformation
+		return fmt.Sprintf("%s(%s)", pattern, astKey)
+	}
+
+	// Build a comment that shows arguments should go inside tr.T()
+	// and the function should change from Msgf to Msg
+	argPlaceholders := make([]string, numArgs)
+	for i := 0; i < numArgs; i++ {
+		argPlaceholders[i] = "arg" + fmt.Sprintf("%d", i+1)
+	}
+
+	comment := fmt.Sprintf("%s(%s, %s)", pattern, astKey, strings.Join(argPlaceholders, ", "))
+
+	// If we know the function should change, add that info
+	if nonFormatFunc != "" && nonFormatFunc != formatFuncName {
+		comment += " and change " + formatFuncName + " to " + nonFormatFunc
+	}
+
+	return comment
+}
+
+// getSimpleFunctionName gets just the function/method name without package
+func (sr *TransformationReplacer) getSimpleFunctionName(call *ast.CallExpr) string {
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		return fun.Sel.Name
+	case *ast.Ident:
+		return fun.Name
+	}
+	return ""
+}
+
+// getNonFormatFunctionName returns the non-format version of a format function
+func (sr *TransformationReplacer) getNonFormatFunctionName(formatFunc string) string {
+	// Common transformations
+	switch formatFunc {
+	case "Printf":
+		return "Print"
+	case "Sprintf":
+		return "Sprint"
+	case "Fprintf":
+		return "Fprint"
+	case "Errorf":
+		return "Error"
+	case "Fatalf":
+		return "Fatal"
+	case "Panicf":
+		return "Panic"
+	case "Warnf":
+		return "Warn"
+	case "Infof":
+		return "Info"
+	case "Debugf":
+		return "Debug"
+	case "Tracef":
+		return "Trace"
+	case "Msgf":
+		return "Msg"
+	case "Logf":
+		return "Log"
+	}
+
+	// Generic handling: remove trailing 'f'
+	if strings.HasSuffix(formatFunc, "f") && len(formatFunc) > 1 {
+		return formatFunc[:len(formatFunc)-1]
+	}
+
+	return formatFunc
 }

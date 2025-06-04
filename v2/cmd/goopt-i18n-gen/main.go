@@ -17,6 +17,8 @@ import (
 	"strings"
 )
 
+var tr i18n.Translator
+
 //go:embed locales/*.json
 var localesFS embed.FS
 

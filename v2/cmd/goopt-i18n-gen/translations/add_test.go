@@ -24,7 +24,7 @@ func TestAdd(t *testing.T) {
 			name: "add single key",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create existing locale file
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
@@ -32,7 +32,7 @@ func TestAdd(t *testing.T) {
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
@@ -43,7 +43,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -52,7 +52,7 @@ func TestAdd(t *testing.T) {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if data["new.key"] != "New Value" {
 					t.Error("new key should be added")
 				}
@@ -65,7 +65,7 @@ func TestAdd(t *testing.T) {
 			name: "add from file",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create locale file
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
@@ -73,7 +73,7 @@ func TestAdd(t *testing.T) {
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				// Create keys file
 				keysFile := filepath.Join(tempDir, "keys.json")
 				newKeys := map[string]string{
@@ -82,7 +82,7 @@ func TestAdd(t *testing.T) {
 				}
 				keysData, _ := json.Marshal(newKeys)
 				os.WriteFile(keysFile, keysData, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
@@ -92,7 +92,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -101,7 +101,7 @@ func TestAdd(t *testing.T) {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if data["key1"] != "Value 1" {
 					t.Error("key1 should be added")
 				}
@@ -117,7 +117,7 @@ func TestAdd(t *testing.T) {
 			name: "both single key and file error",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{filepath.Join(tempDir, "en.json")},
@@ -128,7 +128,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -139,7 +139,7 @@ func TestAdd(t *testing.T) {
 			name: "missing value for single key",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{filepath.Join(tempDir, "en.json")},
@@ -149,7 +149,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -160,14 +160,14 @@ func TestAdd(t *testing.T) {
 			name: "skip mode with existing key",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
 					"existing": "Original Value",
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
@@ -178,7 +178,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -187,7 +187,7 @@ func TestAdd(t *testing.T) {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if data["existing"] != "Original Value" {
 					t.Error("existing key should not be changed in skip mode")
 				}
@@ -197,27 +197,27 @@ func TestAdd(t *testing.T) {
 			name: "replace mode with existing key",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
 					"existing": "Original Value",
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					TR: bundle,
 				}
 				cfg.Add.Exec = Add
-				
-				parser, err := goopt.NewParserFromStruct(cfg, 
+
+				parser, err := goopt.NewParserFromStruct(cfg,
 					goopt.WithFlagNameConverter(goopt.ToKebabCase),
 					goopt.WithCommandNameConverter(goopt.ToKebabCase))
 				if err != nil {
 					t.Fatalf("Failed to create parser: %v", err)
 				}
-				
+
 				// Parse command line with the add command
 				cmdLine := fmt.Sprintf("add -i %s -k existing -V \"Replaced Value\" -m replace", localeFile)
 				if !parser.ParseString(cmdLine) {
@@ -227,7 +227,7 @@ func TestAdd(t *testing.T) {
 					}
 					t.Fatalf("Failed to parse command line: %s", cmdLine)
 				}
-				
+
 				return parser, cfg, tempDir
 			},
 			wantError: false,
@@ -235,7 +235,7 @@ func TestAdd(t *testing.T) {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if data["existing"] != "Replaced Value" {
 					t.Errorf("existing key should be replaced in replace mode, got %q", data["existing"])
 				}
@@ -245,32 +245,32 @@ func TestAdd(t *testing.T) {
 			name: "error mode with existing key",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
 					"existing": "Original Value",
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					TR: bundle,
 				}
 				cfg.Add.Exec = Add
-				
+
 				parser, err := goopt.NewParserFromStruct(cfg,
 					goopt.WithFlagNameConverter(goopt.ToKebabCase),
 					goopt.WithCommandNameConverter(goopt.ToKebabCase))
 				if err != nil {
 					t.Fatalf("Failed to create parser: %v", err)
 				}
-				
+
 				cmdLine := fmt.Sprintf("add -i %s -k existing -V \"New Value\" -m error", localeFile)
 				if !parser.ParseString(cmdLine) {
 					t.Fatalf("Failed to parse command line: %s", cmdLine)
 				}
-				
+
 				return parser, cfg, tempDir
 			},
 			wantError: true,
@@ -280,7 +280,7 @@ func TestAdd(t *testing.T) {
 			name: "invalid mode",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{filepath.Join(tempDir, "en.json")},
@@ -291,7 +291,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -302,14 +302,14 @@ func TestAdd(t *testing.T) {
 			name: "dry run mode",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				existingData := map[string]string{
 					"existing": "value",
 				}
 				data, _ := json.Marshal(existingData)
 				os.WriteFile(localeFile, data, 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
@@ -321,7 +321,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -330,7 +330,7 @@ func TestAdd(t *testing.T) {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				if _, exists := data["new"]; exists {
 					t.Error("new key should not be added in dry run mode")
 				}
@@ -340,20 +340,20 @@ func TestAdd(t *testing.T) {
 			name: "multiple locale files",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create multiple locale files
 				enFile := filepath.Join(tempDir, "en.json")
 				frFile := filepath.Join(tempDir, "fr.json")
-				
+
 				os.WriteFile(enFile, []byte("{}"), 0644)
 				os.WriteFile(frFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
 				// Load test translations for TODO prefix
 				bundle.AddLanguage(language.English, map[string]string{
 					"app.ast.todo_prefix": "[TODO] %s",
 				})
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{enFile, frFile},
 					Add: options.AddCmd{
@@ -363,7 +363,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -373,16 +373,16 @@ func TestAdd(t *testing.T) {
 				enContent, _ := os.ReadFile(cfg.Input[0])
 				var enData map[string]string
 				json.Unmarshal(enContent, &enData)
-				
+
 				if enData["greeting"] != "Hello" {
 					t.Error("key should be added to English file")
 				}
-				
+
 				// Check French file
 				frContent, _ := os.ReadFile(cfg.Input[1])
 				var frData map[string]string
 				json.Unmarshal(frContent, &frData)
-				
+
 				if frData["greeting"] != "[TODO] Hello" {
 					t.Errorf("key should be added to French file with TODO prefix, got %q", frData["greeting"])
 				}
@@ -392,7 +392,7 @@ func TestAdd(t *testing.T) {
 			name: "no keys provided",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{filepath.Join(tempDir, "en.json")},
@@ -401,7 +401,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -412,11 +412,11 @@ func TestAdd(t *testing.T) {
 			name: "wildcard input pattern",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create multiple locale files
 				os.WriteFile(filepath.Join(tempDir, "en.json"), []byte("{}"), 0644)
 				os.WriteFile(filepath.Join(tempDir, "fr.json"), []byte("{}"), 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{filepath.Join(tempDir, "*.json")},
@@ -427,7 +427,7 @@ func TestAdd(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -438,12 +438,12 @@ func TestAdd(t *testing.T) {
 				if len(files) != 2 {
 					t.Fatalf("expected 2 files, got %d", len(files))
 				}
-				
+
 				for _, file := range files {
 					content, _ := os.ReadFile(file)
 					var data map[string]string
 					json.Unmarshal(content, &data)
-					
+
 					if _, exists := data["test"]; !exists {
 						t.Errorf("key should be added to %s", file)
 					}
@@ -455,14 +455,14 @@ func TestAdd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, cfg, tempDir := tt.setup()
-			
+
 			err := Add(parser, nil)
-			
+
 			if (err != nil) != tt.wantError {
 				t.Errorf("Add() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
-			
+
 			if !tt.wantError && tt.validate != nil {
 				tt.validate(t, tempDir, cfg)
 			}

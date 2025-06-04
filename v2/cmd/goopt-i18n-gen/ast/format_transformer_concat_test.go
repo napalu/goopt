@@ -12,22 +12,22 @@ import (
 // TestStringConcatenation tests handling of concatenated strings in format functions
 func TestStringConcatenation(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
+		name         string
+		input        string
 		shouldHandle bool
-		description string
+		description  string
 	}{
 		{
-			name:  "simple concatenation no format",
-			input: `fmt.Printf("Hello " + "world")`,
+			name:         "simple concatenation no format",
+			input:        `fmt.Printf("Hello " + "world")`,
 			shouldHandle: false,
-			description: "No format specifiers, should not transform",
+			description:  "No format specifiers, should not transform",
 		},
 		{
-			name:  "concatenation with format specifiers",
-			input: `fmt.Printf("User: %s" + " Role: %s", name, role)`,
+			name:         "concatenation with format specifiers",
+			input:        `fmt.Printf("User: %s" + " Role: %s", name, role)`,
 			shouldHandle: true,
-			description: "Should combine strings and transform",
+			description:  "Should combine strings and transform",
 		},
 		{
 			name:  "multi-line concatenation",
@@ -35,19 +35,19 @@ func TestStringConcatenation(t *testing.T) {
 				"a message with %s and " +
 				"another %s", first, second)`,
 			shouldHandle: true,
-			description: "Should handle multi-line concatenation",
+			description:  "Should handle multi-line concatenation",
 		},
 		{
-			name:  "variable concatenation",
-			input: `fmt.Printf(prefix + "Message: %s" + suffix, data)`,
+			name:         "variable concatenation",
+			input:        `fmt.Printf(prefix + "Message: %s" + suffix, data)`,
 			shouldHandle: false,
-			description: "Contains non-literal parts, cannot transform",
+			description:  "Contains non-literal parts, cannot transform",
 		},
 		{
-			name:  "function call concatenation",
-			input: `fmt.Printf(getPrefix() + "Message: %s", data)`,
+			name:         "function call concatenation",
+			input:        `fmt.Printf(getPrefix() + "Message: %s", data)`,
 			shouldHandle: false,
-			description: "Contains function calls, cannot transform",
+			description:  "Contains function calls, cannot transform",
 		},
 	}
 
@@ -69,7 +69,7 @@ func TestStringConcatenation(t *testing.T) {
 			if len(call.Args) > 0 {
 				canHandle := isTransformableFormatString(call.Args[0])
 				if canHandle != tt.shouldHandle {
-					t.Errorf("Expected shouldHandle=%v but got %v for: %s\n%s", 
+					t.Errorf("Expected shouldHandle=%v but got %v for: %s\n%s",
 						tt.shouldHandle, canHandle, tt.input, tt.description)
 				}
 			}
@@ -177,10 +177,10 @@ func extractConcatenatedString(expr ast.Expr) string {
 func TestComplexFormatCases(t *testing.T) {
 	// Test with actual format transformer
 	stringMap := map[string]string{
-		`"User: %s Role: %s"`:                          "messages.Keys.App.Extracted.UserSRoleS",
-		`"Failed to connect to %s"`:                    "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"This is a message with %s and another %s"`:   "messages.Keys.App.Extracted.ThisIsAMessageWithSAndAnotherS",
-		`"Line 1: %s\nLine 2: %s\n"`:                   "messages.Keys.App.Extracted.Line1SLine2S",
+		`"User: %s Role: %s"`:                        "messages.Keys.App.Extracted.UserSRoleS",
+		`"Failed to connect to %s"`:                  "messages.Keys.App.Extracted.FailedToConnectToS",
+		`"This is a message with %s and another %s"`: "messages.Keys.App.Extracted.ThisIsAMessageWithSAndAnotherS",
+		`"Line 1: %s\nLine 2: %s\n"`:                 "messages.Keys.App.Extracted.Line1SLine2S",
 	}
 
 	tests := []struct {

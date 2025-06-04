@@ -15,27 +15,27 @@ func createTempGoFile(t *testing.T, content string) *os.File {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	
+
 	if _, err := tmpFile.WriteString(content); err != nil {
 		tmpFile.Close()
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	
+
 	if err := tmpFile.Close(); err != nil {
 		t.Fatalf("Failed to close temp file: %v", err)
 	}
-	
+
 	// Return the file for cleanup
 	file, err := os.Open(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("Failed to reopen temp file: %v", err)
 	}
-	
+
 	t.Cleanup(func() {
 		file.Close()
 		os.Remove(tmpFile.Name())
 	})
-	
+
 	return file
 }
 
@@ -160,8 +160,8 @@ func api() {
 	}
 }
 
-// TestUserFacingOnlyMode tests the user-facing-only transformation mode
-func TestUserFacingOnlyMode(t *testing.T) {
+// TestTransformMode tests the different transformation modes
+func TestTransformMode(t *testing.T) {
 	// String map for testing
 	stringMap := map[string]string{
 		`"Processing data"`:     "messages.Keys.ProcessingData",
@@ -175,11 +175,11 @@ func TestUserFacingOnlyMode(t *testing.T) {
 	tests := []struct {
 		name           string
 		code           string
-		userFacingOnly bool
+		transformMode  string
 		shouldTransform map[string]bool // function -> should transform
 	}{
 		{
-			name: "user-facing only mode (default)",
+			name: "user-facing mode (default)",
 			code: `package main
 import (
 	"fmt"
@@ -199,7 +199,7 @@ func main() {
 
 func doSomething(msg string) {}
 func process(s string) {}`,
-			userFacingOnly: true,
+			transformMode: "user-facing",
 			shouldTransform: map[string]bool{
 				"fmt.Println": true,
 				"log.Print":   true,
@@ -209,7 +209,7 @@ func process(s string) {}`,
 			},
 		},
 		{
-			name: "transform all mode",
+			name: "all mode transforms everything",
 			code: `package main
 import "fmt"
 
@@ -221,7 +221,7 @@ func main() {
 
 func customLog(msg string) {}
 func someFunc(s string) {}`,
-			userFacingOnly: false,
+			transformMode: "all",
 			shouldTransform: map[string]bool{
 				"fmt.Println": true,
 				"customLog":   true,
@@ -238,7 +238,7 @@ func main() {
 	slog.Error("Error occurred")
 	slog.Debug("Debug info")
 }`,
-			userFacingOnly: true,
+			transformMode: "user-facing",
 			shouldTransform: map[string]bool{
 				"slog.Info":  true,
 				"slog.Error": true,
@@ -250,7 +250,7 @@ func main() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transformer := NewFormatTransformer(stringMap)
-			transformer.SetUserFacingOnly(tt.userFacingOnly)
+			transformer.SetTransformMode(tt.transformMode)
 
 			result, err := transformer.TransformFile("test.go", []byte(tt.code))
 			if err != nil {
@@ -326,10 +326,10 @@ func main() {
 	}
 
 	resultStr := string(result)
-	
+
 	// Debug: print the extracted strings
 	t.Logf("Extracted strings: %v", stringMap)
-	
+
 	// Debug: print relevant lines
 	lines := strings.Split(resultStr, "\n")
 	for i, line := range lines {
@@ -346,7 +346,7 @@ func main() {
 	if !strings.Contains(resultStr, `"port"`) {
 		t.Error("Identifier 'port' should still be present as a literal")
 	}
-	
+
 	// For slog.Info line, "port" can be on the same line as tr.T because only "Server ready" was transformed
 	// Check that "OK" line doesn't have tr.T
 	for _, line := range lines {

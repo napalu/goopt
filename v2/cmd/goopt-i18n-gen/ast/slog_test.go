@@ -13,57 +13,57 @@ func TestSlogSupport(t *testing.T) {
 		expectedFormat    bool
 	}{
 		{
-			name: "slog.Info with message",
-			code: `slog.Info("Starting server", "port", 8080)`,
-			expectedStrings: []string{"Starting server"},
+			name:              "slog.Info with message",
+			code:              `slog.Info("Starting server", "port", 8080)`,
+			expectedStrings:   []string{"Starting server"},
 			unexpectedStrings: []string{"port"}, // We should NOT extract the key
-			expectedFormat:  false,
+			expectedFormat:    false,
 		},
 		{
-			name: "slog.Error with message", 
-			code: `slog.Error("Failed to connect", "host", host, "error", err)`,
+			name:            "slog.Error with message",
+			code:            `slog.Error("Failed to connect", "host", host, "error", err)`,
 			expectedStrings: []string{"Failed to connect"},
 			expectedFormat:  false,
 		},
 		{
-			name: "slog.Debug with message",
-			code: `slog.Debug("Processing request", "id", requestID)`,
+			name:            "slog.Debug with message",
+			code:            `slog.Debug("Processing request", "id", requestID)`,
 			expectedStrings: []string{"Processing request"},
 			expectedFormat:  false,
 		},
 		{
-			name: "slog.Warn with message",
-			code: `slog.Warn("High memory usage", "percent", 95)`,
+			name:            "slog.Warn with message",
+			code:            `slog.Warn("High memory usage", "percent", 95)`,
 			expectedStrings: []string{"High memory usage"},
 			expectedFormat:  false,
 		},
 		{
-			name: "logger.Info with message",
-			code: `logger.Info("User logged in", "user", username)`,
+			name:            "logger.Info with message",
+			code:            `logger.Info("User logged in", "user", username)`,
 			expectedStrings: []string{"User logged in"},
 			expectedFormat:  false,
 		},
 		{
-			name: "logger.ErrorContext with message",
-			code: `logger.ErrorContext(ctx, "Database query failed", "query", sql)`,
+			name:            "logger.ErrorContext with message",
+			code:            `logger.ErrorContext(ctx, "Database query failed", "query", sql)`,
 			expectedStrings: []string{"Database query failed"},
 			expectedFormat:  false,
 		},
 		{
-			name: "custom logger with Info",
-			code: `myLogger.Info("Custom logger message", "key", "value")`,
+			name:            "custom logger with Info",
+			code:            `myLogger.Info("Custom logger message", "key", "value")`,
 			expectedStrings: []string{"Custom logger message"},
 			expectedFormat:  false,
 		},
 		{
-			name: "log/slog With pattern",
-			code: `slog.With("request_id", reqID).Info("Processing", "action", "update")`,
+			name:            "log/slog With pattern",
+			code:            `slog.With("request_id", reqID).Info("Processing", "action", "update")`,
 			expectedStrings: []string{"Processing"},
 			expectedFormat:  false,
 		},
 		{
-			name: "slog with concatenation",
-			code: `slog.Info("Request " + "completed", "duration", time.Since(start))`,
+			name:            "slog with concatenation",
+			code:            `slog.Info("Request " + "completed", "duration", time.Since(start))`,
 			expectedStrings: []string{"Request ", "completed"}, // Currently extracts as separate strings
 			expectedFormat:  false,
 		},
@@ -80,19 +80,19 @@ import "log/slog"
 func test() {
 	` + tt.code + `
 }`
-			
+
 			// Create string extractor
 			extractor, _ := NewStringExtractor(nil, "", "", 0)
-			
+
 			// Extract from the code
 			err := extractor.ExtractFromString("test.go", code)
 			if err != nil {
 				t.Fatalf("Failed to extract: %v", err)
 			}
-			
+
 			// Get extracted strings
 			extracted := extractor.GetExtractedStrings()
-			
+
 			// Check if expected strings were found
 			for _, expected := range tt.expectedStrings {
 				found := false

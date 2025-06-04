@@ -79,8 +79,12 @@ func main() {
 
 	// Create replacer
 	bundle := i18n.NewEmptyBundle()
+	config := &TransformationConfig{
+		Translator:    bundle,
+		TransformMode: "user-facing",
+	}
 	tr := &TransformationReplacer{
-		tr:     bundle,
+		config: config,
 		keyMap: make(map[string]string),
 	}
 
@@ -93,7 +97,7 @@ func main() {
 		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
 			tr.parentStack = parents
 			value := strings.Trim(lit.Value, `"`)
-			
+
 			if tr.isInUserFacingFunction(lit) {
 				detectedStrings[value] = true
 			} else {
@@ -209,8 +213,12 @@ func test() {
 
 			// Create replacer
 			bundle := i18n.NewEmptyBundle()
+			config := &TransformationConfig{
+				Translator:    bundle,
+				TransformMode: "user-facing",
+			}
 			tr := &TransformationReplacer{
-				tr:     bundle,
+				config: config,
 				keyMap: make(map[string]string),
 			}
 
@@ -263,8 +271,12 @@ func outer() {
 	}
 
 	bundle := i18n.NewEmptyBundle()
+	config := &TransformationConfig{
+		Translator:    bundle,
+		TransformMode: "user-facing",
+	}
 	tr := &TransformationReplacer{
-		tr: bundle,
+		config: config,
 	}
 
 	foundNestedString := false
@@ -290,8 +302,12 @@ func outer() {
 // BenchmarkIsInUserFacingFunction tests performance
 func BenchmarkIsInUserFacingFunction(b *testing.B) {
 	bundle := i18n.NewEmptyBundle()
+	config := &TransformationConfig{
+		Translator:    bundle,
+		TransformMode: "user-facing",
+	}
 	tr := &TransformationReplacer{
-		tr: bundle,
+		config: config,
 		// Simulate a realistic parent stack
 		parentStack: []ast.Node{
 			&ast.File{},

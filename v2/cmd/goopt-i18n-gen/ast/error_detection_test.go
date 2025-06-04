@@ -19,75 +19,75 @@ func TestErrorFunctionDetection(t *testing.T) {
 		shouldPreserveWrap bool
 	}{
 		{
-			name:              "fmt.Errorf with %w",
-			code:              `fmt.Errorf("failed: %w", err)`,
-			expectedTransform: "Error",
-			isErrorFunction:   true,
-			hasErrorWrap:      true,
+			name:               "fmt.Errorf with %w",
+			code:               `fmt.Errorf("failed: %w", err)`,
+			expectedTransform:  "Error",
+			isErrorFunction:    true,
+			hasErrorWrap:       true,
 			shouldPreserveWrap: true,
 		},
 		{
-			name:              "fmt.Errorf without %w",
-			code:              `fmt.Errorf("simple error")`,
-			expectedTransform: "Error",
-			isErrorFunction:   true,
-			hasErrorWrap:      false,
+			name:               "fmt.Errorf without %w",
+			code:               `fmt.Errorf("simple error")`,
+			expectedTransform:  "Error",
+			isErrorFunction:    true,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 		{
-			name:              "errors.Wrapf with format",
-			code:              `errors.Wrapf(err, "context: %s", ctx)`,
-			expectedTransform: "Wrapf",
-			isErrorFunction:   true,
-			hasErrorWrap:      false, // Wrapf doesn't use %w, it wraps by design
+			name:               "errors.Wrapf with format",
+			code:               `errors.Wrapf(err, "context: %s", ctx)`,
+			expectedTransform:  "Wrapf",
+			isErrorFunction:    true,
+			hasErrorWrap:       false, // Wrapf doesn't use %w, it wraps by design
 			shouldPreserveWrap: true,
 		},
 		{
-			name:              "errors.Errorf (generic)",
-			code:              `errors.Errorf("error: %v", val)`,
-			expectedTransform: "Error",
-			isErrorFunction:   true,
-			hasErrorWrap:      false,
+			name:               "errors.Errorf (generic)",
+			code:               `errors.Errorf("error: %v", val)`,
+			expectedTransform:  "Error",
+			isErrorFunction:    true,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 		{
-			name:              "fmt.Printf (not error)",
-			code:              `fmt.Printf("hello: %s", name)`,
-			expectedTransform: "Print",
-			isErrorFunction:   false,
-			hasErrorWrap:      false,
+			name:               "fmt.Printf (not error)",
+			code:               `fmt.Printf("hello: %s", name)`,
+			expectedTransform:  "Print",
+			isErrorFunction:    false,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 		{
-			name:              "log.Fatalf (not error creation)",
-			code:              `log.Fatalf("fatal: %s", msg)`,
-			expectedTransform: "Print",
-			isErrorFunction:   false,
-			hasErrorWrap:      false,
+			name:               "log.Fatalf (not error creation)",
+			code:               `log.Fatalf("fatal: %s", msg)`,
+			expectedTransform:  "Print",
+			isErrorFunction:    false,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 		{
-			name:              "custom.Errorf (should be detected as error)",
-			code:              `custom.Errorf("custom error: %v", val)`,
-			expectedTransform: "Error",
-			isErrorFunction:   true,
-			hasErrorWrap:      false,
+			name:               "custom.Errorf (should be detected as error)",
+			code:               `custom.Errorf("custom error: %v", val)`,
+			expectedTransform:  "Error",
+			isErrorFunction:    true,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 		{
-			name:              "pkg.Wrapf (should be detected as wrap)",
-			code:              `pkg.Wrapf(err, "wrapped: %s", ctx)`,
-			expectedTransform: "Wrapf",
-			isErrorFunction:   true,
-			hasErrorWrap:      false,
+			name:               "pkg.Wrapf (should be detected as wrap)",
+			code:               `pkg.Wrapf(err, "wrapped: %s", ctx)`,
+			expectedTransform:  "Wrapf",
+			isErrorFunction:    true,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: true,
 		},
 		{
-			name:              "fmt.Sprintf (string return, not error)",
-			code:              `fmt.Sprintf("format: %s", val)`,
-			expectedTransform: "Direct",
-			isErrorFunction:   false,
-			hasErrorWrap:      false,
+			name:               "fmt.Sprintf (string return, not error)",
+			code:               `fmt.Sprintf("format: %s", val)`,
+			expectedTransform:  "Direct",
+			isErrorFunction:    false,
+			hasErrorWrap:       false,
 			shouldPreserveWrap: false,
 		},
 	}
@@ -188,45 +188,45 @@ func test() {
 // TestErrorTransformationDecisionLogic tests the decision logic for error transformations
 func TestErrorTransformationDecisionLogic(t *testing.T) {
 	stringMap := map[string]string{
-		`"connection failed: %w"`:    "messages.Keys.ConnectionFailedW",
-		`"simple error"`:             "messages.Keys.SimpleError",
-		`"context: %s"`:              "messages.Keys.ContextS",
-		`"hello: %s"`:                "messages.Keys.HelloS",
+		`"connection failed: %w"`: "messages.Keys.ConnectionFailedW",
+		`"simple error"`:          "messages.Keys.SimpleError",
+		`"context: %s"`:           "messages.Keys.ContextS",
+		`"hello: %s"`:             "messages.Keys.HelloS",
 	}
 
 	tests := []struct {
-		name            string
-		input           string
-		shouldTransform bool
-		expectedPattern string // What pattern should appear in output
+		name             string
+		input            string
+		shouldTransform  bool
+		expectedPattern  string   // What pattern should appear in output
 		shouldNotContain []string // Patterns that should NOT appear
 	}{
 		{
-			name:            "fmt.Errorf with %w preserves wrapping",
-			input:           `fmt.Errorf("connection failed: %w", err)`,
-			shouldTransform: true,
-			expectedPattern: `fmt.Errorf("%s: %w"`,
+			name:             "fmt.Errorf with %w preserves wrapping",
+			input:            `fmt.Errorf("connection failed: %w", err)`,
+			shouldTransform:  true,
+			expectedPattern:  `fmt.Errorf("%s: %w"`,
 			shouldNotContain: []string{"errors.New"},
 		},
 		{
-			name:            "fmt.Errorf without %w converts to errors.New",
-			input:           `fmt.Errorf("simple error")`,
-			shouldTransform: true,
-			expectedPattern: `errors.New(tr.T(messages.Keys.SimpleError))`,
+			name:             "fmt.Errorf without %w converts to errors.New",
+			input:            `fmt.Errorf("simple error")`,
+			shouldTransform:  true,
+			expectedPattern:  `errors.New(tr.T(messages.Keys.SimpleError))`,
 			shouldNotContain: []string{"fmt.Errorf", "%w"},
 		},
 		{
-			name:            "errors.Wrapf preserves function name",
-			input:           `errors.Wrapf(err, "context: %s", ctx)`,
-			shouldTransform: true,
-			expectedPattern: `errors.Wrapf(err, "%s", tr.T(messages.Keys.ContextS, ctx))`,
+			name:             "errors.Wrapf preserves function name",
+			input:            `errors.Wrapf(err, "context: %s", ctx)`,
+			shouldTransform:  true,
+			expectedPattern:  `errors.Wrapf(err, "%s", tr.T(messages.Keys.ContextS, ctx))`,
 			shouldNotContain: []string{"errors.Wrap(", "errors.New"},
 		},
 		{
-			name:            "fmt.Printf is not error handling",
-			input:           `fmt.Printf("hello: %s", name)`,
-			shouldTransform: true,
-			expectedPattern: `fmt.Print(tr.T(messages.Keys.HelloS, name))`,
+			name:             "fmt.Printf is not error handling",
+			input:            `fmt.Printf("hello: %s", name)`,
+			shouldTransform:  true,
+			expectedPattern:  `fmt.Print(tr.T(messages.Keys.HelloS, name))`,
 			shouldNotContain: []string{"errors.New", "%w", "fmt.Errorf"},
 		},
 	}
@@ -268,10 +268,10 @@ func test() {
 // TestEdgeCasesInErrorDetection tests edge cases in error function detection
 func TestEdgeCasesInErrorDetection(t *testing.T) {
 	tests := []struct {
-		name        string
-		funcName    string
+		name          string
+		funcName      string
 		shouldBeError bool
-		expectedType string
+		expectedType  string
 	}{
 		{
 			name:          "std fmt.Errorf",
@@ -340,7 +340,7 @@ func TestEdgeCasesInErrorDetection(t *testing.T) {
 			}
 
 			transformType := detector.SuggestTransformation(info)
-			
+
 			if transformType != tt.expectedType {
 				t.Errorf("Expected %s, got %s", tt.expectedType, transformType)
 			}

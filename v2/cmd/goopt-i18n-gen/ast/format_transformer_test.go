@@ -251,6 +251,6 @@ func process(count int) {
 		t.Error("Package declaration missing")
 	}
 	if !strings.Contains(string(result), "import") {
-		t.Error("Import declaration missing")  
+		t.Error("Import declaration missing")
 	}
 }

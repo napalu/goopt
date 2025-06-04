@@ -13,6 +13,58 @@ import (
 	"github.com/napalu/goopt/v2/i18n"
 )
 
+// setupAuditTest creates a parser and config for audit tests using command line parsing
+func setupAuditTest(t *testing.T, bundle i18n.Translator, localeFile string, opts map[string]string) (*goopt.Parser, *options.AppConfig) {
+	cfg := &options.AppConfig{
+		TR: bundle,
+	}
+	cfg.Audit.Exec = Audit
+
+	parser, err := goopt.NewParserFromStruct(cfg, goopt.WithFlagNameConverter(goopt.ToKebabCase),
+		goopt.WithCommandNameConverter(goopt.ToKebabCase))
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+
+	// Build command line from options
+	cmdLine := fmt.Sprintf("audit -i %s", localeFile)
+
+	// Add optional parameters
+	for flag, value := range opts {
+		switch flag {
+		case "files":
+			// Don't use default, specify files explicitly
+			cmdLine += fmt.Sprintf(" --files %s", value)
+		case "generateDescKeys":
+			if value == "true" {
+				cmdLine += " -d"
+			}
+		case "generateMissing":
+			if value == "true" {
+				cmdLine += " -g"
+			}
+		case "keyPrefix":
+			cmdLine += fmt.Sprintf(" --key-prefix %s", value)
+		case "autoUpdate":
+			if value == "true" {
+				cmdLine += " -u"
+			}
+		case "backupDir":
+			cmdLine += fmt.Sprintf(" --backup-dir %s", value)
+		}
+	}
+
+	if !parser.ParseString(cmdLine) {
+		// Print errors for debugging
+		for _, err := range parser.GetErrors() {
+			t.Logf("Parser error: %v", err)
+		}
+		t.Fatalf("Failed to parse command line: %s", cmdLine)
+	}
+
+	return parser, cfg
+}
+
 func TestAudit(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -24,7 +76,7 @@ func TestAudit(t *testing.T) {
 			name: "all fields have descKey",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -34,12 +86,12 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -48,7 +100,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -61,7 +113,7 @@ type Config struct {
 			name: "fields without descKey",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -72,12 +124,12 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -86,7 +138,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -99,7 +151,7 @@ type Config struct {
 			name: "generate descKeys",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -109,12 +161,12 @@ type AppConfig struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -125,7 +177,7 @@ type AppConfig struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -138,7 +190,7 @@ type AppConfig struct {
 			name: "auto update source files",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -148,38 +200,33 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
-				cfg := &options.AppConfig{
-					Input: []string{localeFile},
-					Audit: options.AuditCmd{
-						Files:            []string{goFile},
-						GenerateDescKeys: true,
-						AutoUpdate:       true,
-						KeyPrefix:        "app",
-						BackupDir:        filepath.Join(tempDir, ".backup"),
-					},
-					TR: bundle,
+
+				opts := map[string]string{
+					"files":            goFile,
+					"generateDescKeys": "true",
+					"autoUpdate":       "true",
+					"keyPrefix":        "app",
+					"backupDir":        filepath.Join(tempDir, ".backup"),
 				}
-				cfg.Audit.Exec = Audit
-				
-				parser, _ := goopt.NewParserFromStruct(cfg)
+
+				parser, cfg := setupAuditTest(t, bundle, localeFile, opts)
 				return parser, cfg, tempDir
 			},
 			wantError: false,
 			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
 				// Check that source file was updated
 				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
-				
+
 				// Should have added descKey tags
 				if !strings.Contains(string(content), "descKey:") {
 					t.Error("source file should have been updated with descKey tags")
 				}
-				
+
 				// Check backup was created
 				backupFiles, _ := os.ReadDir(cfg.Audit.BackupDir)
 				if len(backupFiles) == 0 {
@@ -191,7 +238,7 @@ type Config struct {
 			name: "generate missing translations",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
 
@@ -200,25 +247,20 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
-				cfg := &options.AppConfig{
-					Input: []string{localeFile},
-					Audit: options.AuditCmd{
-						Files:            []string{goFile},
-						GenerateDescKeys: true,
-						GenerateMissing:  true,
-						KeyPrefix:        "app",
-					},
-					TR: bundle,
+
+				opts := map[string]string{
+					"files":            goFile,
+					"generateDescKeys": "true",
+					"generateMissing":  "true",
+					"keyPrefix":        "app",
 				}
-				cfg.Audit.Exec = Audit
-				
-				parser, _ := goopt.NewParserFromStruct(cfg)
+
+				parser, cfg := setupAuditTest(t, bundle, localeFile, opts)
 				return parser, cfg, tempDir
 			},
 			wantError: false,
@@ -227,7 +269,7 @@ type Config struct {
 				content, _ := os.ReadFile(cfg.Input[0])
 				var data map[string]string
 				json.Unmarshal(content, &data)
-				
+
 				// Should have generated translation
 				if len(data) == 0 {
 					t.Error("translations should have been generated")
@@ -238,7 +280,7 @@ type Config struct {
 			name: "wildcard file patterns",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				// Create multiple Go files
 				for i := 1; i <= 3; i++ {
 					goFile := filepath.Join(tempDir, fmt.Sprintf("file%d.go", i))
@@ -250,12 +292,12 @@ type Config%d struct {
 `, i, i, i)
 					os.WriteFile(goFile, []byte(goContent), 0644)
 				}
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -264,7 +306,7 @@ type Config%d struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -277,7 +319,7 @@ type Config%d struct {
 			name: "nested structs",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "nested.go")
 				goContent := `package test
 
@@ -292,12 +334,12 @@ type Config struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -306,7 +348,7 @@ type Config struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -319,7 +361,7 @@ type Config struct {
 			name: "command structs",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
-				
+
 				goFile := filepath.Join(tempDir, "commands.go")
 				goContent := `package test
 
@@ -332,12 +374,12 @@ type InitCmd struct {
 }
 `
 				os.WriteFile(goFile, []byte(goContent), 0644)
-				
+
 				localeFile := filepath.Join(tempDir, "en.json")
 				os.WriteFile(localeFile, []byte("{}"), 0644)
-				
+
 				bundle := i18n.NewEmptyBundle()
-				
+
 				cfg := &options.AppConfig{
 					Input: []string{localeFile},
 					Audit: options.AuditCmd{
@@ -346,7 +388,7 @@ type InitCmd struct {
 					TR: bundle,
 				}
 				cfg.Audit.Exec = Audit
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -360,14 +402,14 @@ type InitCmd struct {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, cfg, tempDir := tt.setup()
-			
+
 			err := Audit(parser, nil)
-			
+
 			if (err != nil) != tt.wantError {
 				t.Errorf("Audit() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
-			
+
 			if !tt.wantError && tt.validate != nil {
 				tt.validate(t, tempDir, cfg)
 			}
