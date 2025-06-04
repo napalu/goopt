@@ -66,6 +66,78 @@ goopt-i18n-gen -i "locales/*.json" extract -s "cmd/**/*.go" -P app.cli
 goopt-i18n-gen -i "locales/*.json" extract -s "internal/api/**/*.go" -P app.api
 ```
 
+## Transform Modes and User-Facing Functions
+
+The extract command supports different modes for determining which strings to transform:
+
+### Transform Modes
+
+- **`user-facing`** (default): Only transforms strings in known user-facing functions
+- **`with-comments`**: Only transforms strings marked with `i18n-todo` comments  
+- **`all-marked`**: Transforms both user-facing functions AND strings with `i18n-todo` comments
+- **`all`**: Transforms all strings that have translation keys
+
+### Custom User-Facing Functions
+
+By default, the tool recognizes standard user-facing functions like `fmt.Print*`, `log.*`, and common logging methods. You can extend this with regex patterns:
+
+```bash
+# Mark custom logger methods as user-facing (multiple patterns allowed)
+goopt-i18n-gen -i "locales/*.json" extract -u \
+  --user-facing-regex ".*\.MsgAll$" \
+  --user-facing-regex ".*\.LogUser$"
+
+# Multiple patterns for custom loggers
+goopt-i18n-gen -i "locales/*.json" extract -u \
+  --user-facing-regex ".*\.(Log|Print|Display|Show|Render).*" \
+  --user-facing-regex ".*\.(Info|Warn|Error)$"
+```
+
+### Custom Format Functions
+
+For functions that take format strings (like `Printf`), use `--format-function-regex` with the pattern and argument index:
+
+```bash
+# Pattern:index format (0-based index)
+goopt-i18n-gen -i "locales/*.json" extract -u \
+  --format-function-regex ".*\.MsgAll$:1" \
+  --format-function-regex ".*\.Logf$:0"
+```
+
+#### Complete Example
+
+```go
+// Custom audit logger
+type AuditLogger struct {}
+
+// MsgAll takes: fields (index 0), format string (index 1), args...
+func (l *AuditLogger) MsgAll(fields map[string]interface{}, format string, args ...interface{}) {
+    // Custom logging implementation
+}
+
+// Usage
+s.Log.MsgAll(s.auditFields, "disabled user %s during sync", user.Name)
+```
+
+To properly handle this custom format function:
+
+```bash
+goopt-i18n-gen -i "locales/*.json" extract -u \
+  --user-facing-regex ".*\.MsgAll$" \
+  --format-function-regex ".*\.MsgAll$:1"
+```
+
+This tells the tool:
+- `--user-facing-regex ".*\.MsgAll$"` - Functions matching `MsgAll` are user-facing
+- `--format-function-regex ".*\.MsgAll$:1"` - MsgAll is a format function with format string at index 1
+
+The transformation will change:
+```go
+s.Log.MsgAll(fields, "User %s disabled", username)
+// becomes:
+s.Log.MsgAll(fields, tr.T(messages.Keys.UserSDisabled, username))
+```
+
 ## Auto-Update Workflows
 
 ### Comment-Based Workflow (Recommended for Large Codebases)

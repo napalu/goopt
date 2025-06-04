@@ -441,6 +441,9 @@ goopt-i18n-gen uses a command-based structure:
 - `--keep-comments`: Keep i18n comments after replacement
 - `--clean-comments`: Remove all i18n-* comments
 - `--backup-dir`: Directory for backup files (default: .goopt-i18n-backup)
+- `--transform-mode`: What strings to transform: user-facing, with-comments, all-marked, all (default: user-facing)
+- `--user-facing-regex`: Regex patterns to identify custom user-facing functions (can be specified multiple times)
+- `--format-function-regex`: Regex pattern and format arg index for custom format functions (pattern:index, can be specified multiple times)
 
 ### Validation Workflow
 
@@ -836,6 +839,35 @@ errors.New(tr.T(messages.Keys.AppExtracted.FailedToProcessV, err))
 fmt.Fprint(os.Stderr, tr.T(messages.Keys.AppExtracted.ErrorS, msg))
 ```
 
+#### Custom Function Detection
+
+The extract command can identify custom logging and display functions in your codebase:
+
+```bash
+# Identify custom user-facing functions
+goopt-i18n-gen -i "locales/*.json" extract \
+  --user-facing-regex ".*\.Log$" \
+  --user-facing-regex ".*\.Display$" \
+  -u --tr-pattern "tr.T"
+
+# Identify custom format functions with argument positions
+goopt-i18n-gen -i "locales/*.json" extract \
+  --format-function-regex ".*\.Logf$:0" \
+  --format-function-regex ".*\.MsgAll$:1" \
+  -u --tr-pattern "tr.T"
+```
+
+Example transformation of custom functions:
+```go
+// Before: Custom logger with format at position 1
+logger.MsgAll(ctx, "User %s logged in", username)
+
+// After: Format string and args replaced
+logger.MsgAll(ctx, tr.T(messages.Keys.App.UserLoggedIn, username))
+```
+
+For structured logging with Go's slog package, see the [Structured Logging Guide](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/SLOG_USAGE.md) which covers recommended patterns for internationalizing slog-based applications.
+
 #### Advanced Filtering
 
 ```bash
@@ -874,7 +906,10 @@ goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go
 goopt-i18n-gen -i "locales/*.json" extract --clean-comments
 ```
 
-For a detailed workflow guide, see the [EXTRACT_WORKFLOW.md](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/EXTRACT_WORKFLOW.md) documentation.
+For detailed workflow guides and advanced features, see:
+- [Extract Workflow Guide](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/EXTRACT_WORKFLOW.md) - Step-by-step extraction patterns
+- [Structured Logging (slog) Guide](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/SLOG_USAGE.md) - Best practices for i18n with Go's slog
+- [goopt-i18n-gen README](https://github.com/napalu/goopt/tree/main/v2/cmd/goopt-i18n-gen/README.md) - Complete tool documentation
 
 ### Adding Keys with the add Command
 
