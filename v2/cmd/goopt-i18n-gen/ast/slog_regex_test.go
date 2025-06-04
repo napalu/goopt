@@ -8,51 +8,51 @@ import (
 func TestSlogExclusionRegex(t *testing.T) {
 	// Test different regex patterns to exclude slog keys
 	testCases := []struct {
-		name         string
-		regex        string
-		shouldMatch  []string // These should be excluded
+		name           string
+		regex          string
+		shouldMatch    []string // These should be excluded
 		shouldNotMatch []string // These should be kept
 	}{
 		{
-			name: "Single word lowercase keys",
-			regex: `^[a-z]+$`,
-			shouldMatch: []string{"port", "host", "error", "query", "duration"},
+			name:           "Single word lowercase keys",
+			regex:          `^[a-z]+$`,
+			shouldMatch:    []string{"port", "host", "error", "query", "duration"},
 			shouldNotMatch: []string{"Starting server", "Database error", "User logged in"},
 		},
 		{
-			name: "Snake_case keys",
-			regex: `^[a-z]+(_[a-z]+)*$`,
-			shouldMatch: []string{"port", "host", "error", "request_id", "user_name", "error_code"},
+			name:           "Snake_case keys",
+			regex:          `^[a-z]+(_[a-z]+)*$`,
+			shouldMatch:    []string{"port", "host", "error", "request_id", "user_name", "error_code"},
 			shouldNotMatch: []string{"Starting server", "Database error", "User logged in"},
 		},
 		{
-			name: "Common log field names",
-			regex: `^(error|err|host|port|user|id|status|code|duration|latency|method|path|query|request_id|user_id|user_name|timestamp|level|msg|message|logger|source|file|line|function|stack|trace)$`,
-			shouldMatch: []string{"error", "host", "port", "duration", "user_id", "request_id"},
+			name:           "Common log field names",
+			regex:          `^(error|err|host|port|user|id|status|code|duration|latency|method|path|query|request_id|user_id|user_name|timestamp|level|msg|message|logger|source|file|line|function|stack|trace)$`,
+			shouldMatch:    []string{"error", "host", "port", "duration", "user_id", "request_id"},
 			shouldNotMatch: []string{"Starting server", "Database error", "Failed to connect to host"},
 		},
 		{
-			name: "Camelcase and lowercase identifiers",
-			regex: `^[a-z][a-zA-Z0-9]*$`,
-			shouldMatch: []string{"port", "hostName", "userId", "requestID", "errorCode"},
+			name:           "Camelcase and lowercase identifiers",
+			regex:          `^[a-z][a-zA-Z0-9]*$`,
+			shouldMatch:    []string{"port", "hostName", "userId", "requestID", "errorCode"},
 			shouldNotMatch: []string{"Starting server", "Database error", "User logged in", "ID"},
 		},
 		{
-			name: "Short strings (likely to be keys)",
-			regex: `^.{1,15}$`,
-			shouldMatch: []string{"port", "host", "error", "userId"},
+			name:           "Short strings (likely to be keys)",
+			regex:          `^.{1,15}$`,
+			shouldMatch:    []string{"port", "host", "error", "userId"},
 			shouldNotMatch: []string{"Starting server with configuration", "Database connection failed"},
 		},
 		{
-			name: "No spaces (keys don't have spaces)",
-			regex: `^[^\s]+$`,
-			shouldMatch: []string{"port", "host", "error", "user_id", "request-id"},
+			name:           "No spaces (keys don't have spaces)",
+			regex:          `^[^\s]+$`,
+			shouldMatch:    []string{"port", "host", "error", "user_id", "request-id"},
 			shouldNotMatch: []string{"Starting server", "Database error", "User logged in"},
 		},
 		{
-			name: "Combined: no spaces AND common patterns",
-			regex: `^([a-z][a-zA-Z0-9_]*|[a-z]+(_[a-z]+)*)$`,
-			shouldMatch: []string{"port", "hostName", "user_id", "requestID"},
+			name:           "Combined: no spaces AND common patterns",
+			regex:          `^([a-z][a-zA-Z0-9_]*|[a-z]+(_[a-z]+)*)$`,
+			shouldMatch:    []string{"port", "hostName", "user_id", "requestID"},
 			shouldNotMatch: []string{"Starting server", "Database error", "User logged in"},
 		},
 	}

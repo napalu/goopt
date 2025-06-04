@@ -215,6 +215,9 @@ Options:
 - `--keep-comments`: Keep i18n comments after replacement
 - `--clean-comments`: Remove all i18n-* comments
 - `--backup-dir`: Directory for backup files (default: .goopt-i18n-backup)
+- `--transform-mode`: What strings to transform: user-facing, with-comments, all-marked, all (default: user-facing)
+- `--user-facing-regex`: Regex patterns to identify custom user-facing functions (can be specified multiple times)
+- `--format-function-regex`: Regex pattern and format arg index for custom format functions (pattern:index, can be specified multiple times)
 
 Features:
 - **AST-based extraction**: Analyzes Go code structure, not just regex
@@ -230,6 +233,9 @@ Features:
 - **Iterative workflow**: Use comments first, then gradually replace with actual calls
 - **Safe defaults**: Uses `app.extracted` prefix to clearly mark auto-extracted strings
 - **Structured logging support**: Works well with slog - see [SLOG_USAGE.md](SLOG_USAGE.md) for recommended patterns
+- **Custom function detection**: 
+  - Use `--user-facing-regex` to identify custom logging/display functions
+  - Use `--format-function-regex` to identify custom format functions with argument positions
 
 ## Global Options
 

@@ -1,16 +1,13 @@
 package translations
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
-	"github.com/napalu/goopt/v2/i18n"
-	"os"
-	"path/filepath"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
 	"regexp"
 	"sort"
 	"strings"
@@ -39,16 +36,11 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	// Find and process files
 	fmt.Println(tr.T(messages.Keys.AppExtract.ScanningFiles))
 
-	// Handle glob patterns
-	var filesToProcess []string
+	// Handle glob patterns using our utility that supports **
 	patterns := strings.Split(extractCmd.Files, ",")
-	for _, pattern := range patterns {
-		pattern = strings.TrimSpace(pattern)
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, pattern, err.Error()))
-		}
-		filesToProcess = append(filesToProcess, matches...)
+	filesToProcess, err := util.ExpandGlobPatterns(patterns)
+	if err != nil {
+		return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, extractCmd.Files, err.Error()))
 	}
 
 	// Extract strings from all files
@@ -119,26 +111,104 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	if !extractCmd.DryRun {
 		fmt.Println("\n" + tr.T(messages.Keys.AppExtract.UpdatingFiles))
 
-		for _, inputFile := range config.Input {
-			files, err := filepath.Glob(inputFile)
-			if err != nil {
-				return fmt.Errorf(tr.T(messages.Keys.AppAdd.GlobError, inputFile, err.Error()))
+		// Expand input files, creating them if necessary
+		inputFiles, err := expandInputFiles(config.Input)
+		if err != nil {
+			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToExpandInput), err)
+		}
+
+		updatedCount := 0
+		for _, file := range inputFiles {
+			// Ensure the file exists
+			if err := ensureInputFile(file); err != nil {
+				return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToPrepareInput), file, err)
 			}
 
-			for _, file := range files {
-				if err := addTranslationsToFile(file, translations, tr); err != nil {
-					return fmt.Errorf(tr.T(messages.Keys.AppExtract.UpdateError, file, err.Error()))
-				}
+			opts := TranslationUpdateOptions{
+				Mode:       UpdateModeSkip,
+				DryRun:     false,
+				TodoPrefix: "[TODO]",
+			}
+			result, err := UpdateTranslationFile(file, translations, opts)
+			if err != nil {
+				return fmt.Errorf(tr.T(messages.Keys.AppExtract.UpdateError, file, err.Error()))
+			}
+			if result.Modified {
 				fmt.Printf("✓ %s %s\n", tr.T(messages.Keys.AppAdd.Updated), file)
+				updatedCount++
 			}
 		}
 
-		fmt.Printf("\n✓ %s %d %s\n", tr.T(messages.Keys.AppExtract.Added), len(translations), tr.T(messages.Keys.AppExtract.Keys))
+		if updatedCount > 0 {
+			fmt.Printf("\n✓ %s %d %s\n", tr.T(messages.Keys.AppExtract.Added), len(translations), tr.T(messages.Keys.AppExtract.Keys))
+		}
 	}
 
-	// Handle auto-update mode
+	// Handle auto-update mode or comment addition
 	if extractCmd.AutoUpdate {
 		return handleAutoUpdate(config, translations, filesToProcess, extractCmd.DryRun)
+	} else if !extractCmd.DryRun {
+		// When not in auto-update mode and not dry-run, add comments to source files
+		return addCommentsToFiles(config, translations, filesToProcess)
+	}
+
+	return nil
+}
+
+func addCommentsToFiles(config *options.AppConfig, translations map[string]string, files []string) error {
+	tr := config.TR
+	extractCmd := config.Extract
+
+	fmt.Println("adding comments to files")
+
+	// Resolve package path based on module context
+	packagePath, err := resolvePackagePath(extractCmd.Package, ".")
+	if err != nil {
+		// If we can't resolve, use the package name as-is
+		packagePath = extractCmd.Package
+	}
+	trConfig := util.ToTransformConfig(extractCmd)
+	trConfig.IsUpdateMode = false
+	trConfig.PackagePath = packagePath
+
+	replacer := ast.NewTransformationReplacer(trConfig)
+
+	// Build key map (reverse of translations map)
+	keyMap := make(map[string]string)
+	for key, value := range translations {
+		keyMap[value] = key
+	}
+	replacer.SetKeyMap(keyMap)
+
+	// Process files to find replacements
+	if err := replacer.ProcessFiles(files); err != nil {
+		return err
+	}
+
+	// Get replacements for reporting
+	replacements := replacer.GetReplacements()
+	if len(replacements) == 0 {
+		fmt.Println(tr.T(messages.Keys.AppExtract.NoReplacements))
+		return nil
+	}
+
+	fmt.Printf(tr.T(messages.Keys.AppExtract.FoundComments, len(replacements)))
+
+	if config.Verbose {
+		for _, r := range replacements {
+			fmt.Printf("  %s:%d: %s\n", r.File, r.Pos, r.Replacement)
+		}
+	}
+
+	// Apply replacements (add comments)
+	fmt.Println("\n" + tr.T(messages.Keys.AppExtract.ApplyingReplacements))
+	if err := replacer.ApplyReplacements(); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ %s\n", tr.T(messages.Keys.AppExtract.UpdateComplete))
+	if extractCmd.BackupDir != "" {
+		fmt.Printf(tr.T(messages.Keys.AppExtract.BackupLocation, extractCmd.BackupDir))
 	}
 
 	return nil
@@ -164,44 +234,6 @@ func generateKey(prefix, value string) string {
 	return fmt.Sprintf("%s.%s", prefix, key)
 }
 
-// addTranslationsToFile adds translations to a locale file (reused from add command)
-func addTranslationsToFile(filename string, translations map[string]string, tr i18n.Translator) error {
-	// Read existing content
-	existing := make(map[string]interface{})
-	if data, err := os.ReadFile(filename); err == nil && len(data) > 0 {
-		if err := json.Unmarshal(data, &existing); err != nil {
-			return err
-		}
-	}
-
-	// Detect language from filename
-	isEnglish := strings.Contains(strings.ToLower(filename), "en.json") ||
-		strings.Contains(strings.ToLower(filename), "english")
-
-	// Add new translations
-	added := 0
-	for key, value := range translations {
-		if _, exists := existing[key]; !exists {
-			if !isEnglish {
-				value = fmt.Sprintf("[TODO] %s", value)
-			}
-			existing[key] = value
-			added++
-		}
-	}
-
-	if added == 0 {
-		return nil
-	}
-
-	// Write back
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(filename, data, 0644)
-}
 
 // handleAutoUpdate handles the auto-update functionality
 func handleAutoUpdate(config *options.AppConfig, translations map[string]string, files []string, dryRun bool) error {
@@ -211,7 +243,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 	fmt.Println("\n" + tr.T(messages.Keys.AppExtract.AutoUpdateMode))
 
 	// Create a string replacer
-	// Use TransformationReplacer (AST-based) replacer for direct replacement mode, CommentReplacer for comments
+	// Use TransformationReplacer for both comment mode and direct replacement mode
 	var replacer interface {
 		SetKeyMap(map[string]string)
 		ProcessFiles([]string) error
@@ -219,19 +251,16 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		ApplyReplacements() error
 	}
 
-	// Build package path (use relative path with ./ prefix if not absolute)
-	packagePath := extractCmd.Package
-	if packagePath != "" && !strings.HasPrefix(packagePath, "/") && !strings.HasPrefix(packagePath, "./") {
-		packagePath = "./" + packagePath
+	// Resolve package path based on module context
+	packagePath, err := resolvePackagePath(extractCmd.Package, ".")
+	if err != nil {
+		// If we can't resolve, use the package name as-is
+		packagePath = extractCmd.Package
 	}
 
-	if extractCmd.TrPattern != "" {
-		// Use AST-based replacer for format function handling
-		replacer = ast.NewTransformationReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir, packagePath)
-	} else {
-		// Use simple replacer for comment mode
-		replacer = ast.NewCommentReplacer(tr, extractCmd.TrPattern, extractCmd.KeepComments, false, extractCmd.BackupDir, packagePath)
-	}
+	trConfig := util.ToTransformConfig(extractCmd)
+	trConfig.PackagePath = packagePath
+	replacer = ast.NewTransformationReplacer(trConfig)
 
 	// Build key map (reverse of translations map)
 	keyMap := make(map[string]string)
@@ -245,8 +274,9 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		return err
 	}
 
-	// For AST-based transformation mode, we handle differently
-	if extractCmd.TrPattern != "" {
+	// Handle different modes
+	if extractCmd.AutoUpdate {
+		// For direct transformation mode
 		// Check if we have strings to transform
 		if len(translations) == 0 {
 			fmt.Println(tr.T(messages.Keys.AppExtract.NoReplacements))
@@ -287,6 +317,24 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		return err
 	}
 
+	// If keepComments is false and we're in update mode, clean up i18n comments after transformation
+	if extractCmd.AutoUpdate && !extractCmd.KeepComments {
+		// Create a new replacer just for cleaning comments
+		// func NewTransformationReplacer(tr i18n.Translator, trPattern string, keepComments, cleanComments, isUpdateMode bool, backupDir, packagePath string) *TransformationReplacer {
+		trConfig := util.ToTransformConfig(extractCmd)
+		trConfig.KeepComments = false
+		trConfig.CleanComments = true
+		trConfig.IsUpdateMode = false
+		trConfig.PackagePath = packagePath
+		cleanReplacer := ast.NewTransformationReplacer(trConfig)
+		if err := cleanReplacer.ProcessFiles(files); err != nil {
+			return err
+		}
+		if err := cleanReplacer.ApplyReplacements(); err != nil {
+			return err
+		}
+	}
+
 	fmt.Printf("✓ %s\n", tr.T(messages.Keys.AppExtract.UpdateComplete))
 	if extractCmd.BackupDir != "" {
 		fmt.Printf(tr.T(messages.Keys.AppExtract.BackupLocation, extractCmd.BackupDir))
@@ -295,31 +343,29 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 	return nil
 }
 
-// cleanI18nComments removes all i18n-* comments from files
 func cleanI18nComments(config *options.AppConfig) error {
 	tr := config.TR
 	extractCmd := config.Extract
 
 	fmt.Println(tr.T(messages.Keys.AppExtract.CleaningComments))
 
-	// Find files to process
-	var filesToProcess []string
+	// Find files to process using our utility that supports **
 	patterns := strings.Split(extractCmd.Files, ",")
-	for _, pattern := range patterns {
-		pattern = strings.TrimSpace(pattern)
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, pattern, err.Error()))
-		}
-		filesToProcess = append(filesToProcess, matches...)
+	filesToProcess, err := util.ExpandGlobPatterns(patterns)
+	if err != nil {
+		return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, extractCmd.Files, err.Error()))
 	}
 
-	// Create replacer in clean mode
-	packagePath := extractCmd.Package
-	if packagePath != "" && !strings.HasPrefix(packagePath, "/") && !strings.HasPrefix(packagePath, "./") {
-		packagePath = "./" + packagePath
+	// Resolve package path based on module context
+	packagePath, err := resolvePackagePath(extractCmd.Package, ".")
+	if err != nil {
+		// If we can't resolve, use the package name as-is
+		packagePath = extractCmd.Package
 	}
-	replacer := ast.NewCommentReplacer(tr, "", false, true, extractCmd.BackupDir, packagePath)
+
+	trConfig := util.ToTransformConfig(extractCmd)
+	trConfig.PackagePath = packagePath
+	replacer := ast.NewTransformationReplacer(trConfig)
 
 	if err := replacer.ProcessFiles(filesToProcess); err != nil {
 		return err

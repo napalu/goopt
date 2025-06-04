@@ -68,6 +68,8 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 
 	// Group keys by their structure using OrderedMap to maintain order
 	groups := orderedmap.NewOrderedMap[string, *templates.Group]()
+	// Track field names to detect duplicates
+	fieldNameCount := make(map[string]int)
 
 	for _, key := range keys {
 		processedKey := key
@@ -77,6 +79,21 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 		}
 
 		parts := strings.Split(processedKey, ".")
+		// Skip keys with empty parts
+		hasEmptyPart := false
+		for _, part := range parts {
+			if part == "" {
+				hasEmptyPart = true
+				break
+			}
+		}
+		if hasEmptyPart {
+			if cfg.Verbose {
+				log.Printf("Skipping invalid key with empty part: %s", key)
+			}
+			continue
+		}
+
 		if len(parts) < 2 {
 			// Top level key
 			groupName := "Root"
@@ -85,8 +102,19 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 				g = &templates.Group{Name: groupName, Fields: []templates.Field{}}
 				groups.Set(groupName, g)
 			}
+
+			fieldName := toGoName(parts[0])
+			// Check for duplicates within this group
+			groupKey := groupName + "." + fieldName
+			count := fieldNameCount[groupKey]
+			fieldNameCount[groupKey] = count + 1
+			if count > 0 {
+				// Add numeric suffix for duplicates
+				fieldName = fmt.Sprintf("%s%d", fieldName, count+1)
+			}
+
 			g.Fields = append(g.Fields, templates.Field{
-				Name: toGoName(parts[0]),
+				Name: fieldName,
 				Key:  key,
 			})
 		} else {
@@ -100,8 +128,19 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 				g = &templates.Group{Name: groupName, Fields: []templates.Field{}}
 				groups.Set(groupName, g)
 			}
+
+			goFieldName := toGoName(fieldName)
+			// Check for duplicates within this group
+			groupKey := groupName + "." + goFieldName
+			count := fieldNameCount[groupKey]
+			fieldNameCount[groupKey] = count + 1
+			if count > 0 {
+				// Add numeric suffix for duplicates
+				goFieldName = fmt.Sprintf("%s%d", goFieldName, count+1)
+			}
+
 			g.Fields = append(g.Fields, templates.Field{
-				Name: toGoName(fieldName),
+				Name: goFieldName,
 				Key:  key,
 			})
 		}

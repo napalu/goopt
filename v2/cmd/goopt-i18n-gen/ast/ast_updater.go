@@ -57,7 +57,7 @@ func (u *Updater) UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, genera
 		fmt.Println()
 		fmt.Println(u.tr.T(messages.Keys.AppAst.SomeFilesFailed, sessionDir))
 		for _, err := range updateErrors {
-			fmt.Println(u.tr.T(messages.Keys.AppAst.UpdateError, err))
+			fmt.Println(u.tr.T("  - %v", err))
 		}
 		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdateCount), len(updateErrors))
 	}
@@ -107,19 +107,17 @@ func (u *Updater) updateFile(filename string, fields []FieldWithoutDescKey, gene
 		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateTemp), err)
 	}
 	tempPath := tempFile.Name()
+	defer tempFile.Close()
 	defer os.Remove(tempPath) // Clean up temp file
 
 	// Use go/format to ensure proper formatting
 	if err := format.Node(tempFile, fset, file); err != nil {
-		tempFile.Close()
 		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedWriteFormatted), err)
 	}
 
 	if err := tempFile.Sync(); err != nil {
-		tempFile.Close()
 		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedSyncTemp), err)
 	}
-	tempFile.Close()
 
 	// Atomic rename (or copy if cross-device)
 	if err := os.Rename(tempPath, filename); err != nil {

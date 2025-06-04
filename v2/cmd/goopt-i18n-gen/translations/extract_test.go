@@ -78,7 +78,7 @@ func setupExtractTest(t *testing.T, bundle i18n.Translator, localeFile, goFile s
 		case "keyPrefix":
 			cmdLine += fmt.Sprintf(" -P %s", value)
 		case "minLength":
-			cmdLine += fmt.Sprintf(" -l %s", value)
+			cmdLine += fmt.Sprintf(" -L %s", value)
 		case "matchOnly":
 			cmdLine += fmt.Sprintf(" -M %s", value)
 		case "skipMatch":
@@ -99,6 +99,12 @@ func setupExtractTest(t *testing.T, bundle i18n.Translator, localeFile, goFile s
 			if value == "true" {
 				cmdLine += " --clean-comments"
 			}
+		case "keepComments":
+			if value == "true" {
+				cmdLine += " --keep-comments"
+			}
+		case "transformMode":
+			cmdLine += fmt.Sprintf(" --transform-mode %s", value)
 			// Add more flags as needed
 		}
 	}
@@ -388,12 +394,14 @@ func main() {
 			},
 		},
 		{
-			name: "auto update with comments",
+			name: "auto update with default tr pattern",
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
 
 				goFile := filepath.Join(tempDir, "test.go")
 				goContent := `package test
+
+import "fmt"
 
 func main() {
 	fmt.Println("Hello, world!")
@@ -414,11 +422,12 @@ func main() {
 			},
 			wantError: false,
 			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
-				// Check that Go file was updated with comments
+				// With the new default, -u should do direct transformation
 				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Updated Go file content:\n%s", string(content))
 
-				if !strings.Contains(string(content), "// i18n-todo:") {
-					t.Error("Go file should have i18n-todo comment added")
+				if !strings.Contains(string(content), "tr.T(") {
+					t.Error("Go file should have strings replaced with tr.T calls")
 				}
 
 				// Check backup was created
@@ -463,11 +472,11 @@ func main() {
 				// Check that Go file was updated
 				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
 				t.Logf("Updated Go file content:\n%s", string(content))
-				
+
 				// Also check if a backup was created to confirm processing happened
 				backupFiles, _ := os.ReadDir(filepath.Join(tempDir, ".backup"))
 				t.Logf("Backup files created: %d", len(backupFiles))
-				
+
 				// Log the extract configuration
 				t.Logf("AutoUpdate: %v, TrPattern: %s", cfg.Extract.AutoUpdate, cfg.Extract.TrPattern)
 
@@ -572,6 +581,98 @@ func main() {
 
 				if !hasExtract || !hasAlso {
 					t.Error("other strings should have been extracted")
+				}
+			},
+		},
+		{
+			name: "keep comments with auto update",
+			setup: func() (*goopt.Parser, *options.AppConfig, string) {
+				tempDir := t.TempDir()
+
+				goFile := filepath.Join(tempDir, "test.go")
+				goContent := `package test
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello") // i18n-todo: tr.T(messages.Keys.Hello)
+	msg := "World" // i18n-todo: tr.T(messages.Keys.World)
+	fmt.Println(msg)
+}
+`
+				os.WriteFile(goFile, []byte(goContent), 0644)
+
+				localeFile := filepath.Join(tempDir, "en.json")
+				os.WriteFile(localeFile, []byte("{}"), 0644)
+
+				bundle := createTestBundle()
+				parser, cfg := setupExtractTest(t, bundle, localeFile, goFile, map[string]string{
+					"autoUpdate":   "true",
+					"keepComments": "true",
+					"keyPrefix":    "test",
+					"backupDir":    filepath.Join(tempDir, ".backup"),
+				})
+				return parser, cfg, tempDir
+			},
+			wantError: false,
+			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
+
+				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Go file content with keep-comments:\n%s", string(content))
+
+				// Should have tr.T replacements
+				if !strings.Contains(string(content), "tr.T(") {
+					t.Error("Go file should have strings replaced with tr.T calls")
+				}
+
+				if !strings.Contains(string(content), "i18n-todo") {
+					t.Error("i18n-todo comments should be kept with --keep-comments flag")
+				}
+			},
+		},
+		{
+			name: "remove comments with auto update",
+			setup: func() (*goopt.Parser, *options.AppConfig, string) {
+				tempDir := t.TempDir()
+
+				goFile := filepath.Join(tempDir, "test.go")
+				goContent := `package test
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello") // i18n-todo: tr.T(messages.Keys.Hello)
+	msg := "World" // i18n-todo: tr.T(messages.Keys.World)
+	fmt.Println(msg)
+}
+`
+				os.WriteFile(goFile, []byte(goContent), 0644)
+
+				localeFile := filepath.Join(tempDir, "en.json")
+				os.WriteFile(localeFile, []byte("{}"), 0644)
+
+				bundle := createTestBundle()
+				parser, cfg := setupExtractTest(t, bundle, localeFile, goFile, map[string]string{
+					"autoUpdate": "true",
+					// Note: NOT setting keepComments, so it defaults to false
+					"keyPrefix": "test",
+					"backupDir": filepath.Join(tempDir, ".backup"),
+				})
+				return parser, cfg, tempDir
+			},
+			wantError: false,
+			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
+
+				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Go file content without keep-comments:\n%s", string(content))
+
+				// Should have tr.T replacements
+				if !strings.Contains(string(content), "tr.T(") {
+					t.Error("Go file should have strings replaced with tr.T calls")
+				}
+
+				if strings.Contains(string(content), "i18n-todo") {
+					t.Error("i18n-todo comments should be removed without --keep-comments flag")
 				}
 			},
 		},
@@ -689,6 +790,154 @@ func f2() { println("String from file2") }
 
 				if !hasFile1 || !hasFile2 {
 					t.Error("strings from all files should have been extracted")
+				}
+			},
+		},
+		{
+			name: "honor i18n-todo comments with transform-mode all-marked",
+			setup: func() (*goopt.Parser, *options.AppConfig, string) {
+				tempDir := t.TempDir()
+
+				goFile := filepath.Join(tempDir, "test.go")
+				goContent := `package test
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello") // i18n-todo: tr.T(messages.Keys.Hello)
+	msg := "World" // i18n-todo: tr.T(messages.Keys.World)
+	fmt.Println(msg)
+}
+`
+				os.WriteFile(goFile, []byte(goContent), 0644)
+
+				localeFile := filepath.Join(tempDir, "en.json")
+				os.WriteFile(localeFile, []byte("{}"), 0644)
+
+				bundle := createTestBundle()
+				parser, cfg := setupExtractTest(t, bundle, localeFile, goFile, map[string]string{
+					"autoUpdate":    "true",
+					"transformMode": "all-marked",
+					"keyPrefix":     "test",
+					"backupDir":     filepath.Join(tempDir, ".backup"),
+				})
+				return parser, cfg, tempDir
+			},
+			wantError: false,
+			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
+				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Go file content with transform-mode=all-marked:\n%s", string(content))
+
+				// Both strings should be transformed when userFacingOnly is false
+				if !strings.Contains(string(content), `fmt.Println(tr.T(messages.Keys.Test.Hello))`) {
+					t.Error("'Hello' should be transformed")
+				}
+
+				// Check that msg is assigned a tr.T call (may be formatted across lines)
+				// The string "World" should be transformed to use tr.T
+				if !strings.Contains(string(content), `msg := tr.T(`) || strings.Contains(string(content), `msg := "World"`) {
+					t.Error("'World' should be transformed with all-marked mode")
+				}
+
+				// i18n-todo comments should be removed
+				if strings.Contains(string(content), "i18n-todo") {
+					t.Error("i18n-todo comments should be removed after transformation")
+				}
+			},
+		},
+		{
+			name: "transform-mode with-comments only transforms i18n-todo strings",
+			setup: func() (*goopt.Parser, *options.AppConfig, string) {
+				tempDir := t.TempDir()
+
+				goFile := filepath.Join(tempDir, "test.go")
+				goContent := `package test
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello") // i18n-todo: tr.T(messages.Keys.Hello)
+	msg := "World" // i18n-todo: tr.T(messages.Keys.World)
+	fmt.Println(msg)
+	fmt.Println("NoComment") // This should not be transformed
+}
+`
+				os.WriteFile(goFile, []byte(goContent), 0644)
+
+				localeFile := filepath.Join(tempDir, "en.json")
+				os.WriteFile(localeFile, []byte("{}"), 0644)
+
+				bundle := createTestBundle()
+				parser, cfg := setupExtractTest(t, bundle, localeFile, goFile, map[string]string{
+					"autoUpdate":    "true",
+					"transformMode": "with-comments",
+					"keyPrefix":     "test",
+					"backupDir":     filepath.Join(tempDir, ".backup"),
+				})
+				return parser, cfg, tempDir
+			},
+			wantError: false,
+			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
+				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Go file content with transform-mode=with-comments:\n%s", string(content))
+
+				// Only strings with i18n-todo comments should be transformed
+				if !strings.Contains(string(content), `fmt.Println(tr.T(`) {
+					t.Error("'Hello' with i18n-todo should be transformed")
+				}
+
+				if !strings.Contains(string(content), `msg := tr.T(`) {
+					t.Error("'World' with i18n-todo should be transformed")
+				}
+
+				// String without comment should NOT be transformed
+				if !strings.Contains(string(content), `fmt.Println("NoComment")`) {
+					t.Error("'NoComment' without i18n-todo should NOT be transformed")
+				}
+			},
+		},
+		{
+			name: "transform-mode all transforms all strings with keys",
+			setup: func() (*goopt.Parser, *options.AppConfig, string) {
+				tempDir := t.TempDir()
+
+				goFile := filepath.Join(tempDir, "test.go")
+				goContent := `package test
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello")
+	msg := "World"
+	fmt.Println(msg)
+}
+`
+				os.WriteFile(goFile, []byte(goContent), 0644)
+
+				localeFile := filepath.Join(tempDir, "en.json")
+				os.WriteFile(localeFile, []byte("{}"), 0644)
+
+				bundle := createTestBundle()
+				parser, cfg := setupExtractTest(t, bundle, localeFile, goFile, map[string]string{
+					"autoUpdate":    "true",
+					"transformMode": "all",
+					"keyPrefix":     "test",
+					"backupDir":     filepath.Join(tempDir, ".backup"),
+				})
+				return parser, cfg, tempDir
+			},
+			wantError: false,
+			validate: func(t *testing.T, tempDir string, cfg *options.AppConfig) {
+				content, _ := os.ReadFile(filepath.Join(tempDir, "test.go"))
+				t.Logf("Go file content with transform-mode=all:\n%s", string(content))
+
+				// All strings should be transformed
+				if !strings.Contains(string(content), `fmt.Println(tr.T(messages.Keys.Test.Hello))`) {
+					t.Error("'Hello' should be transformed in all mode")
+				}
+
+				if !strings.Contains(string(content), `msg := tr.T(`) {
+					t.Error("'World' should be transformed in all mode")
 				}
 			},
 		},

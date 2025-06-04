@@ -28,10 +28,10 @@ func TestGenerate(t *testing.T) {
 				// Create test locale file
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
-					"app.name":         "Test App",
-					"app.description":  "Test Description",
-					"error.not_found":  "Not Found",
-					"error.forbidden":  "Forbidden",
+					"app.name":        "Test App",
+					"app.description": "Test Description",
+					"error.not_found": "Not Found",
+					"error.forbidden": "Forbidden",
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
@@ -57,12 +57,12 @@ func TestGenerate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to read output file: %v", err)
 				}
-				
+
 				// Check package declaration
 				if !strings.Contains(string(content), "package messages") {
 					t.Error("output should contain package declaration")
 				}
-				
+
 				// Check generated keys structure
 				expectedKeys := []string{
 					"App struct",         // Group
@@ -72,7 +72,7 @@ func TestGenerate(t *testing.T) {
 					"NotFound string",    // Field in Error
 					"Forbidden string",   // Field in Error
 				}
-				
+
 				for _, key := range expectedKeys {
 					if !strings.Contains(string(content), key) {
 						t.Errorf("output should contain key %q", key)
@@ -113,7 +113,7 @@ func TestGenerate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to read output file: %v", err)
 				}
-				
+
 				// Keys with prefix should have it stripped and be grouped
 				if !strings.Contains(string(content), "Feature struct") {
 					t.Error("output should contain Feature struct (prefix stripped)")
@@ -121,7 +121,7 @@ func TestGenerate(t *testing.T) {
 				if !strings.Contains(string(content), "Enable string") {
 					t.Error("output should contain Enable field")
 				}
-				
+
 				// Keys without prefix should remain in root
 				if !strings.Contains(string(content), "Other struct") {
 					t.Error("output should contain Other struct")
@@ -140,7 +140,7 @@ func TestGenerate(t *testing.T) {
 				data, _ := json.Marshal(enData)
 				os.WriteFile(enFile, data, 0644)
 
-				frFile := filepath.Join(tempDir, "multi_fr.json") 
+				frFile := filepath.Join(tempDir, "multi_fr.json")
 				frData := map[string]string{"common.yes": "Oui", "common.cancel": "Annuler"}
 				data, _ = json.Marshal(frData)
 				os.WriteFile(frFile, data, 0644)
@@ -165,7 +165,7 @@ func TestGenerate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to read output file: %v", err)
 				}
-				
+
 				// Should have all unique keys from both files in Common struct
 				if !strings.Contains(string(content), "Common struct") {
 					t.Error("output should contain Common struct")
@@ -204,7 +204,7 @@ func TestGenerate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to read output file: %v", err)
 				}
-				
+
 				// Should still have valid Go code structure
 				if !strings.Contains(string(content), "package messages") {
 					t.Error("output should contain package declaration")
@@ -297,7 +297,7 @@ func TestGenerate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to read output file: %v", err)
 				}
-				
+
 				// Should have deduplicated keys in Root struct
 				if !strings.Contains(string(content), "Root struct") {
 					t.Error("output should contain Root struct for top-level keys")
@@ -315,14 +315,14 @@ func TestGenerate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, cfg := tt.setup()
-			
+
 			err := Generate(parser, nil)
-			
+
 			if (err != nil) != tt.wantError {
 				t.Errorf("Generate() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
-			
+
 			if !tt.wantError && tt.validate != nil {
 				tt.validate(t, cfg.Generate.Output)
 			}
@@ -332,16 +332,16 @@ func TestGenerate(t *testing.T) {
 
 func TestGenerateKeyGrouping(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Create locale file with nested keys
 	localeFile := filepath.Join(tempDir, "grouped.json")
 	localeData := map[string]string{
-		"user.profile.name":     "Name",
-		"user.profile.email":    "Email",
-		"user.settings.theme":   "Theme",
-		"admin.users.list":      "User List",
-		"admin.users.create":    "Create User",
-		"standalone":            "Standalone Key",
+		"user.profile.name":   "Name",
+		"user.profile.email":  "Email",
+		"user.settings.theme": "Theme",
+		"admin.users.list":    "User List",
+		"admin.users.create":  "Create User",
+		"standalone":          "Standalone Key",
 	}
 	data, _ := json.Marshal(localeData)
 	os.WriteFile(localeFile, data, 0644)
@@ -358,7 +358,7 @@ func TestGenerateKeyGrouping(t *testing.T) {
 	}
 
 	parser, _ := goopt.NewParserFromStruct(cfg)
-	
+
 	err := Generate(parser, nil)
 	if err != nil {
 		t.Fatalf("Generate() failed: %v", err)
@@ -371,7 +371,7 @@ func TestGenerateKeyGrouping(t *testing.T) {
 
 	// Check for proper nesting structure
 	contentStr := string(content)
-	
+
 	// Should have nested structs
 	if !strings.Contains(contentStr, "UserProfile struct") {
 		t.Error("should have UserProfile nested struct")
@@ -382,7 +382,7 @@ func TestGenerateKeyGrouping(t *testing.T) {
 	if !strings.Contains(contentStr, "AdminUsers struct") {
 		t.Error("should have AdminUsers nested struct")
 	}
-	
+
 	// Check standalone key
 	if !strings.Contains(contentStr, "Standalone") {
 		t.Error("should have Standalone key")

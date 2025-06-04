@@ -12,6 +12,7 @@
 ## Why Choose goopt? Beyond the Basics
 
 While simple CLIs are easy with goopt, its real power shines in complex applications:
+- **First-Class Internationalization**: Unlike other CLI libraries where i18n is an afterthought, goopt v2 features deeply integrated internationalization support. Use the `descKey` tag to reference translations, generate type-safe message keys, and ship your CLI in multiple languages with zero boilerplate. The included `goopt-i18n-gen` tool provides a complete workflow from string extraction to validation.
 - **Deep Integration with Go Structs**: Define your entire CLI, including commands, subcommands, namespaced flags, and inheritance, directly within your Go configuration structs using goopt tags. This provides compile-time checks and a highly declarative approach not found elsewhere.
 - **True Hierarchical Flags**: Define flags at any level of your command structure (app, app service, app service start). Flags are automatically inherited by subcommands but can be precisely overridden where needed.
 - **Flexible Organization**: Mix and match struct-tag definitions with programmatic configuration. Use nested structs for flag namespacing or embed shared configurations directly into commands.
@@ -28,7 +29,7 @@ While simple CLIs are easy with goopt, its real power shines in complex applicat
 - **Positional Arguments**: Support for positional arguments with flexible position and index constraints.
 - **Command Callbacks**: Define executable functions tied to specific commands with access to the command context.
 - **Struct Context Access**: Access the original configuration struct from command callbacks, enabling better separation of concerns.
-- **Internationalization (i18n)**: Built-in support for translating command descriptions, flag descriptions, error messages, and help text into multiple languages.
+- **Internationalization (i18n)**: Built-in support for translating command descriptions, flag descriptions, error messages, and help text into multiple languages. Includes the powerful `goopt-i18n-gen` tool for complete i18n workflow automation.
 
 ## Installation
 
@@ -136,8 +137,30 @@ Key i18n features:
 - Automatic translation of error messages and help text
 - Support for multiple languages with easy runtime switching
 - Separation of system and user translation bundles
+- **Complete i18n workflow automation** with `goopt-i18n-gen`:
+  - Automatically scan your code for missing `descKey` tags
+  - Generate type-safe message constants from JSON locale files
+  - Extract hardcoded strings for translation
+  - Validate all translations are complete across locales
+  - Transform existing CLIs to be i18n-ready
 
-See the [i18n-demo example](examples/i18n-demo) for a complete implementation.
+### Quick i18n Setup
+
+```bash
+# Install the i18n tool
+go install github.com/napalu/goopt/v2/cmd/goopt-i18n-gen@latest
+
+# Initialize locale files
+goopt-i18n-gen -i locales/en.json init
+
+# Scan code and generate translations
+goopt-i18n-gen -i locales/en.json audit -d -g -u
+
+# Generate type-safe constants
+goopt-i18n-gen -i "locales/*.json" generate -o messages/keys.go
+```
+
+See the [i18n-demo example](examples/i18n-demo) and [goopt-i18n-gen documentation](cmd/goopt-i18n-gen/README.md) for complete implementation details.
 
 For more examples and detailed documentation, visit the [documentation site](https://napalu.github.io/goopt).
 

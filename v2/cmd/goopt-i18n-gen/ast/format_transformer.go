@@ -7,18 +7,21 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"regexp"
 	"strings"
 )
 
 // FormatTransformer handles AST transformation of format function calls
 type FormatTransformer struct {
 	fset            *token.FileSet
-	stringMap       map[string]string  // maps string literals to translation keys
-	requiredImports map[string]bool    // tracks imports needed
-	transformed     bool               // tracks if any transformations were made
-	detector        *FormatDetector    // generic format function detector
-	packagePath     string             // path to the messages package
-	userFacingOnly  bool               // if true, only transform known user-facing functions
+	stringMap       map[string]string    // maps string literals to translation keys
+	requiredImports map[string]bool      // tracks imports needed
+	transformed     bool                 // tracks if any transformations were made
+	detector        *FormatDetector      // generic format function detector
+	packagePath      string               // path to the messages package
+	transformMode    string               // "user-facing", "with-comments", "all-marked", "all"
+	i18nTodoMap      map[token.Pos]string // maps string literal positions to i18n-todo message keys
+	userFacingRegexes []*regexp.Regexp    // regex patterns to identify user-facing functions
 }
 
 // NewFormatTransformer creates a new format transformer
@@ -29,8 +32,9 @@ func NewFormatTransformer(stringMap map[string]string) *FormatTransformer {
 		requiredImports: make(map[string]bool),
 		transformed:     false,
 		detector:        NewFormatDetector(),
-		packagePath:     "./messages", // default value
-		userFacingOnly:  true,         // default to only transforming known user-facing functions
+		packagePath:     "messages",    // default value (will be resolved to full module path)
+		transformMode:   "user-facing", // default to only transforming known user-facing functions
+		i18nTodoMap:     make(map[token.Pos]string),
 	}
 }
 
@@ -39,9 +43,103 @@ func (ft *FormatTransformer) SetMessagePackagePath(path string) {
 	ft.packagePath = path
 }
 
-// SetUserFacingOnly sets whether to only transform known user-facing functions
-func (ft *FormatTransformer) SetUserFacingOnly(userFacingOnly bool) {
-	ft.userFacingOnly = userFacingOnly
+// SetTransformMode sets the transformation mode
+func (ft *FormatTransformer) SetTransformMode(mode string) {
+	ft.transformMode = mode
+}
+
+// SetUserFacingRegexes sets the regex patterns to identify user-facing functions
+func (ft *FormatTransformer) SetUserFacingRegexes(patterns []string) error {
+	ft.userFacingRegexes = nil
+	for _, pattern := range patterns {
+		if pattern == "" {
+			continue
+		}
+		regex, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("invalid user-facing regex '%s': %w", pattern, err)
+		}
+		ft.userFacingRegexes = append(ft.userFacingRegexes, regex)
+	}
+	return nil
+}
+
+// SetFormatFunctionPatterns registers custom format function patterns
+func (ft *FormatTransformer) SetFormatFunctionPatterns(patterns []string) error {
+	for _, pattern := range patterns {
+		// Parse pattern:index format
+		parts := strings.SplitN(pattern, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid format function pattern '%s', expected 'pattern:index'", pattern)
+		}
+		
+		regex := parts[0]
+		indexStr := parts[1]
+		
+		// Parse the index
+		var index int
+		if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+			return fmt.Errorf("invalid format arg index '%s' in pattern '%s'", indexStr, pattern)
+		}
+		
+		// Register with the detector
+		if err := ft.detector.RegisterCustomFormatPattern(regex, index); err != nil {
+			return fmt.Errorf("failed to register format pattern '%s': %w", pattern, err)
+		}
+	}
+	return nil
+}
+
+// buildI18nTodoMap scans the AST to find string literals with i18n-todo comments
+func (ft *FormatTransformer) buildI18nTodoMap(file *ast.File) {
+	// Clear the map
+	ft.i18nTodoMap = make(map[token.Pos]string)
+
+	// First, collect all i18n-todo comments and their positions
+	todoComments := make(map[token.Pos]string)
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			// Check if this is an i18n-todo comment
+			if strings.Contains(c.Text, "i18n-todo:") {
+				// Extract the message key from the comment
+				// Format: // i18n-todo: tr.T(messages.Keys.Hello)
+				parts := strings.Split(c.Text, "i18n-todo:")
+				if len(parts) < 2 {
+					continue
+				}
+
+				todoText := strings.TrimSpace(parts[1])
+				// Extract the key from tr.T(messages.Keys.XXX) or similar patterns
+				if keyStart := strings.Index(todoText, "("); keyStart != -1 {
+					if keyEnd := strings.LastIndex(todoText, ")"); keyEnd != -1 {
+						keyExpr := todoText[keyStart+1 : keyEnd]
+						// Remove any quotes if present
+						keyExpr = strings.Trim(keyExpr, `"'`)
+						// Store by comment position
+						todoComments[c.Pos()] = keyExpr
+					}
+				}
+			}
+		}
+	}
+
+	// Now walk the AST to find string literals that are on the same line as i18n-todo comments
+	ast.Inspect(file, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			litPos := ft.fset.Position(lit.Pos())
+
+			// Check if there's an i18n-todo comment on the same line
+			for commentPos, keyExpr := range todoComments {
+				cPos := ft.fset.Position(commentPos)
+				if cPos.Line == litPos.Line {
+					// Found a match - map the string literal position to the key
+					ft.i18nTodoMap[lit.Pos()] = keyExpr
+					break
+				}
+			}
+		}
+		return true
+	})
 }
 
 // TransformFile transforms format functions in a file
@@ -52,8 +150,34 @@ func (ft *FormatTransformer) TransformFile(filename string, src []byte) ([]byte,
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
-	// Transform the AST
-	ast.Inspect(file, ft.transformNode)
+	// Build i18n-todo map if needed for certain transform modes
+	if ft.transformMode == "with-comments" || ft.transformMode == "all-marked" {
+		ft.buildI18nTodoMap(file)
+	}
+
+	// Transform the AST based on mode
+	switch ft.transformMode {
+	case "user-facing":
+		// Only transform user-facing functions
+		ast.Inspect(file, ft.transformNode)
+	case "with-comments":
+		// Only transform strings with i18n-todo comments
+		if len(ft.i18nTodoMap) > 0 {
+			ft.applyI18nTodoTransformations(file)
+		}
+	case "all-marked":
+		// Transform both user-facing AND i18n-todo comments
+		ast.Inspect(file, ft.transformNode)
+		if len(ft.i18nTodoMap) > 0 {
+			ft.applyI18nTodoTransformations(file)
+		}
+	case "all":
+		// Transform all strings that have keys
+		ft.transformAllStrings(file)
+	default:
+		// Default to user-facing only
+		ast.Inspect(file, ft.transformNode)
+	}
 
 	// Add required imports if any transformations were made
 	if ft.transformed {
@@ -62,6 +186,161 @@ func (ft *FormatTransformer) TransformFile(filename string, src []byte) ([]byte,
 
 	// Convert back to source
 	return formatNode(ft.fset, file)
+}
+
+// transformAllStrings transforms all string literals that have translation keys
+func (ft *FormatTransformer) transformAllStrings(file *ast.File) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			// First handle format functions as usual
+			ft.transformNode(x)
+		case *ast.AssignStmt:
+			// Handle assignments
+			for i, rhs := range x.Rhs {
+				if lit, ok := rhs.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					for quotedStr, key := range ft.stringMap {
+						if lit.Value == quotedStr {
+							trCall := ft.createTrCall(key, nil)
+							if trCall != nil {
+								x.Rhs[i] = trCall
+								ft.transformed = true
+								ft.requiredImports["messages"] = true
+								ft.requiredImports["i18n"] = true
+							}
+							break
+						}
+					}
+				}
+			}
+		case *ast.ValueSpec:
+			// Handle var/const declarations
+			for i, val := range x.Values {
+				if lit, ok := val.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					for quotedStr, key := range ft.stringMap {
+						if lit.Value == quotedStr {
+							trCall := ft.createTrCall(key, nil)
+							if trCall != nil {
+								x.Values[i] = trCall
+								ft.transformed = true
+								ft.requiredImports["messages"] = true
+								ft.requiredImports["i18n"] = true
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// applyI18nTodoTransformations applies transformations based on i18n-todo comments
+func (ft *FormatTransformer) applyI18nTodoTransformations(file *ast.File) {
+	// Walk the AST and transform string literals that have i18n-todo comments
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			// Handle function calls with string literals
+			for i, arg := range x.Args {
+				if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
+						// Check if we have a key for this string
+						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
+						for quotedStr, key := range ft.stringMap {
+							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
+								// Found a match - create tr.T call
+								trCall := ft.createTrCall(key, nil)
+								if trCall != nil {
+									x.Args[i] = trCall
+									ft.transformed = true
+									ft.requiredImports["messages"] = true
+									ft.requiredImports["i18n"] = true
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		case *ast.AssignStmt:
+			// Handle assignments like: msg := "World" // i18n-todo: tr.T(messages.Keys.World)
+			for i, rhs := range x.Rhs {
+				if lit, ok := rhs.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
+						// Check if the key exists in our string map
+						// We need to check if we have a transformation for this string
+						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
+						for quotedStr, key := range ft.stringMap {
+							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
+								// Found a match - create tr.T call
+								trCall := ft.createTrCall(key, nil)
+								if trCall != nil {
+									x.Rhs[i] = trCall
+									ft.transformed = true
+									ft.requiredImports["messages"] = true
+									ft.requiredImports["i18n"] = true
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		case *ast.ValueSpec:
+			// Handle var/const declarations
+			for i, val := range x.Values {
+				if lit, ok := val.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
+						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
+						for quotedStr, key := range ft.stringMap {
+							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
+								// Found a match - create tr.T call
+								trCall := ft.createTrCall(key, nil)
+								if trCall != nil {
+									x.Values[i] = trCall
+									ft.transformed = true
+									ft.requiredImports["messages"] = true
+									ft.requiredImports["i18n"] = true
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// createTrCallFromKeyExpr creates a tr.T call expression from a key expression like "messages.Keys.World"
+func (ft *FormatTransformer) createTrCallFromKeyExpr(keyExpr string) ast.Expr {
+	// Parse the key expression to build the AST
+	// keyExpr is like "messages.Keys.World"
+	parts := strings.Split(keyExpr, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+
+	// Build the selector expression for the key
+	var expr ast.Expr = ast.NewIdent(parts[0])
+	for i := 1; i < len(parts); i++ {
+		expr = &ast.SelectorExpr{
+			X:   expr,
+			Sel: ast.NewIdent(parts[i]),
+		}
+	}
+
+	// Create tr.T call
+	return &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   ast.NewIdent("tr"),
+			Sel: ast.NewIdent("T"),
+		},
+		Args: []ast.Expr{expr},
+	}
 }
 
 // transformNode examines and transforms individual AST nodes
@@ -83,7 +362,7 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 
 		// Get transformation type
 		transformType := ft.detector.SuggestTransformation(formatInfo)
-		
+
 		// Transform based on type
 		switch transformType {
 		case "Print":
@@ -118,7 +397,7 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 type FunctionInfo struct {
 	pkg      string // package name (e.g., "fmt", "log")
 	receiver string // receiver for method calls (e.g., "logger")
-	function string // function name (e.g., "Printf") 
+	function string // function name (e.g., "Printf")
 	funcType string // normalized function type for handling
 }
 
@@ -165,7 +444,7 @@ func (ft *FormatTransformer) getFuncType(pkg, function string) string {
 			return "errorf"
 		}
 	}
-	
+
 	if pkg == "log" {
 		switch function {
 		case "Printf", "Fatalf", "Panicf":
@@ -214,7 +493,7 @@ func (ft *FormatTransformer) isHandledFormatFunction(info *FunctionInfo) bool {
 }
 
 // transformPrintf transforms Printf-style calls
-func (ft *FormatTransformer) transformPrintf(call *ast.CallExpr, info *FunctionInfo, key string) {
+func (ft *FormatTransformer) transformPrintf(call *ast.CallExpr, key string) {
 	// Change Printf to Print
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		newName := strings.TrimSuffix(sel.Sel.Name, "f")
@@ -223,7 +502,7 @@ func (ft *FormatTransformer) transformPrintf(call *ast.CallExpr, info *FunctionI
 
 	// Create tr.T call with all arguments
 	trCall := ft.createTrCall(key, call.Args[1:])
-	
+
 	// Replace arguments with just the tr.T call
 	call.Args = []ast.Expr{trCall}
 }
@@ -262,11 +541,11 @@ func (ft *FormatTransformer) transformErrorf(call *ast.CallExpr, info *FunctionI
 	if hasErrorWrap {
 		// Need to preserve error wrapping
 		// fmt.Errorf("msg: %w", err) -> fmt.Errorf("%s: %w", tr.T(key), err)
-		
+
 		// Find the position of %w and extract non-error format args
 		var nonErrorArgs []ast.Expr
 		errorArg := call.Args[len(call.Args)-1] // Assume %w is last
-		
+
 		if len(call.Args) > 2 {
 			nonErrorArgs = call.Args[1 : len(call.Args)-1]
 		}
@@ -279,7 +558,7 @@ func (ft *FormatTransformer) transformErrorf(call *ast.CallExpr, info *FunctionI
 
 		// Create tr.T call for the message part
 		trCall := ft.createTrCall(key, nonErrorArgs)
-		
+
 		// New args: format, tr.T result, error
 		call.Args = []ast.Expr{call.Args[0], trCall, errorArg}
 	} else {
@@ -292,7 +571,7 @@ func (ft *FormatTransformer) transformErrorf(call *ast.CallExpr, info *FunctionI
 		// Create tr.T call with all format args
 		trCall := ft.createTrCall(key, call.Args[1:])
 		call.Args = []ast.Expr{trCall}
-		
+
 		ft.requiredImports["errors"] = true
 	}
 }
@@ -336,23 +615,23 @@ func (ft *FormatTransformer) createTrCall(key string, args []ast.Expr) *ast.Call
 // createTrCallArgs creates the arguments for a tr.T call
 func (ft *FormatTransformer) createTrCallArgs(key string, formatArgs []ast.Expr) []ast.Expr {
 	args := make([]ast.Expr, 0, len(formatArgs)+1)
-	
+
 	// Add the key
 	args = append(args, ft.createKeyExpr(key))
-	
+
 	// Add format arguments
 	args = append(args, formatArgs...)
-	
+
 	return args
 }
 
 // createKeyExpr creates the AST expression for a message key
 func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
 	parts := strings.Split(key, ".")
-	
+
 	// Start with the first part
 	expr := ast.Expr(ast.NewIdent(parts[0]))
-	
+
 	// Build selector expression for each remaining part
 	for i := 1; i < len(parts); i++ {
 		expr = &ast.SelectorExpr{
@@ -360,7 +639,7 @@ func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
 			Sel: ast.NewIdent(parts[i]),
 		}
 	}
-	
+
 	return expr
 }
 
@@ -370,11 +649,11 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 	needMessages := ft.requiredImports["messages"]
 	needErrors := ft.requiredImports["errors"]
 	needI18n := needMessages // If we need messages, we need i18n for tr
-	
+
 	if !needMessages && !needErrors {
 		return
 	}
-	
+
 	// Find or create import declaration
 	var importDecl *ast.GenDecl
 	for _, decl := range file.Decls {
@@ -383,14 +662,14 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 			break
 		}
 	}
-	
+
 	// If no import declaration exists, create one after package declaration
 	if importDecl == nil {
 		importDecl = &ast.GenDecl{
-			Tok: token.IMPORT,
+			Tok:   token.IMPORT,
 			Specs: []ast.Spec{},
 		}
-		
+
 		// Insert after package declaration
 		newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
 		newDecls = append(newDecls, file.Decls[0]) // package decl
@@ -398,7 +677,7 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 		newDecls = append(newDecls, file.Decls[1:]...)
 		file.Decls = newDecls
 	}
-	
+
 	// Add required imports if not already present
 	if needMessages && !ft.hasImport(importDecl, "messages") {
 		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
@@ -408,7 +687,7 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 			},
 		})
 	}
-	
+
 	if needErrors && !ft.hasImport(importDecl, "errors") {
 		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
@@ -417,7 +696,7 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 			},
 		})
 	}
-	
+
 	// We also need to ensure tr is available
 	if needI18n && !ft.hasImport(importDecl, "github.com/napalu/goopt/v2/i18n") {
 		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
@@ -427,7 +706,7 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 			},
 		})
 	}
-	
+
 	// Add tr variable initialization if needed
 	if needMessages {
 		ft.addTrInitialization(file)
@@ -465,11 +744,11 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 			}
 		}
 	}
-	
+
 	if hasTr {
 		return
 	}
-	
+
 	// Create tr variable declaration
 	trDecl := &ast.GenDecl{
 		Tok: token.VAR,
@@ -488,7 +767,7 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 			},
 		},
 	}
-	
+
 	// Find position after imports
 	importIndex := -1
 	for i, decl := range file.Decls {
@@ -496,13 +775,42 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 			importIndex = i
 		}
 	}
-	
-	// Insert after imports
+
+	// Insert after imports, but be careful about //go: directives
 	if importIndex >= 0 {
+		insertPos := importIndex + 1
+		
+		// Skip past any declarations that have //go: directives
+		// These directives must be immediately followed by their target declaration
+		for insertPos < len(file.Decls) {
+			// Check if this declaration has any //go: directive comments
+			if genDecl, ok := file.Decls[insertPos].(*ast.GenDecl); ok {
+				hasGoDirective := false
+				
+				// Check the declaration's doc comments for //go: directives
+				if genDecl.Doc != nil {
+					for _, comment := range genDecl.Doc.List {
+						if strings.HasPrefix(strings.TrimSpace(comment.Text), "//go:") {
+							hasGoDirective = true
+							break
+						}
+					}
+				}
+				
+				// If this declaration has a //go: directive, skip it
+				if hasGoDirective {
+					insertPos++
+					continue
+				}
+			}
+			break
+		}
+		
+		// Now insert the tr declaration at the safe position
 		newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
-		newDecls = append(newDecls, file.Decls[:importIndex+1]...)
+		newDecls = append(newDecls, file.Decls[:insertPos]...)
 		newDecls = append(newDecls, trDecl)
-		newDecls = append(newDecls, file.Decls[importIndex+1:]...)
+		newDecls = append(newDecls, file.Decls[insertPos:]...)
 		file.Decls = newDecls
 	}
 }
@@ -533,20 +841,101 @@ func (ft *FormatTransformer) extractFormatString(expr ast.Expr) (string, bool) {
 
 // transformGenericPrintf handles Printf-style functions generically
 func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *FormatCallInfo, key string) {
-	// Remove 'f' from function name if it ends with 'f'
+	// Smart detection: determine transformation strategy based on format string position
+	// and the presence of additional arguments after it
+	
+	// Strategy 1: Classical Printf pattern (format at position 0)
+	// - fmt.Printf("format %s", args...) -> fmt.Print(tr.T(key, args...))
+	// - Remove 'f' suffix and replace ALL arguments
+	
+	// Strategy 2: Writer-based pattern (format at position 1) 
+	// - fmt.Fprintf(w, "format %s", args...) -> fmt.Fprint(w, tr.T(key, args...))
+	// - Keep writer, remove 'f', replace format and args
+	
+	// Strategy 3: Custom format function (format at any position with args after)
+	// - s.Log.MsgAll(map, "format %s", args...) -> s.Log.MsgAll(map, tr.T(key, args...))
+	// - Keep function name, replace format string and consume variadic args
+	
+	// Determine the transformation strategy
+	isClassicalPrintf := false
+	isWriterBased := false
+	hasArgsAfterFormat := info.FormatStringIndex < len(call.Args)-1
+	
+	// Check if it's a standard Printf-style function
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		funcName := sel.Sel.Name
-		if strings.HasSuffix(funcName, "f") {
-			sel.Sel = ast.NewIdent(strings.TrimSuffix(funcName, "f"))
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			pkg := ident.Name
+			method := sel.Sel.Name
+			
+			// Classical Printf pattern: format at index 0
+			if info.FormatStringIndex == 0 {
+				standardPkgs := map[string]bool{"fmt": true, "log": true, "testing": true}
+				if standardPkgs[pkg] && strings.HasSuffix(method, "f") {
+					isClassicalPrintf = true
+				}
+				// Also check for common logging patterns
+				if strings.HasSuffix(method, "Printf") || 
+				   strings.HasSuffix(method, "Infof") ||
+				   strings.HasSuffix(method, "Debugf") ||
+				   strings.HasSuffix(method, "Warnf") ||
+				   strings.HasSuffix(method, "Errorf") ||
+				   strings.HasSuffix(method, "Fatalf") ||
+				   strings.HasSuffix(method, "Panicf") {
+					isClassicalPrintf = true
+				}
+			} else if info.FormatStringIndex == 1 && pkg == "fmt" && strings.HasPrefix(method, "Fprint") {
+				// Writer-based pattern: fmt.Fprintf, fmt.Fprintln
+				isWriterBased = true
+			}
 		}
 	}
-
-	// Create tr.T call with format arguments
-	args := ft.extractFormatArgs(call, info)
-	trCall := ft.createTrCall(key, args)
 	
-	// Replace all arguments with just the tr.T call
-	call.Args = []ast.Expr{trCall}
+	// Apply transformation based on detected pattern
+	if isClassicalPrintf {
+		// Classical Printf: remove 'f' and replace ALL arguments
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if strings.HasSuffix(sel.Sel.Name, "f") {
+				sel.Sel = ast.NewIdent(strings.TrimSuffix(sel.Sel.Name, "f"))
+			}
+		}
+		
+		args := ft.extractFormatArgs(call, info)
+		trCall := ft.createTrCall(key, args)
+		call.Args = []ast.Expr{trCall}
+		
+	} else if isWriterBased {
+		// Writer-based: keep writer, remove 'f', replace format+args
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if strings.HasSuffix(sel.Sel.Name, "f") {
+				sel.Sel = ast.NewIdent(strings.TrimSuffix(sel.Sel.Name, "f"))
+			}
+		}
+		
+		writer := call.Args[0]
+		args := ft.extractFormatArgs(call, info)
+		trCall := ft.createTrCall(key, args)
+		call.Args = []ast.Expr{writer, trCall}
+		
+	} else if hasArgsAfterFormat {
+		// Custom format function with variadic args after format string
+		// Replace format string and all subsequent args with tr.T call
+		args := ft.extractFormatArgs(call, info)
+		trCall := ft.createTrCall(key, args)
+		
+		// Keep all args before format string, replace format and all args after
+		newArgs := make([]ast.Expr, 0, info.FormatStringIndex+1)
+		for i := 0; i < info.FormatStringIndex; i++ {
+			newArgs = append(newArgs, call.Args[i])
+		}
+		newArgs = append(newArgs, trCall)
+		call.Args = newArgs
+		
+	} else {
+		// Custom format function with no args after format string
+		// Just replace the format string argument
+		trCall := ft.createTrCall(key, nil)
+		call.Args[info.FormatStringIndex] = trCall
+	}
 }
 
 // transformGenericDirect handles direct replacement (like Sprintf)
@@ -575,7 +964,7 @@ func (ft *FormatTransformer) transformGenericFprintf(call *ast.CallExpr, info *F
 	// Extract writer and format args
 	var writer ast.Expr
 	var formatArgs []ast.Expr
-	
+
 	for i, arg := range call.Args {
 		if i < info.FormatStringIndex {
 			writer = arg // Assume first non-format arg is writer
@@ -586,7 +975,7 @@ func (ft *FormatTransformer) transformGenericFprintf(call *ast.CallExpr, info *F
 
 	// Create tr.T call
 	trCall := ft.createTrCall(key, formatArgs)
-	
+
 	// New args: writer + tr.T result
 	if writer != nil {
 		call.Args = []ast.Expr{writer, trCall}
@@ -599,18 +988,18 @@ func (ft *FormatTransformer) transformGenericFprintf(call *ast.CallExpr, info *F
 func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *FormatCallInfo, key string) {
 	// Check for error wrapping
 	hasErrorWrap := strings.Contains(info.FormatString, "%w")
-	
+
 	if hasErrorWrap {
 		// Preserve error wrapping
 		call.Args[info.FormatStringIndex] = &ast.BasicLit{
 			Kind:  token.STRING,
 			Value: `"%s: %w"`,
 		}
-		
+
 		// Extract non-error format args
 		var formatArgs []ast.Expr
 		var errorArg ast.Expr
-		
+
 		for i, arg := range call.Args {
 			if i > info.FormatStringIndex {
 				if i == len(call.Args)-1 && hasErrorWrap {
@@ -620,10 +1009,10 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 				}
 			}
 		}
-		
+
 		// Create tr.T call
 		trCall := ft.createTrCall(key, formatArgs)
-		
+
 		// New args
 		newArgs := []ast.Expr{call.Args[info.FormatStringIndex], trCall}
 		if errorArg != nil {
@@ -636,11 +1025,11 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 			X:   ast.NewIdent("errors"),
 			Sel: ast.NewIdent("New"),
 		}
-		
+
 		args := ft.extractFormatArgs(call, info)
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{trCall}
-		
+
 		ft.requiredImports["errors"] = true
 	}
 }
@@ -649,13 +1038,13 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 func (ft *FormatTransformer) transformGenericWrapf(call *ast.CallExpr, info *FormatCallInfo, key string) {
 	// For errors.Wrapf(err, "format %s", arg), transform to errors.Wrapf(err, "%s", tr.T(key, arg))
 	// Keep the function name as-is, just replace format string with "%s" and create tr.T call
-	
+
 	// Replace format string with "%s"
 	call.Args[info.FormatStringIndex] = &ast.BasicLit{
 		Kind:  token.STRING,
 		Value: `"%s"`,
 	}
-	
+
 	// Extract format arguments (everything after the format string)
 	var formatArgs []ast.Expr
 	for i, arg := range call.Args {
@@ -663,21 +1052,21 @@ func (ft *FormatTransformer) transformGenericWrapf(call *ast.CallExpr, info *For
 			formatArgs = append(formatArgs, arg)
 		}
 	}
-	
+
 	// Create tr.T call
 	trCall := ft.createTrCall(key, formatArgs)
-	
+
 	// Build new arguments: preserve everything before format string, add "%s", add tr.T call
 	newArgs := make([]ast.Expr, 0, info.FormatStringIndex+2)
-	
+
 	// Add arguments before format string (e.g., the error for errors.Wrapf)
 	for i := 0; i < info.FormatStringIndex; i++ {
 		newArgs = append(newArgs, call.Args[i])
 	}
-	
+
 	// Add the "%s" format string and tr.T call
 	newArgs = append(newArgs, call.Args[info.FormatStringIndex], trCall)
-	
+
 	call.Args = newArgs
 }
 
@@ -706,16 +1095,21 @@ func (ft *FormatTransformer) transformRegularFunctionCall(call *ast.CallExpr) {
 
 			// Determine function name
 			funcName := ft.getFunctionName(call)
-			
-			// Check if we should transform this function
-			if ft.userFacingOnly {
-				// In user-facing only mode, check against known user-facing functions
+
+			// Check if we should transform this function based on mode
+			switch ft.transformMode {
+			case "user-facing", "all-marked":
+				// In these modes, check against known user-facing functions
 				if !ft.isUserFacingFunction(funcName) {
 					continue
 				}
+			case "with-comments":
+				// Skip - only i18n-todo comments are transformed in this mode
+				continue
+			case "all":
+				// Transform all functions with string literals
 			}
-			// If not in user-facing only mode, transform all functions with string literals
-			
+
 			// Replace the string literal with tr.T call
 			call.Args[i] = ft.createTrCall(key, nil)
 			ft.transformed = true
@@ -727,7 +1121,14 @@ func (ft *FormatTransformer) transformRegularFunctionCall(call *ast.CallExpr) {
 
 // isUserFacingFunction checks if a function is known to display user-facing text
 func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
-	// Check exact matches first (package.Function)
+	// Check regex patterns first if provided
+	for _, regex := range ft.userFacingRegexes {
+		if regex.MatchString(funcName) {
+			return true
+		}
+	}
+
+	// Check exact matches (package.Function)
 	exactMatches := map[string]bool{
 		// fmt package - display functions
 		"fmt.Print":    true,
@@ -736,7 +1137,7 @@ func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
 		"fmt.Fprintln": true,
 		"fmt.Sprint":   true,
 		"fmt.Sprintln": true,
-		
+
 		// log package - logging functions
 		"log.Print":   true,
 		"log.Println": true,
@@ -744,21 +1145,21 @@ func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
 		"log.Fatalln": true,
 		"log.Panic":   true,
 		"log.Panicln": true,
-		
+
 		// errors package
 		"errors.New": true,
 	}
-	
+
 	if exactMatches[funcName] {
 		return true
 	}
-	
+
 	// Check method names (anything.MethodName)
 	// This handles logger.Info(), slog.Info(), customLogger.Error(), etc.
 	parts := strings.Split(funcName, ".")
 	if len(parts) == 2 {
 		methodName := parts[1]
-		
+
 		// Common logging method names
 		loggingMethods := map[string]bool{
 			// Logging levels
@@ -770,24 +1171,42 @@ func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
 			"Trace":   true,
 			"Fatal":   true,
 			"Panic":   true,
-			
+
 			// Common logging methods
 			"Log":     true,
 			"Logf":    true,
 			"Print":   true,
 			"Println": true,
 			"Printf":  true,
-			
+
 			// Message methods (for structured loggers)
 			"Msg":  true,
 			"Send": true,
 		}
-		
+
 		if loggingMethods[methodName] {
+			return true
+		}
+
+		// Handle chained calls like "chained.Msg"
+		if parts[0] == "chained" && loggingMethods[methodName] {
 			return true
 		}
 	}
 	
+	// Handle deeper chains like "chained.logger.Info.Msg"
+	if len(parts) > 2 && parts[0] == "chained" {
+		// Get the last part as the method name
+		lastMethod := parts[len(parts)-1]
+		loggingMethods := map[string]bool{
+			"Info": true, "Error": true, "Warn": true, "Debug": true,
+			"Msg": true, "Send": true, "Log": true, "Print": true,
+		}
+		if loggingMethods[lastMethod] {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -795,15 +1214,44 @@ func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
 func (ft *FormatTransformer) getFunctionName(call *ast.CallExpr) string {
 	switch fun := call.Fun.(type) {
 	case *ast.SelectorExpr:
-		// pkg.Function or receiver.Method
-		if ident, ok := fun.X.(*ast.Ident); ok {
-			return ident.Name + "." + fun.Sel.Name
-		}
+		// Build the full selector path recursively
+		return ft.buildSelectorPath(fun)
 	case *ast.Ident:
 		// Simple function name
 		return fun.Name
 	}
 	return ""
+}
+
+// buildSelectorPath recursively builds the full path for a selector expression
+func (ft *FormatTransformer) buildSelectorPath(sel *ast.SelectorExpr) string {
+	switch x := sel.X.(type) {
+	case *ast.Ident:
+		// Base case: simple identifier
+		return x.Name + "." + sel.Sel.Name
+	case *ast.SelectorExpr:
+		// Recursive case: nested selector
+		return ft.buildSelectorPath(x) + "." + sel.Sel.Name
+	case *ast.CallExpr:
+		// Chained call: extract the function being called
+		if callSel, ok := x.Fun.(*ast.SelectorExpr); ok {
+			// For chained calls like logger.WithField().Infof()
+			// we return "chained.WithField.Infof" to indicate it's a chain
+			return "chained." + ft.buildSelectorPath(callSel) + "." + sel.Sel.Name
+		}
+		// Generic chained call
+		return "chained." + sel.Sel.Name
+	case *ast.IndexExpr:
+		// Handle indexed expressions like arr[0].Method()
+		if ident, ok := x.X.(*ast.Ident); ok {
+			return ident.Name + "[idx]." + sel.Sel.Name
+		}
+		return "indexed." + sel.Sel.Name
+	default:
+		// For any other expression type, just return the method name
+		// This handles cases like function returns: GetLogger().Info()
+		return sel.Sel.Name
+	}
 }
 
 // formatNode converts an AST node back to source code
@@ -813,11 +1261,11 @@ func formatNode(fset *token.FileSet, node ast.Node) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Post-process to fix multiline key issues
 	result := buf.Bytes()
 	result = fixMultilineKeys(result)
-	
+
 	return result, nil
 }
 
@@ -827,18 +1275,18 @@ func fixMultilineKeys(src []byte) []byte {
 	var fixed []string
 	var inMessageKey bool
 	var keyBuffer []string
-	
+
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Check if we're starting a messages.Keys reference
 		if strings.Contains(line, "messages.Keys.") && !strings.Contains(line, ")") {
 			inMessageKey = true
 			keyBuffer = []string{line}
 			continue
 		}
-		
+
 		// If we're in a message key, accumulate lines
 		if inMessageKey {
 			// Check if this line ends the key
@@ -858,15 +1306,15 @@ func fixMultilineKeys(src []byte) []byte {
 			}
 			continue
 		}
-		
+
 		// Normal line
 		fixed = append(fixed, line)
 	}
-	
+
 	// Handle any remaining buffer
 	if len(keyBuffer) > 0 {
 		fixed = append(fixed, strings.Join(keyBuffer, ""))
 	}
-	
+
 	return []byte(strings.Join(fixed, "\n"))
 }

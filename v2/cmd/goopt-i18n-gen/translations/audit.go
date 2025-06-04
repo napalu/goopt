@@ -7,9 +7,9 @@ import (
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
 	"log"
 	"os"
-	"path/filepath"
 )
 
 func Audit(parser *goopt.Parser, _ *goopt.Command) error {
@@ -23,20 +23,18 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 		// Default to all Go files in current directory
 		scanPatterns = []string{"*.go"}
 	}
+	
 
-	// Expand glob patterns
-	var files []string
-	for _, pattern := range scanPatterns {
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			log.Fatalf("Failed to expand pattern %s: %v", pattern, err)
-		}
-		files = append(files, matches...)
+	// Expand glob patterns using our utility that supports **
+	files, err := util.ExpandGlobPatterns(scanPatterns)
+	if err != nil {
+		log.Fatalf("Failed to expand patterns: %v", err)
 	}
 
 	if len(files) == 0 {
 		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.NoFiles))
 	}
+	
 
 	// Scan for fields without descKey tags
 	scanner := ast.NewScanner(cfg.TR)
@@ -77,8 +75,8 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 		fmt.Printf("    %s\n", cfg.TR.T(messages.Keys.AppAudit.TranslationLabel, translation))
 	}
 
-	// Update JSON files if requested
-	if cfg.Audit.GenerateMissing && len(cfg.Input) > 0 {
+	// Update JSON files when generating descKeys or when explicitly requested
+	if (cfg.Audit.GenerateDescKeys || cfg.Audit.GenerateMissing) && len(cfg.Input) > 0 && len(generatedTranslations) > 0 {
 		// Expand input files
 		inputFiles, err := expandInputFiles(cfg.Input)
 		if err != nil {

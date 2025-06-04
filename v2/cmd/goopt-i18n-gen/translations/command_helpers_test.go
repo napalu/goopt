@@ -85,8 +85,8 @@ func TestEnsureInputFile(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name:      "file already exists",
-			path:      filepath.Join(tempDir, "existing.json"),
+			name: "file already exists",
+			path: filepath.Join(tempDir, "existing.json"),
 			setup: func() {
 				os.WriteFile(filepath.Join(tempDir, "existing.json"), []byte("{}"), 0644)
 			},
@@ -105,9 +105,9 @@ func TestEnsureInputFile(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name: "invalid path",
-			path: "",
-			setup: func() {},
+			name:      "invalid path",
+			path:      "",
+			setup:     func() {},
 			wantError: true,
 		},
 	}
@@ -115,7 +115,7 @@ func TestEnsureInputFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
-			
+
 			err := ensureInputFile(tt.path)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ensureInputFile(%q) error = %v, wantError %v", tt.path, err, tt.wantError)
@@ -126,7 +126,7 @@ func TestEnsureInputFile(t *testing.T) {
 				if _, err := os.Stat(tt.path); os.IsNotExist(err) {
 					t.Errorf("expected file %q to exist", tt.path)
 				}
-				
+
 				// Check content for newly created files
 				if tt.name == "create new file" || tt.name == "create file in new directory" {
 					content, err := os.ReadFile(tt.path)
@@ -145,15 +145,15 @@ func TestEnsureInputFile(t *testing.T) {
 func TestExpandInputFiles(t *testing.T) {
 	// Create temp directory with test files
 	tempDir := t.TempDir()
-	
+
 	// Create test files
 	testFiles := []string{
 		"en.json",
-		"fr.json", 
+		"fr.json",
 		"de.json",
 		"config.yaml", // Different extension
 	}
-	
+
 	for _, file := range testFiles {
 		path := filepath.Join(tempDir, file)
 		if err := os.WriteFile(path, []byte("{}"), 0644); err != nil {
@@ -167,70 +167,70 @@ func TestExpandInputFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(subDir, "es.json"), []byte("{}"), 0644)
 
 	tests := []struct {
-		name     string
-		inputs   []string
-		wantLen  int
-		wantErr  bool
+		name    string
+		inputs  []string
+		wantLen int
+		wantErr bool
 	}{
 		{
-			name:     "single file",
-			inputs:   []string{filepath.Join(tempDir, "en.json")},
-			wantLen:  1,
-			wantErr:  false,
+			name:    "single file",
+			inputs:  []string{filepath.Join(tempDir, "en.json")},
+			wantLen: 1,
+			wantErr: false,
 		},
 		{
-			name:     "wildcard pattern",
-			inputs:   []string{filepath.Join(tempDir, "*.json")},
-			wantLen:  3, // en.json, fr.json, de.json
-			wantErr:  false,
+			name:    "wildcard pattern",
+			inputs:  []string{filepath.Join(tempDir, "*.json")},
+			wantLen: 3, // en.json, fr.json, de.json
+			wantErr: false,
 		},
 		{
-			name:     "multiple patterns",
-			inputs:   []string{
+			name: "multiple patterns",
+			inputs: []string{
 				filepath.Join(tempDir, "en.json"),
 				filepath.Join(tempDir, "fr.json"),
 			},
-			wantLen:  2,
-			wantErr:  false,
+			wantLen: 2,
+			wantErr: false,
 		},
 		{
-			name:     "non-existent file (literal)",
-			inputs:   []string{filepath.Join(tempDir, "nonexistent.json")},
-			wantLen:  1, // Should return the literal path
-			wantErr:  false,
+			name:    "non-existent file (literal)",
+			inputs:  []string{filepath.Join(tempDir, "nonexistent.json")},
+			wantLen: 1, // Should return the literal path
+			wantErr: false,
 		},
 		{
-			name:     "subdirectory pattern",
-			inputs:   []string{filepath.Join(tempDir, "sub", "*.json")},
-			wantLen:  1, // Just es.json in subdirectory
-			wantErr:  false,
+			name:    "subdirectory pattern",
+			inputs:  []string{filepath.Join(tempDir, "sub", "*.json")},
+			wantLen: 1, // Just es.json in subdirectory
+			wantErr: false,
 		},
 		{
-			name:     "empty input",
-			inputs:   []string{},
-			wantLen:  0,
-			wantErr:  true, // expandInputFiles returns error for no files
+			name:    "empty input",
+			inputs:  []string{},
+			wantLen: 0,
+			wantErr: true, // expandInputFiles returns error for no files
 		},
 		{
-			name:     "mixed wildcards and literals",
-			inputs:   []string{
+			name: "mixed wildcards and literals",
+			inputs: []string{
 				filepath.Join(tempDir, "*.json"),
 				filepath.Join(tempDir, "config.yaml"),
 			},
-			wantLen:  4, // 3 json files + 1 yaml file
-			wantErr:  false,
+			wantLen: 4, // 3 json files + 1 yaml file
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := expandInputFiles(tt.inputs)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("expandInputFiles() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if len(result) != tt.wantLen {
 				t.Errorf("expandInputFiles() returned %d files, want %d", len(result), tt.wantLen)
 				t.Errorf("Files returned: %v", result)

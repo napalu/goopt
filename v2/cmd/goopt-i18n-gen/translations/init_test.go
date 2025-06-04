@@ -30,7 +30,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -68,11 +68,11 @@ func TestInit(t *testing.T) {
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
 				existingFile := filepath.Join(tempDir, "existing.json")
-				
+
 				// Create existing file
 				os.MkdirAll(filepath.Dir(existingFile), 0755)
 				os.WriteFile(existingFile, []byte(`{"existing": "content"}`), 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{existingFile},
@@ -81,7 +81,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -99,11 +99,11 @@ func TestInit(t *testing.T) {
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
 				existingFile := filepath.Join(tempDir, "force.json")
-				
+
 				// Create existing file
 				os.MkdirAll(filepath.Dir(existingFile), 0755)
 				os.WriteFile(existingFile, []byte(`{"old": "data"}`), 0644)
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{existingFile},
@@ -112,7 +112,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -145,7 +145,7 @@ func TestInit(t *testing.T) {
 				oldWd, _ := os.Getwd()
 				os.Chdir(tempDir)
 				t.Cleanup(func() { os.Chdir(oldWd) })
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{}, // Empty input
@@ -154,7 +154,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -176,7 +176,7 @@ func TestInit(t *testing.T) {
 					filepath.Join(tempDir, "fr.json"),
 					filepath.Join(tempDir, "de.json"),
 				}
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: files,
@@ -185,7 +185,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -212,7 +212,7 @@ func TestInit(t *testing.T) {
 			setup: func() (*goopt.Parser, *options.AppConfig, string) {
 				tempDir := t.TempDir()
 				deepPath := filepath.Join(tempDir, "deep", "nested", "path", "locale.json")
-				
+
 				bundle, _ := i18n.NewBundle()
 				cfg := &options.AppConfig{
 					Input: []string{deepPath},
@@ -221,7 +221,7 @@ func TestInit(t *testing.T) {
 					},
 					TR: bundle,
 				}
-				
+
 				parser, _ := goopt.NewParserFromStruct(cfg)
 				return parser, cfg, tempDir
 			},
@@ -237,14 +237,14 @@ func TestInit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, cfg, tempDir := tt.setup()
-			
+
 			err := Init(parser, nil)
-			
+
 			if (err != nil) != tt.wantError {
 				t.Errorf("Init() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
-			
+
 			if tt.validate != nil {
 				tt.validate(t, tempDir, cfg)
 			}
