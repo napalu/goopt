@@ -1357,7 +1357,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 
 	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth, nil)
 	if err != nil {
-		parser.addError(err)
+		return nil, err
 	}
 
 	// Use unwrappedValue for field iteration
@@ -1391,9 +1391,9 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		if err != nil {
 			if !isFunction(field) {
 				if flagPrefix != "" {
-					parser.addError(errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err))
+					return nil, errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err)
 				} else {
-					parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+					return nil, errs.ErrProcessingField.WithArgs(field.Name).Wrap(err)
 				}
 			}
 			continue
@@ -1422,7 +1422,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		if isSliceType(field) && !isBasicType(field.Type) {
 			// Process as nested structure
 			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(errs.ErrProcessingSliceField.WithArgs(fieldFlagPath).Wrap(err))
+				return nil, err
 			}
 			continue
 		}
@@ -1442,7 +1442,8 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 
 			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(errs.ErrProcessingNestedStruct.WithArgs(fieldFlagPath).Wrap(err))
+				// For structural errors during parser creation, fail immediately with the original error
+				return nil, err
 			}
 			continue
 		}
@@ -1492,7 +1493,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 			}
 
 			if cmd, err = p.buildCommand(parentCommand, "", "", pCmd); err != nil {
-				p.addError(errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err))
+				return errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err)
 			}
 		}
 
@@ -1510,7 +1511,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 		if arg.DefaultValue != "" {
 			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
 			if err != nil {
-				p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
+				return errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err)
 			}
 		}
 	}
@@ -1520,8 +1521,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 
 func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, fullFlagName string, arg *Argument) (err error) {
 	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
-		p.addError(errs.ErrBindNil.WithArgs(fullFlagName))
-		return nil
+		return errs.ErrBindNil.WithArgs(fullFlagName)
 	}
 	// Get the interface value - if it's already a pointer, use it directly
 	var interfaceValue interface{}
@@ -1547,7 +1547,7 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 			err = p.setBoundVariable(arg.DefaultValue, fullFlagName)
 		}
 		if err != nil {
-			p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
+			return errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err)
 		}
 	}
 
@@ -1606,7 +1606,8 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			if currentPath != "" {
 				cmd, ok := p.registeredCommands.Get(currentPath)
 				if !ok {
-					return errs.ErrCommandNotFound.WithArgs(currentPath)
+					// Skip this field instead of failing - the command might not be registered yet due to an earlier error
+					continue
 				}
 
 				// If the callback is already set (non-nil), use it directly

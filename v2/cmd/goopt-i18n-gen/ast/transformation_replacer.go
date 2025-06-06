@@ -524,9 +524,7 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 	// "messages" -> "messages"
 	// "github.com/user/project/messages" -> "messages"
 	packageName := sr.config.PackagePath
-	if strings.HasPrefix(packageName, "./") {
-		packageName = packageName[2:]
-	}
+	packageName = strings.TrimPrefix(packageName, "./")
 	// For any path with slashes (module paths or absolute paths), use just the last component
 	if strings.Contains(packageName, "/") {
 		parts := strings.Split(packageName, "/")

@@ -364,7 +364,8 @@ func GenerateDescKeysAndTranslations(fields []FieldWithoutDescKey, keyPrefix str
 		} else {
 			// Convert field name to human-readable text
 			translation = strcase.ToDelimited(field.FieldName, ' ')
-			translation = strings.Title(translation)
+			caser := cases.Title(language.Und)
+			translation = caser.String(translation)
 
 			// Add context based on kind
 			if field.Kind == "command" {

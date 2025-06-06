@@ -185,5 +185,13 @@
   "app.validate_cmd.strict_desc": "Sortir avec une erreur si la validation échoue",
   "app.version": "Version",
   "app.warning.failed_to_format": "Avertissement : Échec du formatage du code généré : %v",
-  "app.warning.update_failed": "Avertissement : %v"
+  "app.warning.update_failed": "Avertissement : %v",
+  "app.sync.all_in_sync": "✓ Tous les fichiers de locale sont synchronisés",
+  "app.sync.summary": "Résumé de la synchronisation :",
+  "app.sync.total_changes": "Total : %d clés ajoutées, %d clés supprimées",
+  "app.sync_cmd.target_desc": "Fichiers JSON cibles à synchroniser avec les fichiers de référence (flag -i)",
+  "app.sync_cmd.remove_extra_desc": "Supprimer les clés qui n'existent pas dans la référence",
+  "app.sync_cmd.todo_prefix_desc": "Préfixe pour les nouvelles traductions non-anglaises",
+  "app.sync_cmd.dry_run_desc": "Aperçu des changements",
+  "app.app_config.sync_desc": "Synchroniser les clés entre les fichiers de locale"
 }

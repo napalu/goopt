@@ -17,8 +17,6 @@ import (
 	"strings"
 )
 
-var tr i18n.Translator
-
 //go:embed locales/*.json
 var localesFS embed.FS
 
@@ -32,6 +30,7 @@ func main() {
 	cfg.Init.Exec = translations.Init
 	cfg.Add.Exec = translations.Add
 	cfg.Extract.Exec = translations.Extract
+	cfg.Sync.Exec = translations.Sync
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")

@@ -185,5 +185,13 @@
   "app.validate_cmd.strict_desc": "Mit Fehler beenden wenn Validierung fehlschlägt",
   "app.version": "Version",
   "app.warning.failed_to_format": "Warnung: Fehler beim Formatieren des generierten Codes: %v",
-  "app.warning.update_failed": "Warnung: %v"
+  "app.warning.update_failed": "Warnung: %v",
+  "app.sync.all_in_sync": "✓ Alle Lokalisierungsdateien sind synchron",
+  "app.sync.summary": "Synchronisierungszusammenfassung:",
+  "app.sync.total_changes": "Gesamt: %d Schlüssel hinzugefügt, %d Schlüssel entfernt",
+  "app.sync_cmd.target_desc": "Ziel-JSON-Dateien zum Synchronisieren gegen Referenzdateien (-i Flag)",
+  "app.sync_cmd.remove_extra_desc": "Schlüssel entfernen die nicht in der Referenz existieren",
+  "app.sync_cmd.todo_prefix_desc": "Präfix für neue nicht-englische Übersetzungen",
+  "app.sync_cmd.dry_run_desc": "Vorschau der Änderungen",
+  "app.app_config.sync_desc": "Schlüssel über Lokalisierungsdateien synchronisieren"
 }

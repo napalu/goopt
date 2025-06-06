@@ -174,6 +174,47 @@ Features:
 - **Safe by Default**: Skip mode prevents accidental overwrites
 - **Preview Changes**: Dry run shows exactly what will be modified
 
+### `sync`
+Synchronize translation keys across locale files to ensure all files have the same keys.
+
+```bash
+# Sync all locale files with each other (uses first file as reference)
+goopt-i18n-gen -i "locales/*.json" sync
+
+# Sync target files against reference files
+goopt-i18n-gen -i "locales/*.json" sync -t "system-locales/*.json"
+
+# Remove extra keys that don't exist in reference
+goopt-i18n-gen -i "locales/*.json" sync -r
+
+# Dry run to preview changes
+goopt-i18n-gen -i "locales/*.json" sync -n
+
+# Custom TODO prefix
+goopt-i18n-gen -i "locales/*.json" sync --todo-prefix "[TRANSLATE]"
+```
+
+Options:
+- `-t, --target`: Target JSON files to sync against reference files (-i flag)
+- `-r, --remove-extra`: Remove keys that don't exist in reference
+- `--todo-prefix`: Prefix for new non-English translations (default: [TODO])
+- `-n, --dry-run`: Preview what would be changed
+
+Features:
+- **Two sync modes**: 
+  - Without `-t`: Syncs all input files with each other (first file is reference)
+  - With `-t`: Syncs target files using input files as reference
+- **Language matching**: When syncing target files, tries to match by language code
+- **English fallback**: Uses English translations when no language match found
+- **Preserves existing**: Only adds missing keys, preserves existing translations
+- **TODO prefixing**: Automatically adds prefix to non-English translations
+
+Example: Keeping system-locales in sync with goopt core translations:
+```bash
+# If you're extending goopt's system translations (like in the i18n-demo example)
+goopt-i18n-gen -i "$GOPATH/src/github.com/napalu/goopt/v2/i18n/locales/*.json" sync -t "system-locales/*.json"
+```
+
 ### `extract`
 Extract string literals from Go source files for translation and optionally update source code.
 
@@ -193,11 +234,14 @@ goopt-i18n-gen -i "locales/*.json" extract -P app.ui -l 5
 # Dry run with verbose output
 goopt-i18n-gen -v -i "locales/*.json" extract -n
 
-# Auto-update: Add TODO comments to source files
-goopt-i18n-gen -i "locales/*.json" extract -u
+# Add TODO comments to source files (for review)
+goopt-i18n-gen -i "locales/*.json" extract
 
 # Auto-update: Replace strings with translation calls
-goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+goopt-i18n-gen -i "locales/*.json" extract -u
+
+# Auto-update with custom translator pattern
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "myTr.T"
 
 # Clean up i18n comments after manual review
 goopt-i18n-gen -i "locales/*.json" extract --clean-comments
