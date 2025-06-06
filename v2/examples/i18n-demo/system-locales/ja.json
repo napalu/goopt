@@ -1,7 +1,7 @@
 {
   "goopt.error.bind_invalid_value_field": "無効な値フィールドにバインドできません",
   "goopt.error.bind_nil": "フラグをnilにバインドできません",
-  "goopt.error.callback_on_non_terminal_command": "[TODO] cannot set callback for non-terminal command",
+  "goopt.error.callback_on_non_terminal_command": "非終端コマンドにコールバックを設定できません",
   "goopt.error.circular_dependency": "循環依存関係が検出されました: フラグ '%[1]s' は循環依存チェーンに含まれています: %[2]v",
   "goopt.error.command_callback_error": "コマンドコールバックでエラーが発生しました: %[1]v",
   "goopt.error.command_expects_subcommand": "コマンド '%[1]s' は以下のいずれかを必要とします: %[2]v",
@@ -88,7 +88,7 @@
   "goopt.error.secure_flag_expects_value": "セキュアフラグ '%[1]s' は値を必要としますが、取得に失敗しました: %[2]s",
   "goopt.error.setting_bound_variable_value": "フラグ %[1] のバインドされた変数値の設定中にエラーが発生しました",
   "goopt.error.short_flag_conflict": "グローバルフラグ %[2]s の短縮フラグ '%[1]s' は既に %[3]v として存在します",
-  "goopt.error.short_flag_conflict_context": "[TODO] short flag '-%[1]s' already used by '%[2]s'%[3]s, cannot use for '%[4]s'%[5]s",
+  "goopt.error.short_flag_conflict_context": "ショートフラグ '-%[1]s' は既に '%[2]s'%[3]s\n  で使用されています。'%[4]s'%[5]s には使用できません",
   "goopt.error.short_flag_not_defined": "フラグ %[1]s には短縮フラグが定義されていません",
   "goopt.error.unknown_flag": "不明なフラグ: %[1]s",
   "goopt.error.unknown_flag_in_command_path": "コマンドパス '%[2]s' に不明な引数 '%[1]s' があります",
