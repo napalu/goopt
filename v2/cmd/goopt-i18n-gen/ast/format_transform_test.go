@@ -145,10 +145,10 @@ var transformTestCases = []TestCase{
 
 	// Should NOT transform
 	{
-		name:     "non-format function",
+		name:     "non-format function should transform if string is in map",
 		input:    `fmt.Println("Hello world")`,
-		expected: `fmt.Println("Hello world")`,
-		imports:  []string{},
+		expected: `fmt.Println(tr.T(messages.Keys.App.Extracted.HelloWorld))`,
+		imports:  []string{"messages"},
 	},
 	{
 		name:     "custom printf function",
@@ -188,13 +188,157 @@ var errorTestCases = []TestCase{
 
 // Test the transformation logic
 func TestFormatTransformation(t *testing.T) {
-	// This will test our AST transformation implementation
+	// Create a string map based on the test cases
+	stringMap := map[string]string{
+		`"User %s logged in"`:               "messages.Keys.App.Extracted.UserSLoggedIn",
+		`"User %s logged in at %v from %s"`: "messages.Keys.App.Extracted.UserSLoggedInAtVFromS",
+		`"Error code: %d"`:                  "messages.Keys.App.Extracted.ErrorCodeD",
+		`"Welcome %s!"`:                     "messages.Keys.App.Extracted.WelcomeS",
+		`"Response: %s"`:                    "messages.Keys.App.Extracted.ResponseS",
+		`"failed to connect"`:               "messages.Keys.App.Extracted.FailedToConnect",
+		`"failed to connect to %s"`:         "messages.Keys.App.Extracted.FailedToConnectToS",
+		`"failed to connect to %s: %w"`:     "messages.Keys.App.Extracted.FailedToConnectToS",
+		`"connection failed: %w"`:           "messages.Keys.App.Extracted.ConnectionFailed",
+		`"Server started on port %d"`:       "messages.Keys.App.Extracted.ServerStartedOnPortD",
+		`"Authentication failed for %s"`:    "messages.Keys.App.Extracted.AuthenticationFailedForS",
+		`"Hello world"`:                     "messages.Keys.App.Extracted.HelloWorld",
+		`"Result: %v"`:                      "messages.Keys.App.Extracted.ResultV",
+		`"User: %s"`:                        "messages.Keys.App.Extracted.UserS",
+		`"Time: %v"`:                        "messages.Keys.App.Extracted.TimeV",
+		`"Progress: %d%%"`:                  "messages.Keys.App.Extracted.ProgressD",
+		`"Critical error: %v"`:              "messages.Keys.App.Extracted.CriticalErrorV",
+		`"Panic: %s"`:                       "messages.Keys.App.Extracted.PanicS",
+	}
+
+	// Create the transformer with the string map
+	ft := NewFormatTransformer(stringMap)
+	ft.SetMessagePackagePath("messages")
+	ft.SetTransformMode("user-facing") // Only transform format functions and known user-facing functions
+
 	for _, tc := range transformTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// TODO: Implement the actual test once we have the transformer
-			// result := transformCode(tc.input)
-			// assert.Equal(t, tc.expected, result)
-			// assert.Equal(t, tc.imports, result.RequiredImports)
+			// Wrap the input in a simple Go program
+			code := `package main
+import "fmt"
+import "log"
+import "errors"
+
+func main() {
+	` + tc.input + `
+}`
+
+			// Transform the code
+			result, err := ft.TransformFile("test.go", []byte(code))
+			if err != nil {
+				t.Fatalf("Transform failed: %v", err)
+			}
+
+			// Extract just the transformed line from the result
+			resultStr := string(result)
+			lines := strings.Split(resultStr, "\n")
+			var transformedLine string
+			inImportBlock := false
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+
+				// Track import blocks
+				if strings.HasPrefix(trimmed, "import (") {
+					inImportBlock = true
+					continue
+				}
+				if inImportBlock && trimmed == ")" {
+					inImportBlock = false
+					continue
+				}
+
+				// Skip various non-code lines
+				if trimmed != "" &&
+					!inImportBlock &&
+					!strings.HasPrefix(trimmed, "package") &&
+					!strings.HasPrefix(trimmed, "import") &&
+					!strings.HasPrefix(trimmed, "func") &&
+					!strings.HasPrefix(trimmed, "//") &&
+					trimmed != "}" && trimmed != "{" &&
+					!strings.HasPrefix(trimmed, "var tr") &&
+					!strings.Contains(trimmed, `"fmt"`) &&
+					!strings.Contains(trimmed, `"messages"`) &&
+					!strings.Contains(trimmed, `"github.com/napalu/goopt`) &&
+					!strings.Contains(trimmed, `"errors"`) {
+					transformedLine = trimmed
+					break
+				}
+			}
+
+			// Special handling for multiple statements test case
+			if tc.name == "multiple format strings in one statement" {
+				// For this test, we need to collect all transformed lines
+				var codeLines []string
+				for _, line := range lines {
+					trimmed := strings.TrimSpace(line)
+					// Look specifically for fmt.Print calls
+					if strings.HasPrefix(trimmed, "fmt.Print") {
+						codeLines = append(codeLines, trimmed)
+					}
+				}
+				transformedLine = strings.Join(codeLines, "; ")
+			}
+
+			// Check the transformation
+			if transformedLine != tc.expected {
+				t.Errorf("Transformation mismatch:\nGot:      %s\nExpected: %s", transformedLine, tc.expected)
+			}
+
+			// Check imports
+			for _, expectedImport := range tc.imports {
+				if !strings.Contains(resultStr, `"`+expectedImport+`"`) {
+					t.Errorf("Missing expected import: %s", expectedImport)
+				}
+			}
+		})
+	}
+}
+
+// Test error cases where transformation should not happen
+func TestFormatTransformationErrorCases(t *testing.T) {
+	// Empty string map since these should not transform
+	ft := NewFormatTransformer(map[string]string{})
+	ft.SetMessagePackagePath("messages")
+
+	for _, tc := range errorTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Wrap the input in a simple Go program
+			code := `package main
+import "fmt"
+
+func main() {
+	` + tc.input + `
+}`
+
+			// Transform the code
+			result, err := ft.TransformFile("test.go", []byte(code))
+			if err != nil {
+				t.Fatalf("Transform failed: %v", err)
+			}
+
+			// Extract just the line from the result
+			resultStr := string(result)
+			lines := strings.Split(resultStr, "\n")
+			var transformedLine string
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed != "" && !strings.HasPrefix(trimmed, "package") &&
+					!strings.HasPrefix(trimmed, "import") &&
+					!strings.HasPrefix(trimmed, "func") &&
+					trimmed != "}" && trimmed != "{" {
+					transformedLine = trimmed
+					break
+				}
+			}
+
+			// Check that no transformation occurred
+			if transformedLine != tc.expected {
+				t.Errorf("Unexpected transformation:\nGot:      %s\nExpected: %s", transformedLine, tc.expected)
+			}
 		})
 	}
 }
@@ -235,22 +379,4 @@ func example() error {
 	if err != nil {
 		t.Errorf("Failed to transform valid code: %v", err)
 	}
-}
-
-// Benchmarks to ensure performance
-func BenchmarkTransformation(b *testing.B) {
-	// TODO: Benchmark the transformation of a large file
-}
-
-// Helper function to normalize whitespace for comparison
-func normalizeWhitespace(s string) string {
-	lines := strings.Split(s, "\n")
-	var normalized []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			normalized = append(normalized, trimmed)
-		}
-	}
-	return strings.Join(normalized, "\n")
 }

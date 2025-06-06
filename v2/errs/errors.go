@@ -24,7 +24,7 @@ var (
 	ErrFlagAlreadyExists            = i18n.NewError(ErrFlagAlreadyExistsKey)
 	ErrPosixShortForm               = i18n.NewError(ErrPosixShortFormKey)
 	ErrShortFlagConflict            = i18n.NewError(ErrShortFlagConflictKey)
-	ErrShortFlagConflictContext     = i18n.NewError(ErrShortFlagConflictKey)
+	ErrShortFlagConflictContext     = i18n.NewError(ErrShortFlagConflictKeyContext)
 	ErrInvalidListDelimiterFunc     = i18n.NewError(ErrInvalidListDelimiterFuncKey)
 	ErrBindInvalidValue             = i18n.NewError(ErrBindInvalidValueKey)
 	ErrPointerExpected              = i18n.NewError(ErrPointerExpectedKey)

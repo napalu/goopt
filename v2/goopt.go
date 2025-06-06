@@ -806,7 +806,6 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 			if len(commandPath) > 0 {
 				currentContext = " in context '" + strings.Join(commandPath, " ") + "'"
 			}
-
 			return errs.ErrShortFlagConflictContext.WithArgs(argument.Short, conflictingFlag, conflictContext, flag, currentContext)
 		}
 

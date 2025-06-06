@@ -395,6 +395,7 @@ goopt-i18n-gen uses a command-based structure:
 - `audit`: Audit goopt fields for missing descKey tags
 - `validate`: Check that all descKey references have translations
 - `add`: Add translation keys to locale files programmatically
+- `sync`: Synchronize keys across locale files
 
 **Global options:**
 - `-i, --input`: Input JSON files (comma-separated or wildcards, required)
@@ -428,6 +429,12 @@ goopt-i18n-gen uses a command-based structure:
 - `-F, --from-file`: JSON file containing key-value pairs to add
 - `-m, --mode`: How to handle existing keys (skip, replace, error) - default: skip
 - `-n, --dry-run`: Show what would be added without modifying files
+
+**Sync command options:**
+- `-t, --target`: Target JSON files to sync against reference files (-i flag)
+- `-r, --remove-extra`: Remove keys that don't exist in reference
+- `--todo-prefix`: Prefix for new non-English translations (default: [TODO])
+- `-n, --dry-run`: Preview what would be changed
 
 **Extract command options:**
 - `-s, --files`: Go files to scan (default: **/*.go)
@@ -790,7 +797,7 @@ This approach adds comments next to strings, allowing manual review:
 
 ```bash
 # Step 1: Add TODO comments to all extractable strings
-goopt-i18n-gen -i "locales/*.json" extract -u
+goopt-i18n-gen -i "locales/*.json" extract
 
 # Your code now has comments like:
 # fmt.Println("Starting server...") // i18n-todo: app.extracted.starting_server
@@ -891,7 +898,7 @@ goopt-i18n-gen -i "locales/*.json" extract -s "internal/api/**/*.go" -P app.api
 goopt-i18n-gen -v -i "locales/*.json" extract -m ".*\\s+.*" -l 3 -n > strings-review.txt
 
 # 2. Add TODO comments for review
-goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*" -l 3 -u
+goopt-i18n-gen -i "locales/*.json" extract -m ".*\\s+.*" -l 3
 git add -A && git commit -m "Add i18n TODO comments"
 
 # 3. Package-by-package migration
@@ -977,6 +984,80 @@ Always preview changes before applying them:
 ```bash
 # See what would be changed without modifying files
 goopt-i18n-gen -i "locales/*.json" add -F new-keys.json -n
+```
+
+### Synchronizing Keys with the sync Command
+
+The `sync` command ensures that all locale files have the same translation keys, which is required by goopt's bundle validation. It provides two synchronization modes:
+
+#### Mode 1: Sync Within Input Files
+
+When no target files are specified, the command syncs all input files with each other, using the first file as the reference:
+
+```bash
+# Sync all locale files to have the same keys as en.json (first file)
+goopt-i18n-gen -i "locales/*.json" sync
+
+# Preview changes without modifying files
+goopt-i18n-gen -i "locales/*.json" sync -n
+
+# Remove keys that don't exist in the reference file
+goopt-i18n-gen -i "locales/*.json" sync -r
+```
+
+#### Mode 2: Sync Target Files Against Reference
+
+Use this mode when you have separate sets of files that need to be kept in sync:
+
+```bash
+# Sync system-locales against main locales
+goopt-i18n-gen -i "locales/*.json" sync -t "system-locales/*.json"
+
+# Sync vendor translations against your main translations
+goopt-i18n-gen -i "locales/*.json" sync -t "vendor/*/locales/*.json"
+```
+
+#### Language Matching
+
+The sync command intelligently matches languages between reference and target files:
+
+```bash
+# Given reference files: locales/en.json, locales/de.json
+# And target files: system/es.json, system/ja.json
+goopt-i18n-gen -i "locales/*.json" sync -t "system/*.json"
+
+# Result:
+# - system/es.json syncs with locales/en.json (English fallback)
+# - system/ja.json syncs with locales/en.json (English fallback)
+```
+
+#### Custom TODO Prefix
+
+For non-English translations, new keys are prefixed to indicate they need translation:
+
+```bash
+# Use default [TODO] prefix
+goopt-i18n-gen -i "locales/*.json" sync
+
+# Use custom prefix
+goopt-i18n-gen -i "locales/*.json" sync --todo-prefix "[TRANSLATE]"
+
+# Remove prefix (empty string)
+goopt-i18n-gen -i "locales/*.json" sync --todo-prefix ""
+```
+
+#### Example: Keeping Multiple Locale Sets in Sync
+
+```bash
+# Scenario: You have main app locales and plugin locales
+# Main: locales/en.json, locales/de.json, locales/fr.json
+# Plugin: plugins/auth/locales/en.json, plugins/auth/locales/de.json
+
+# Ensure plugin locales have all keys from main app
+goopt-i18n-gen -i "locales/*.json" sync -t "plugins/*/locales/*.json"
+
+# Result: Plugin locale files will have all keys from main app locales
+# Missing translations are added with [TODO] prefix for non-English files
 ```
 
 ### Tips

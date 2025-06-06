@@ -5,6 +5,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/constants"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
@@ -127,7 +128,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 			opts := TranslationUpdateOptions{
 				Mode:       UpdateModeSkip,
 				DryRun:     false,
-				TodoPrefix: "[TODO]",
+				TodoPrefix: constants.DefaultTODOPrefix,
 			}
 			result, err := UpdateTranslationFile(file, translations, opts)
 			if err != nil {
@@ -216,7 +217,47 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 
 // generateKey generates a translation key from a string value
 func generateKey(prefix, value string) string {
-	key := regexp.MustCompile(`[^\w\s]+`).ReplaceAllString(value, " ")
+	// Count and replace format specifiers with numbered placeholders
+	formatCounts := make(map[string]int)
+	
+	// Simple format specifier patterns - just the common ones
+	formatPatterns := []struct {
+		pattern string
+		name    string
+	}{
+		{`%s`, "s"},
+		{`%d`, "d"},
+		{`%v`, "v"},
+		{`%f`, "f"},
+		{`%t`, "t"},
+		{`%q`, "q"},
+		{`%x`, "x"},
+		{`%w`, "w"},
+		{`%%`, "percent"}, // Escaped percent
+	}
+	
+	key := value
+	
+	// Replace format specifiers with readable placeholders
+	for _, fp := range formatPatterns {
+		count := strings.Count(key, fp.pattern)
+		if count > 0 {
+			// Replace each occurrence with a numbered placeholder
+			for i := 1; i <= count; i++ {
+				old := fp.pattern
+				new := fmt.Sprintf("_%s", fp.name)
+				if i > 1 {
+					new = fmt.Sprintf("_%s%d", fp.name, i)
+				}
+				// Replace first occurrence
+				key = strings.Replace(key, old, new, 1)
+			}
+			formatCounts[fp.name] += count
+		}
+	}
+	
+	// Now apply the regex to remove other non-word chars
+	key = regexp.MustCompile(`[^\w\s]+`).ReplaceAllString(key, " ")
 	key = strings.TrimSpace(key)
 	key = strings.ToLower(key)
 

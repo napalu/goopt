@@ -10,29 +10,30 @@ import (
 
 // toGoName converts a string to a valid Go identifier
 func toGoName(s string) string {
-	// Handle special cases for format string patterns
-	// These appear to be auto-generated keys from format strings
-	if strings.Contains(s, "___") || strings.Contains(s, "__") {
-		// For these special cases, preserve the distinction by encoding underscore counts
-		s = strings.ReplaceAll(s, "___", "_Triple_")
-		s = strings.ReplaceAll(s, "__", "_Double_")
-	}
-
-	// Replace common separators with underscores
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, ".", "_")
-	s = strings.ReplaceAll(s, " ", "_")
-
-	// Split on underscores and capitalize each part
-	parts := strings.Split(s, "_")
+	// Split by dots first to preserve hierarchy
+	dotParts := strings.Split(s, ".")
 	var result []string
-	for _, part := range parts {
-		if part != "" {
-			result = append(result, strings.ToUpper(part[:1])+part[1:])
+	
+	for _, part := range dotParts {
+		// Replace common separators with underscores
+		part = strings.ReplaceAll(part, "-", "_")
+		part = strings.ReplaceAll(part, " ", "_")
+		
+		// Split on underscores and capitalize each part
+		subParts := strings.Split(part, "_")
+		var pascalPart []string
+		for _, subPart := range subParts {
+			if subPart != "" {
+				pascalPart = append(pascalPart, strings.ToUpper(subPart[:1])+subPart[1:])
+			}
+		}
+		
+		if len(pascalPart) > 0 {
+			result = append(result, strings.Join(pascalPart, ""))
 		}
 	}
-
-	return strings.Join(result, "")
+	
+	return strings.Join(result, ".")
 }
 
 // ensureInputFile creates the directory and file if they don't exist

@@ -68,6 +68,15 @@ type ExtractCmd struct {
 	Exec                 goopt.CommandFunc
 }
 
+// SyncCmd command configuration
+type SyncCmd struct {
+	Target       []string `goopt:"short:t;desc:Target JSON files to sync against reference files (-i flag);descKey:app.sync_cmd.target_desc"`
+	RemoveExtra  bool     `goopt:"short:r;desc:Remove keys that don't exist in reference;descKey:app.sync_cmd.remove_extra_desc"`
+	TodoPrefix   string   `goopt:"desc:Prefix for new non-English translations;default:[TODO];descKey:app.sync_cmd.todo_prefix_desc"`
+	DryRun       bool     `goopt:"short:n;desc:Preview what would be changed;descKey:app.sync_cmd.dry_run_desc"`
+	Exec         goopt.CommandFunc
+}
+
 // AppConfig main application configuration
 type AppConfig struct {
 	Input    []string        `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.app_config.input_desc"`
@@ -80,5 +89,6 @@ type AppConfig struct {
 	Init     InitCmd         `goopt:"kind:command;name:init;desc:Initialize a new i18n setup;descKey:app.app_config.init_desc"`
 	Add      AddCmd          `goopt:"kind:command;name:add;desc:Add new translation keys to locale files;descKey:app.app_config.add_desc"`
 	Extract  ExtractCmd      `goopt:"kind:command;name:extract;desc:Extract strings from Go source files;descKey:app.app_config.extract_desc"`
+	Sync     SyncCmd         `goopt:"kind:command;name:sync;desc:Synchronize keys across locale files;descKey:app.app_config.sync_desc"`
 	TR       i18n.Translator `ignore:"true"` // Translator for messages
 }

@@ -30,7 +30,7 @@ func TestToGoName(t *testing.T) {
 		{
 			name:     "with dots",
 			input:    "app.error.failed",
-			expected: "AppErrorFailed",
+			expected: "App.Error.Failed",
 		},
 		{
 			name:     "with spaces",

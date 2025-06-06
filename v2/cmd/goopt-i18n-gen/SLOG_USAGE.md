@@ -127,7 +127,12 @@ goopt-i18n-gen -i "locales/*.json" extract \
   --dry-run
 
 # If satisfied, run without --dry-run
-# Then optionally auto-update with comments
+# Then optionally add TODO comments for review
+goopt-i18n-gen -i "locales/*.json" extract \
+  --files "**/*.go" \
+  --skip-match "^[^\s]+$"
+
+# Or directly transform the code
 goopt-i18n-gen -i "locales/*.json" extract \
   --files "**/*.go" \
   --skip-match "^[^\s]+$" \

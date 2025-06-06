@@ -1141,6 +1141,11 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
 		p.registeredCommands.Set(*it.Key, it.Value)
 	}
+	
+	// Merge errors from nested parser
+	for _, err := range nestedCmdLine.errors {
+		p.addError(err)
+	}
 
 	return nil
 }
@@ -1357,7 +1362,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 
 	err = parser.processStructCommands(unwrappedValue, commandPath, currentDepth, maxDepth, nil)
 	if err != nil {
-		parser.addError(err)
+		return nil, err
 	}
 
 	// Use unwrappedValue for field iteration
@@ -1389,11 +1394,23 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		}
 		longName, pathTag, err = unmarshalTagsToArgument(bundle, field, arg)
 		if err != nil {
+			// ErrNoValidTags is not an error - it just means the field has no goopt tags
+			if errors.Is(err, errs.ErrNoValidTags) {
+				continue
+			}
+			
+			// For other errors, decide based on field type
+			if !isFunction(field) && !isStructOrSliceType(field) {
+				// For simple fields with tag errors, we can skip them and continue
+				parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+				continue
+			}
+			// For structural fields (functions, nested structs, slices), fail fast
 			if !isFunction(field) {
 				if flagPrefix != "" {
-					parser.addError(errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err))
+					return nil, errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err)
 				} else {
-					parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+					return nil, errs.ErrProcessingField.WithArgs(field.Name).Wrap(err)
 				}
 			}
 			continue
@@ -1422,7 +1439,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		if isSliceType(field) && !isBasicType(field.Type) {
 			// Process as nested structure
 			if err := processSliceField(fieldFlagPath, commandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(errs.ErrProcessingSliceField.WithArgs(fieldFlagPath).Wrap(err))
+				return nil, err
 			}
 			continue
 		}
@@ -1442,7 +1459,8 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			}
 
 			if err = processNestedStruct(fieldFlagPath, newCommandPath, fieldValue, maxDepth, currentDepth, parser, config...); err != nil {
-				parser.addError(errs.ErrProcessingNestedStruct.WithArgs(fieldFlagPath).Wrap(err))
+				// For structural errors during parser creation, fail immediately with the original error
+				return nil, err
 			}
 			continue
 		}
@@ -1492,7 +1510,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 			}
 
 			if cmd, err = p.buildCommand(parentCommand, "", "", pCmd); err != nil {
-				p.addError(errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err))
+				return errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err)
 			}
 		}
 
@@ -1510,6 +1528,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 		if arg.DefaultValue != "" {
 			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
 			if err != nil {
+				// Default value binding errors are not critical - collect them
 				p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
 			}
 		}
@@ -1520,6 +1539,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 
 func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, fullFlagName string, arg *Argument) (err error) {
 	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
+		// For nil pointers, add to errors but don't fail the entire parser construction
 		p.addError(errs.ErrBindNil.WithArgs(fullFlagName))
 		return nil
 	}
@@ -1547,6 +1567,7 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 			err = p.setBoundVariable(arg.DefaultValue, fullFlagName)
 		}
 		if err != nil {
+			// Default value binding errors are not critical - collect them
 			p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
 		}
 	}
@@ -1606,7 +1627,8 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			if currentPath != "" {
 				cmd, ok := p.registeredCommands.Get(currentPath)
 				if !ok {
-					return errs.ErrCommandNotFound.WithArgs(currentPath)
+					// Skip this field instead of failing - the command might not be registered yet due to an earlier error
+					continue
 				}
 
 				// If the callback is already set (non-nil), use it directly
@@ -1702,11 +1724,19 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 		}
 	}
 
+	// Process all callbacks collected at this level
 	for cmdPath, callback := range callbackMap {
 		// Get the command by path
 		cmd, ok := p.registeredCommands.Get(cmdPath)
 		if !ok {
-			return errs.ErrCommandNotFound.WithArgs(cmdPath)
+			// Command might not be registered yet if it's in a nested structure
+			// This is not an error during construction
+			continue
+		}
+
+		// Skip if we've already processed this callback
+		if cmd.Callback != nil {
+			continue
 		}
 
 		// Check if this is a terminal command (no subcommands)
@@ -1714,7 +1744,19 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			// we can safely ignore the error because we know the command exists
 			_ = p.SetCommand(cmdPath, WithCallback(callback))
 		} else {
-			return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(errs.ErrCallbackOnNonTerminalCommand)
+			// Callback on non-terminal command is a validation error, not structural
+			// Check if we've already added this error to avoid duplicates
+			errMsg := errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(errs.ErrCallbackOnNonTerminalCommand).Error()
+			alreadyExists := false
+			for _, existingErr := range p.errors {
+				if existingErr.Error() == errMsg {
+					alreadyExists = true
+					break
+				}
+			}
+			if !alreadyExists {
+				p.addError(errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(errs.ErrCallbackOnNonTerminalCommand))
+			}
 		}
 	}
 

@@ -145,8 +145,8 @@ s.Log.MsgAll(fields, tr.T(messages.Keys.UserSDisabled, username))
 This approach adds comments next to strings, allowing manual review before transformation.
 
 ```bash
-# Step 1: Add TODO comments
-goopt-i18n-gen -i "locales/*.json" extract -u
+# Step 1: Add TODO comments (NO -u flag!)
+goopt-i18n-gen -i "locales/*.json" extract
 
 # Your code now looks like:
 # fmt.Println("Starting server...") // i18n-todo: app.extracted.starting_server
@@ -158,10 +158,10 @@ goopt-i18n-gen -i "locales/*.json" extract -u
 # Step 3: Mark strings to skip
 # fmt.Println("DEBUG: raw data") // i18n-skip
 
-# Step 4: Auto-transform remaining TODOs
-goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+# Step 4: Auto-transform source code (WITH -u flag!)
+goopt-i18n-gen -i "locales/*.json" extract -u
 
-# Step 5: Clean up comments
+# Step 5: Clean up any remaining comments
 goopt-i18n-gen -i "locales/*.json" extract --clean-comments
 ```
 
@@ -171,13 +171,16 @@ Replace strings directly with translation calls:
 
 ```bash
 # Preview what will be changed
-goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T" -n
+goopt-i18n-gen -i "locales/*.json" extract -u -n
 
-# Apply transformations
-goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T"
+# Apply transformations (uses tr.T by default)
+goopt-i18n-gen -i "locales/*.json" extract -u
 
-# Keep comments for documentation
-goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "tr.T" --keep-comments
+# Use custom translator pattern if needed
+goopt-i18n-gen -i "locales/*.json" extract -u --tr-pattern "myApp.Translate"
+
+# Keep i18n comments for documentation after transformation
+goopt-i18n-gen -i "locales/*.json" extract -u --keep-comments
 ```
 
 ## Format Function Handling

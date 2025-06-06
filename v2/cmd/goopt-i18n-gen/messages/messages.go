@@ -79,6 +79,8 @@ var Keys = struct {
 
 		LanguageDesc string
 
+		SyncDesc string
+
 		ValidateDesc string
 
 		VerboseDesc string
@@ -245,7 +247,7 @@ var Keys = struct {
 
 		FileError string
 
-		FoundDoubleDStringsToReplaceN string
+		FoundDStringsToReplaceN string
 
 		FoundComments string
 
@@ -275,7 +277,7 @@ var Keys = struct {
 
 		ScanningFiles string
 
-		TodoTripleS string
+		TodoS string
 
 		UniqueStrings string
 
@@ -370,6 +372,24 @@ var Keys = struct {
 
 	AppInitCmd struct {
 		ForceDesc string
+	}
+
+	AppSync struct {
+		AllInSync string
+
+		Summary string
+
+		TotalChanges string
+	}
+
+	AppSyncCmd struct {
+		DryRunDesc string
+
+		RemoveExtraDesc string
+
+		TargetDesc string
+
+		TodoPrefixDesc string
 	}
 
 	AppTest struct {
@@ -548,6 +568,8 @@ var Keys = struct {
 
 		LanguageDesc string
 
+		SyncDesc string
+
 		ValidateDesc string
 
 		VerboseDesc string
@@ -568,6 +590,8 @@ var Keys = struct {
 		InputDesc: "app.app_config.input_desc",
 
 		LanguageDesc: "app.app_config.language_desc",
+
+		SyncDesc: "app.app_config.sync_desc",
 
 		ValidateDesc: "app.app_config.validate_desc",
 
@@ -870,7 +894,7 @@ var Keys = struct {
 
 		FileError string
 
-		FoundDoubleDStringsToReplaceN string
+		FoundDStringsToReplaceN string
 
 		FoundComments string
 
@@ -900,7 +924,7 @@ var Keys = struct {
 
 		ScanningFiles string
 
-		TodoTripleS string
+		TodoS string
 
 		UniqueStrings string
 
@@ -933,7 +957,7 @@ var Keys = struct {
 
 		FileError: "app.extract.file_error",
 
-		FoundDoubleDStringsToReplaceN: "app.extract.found__d_strings_to_replace_n",
+		FoundDStringsToReplaceN: "app.extract.found__d_strings_to_replace_n",
 
 		FoundComments: "app.extract.found_comments",
 
@@ -963,7 +987,7 @@ var Keys = struct {
 
 		ScanningFiles: "app.extract.scanning_files",
 
-		TodoTripleS: "app.extract.todo___s",
+		TodoS: "app.extract.todo___s",
 
 		UniqueStrings: "app.extract.unique_strings",
 
@@ -1136,6 +1160,40 @@ var Keys = struct {
 	}{
 
 		ForceDesc: "app.init_cmd.force_desc",
+	},
+
+	AppSync: struct {
+		AllInSync string
+
+		Summary string
+
+		TotalChanges string
+	}{
+
+		AllInSync: "app.sync.all_in_sync",
+
+		Summary: "app.sync.summary",
+
+		TotalChanges: "app.sync.total_changes",
+	},
+
+	AppSyncCmd: struct {
+		DryRunDesc string
+
+		RemoveExtraDesc string
+
+		TargetDesc string
+
+		TodoPrefixDesc string
+	}{
+
+		DryRunDesc: "app.sync_cmd.dry_run_desc",
+
+		RemoveExtraDesc: "app.sync_cmd.remove_extra_desc",
+
+		TargetDesc: "app.sync_cmd.target_desc",
+
+		TodoPrefixDesc: "app.sync_cmd.todo_prefix_desc",
 	},
 
 	AppTest: struct {

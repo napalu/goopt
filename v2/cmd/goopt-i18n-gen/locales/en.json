@@ -185,5 +185,13 @@
   "app.validate_cmd.strict_desc": "Exit with error if validation fails",
   "app.version": "Version",
   "app.warning.failed_to_format": "Warning: Failed to format generated code: %v",
-  "app.warning.update_failed": "Warning: %v"
+  "app.warning.update_failed": "Warning: %v",
+  "app.sync.all_in_sync": "✓ All locale files are in sync",
+  "app.sync.summary": "Synchronization summary:",
+  "app.sync.total_changes": "Total: %d keys added, %d keys removed",
+  "app.sync_cmd.target_desc": "Target JSON files to sync against reference files (-i flag)",
+  "app.sync_cmd.remove_extra_desc": "Remove keys that don't exist in reference",
+  "app.sync_cmd.todo_prefix_desc": "Prefix for new non-English translations",
+  "app.sync_cmd.dry_run_desc": "Preview what would be changed",
+  "app.app_config.sync_desc": "Synchronize keys across locale files"
 }

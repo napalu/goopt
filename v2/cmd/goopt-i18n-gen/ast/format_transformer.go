@@ -13,15 +13,15 @@ import (
 
 // FormatTransformer handles AST transformation of format function calls
 type FormatTransformer struct {
-	fset            *token.FileSet
-	stringMap       map[string]string    // maps string literals to translation keys
-	requiredImports map[string]bool      // tracks imports needed
-	transformed     bool                 // tracks if any transformations were made
-	detector        *FormatDetector      // generic format function detector
-	packagePath      string               // path to the messages package
-	transformMode    string               // "user-facing", "with-comments", "all-marked", "all"
-	i18nTodoMap      map[token.Pos]string // maps string literal positions to i18n-todo message keys
-	userFacingRegexes []*regexp.Regexp    // regex patterns to identify user-facing functions
+	fset              *token.FileSet
+	stringMap         map[string]string    // maps string literals to translation keys
+	requiredImports   map[string]bool      // tracks imports needed
+	transformed       bool                 // tracks if any transformations were made
+	detector          *FormatDetector      // generic format function detector
+	packagePath       string               // path to the messages package
+	transformMode     string               // "user-facing", "with-comments", "all-marked", "all"
+	i18nTodoMap       map[token.Pos]string // maps string literal positions to i18n-todo message keys
+	userFacingRegexes []*regexp.Regexp     // regex patterns to identify user-facing functions
 }
 
 // NewFormatTransformer creates a new format transformer
@@ -72,16 +72,16 @@ func (ft *FormatTransformer) SetFormatFunctionPatterns(patterns []string) error 
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid format function pattern '%s', expected 'pattern:index'", pattern)
 		}
-		
+
 		regex := parts[0]
 		indexStr := parts[1]
-		
+
 		// Parse the index
 		var index int
 		if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
 			return fmt.Errorf("invalid format arg index '%s' in pattern '%s'", indexStr, pattern)
 		}
-		
+
 		// Register with the detector
 		if err := ft.detector.RegisterCustomFormatPattern(regex, index); err != nil {
 			return fmt.Errorf("failed to register format pattern '%s': %w", pattern, err)
@@ -315,33 +315,6 @@ func (ft *FormatTransformer) applyI18nTodoTransformations(file *ast.File) {
 	})
 }
 
-// createTrCallFromKeyExpr creates a tr.T call expression from a key expression like "messages.Keys.World"
-func (ft *FormatTransformer) createTrCallFromKeyExpr(keyExpr string) ast.Expr {
-	// Parse the key expression to build the AST
-	// keyExpr is like "messages.Keys.World"
-	parts := strings.Split(keyExpr, ".")
-	if len(parts) < 2 {
-		return nil
-	}
-
-	// Build the selector expression for the key
-	var expr ast.Expr = ast.NewIdent(parts[0])
-	for i := 1; i < len(parts); i++ {
-		expr = &ast.SelectorExpr{
-			X:   expr,
-			Sel: ast.NewIdent(parts[i]),
-		}
-	}
-
-	// Create tr.T call
-	return &ast.CallExpr{
-		Fun: &ast.SelectorExpr{
-			X:   ast.NewIdent("tr"),
-			Sel: ast.NewIdent("T"),
-		},
-		Args: []ast.Expr{expr},
-	}
-}
 
 // transformNode examines and transforms individual AST nodes
 func (ft *FormatTransformer) transformNode(n ast.Node) bool {
@@ -393,213 +366,8 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 	return true
 }
 
-// FunctionInfo holds information about a function call
-type FunctionInfo struct {
-	pkg      string // package name (e.g., "fmt", "log")
-	receiver string // receiver for method calls (e.g., "logger")
-	function string // function name (e.g., "Printf")
-	funcType string // normalized function type for handling
-}
 
-// identifyFunction analyzes a CallExpr to identify the function being called
-func (ft *FormatTransformer) identifyFunction(call *ast.CallExpr) *FunctionInfo {
-	switch fun := call.Fun.(type) {
-	case *ast.SelectorExpr:
-		// Could be pkg.Func or receiver.Method
-		switch x := fun.X.(type) {
-		case *ast.Ident:
-			// Simple case: fmt.Printf or logger.Printf
-			return &FunctionInfo{
-				pkg:      x.Name,
-				function: fun.Sel.Name,
-				funcType: ft.getFuncType(x.Name, fun.Sel.Name),
-			}
-		case *ast.CallExpr:
-			// Chained call: log.Info().Msgf
-			if chainInfo := ft.getChainedCallInfo(x, fun.Sel.Name); chainInfo != nil {
-				return chainInfo
-			}
-		case *ast.SelectorExpr:
-			// Deeper chain: log.WithField().Infof
-			if chainInfo := ft.getDeepChainInfo(x, fun.Sel.Name); chainInfo != nil {
-				return chainInfo
-			}
-		}
-	}
-	return nil
-}
 
-// getFuncType returns a normalized function type for transformation
-func (ft *FormatTransformer) getFuncType(pkg, function string) string {
-	// Standard library format functions
-	if pkg == "fmt" {
-		switch function {
-		case "Printf":
-			return "printf"
-		case "Sprintf":
-			return "sprintf"
-		case "Fprintf":
-			return "fprintf"
-		case "Errorf":
-			return "errorf"
-		}
-	}
-
-	if pkg == "log" {
-		switch function {
-		case "Printf", "Fatalf", "Panicf":
-			return "printf"
-		}
-	}
-
-	// Common logging libraries
-	switch function {
-	case "Msgf":
-		return "msgf"
-	case "Infof", "Debugf", "Warnf", "Errorf":
-		return "infof" // logrus style
-	}
-
-	return ""
-}
-
-// getChainedCallInfo handles chained method calls like log.Info().Msgf()
-func (ft *FormatTransformer) getChainedCallInfo(chainCall *ast.CallExpr, methodName string) *FunctionInfo {
-	if methodName == "Msgf" {
-		// This is likely a zerolog-style call
-		return &FunctionInfo{
-			funcType: "msgf",
-			function: methodName,
-		}
-	}
-	return nil
-}
-
-// getDeepChainInfo handles deeper chains like log.WithFields().Infof()
-func (ft *FormatTransformer) getDeepChainInfo(sel *ast.SelectorExpr, methodName string) *FunctionInfo {
-	switch methodName {
-	case "Infof", "Debugf", "Warnf", "Errorf":
-		return &FunctionInfo{
-			funcType: "infof",
-			function: methodName,
-		}
-	}
-	return nil
-}
-
-// isHandledFormatFunction checks if we handle this function type
-func (ft *FormatTransformer) isHandledFormatFunction(info *FunctionInfo) bool {
-	return info.funcType != ""
-}
-
-// transformPrintf transforms Printf-style calls
-func (ft *FormatTransformer) transformPrintf(call *ast.CallExpr, key string) {
-	// Change Printf to Print
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		newName := strings.TrimSuffix(sel.Sel.Name, "f")
-		sel.Sel = ast.NewIdent(newName)
-	}
-
-	// Create tr.T call with all arguments
-	trCall := ft.createTrCall(key, call.Args[1:])
-
-	// Replace arguments with just the tr.T call
-	call.Args = []ast.Expr{trCall}
-}
-
-// transformSprintf transforms Sprintf calls to direct tr.T calls
-func (ft *FormatTransformer) transformSprintf(call *ast.CallExpr, info *FunctionInfo, key string) {
-	// Replace the entire call with tr.T
-	call.Fun = &ast.SelectorExpr{
-		X:   ast.NewIdent("tr"),
-		Sel: ast.NewIdent("T"),
-	}
-
-	// Replace arguments
-	call.Args = ft.createTrCallArgs(key, call.Args[1:])
-}
-
-// transformFprintf transforms Fprintf calls
-func (ft *FormatTransformer) transformFprintf(call *ast.CallExpr, info *FunctionInfo, key string) {
-	// Change Fprintf to Fprint
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		sel.Sel = ast.NewIdent("Fprint")
-	}
-
-	// Keep the writer as first arg, add tr.T call as second
-	writer := call.Args[0]
-	trCall := ft.createTrCall(key, call.Args[2:]) // Skip writer and format string
-	call.Args = []ast.Expr{writer, trCall}
-}
-
-// transformErrorf transforms Errorf calls with special handling for %w
-func (ft *FormatTransformer) transformErrorf(call *ast.CallExpr, info *FunctionInfo, key string, formatStr string) {
-	// Check if format string contains %w for error wrapping
-	unquoted := strings.Trim(formatStr, `"`)
-	hasErrorWrap := strings.Contains(unquoted, "%w")
-
-	if hasErrorWrap {
-		// Need to preserve error wrapping
-		// fmt.Errorf("msg: %w", err) -> fmt.Errorf("%s: %w", tr.T(key), err)
-
-		// Find the position of %w and extract non-error format args
-		var nonErrorArgs []ast.Expr
-		errorArg := call.Args[len(call.Args)-1] // Assume %w is last
-
-		if len(call.Args) > 2 {
-			nonErrorArgs = call.Args[1 : len(call.Args)-1]
-		}
-
-		// Create new format string
-		call.Args[0] = &ast.BasicLit{
-			Kind:  token.STRING,
-			Value: `"%s: %w"`,
-		}
-
-		// Create tr.T call for the message part
-		trCall := ft.createTrCall(key, nonErrorArgs)
-
-		// New args: format, tr.T result, error
-		call.Args = []ast.Expr{call.Args[0], trCall, errorArg}
-	} else {
-		// No error wrapping, convert to errors.New
-		call.Fun = &ast.SelectorExpr{
-			X:   ast.NewIdent("errors"),
-			Sel: ast.NewIdent("New"),
-		}
-
-		// Create tr.T call with all format args
-		trCall := ft.createTrCall(key, call.Args[1:])
-		call.Args = []ast.Expr{trCall}
-
-		ft.requiredImports["errors"] = true
-	}
-}
-
-// transformMsgf transforms zerolog-style Msgf calls
-func (ft *FormatTransformer) transformMsgf(call *ast.CallExpr, info *FunctionInfo, key string) {
-	// Change Msgf to Msg
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		sel.Sel = ast.NewIdent("Msg")
-	}
-
-	// Create tr.T call
-	trCall := ft.createTrCall(key, call.Args[1:])
-	call.Args = []ast.Expr{trCall}
-}
-
-// transformLogrusStyle transforms logrus-style format methods
-func (ft *FormatTransformer) transformLogrusStyle(call *ast.CallExpr, info *FunctionInfo, key string) {
-	// Change Infof to Info, etc.
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		newName := strings.TrimSuffix(sel.Sel.Name, "f")
-		sel.Sel = ast.NewIdent(newName)
-	}
-
-	// Create tr.T call
-	trCall := ft.createTrCall(key, call.Args[1:])
-	call.Args = []ast.Expr{trCall}
-}
 
 // createTrCall creates a tr.T function call expression
 func (ft *FormatTransformer) createTrCall(key string, args []ast.Expr) *ast.CallExpr {
@@ -779,14 +547,14 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 	// Insert after imports, but be careful about //go: directives
 	if importIndex >= 0 {
 		insertPos := importIndex + 1
-		
+
 		// Skip past any declarations that have //go: directives
 		// These directives must be immediately followed by their target declaration
 		for insertPos < len(file.Decls) {
 			// Check if this declaration has any //go: directive comments
 			if genDecl, ok := file.Decls[insertPos].(*ast.GenDecl); ok {
 				hasGoDirective := false
-				
+
 				// Check the declaration's doc comments for //go: directives
 				if genDecl.Doc != nil {
 					for _, comment := range genDecl.Doc.List {
@@ -796,7 +564,7 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 						}
 					}
 				}
-				
+
 				// If this declaration has a //go: directive, skip it
 				if hasGoDirective {
 					insertPos++
@@ -805,7 +573,7 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 			}
 			break
 		}
-		
+
 		// Now insert the tr declaration at the safe position
 		newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
 		newDecls = append(newDecls, file.Decls[:insertPos]...)
@@ -815,27 +583,6 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 	}
 }
 
-// extractFormatString attempts to extract a format string from an expression
-// Returns the string and whether it's a literal (or concatenation of literals)
-func (ft *FormatTransformer) extractFormatString(expr ast.Expr) (string, bool) {
-	switch e := expr.(type) {
-	case *ast.BasicLit:
-		if e.Kind == token.STRING {
-			// Remove quotes
-			return strings.Trim(e.Value, "`\""), true
-		}
-	case *ast.BinaryExpr:
-		// Handle string concatenation
-		if e.Op == token.ADD {
-			left, leftOk := ft.extractFormatString(e.X)
-			right, rightOk := ft.extractFormatString(e.Y)
-			if leftOk && rightOk {
-				return left + right, true
-			}
-		}
-	}
-	return "", false
-}
 
 // Generic transformation methods that work with FormatCallInfo
 
@@ -843,53 +590,44 @@ func (ft *FormatTransformer) extractFormatString(expr ast.Expr) (string, bool) {
 func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *FormatCallInfo, key string) {
 	// Smart detection: determine transformation strategy based on format string position
 	// and the presence of additional arguments after it
-	
+
 	// Strategy 1: Classical Printf pattern (format at position 0)
 	// - fmt.Printf("format %s", args...) -> fmt.Print(tr.T(key, args...))
 	// - Remove 'f' suffix and replace ALL arguments
-	
-	// Strategy 2: Writer-based pattern (format at position 1) 
+
+	// Strategy 2: Writer-based pattern (format at position 1)
 	// - fmt.Fprintf(w, "format %s", args...) -> fmt.Fprint(w, tr.T(key, args...))
 	// - Keep writer, remove 'f', replace format and args
-	
+
 	// Strategy 3: Custom format function (format at any position with args after)
 	// - s.Log.MsgAll(map, "format %s", args...) -> s.Log.MsgAll(map, tr.T(key, args...))
 	// - Keep function name, replace format string and consume variadic args
-	
+
 	// Determine the transformation strategy
 	isClassicalPrintf := false
 	isWriterBased := false
 	hasArgsAfterFormat := info.FormatStringIndex < len(call.Args)-1
-	
+
 	// Check if it's a standard Printf-style function
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		if ident, ok := sel.X.(*ast.Ident); ok {
-			pkg := ident.Name
-			method := sel.Sel.Name
-			
-			// Classical Printf pattern: format at index 0
-			if info.FormatStringIndex == 0 {
-				standardPkgs := map[string]bool{"fmt": true, "log": true, "testing": true}
-				if standardPkgs[pkg] && strings.HasSuffix(method, "f") {
-					isClassicalPrintf = true
+		method := sel.Sel.Name
+
+		// Check for any method ending with 'f' that we should transform
+		if strings.HasSuffix(method, "f") && info.FormatStringIndex == 0 {
+			// Always treat format functions ending with 'f' as classical printf
+			// This includes Msgf, Infof, Printf, etc.
+			isClassicalPrintf = true
+		} else if info.FormatStringIndex == 1 {
+			// Check for writer-based patterns
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				pkg := ident.Name
+				if pkg == "fmt" && strings.HasPrefix(method, "Fprint") {
+					isWriterBased = true
 				}
-				// Also check for common logging patterns
-				if strings.HasSuffix(method, "Printf") || 
-				   strings.HasSuffix(method, "Infof") ||
-				   strings.HasSuffix(method, "Debugf") ||
-				   strings.HasSuffix(method, "Warnf") ||
-				   strings.HasSuffix(method, "Errorf") ||
-				   strings.HasSuffix(method, "Fatalf") ||
-				   strings.HasSuffix(method, "Panicf") {
-					isClassicalPrintf = true
-				}
-			} else if info.FormatStringIndex == 1 && pkg == "fmt" && strings.HasPrefix(method, "Fprint") {
-				// Writer-based pattern: fmt.Fprintf, fmt.Fprintln
-				isWriterBased = true
 			}
 		}
 	}
-	
+
 	// Apply transformation based on detected pattern
 	if isClassicalPrintf {
 		// Classical Printf: remove 'f' and replace ALL arguments
@@ -898,11 +636,11 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 				sel.Sel = ast.NewIdent(strings.TrimSuffix(sel.Sel.Name, "f"))
 			}
 		}
-		
+
 		args := ft.extractFormatArgs(call, info)
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{trCall}
-		
+
 	} else if isWriterBased {
 		// Writer-based: keep writer, remove 'f', replace format+args
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
@@ -910,18 +648,18 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 				sel.Sel = ast.NewIdent(strings.TrimSuffix(sel.Sel.Name, "f"))
 			}
 		}
-		
+
 		writer := call.Args[0]
 		args := ft.extractFormatArgs(call, info)
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{writer, trCall}
-		
+
 	} else if hasArgsAfterFormat {
 		// Custom format function with variadic args after format string
 		// Replace format string and all subsequent args with tr.T call
 		args := ft.extractFormatArgs(call, info)
 		trCall := ft.createTrCall(key, args)
-		
+
 		// Keep all args before format string, replace format and all args after
 		newArgs := make([]ast.Expr, 0, info.FormatStringIndex+1)
 		for i := 0; i < info.FormatStringIndex; i++ {
@@ -929,7 +667,7 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 		}
 		newArgs = append(newArgs, trCall)
 		call.Args = newArgs
-		
+
 	} else {
 		// Custom format function with no args after format string
 		// Just replace the format string argument
@@ -991,21 +729,31 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 
 	if hasErrorWrap {
 		// Preserve error wrapping
-		call.Args[info.FormatStringIndex] = &ast.BasicLit{
-			Kind:  token.STRING,
-			Value: `"%s: %w"`,
+		// For mixed cases like "failed to connect to %s: %w", we need to handle
+		// the format args properly
+
+		// Count the number of format specifiers excluding %w
+		nonWrapSpecifiers := 0
+		for _, match := range regexp.MustCompile(`%[^w%]`).FindAllString(info.FormatString, -1) {
+			if match != "%%" { // Skip escaped %
+				nonWrapSpecifiers++
+			}
 		}
 
-		// Extract non-error format args
+		// Extract format args
 		var formatArgs []ast.Expr
 		var errorArg ast.Expr
 
+		argCount := 0
 		for i, arg := range call.Args {
 			if i > info.FormatStringIndex {
-				if i == len(call.Args)-1 && hasErrorWrap {
-					errorArg = arg
-				} else {
+				if argCount < nonWrapSpecifiers {
+					// These are the regular format args
 					formatArgs = append(formatArgs, arg)
+					argCount++
+				} else {
+					// This should be the error arg for %w
+					errorArg = arg
 				}
 			}
 		}
@@ -1013,8 +761,18 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 		// Create tr.T call
 		trCall := ft.createTrCall(key, formatArgs)
 
+		// Replace format string with "%s: %w"
+		call.Args[info.FormatStringIndex] = &ast.BasicLit{
+			Kind:  token.STRING,
+			Value: `"%s: %w"`,
+		}
+
 		// New args
-		newArgs := []ast.Expr{call.Args[info.FormatStringIndex], trCall}
+		newArgs := make([]ast.Expr, 0, info.FormatStringIndex+3)
+		for i := 0; i < info.FormatStringIndex; i++ {
+			newArgs = append(newArgs, call.Args[i])
+		}
+		newArgs = append(newArgs, call.Args[info.FormatStringIndex], trCall)
 		if errorArg != nil {
 			newArgs = append(newArgs, errorArg)
 		}
@@ -1193,7 +951,7 @@ func (ft *FormatTransformer) isUserFacingFunction(funcName string) bool {
 			return true
 		}
 	}
-	
+
 	// Handle deeper chains like "chained.logger.Info.Msg"
 	if len(parts) > 2 && parts[0] == "chained" {
 		// Get the last part as the method name
