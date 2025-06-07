@@ -6729,6 +6729,101 @@ func TestRepeatedFlagsWithChainedType(t *testing.T) {
 	})
 }
 
+// TestRepeatedFlagsEdgeCases tests edge cases for repeated flags
+func TestRepeatedFlagsEdgeCases(t *testing.T) {
+	t.Run("repeated flags with empty values between", func(t *testing.T) {
+		var values []string
+		p := NewParser()
+		err := p.BindFlag(&values, "value", NewArg(WithType(types.Chained)))
+		assert.NoError(t, err)
+
+		success := p.Parse([]string{"--value", "a", "--value", "", "--value", "b"})
+		assert.True(t, success)
+		// strings.FieldsFunc skips empty strings by default
+		assert.Equal(t, []string{"a", "b"}, values)
+	})
+
+	t.Run("repeated flags with whitespace-only values", func(t *testing.T) {
+		var values []string
+		p := NewParser()
+		p.SetListDelimiterFunc(func(r rune) bool { return r == ',' })
+		err := p.BindFlag(&values, "value", NewArg(WithType(types.Chained)))
+		assert.NoError(t, err)
+
+		success := p.Parse([]string{"--value", "  ", "--value", "b"})
+		assert.True(t, success)
+		assert.Equal(t, []string{"  ", "b"}, values)
+	})
+
+	t.Run("repeated flags reset between parses", func(t *testing.T) {
+		var values []string
+		p := NewParser()
+		err := p.BindFlag(&values, "value", NewArg(WithType(types.Chained)))
+		assert.NoError(t, err)
+
+		// First parse
+		success := p.Parse([]string{"--value", "a", "--value", "b"})
+		assert.True(t, success)
+		assert.Equal(t, []string{"a", "b"}, values)
+
+		// Reset values and parse again
+		values = nil
+		p = NewParser()
+		err = p.BindFlag(&values, "value", NewArg(WithType(types.Chained)))
+		assert.NoError(t, err)
+
+		success = p.Parse([]string{"--value", "c", "--value", "d"})
+		assert.True(t, success)
+		assert.Equal(t, []string{"c", "d"}, values)
+	})
+
+	t.Run("repeated flags with very long values", func(t *testing.T) {
+		var values []string
+		p := NewParser()
+		err := p.BindFlag(&values, "value", NewArg(WithType(types.Chained)))
+		assert.NoError(t, err)
+
+		longValue := string(make([]byte, 1000))
+		for i := range longValue {
+			longValue = longValue[:i] + "a" + longValue[i+1:]
+		}
+
+		success := p.Parse([]string{"--value", longValue, "--value", "short"})
+		assert.True(t, success)
+		assert.Equal(t, 2, len(values))
+		assert.Equal(t, 1000, len(values[0]))
+		assert.Equal(t, "short", values[1])
+	})
+}
+
+// TestRepeatedFlagsWithStructTags tests repeated flags when using struct tags
+func TestRepeatedFlagsWithStructTags(t *testing.T) {
+	t.Run("struct with various repeated slice types", func(t *testing.T) {
+		type Config struct {
+			Strings   []string        `goopt:"name:string;type:chained"`
+			Ints      []int           `goopt:"name:int;type:chained"`
+			Floats    []float64       `goopt:"name:float;type:chained"`
+			Durations []time.Duration `goopt:"name:duration;type:chained"`
+		}
+
+		var cfg Config
+		p, err := NewParserFromStruct(&cfg)
+		assert.NoError(t, err)
+
+		success := p.Parse([]string{
+			"--string", "a", "--string", "b",
+			"--int", "1", "--int", "2",
+			"--float", "1.5", "--float", "2.5",
+			"--duration", "1h", "--duration", "30m",
+		})
+		assert.True(t, success)
+		assert.Equal(t, []string{"a", "b"}, cfg.Strings)
+		assert.Equal(t, []int{1, 2}, cfg.Ints)
+		assert.Equal(t, []float64{1.5, 2.5}, cfg.Floats)
+		assert.Equal(t, []time.Duration{time.Hour, 30 * time.Minute}, cfg.Durations)
+	})
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
