@@ -126,6 +126,7 @@ type Parser struct {
 	commandOptions          *orderedmap.OrderedMap[string, bool]
 	positionalArgs          []PositionalArgument
 	rawArgs                 map[string]string
+	repeatedFlags           map[string]bool
 	callbackQueue           *queue.Q[*Command]
 	callbackResults         map[string]error
 	callbackOnParse         bool // *during* parse process

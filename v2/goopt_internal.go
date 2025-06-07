@@ -205,6 +205,9 @@ func (p *Parser) ensureInit() {
 	if p.rawArgs == nil {
 		p.rawArgs = map[string]string{}
 	}
+	if p.repeatedFlags == nil {
+		p.repeatedFlags = map[string]bool{}
+	}
 	if p.callbackQueue == nil {
 		p.callbackQueue = queue.New[*Command]()
 	}
@@ -332,7 +335,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	currentCmdPath := make([]string, 0, 3) // Pre-allocate for typical command depth
 	argPos := 0
 	executedCommands := make(map[string]bool) // Track which commands were encountered
-	executedCommands[""] = true // Always check global positionals
+	executedCommands[""] = true               // Always check global positionals
 	for i, arg := range args {
 		if skipNext {
 			skipNext = false
@@ -402,7 +405,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			Argument: nil,
 			ArgPos:   argPos,
 		}
-		
+
 		// Find the matching declared positional for this command context
 		cmdPath := strings.Join(currentCmdPath, " ")
 		for _, decl := range declaredPos {
@@ -418,7 +421,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				break
 			}
 		}
-		
+
 		positional = append(positional, pa)
 		argPos++
 	}
@@ -430,7 +433,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		if !executedCommands[decl.flag.CommandPath] {
 			continue
 		}
-		
+
 		// Check if this positional was provided
 		found := false
 		for _, pos := range positional {
@@ -439,14 +442,14 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				break
 			}
 		}
-		
+
 		if !found {
 			// Check if a flag was provided that takes precedence
 			flagFromArg := p.flagOrShortFlag(decl.key, decl.flag.CommandPath)
 			if p.HasRawFlag(flagFromArg) {
 				continue
 			}
-			
+
 			if decl.flag.Argument.DefaultValue != "" {
 				// Apply default value
 				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
@@ -455,7 +458,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				if err := p.setBoundVariable(decl.flag.Argument.DefaultValue, lookup); err != nil {
 					p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
 				}
-				
+
 				// Add a positional argument entry for the default value
 				positional = append(positional, PositionalArgument{
 					Position: decl.index, // Use the declared position
@@ -620,6 +623,15 @@ func (p *Parser) registerFlagValue(flag, value, rawValue string) {
 	parts := splitPathFlag(flag)
 	p.rawArgs[parts[0]] = rawValue
 	p.rawArgs[rawValue] = rawValue
+
+	// For Chained type flags that are repeated, append values
+	if flagInfo, found := p.acceptedFlags.Get(flag); found && flagInfo.Argument.TypeOf == types.Chained {
+		if existingValue, exists := p.options[flag]; exists && p.repeatedFlags[flag] {
+			// Append with pipe separator (the default for chained values)
+			p.options[flag] = existingValue + "|" + value
+			return
+		}
+	}
 
 	p.options[flag] = value
 }
@@ -1103,7 +1115,27 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 		}
 	}
 
+	// For Chained type with repeated flag support, check if we need to append
+	if flagInfo.Argument.TypeOf == types.Chained {
+		return p.appendOrSetBoundVariable(value, data, currentArg, p.listFunc)
+	}
+
 	return util.ConvertString(value, data, currentArg, p.listFunc)
+}
+
+// appendOrSetBoundVariable handles repeated flags by appending to slice types
+// or replacing the value for non-slice types. This enables the pattern:
+// -o option1 -o option2 instead of -o "option1,option2"
+func (p *Parser) appendOrSetBoundVariable(value string, data any, currentArg string, delimiterFunc types.ListDelimiterFunc) error {
+	// Check if we've already seen this flag
+	doAppend := true
+	if !p.repeatedFlags[currentArg] {
+		// First occurrence, mark it as seen and set normally
+		p.repeatedFlags[currentArg] = true
+		doAppend = false
+	}
+
+	return util.ConvertString(value, data, currentArg, delimiterFunc, doAppend)
 }
 
 func (p *Parser) prefixFunc(r rune) bool {
@@ -1171,7 +1203,7 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
 		p.registeredCommands.Set(*it.Key, it.Value)
 	}
-	
+
 	// Merge errors from nested parser
 	for _, err := range nestedCmdLine.errors {
 		p.addError(err)
@@ -1428,7 +1460,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			if errors.Is(err, errs.ErrNoValidTags) {
 				continue
 			}
-			
+
 			// For other errors, decide based on field type
 			if !isFunction(field) && !isStructOrSliceType(field) {
 				// For simple fields with tag errors, we can skip them and continue

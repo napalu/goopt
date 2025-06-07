@@ -369,6 +369,229 @@ func TestUtil_ConvertString(t *testing.T) {
 			want:    0,
 			wantErr: true,
 		},
+		// Test error cases for all numeric types
+		{
+			name:    "invalid int8",
+			value:   "256", // overflow
+			data:    new(int8),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int8 slice",
+			value:   "127,256", // second value overflows
+			data:    new([]int8),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int16",
+			value:   "65536", // overflow
+			data:    new(int16),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int16 slice",
+			value:   "32767,65536", // second value overflows
+			data:    new([]int16),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int32",
+			value:   "2147483648", // overflow
+			data:    new(int32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int32 slice",
+			value:   "2147483647,2147483648", // second value overflows
+			data:    new([]int32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int64",
+			value:   "not-a-number",
+			data:    new(int64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int64 slice",
+			value:   "123,not-a-number",
+			data:    new([]int64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int",
+			value:   "not-a-number",
+			data:    new(int),
+			wantErr: true,
+		},
+		{
+			name:    "invalid int slice",
+			value:   "1,2,not-a-number",
+			data:    new([]int),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint8",
+			value:   "256", // overflow
+			data:    new(uint8),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint8 slice",
+			value:   "255,256", // second value overflows
+			data:    new([]uint8),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint16",
+			value:   "65536", // overflow
+			data:    new(uint16),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint16 slice",
+			value:   "65535,65536", // second value overflows
+			data:    new([]uint16),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint32",
+			value:   "4294967296", // overflow
+			data:    new(uint32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint32 slice",
+			value:   "4294967295,4294967296", // second value overflows
+			data:    new([]uint32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint64",
+			value:   "not-a-number",
+			data:    new(uint64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint64 slice",
+			value:   "123,not-a-number",
+			data:    new([]uint64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint",
+			value:   "not-a-number",
+			data:    new(uint),
+			wantErr: true,
+		},
+		{
+			name:    "invalid uint slice",
+			value:   "1,2,not-a-number",
+			data:    new([]uint),
+			wantErr: true,
+		},
+		{
+			name:    "invalid float32",
+			value:   "not-a-float",
+			data:    new(float32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid float32 slice",
+			value:   "1.1,not-a-float",
+			data:    new([]float32),
+			wantErr: true,
+		},
+		{
+			name:    "invalid float64",
+			value:   "not-a-float",
+			data:    new(float64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid float64 slice",
+			value:   "1.1,not-a-float",
+			data:    new([]float64),
+			wantErr: true,
+		},
+		{
+			name:    "invalid bool",
+			value:   "not-a-bool",
+			data:    new(bool),
+			wantErr: true,
+		},
+		{
+			name:    "invalid bool slice",
+			value:   "true,not-a-bool",
+			data:    new([]bool),
+			wantErr: true,
+		},
+		{
+			name:    "invalid time",
+			value:   "not-a-time",
+			data:    new(time.Time),
+			wantErr: true,
+		},
+		{
+			name:    "invalid time slice",
+			value:   "2024-01-01T12:00:00Z,not-a-time",
+			data:    new([]time.Time),
+			wantErr: true,
+		},
+		{
+			name:    "invalid duration",
+			value:   "not-a-duration",
+			data:    new(time.Duration),
+			wantErr: true,
+		},
+		{
+			name:    "invalid duration slice",
+			value:   "1h,not-a-duration",
+			data:    new([]time.Duration),
+			wantErr: true,
+		},
+		{
+			name:    "invalid complex64",
+			value:   "not-a-complex",
+			data:    new(complex64),
+			wantErr: true,
+		},
+		{
+			name:  "complex64 slice",
+			value: "1+2i,3+4i",
+			data:  new([]complex64),
+			want:  []complex64{1 + 2i, 3 + 4i},
+		},
+		{
+			name:    "invalid complex64 slice",
+			value:   "1+2i,not-a-complex",
+			data:    new([]complex64),
+			wantErr: true,
+		},
+		{
+			name:  "complex128",
+			value: "5+6i",
+			data:  new(complex128),
+			want:  complex128(5 + 6i),
+		},
+		{
+			name:  "complex128 slice",
+			value: "5+6i,7+8i",
+			data:  new([]complex128),
+			want:  []complex128{5 + 6i, 7 + 8i},
+		},
+		{
+			name:    "invalid complex128",
+			value:   "not-a-complex",
+			data:    new(complex128),
+			wantErr: true,
+		},
+		{
+			name:    "invalid complex128 slice",
+			value:   "5+6i,not-a-complex",
+			data:    new([]complex128),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -384,6 +607,158 @@ func TestUtil_ConvertString(t *testing.T) {
 			assert.Equal(t, tt.want, actual)
 		})
 	}
+}
+
+// TestUtil_ConvertString_Append tests the append mode of ConvertString
+func TestUtil_ConvertString_Append(t *testing.T) {
+	// Default delimiter function
+	delimiter := func(r rune) bool {
+		return r == ',' || r == '|' || r == ' '
+	}
+
+	t.Run("append to string slice", func(t *testing.T) {
+		data := []string{"existing"}
+		err := ConvertString("new1,new2", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"existing", "new1", "new2"}, data)
+	})
+
+	t.Run("append to int slice", func(t *testing.T) {
+		data := []int{1, 2}
+		err := ConvertString("3,4", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3, 4}, data)
+	})
+
+	t.Run("append to int8 slice", func(t *testing.T) {
+		data := []int8{1}
+		err := ConvertString("2,3", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []int8{1, 2, 3}, data)
+	})
+
+	t.Run("append to int16 slice", func(t *testing.T) {
+		data := []int16{100}
+		err := ConvertString("200,300", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []int16{100, 200, 300}, data)
+	})
+
+	t.Run("append to int32 slice", func(t *testing.T) {
+		data := []int32{1000}
+		err := ConvertString("2000,3000", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []int32{1000, 2000, 3000}, data)
+	})
+
+	t.Run("append to int64 slice", func(t *testing.T) {
+		data := []int64{10000}
+		err := ConvertString("20000,30000", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []int64{10000, 20000, 30000}, data)
+	})
+
+	t.Run("append to uint slice", func(t *testing.T) {
+		data := []uint{1}
+		err := ConvertString("2,3", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []uint{1, 2, 3}, data)
+	})
+
+	t.Run("append to uint8 slice", func(t *testing.T) {
+		data := []uint8{10}
+		err := ConvertString("20,30", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []uint8{10, 20, 30}, data)
+	})
+
+	t.Run("append to uint16 slice", func(t *testing.T) {
+		data := []uint16{100}
+		err := ConvertString("200,300", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []uint16{100, 200, 300}, data)
+	})
+
+	t.Run("append to uint32 slice", func(t *testing.T) {
+		data := []uint32{1000}
+		err := ConvertString("2000,3000", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []uint32{1000, 2000, 3000}, data)
+	})
+
+	t.Run("append to uint64 slice", func(t *testing.T) {
+		data := []uint64{10000}
+		err := ConvertString("20000,30000", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []uint64{10000, 20000, 30000}, data)
+	})
+
+	t.Run("append to float32 slice", func(t *testing.T) {
+		data := []float32{1.1}
+		err := ConvertString("2.2,3.3", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []float32{1.1, 2.2, 3.3}, data)
+	})
+
+	t.Run("append to float64 slice", func(t *testing.T) {
+		data := []float64{1.1}
+		err := ConvertString("2.2,3.3", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []float64{1.1, 2.2, 3.3}, data)
+	})
+
+	t.Run("append to bool slice", func(t *testing.T) {
+		data := []bool{true}
+		err := ConvertString("false,true", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, false, true}, data)
+	})
+
+	t.Run("append to time slice", func(t *testing.T) {
+		existing := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		data := []time.Time{existing}
+		err := ConvertString("2024-12-31T23:59:59Z", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Len(t, data, 2)
+		assert.Equal(t, existing, data[0])
+	})
+
+	t.Run("append to duration slice", func(t *testing.T) {
+		data := []time.Duration{time.Hour}
+		err := ConvertString("30m,45s", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []time.Duration{time.Hour, 30 * time.Minute, 45 * time.Second}, data)
+	})
+
+	t.Run("append to complex64 slice", func(t *testing.T) {
+		data := []complex64{1 + 2i}
+		err := ConvertString("3+4i,5+6i", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []complex64{1 + 2i, 3 + 4i, 5 + 6i}, data)
+	})
+
+	t.Run("append to complex128 slice", func(t *testing.T) {
+		data := []complex128{1 + 2i}
+		err := ConvertString("3+4i,5+6i", &data, "test", delimiter, true)
+		assert.NoError(t, err)
+		assert.Equal(t, []complex128{1 + 2i, 3 + 4i, 5 + 6i}, data)
+	})
+
+	// Test error cases during append
+	t.Run("append invalid int to slice", func(t *testing.T) {
+		data := []int{1}
+		err := ConvertString("not-a-number", &data, "test", delimiter, true)
+		assert.Error(t, err)
+		// Original data should be unchanged on error
+		assert.Equal(t, []int{1}, data)
+	})
+
+	t.Run("append invalid bool to slice", func(t *testing.T) {
+		data := []bool{true}
+		err := ConvertString("not-a-bool", &data, "test", delimiter, true)
+		assert.Error(t, err)
+		assert.Equal(t, []bool{true}, data)
+	})
 }
 
 // BenchmarkStdLib provides comparison against standard library functions
