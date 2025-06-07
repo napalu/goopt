@@ -54,6 +54,7 @@ func NewParser() *Parser {
 		registeredCommands:   orderedmap.NewOrderedMap[string, *Command](),
 		commandOptions:       orderedmap.NewOrderedMap[string, bool](),
 		positionalArgs:       []PositionalArgument{},
+		repeatedFlags:        map[string]bool{},
 		listFunc:             matchChainedSeparators,
 		callbackQueue:        queue.New[*Command](),
 		callbackResults:      map[string]error{},
