@@ -22,7 +22,7 @@ import (
 	"github.com/napalu/goopt/v2/types/queue"
 )
 
-func (p *Parser) parseFlag(state parse.State, currentCommandPath string) {
+func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 	stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
 	flag := p.flagOrShortFlag(stripped, currentCommandPath)
 	flagInfo, found := p.acceptedFlags.Get(flag)
@@ -36,12 +36,14 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) {
 
 	if found {
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		return true
 	} else {
-		p.addError(errs.ErrUnknownFlagInCommandPath.WithArgs(flag, currentCommandPath))
+		// Don't add error here - return false to indicate not processed
+		return false
 	}
 }
 
-func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) {
+func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) bool {
 	flag := p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
 	flagInfo, found := p.getFlagInCommandPath(flag, currentCommandPath)
 	if !found {
@@ -53,8 +55,10 @@ func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) {
 
 	if found {
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		return true
 	} else {
-		p.addError(errs.ErrUnknownFlagInCommandPath.WithArgs(flag, currentCommandPath))
+		// Don't add error here - return false to indicate not processed
+		return false
 	}
 }
 
@@ -327,6 +331,8 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	skipNext := false
 	currentCmdPath := make([]string, 0, 3) // Pre-allocate for typical command depth
 	argPos := 0
+	executedCommands := make(map[string]bool) // Track which commands were encountered
+	executedCommands[""] = true // Always check global positionals
 	for i, arg := range args {
 		if skipNext {
 			skipNext = false
@@ -367,81 +373,100 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			if p.isCommand(arg) {
 				currentCmdPath = append(currentCmdPath, arg)
 				isCmd = true
+				argPos = 0 // Reset position counter for new command
 			}
 		} else {
 			if p.isCommand(strings.Join(append(currentCmdPath, arg), " ")) {
 				currentCmdPath = append(currentCmdPath, arg)
 				isCmd = true
+			} else if p.isCommand(arg) {
+				// Start a new command path for root-level command
+				currentCmdPath = []string{arg}
+				isCmd = true
+				argPos = 0 // Reset position counter for new command
 			} else {
-				currentCmdPath = currentCmdPath[:0]
+				// This is a positional argument, don't clear the path
 			}
 		}
 
 		if isCmd {
+			// Mark this command path as executed
+			executedCommands[strings.Join(currentCmdPath, " ")] = true
 			continue
 		}
 
-		positional = append(positional, PositionalArgument{
+		// Store the positional with its command context
+		pa := PositionalArgument{
 			Position: i,
 			Value:    arg,
 			Argument: nil,
 			ArgPos:   argPos,
-		})
+		}
+		
+		// Find the matching declared positional for this command context
+		cmdPath := strings.Join(currentCmdPath, " ")
+		for _, decl := range declaredPos {
+			// Check if this declaration belongs to the current command path
+			if decl.flag.CommandPath == cmdPath && *decl.flag.Argument.Position == argPos {
+				pa.Argument = decl.flag.Argument
+				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+				p.registerFlagValue(lookup, arg, arg)
+				p.options[lookup] = arg
+				if err := p.setBoundVariable(arg, lookup); err != nil {
+					p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
+				}
+				break
+			}
+		}
+		
+		positional = append(positional, pa)
 		argPos++
 	}
 
-	maxDeclaredIdx := 0
-	if len(declaredPos) > 0 {
-		maxDeclaredIdx = declaredPos[len(declaredPos)-1].index
-	}
-	// Match and register positionals in one pass
+	// Check for missing required positionals and apply defaults
+	// Since we already matched positionals during collection, we only need to check for missing ones
 	for _, decl := range declaredPos {
-		if decl.index >= len(positional) {
-			if decl.flag.Argument.DefaultValue != "" {
-				// Only extend if within reasonable bounds
-				if decl.index <= maxDeclaredIdx {
-					// Extend result slice if needed
-					if decl.index >= len(positional) {
-						newResult := make([]PositionalArgument, decl.index+1)
-						copy(newResult, positional)
-						positional = newResult
-					}
-					positional[decl.index] = PositionalArgument{
-						Position: decl.index,
-						Value:    decl.flag.Argument.DefaultValue,
-						Argument: decl.flag.Argument,
-						ArgPos:   *decl.flag.Argument.Position,
-					}
-
-				} else {
-					continue
-				}
-			} else {
-				continue
+		// Only check positionals for commands that were actually executed
+		if !executedCommands[decl.flag.CommandPath] {
+			continue
+		}
+		
+		// Check if this positional was provided
+		found := false
+		for _, pos := range positional {
+			if pos.Argument == decl.flag.Argument {
+				found = true
+				break
 			}
 		}
-
-		pos := &positional[decl.index]
-		if pos.ArgPos != *decl.flag.Argument.Position {
-			continue
-		}
-
-		flagFromArg := p.flagOrShortFlag(decl.key, decl.flag.CommandPath) // Use resolved name
-		// Precedence check is done here to check whether the flag was provided on the command line.
-		if p.HasRawFlag(flagFromArg) {
-			// The flag was explicitly provided. Flag takes precedence.
-			// Do NOT bind the value from 'pos' to this field ('decl').
-			// Mark this positional argument slot as unbound in the final results.
-			pos.Argument = nil
-			continue
-		}
-
-		pos.Argument = decl.flag.Argument
-		lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
-		p.registerFlagValue(lookup, pos.Value, pos.Value)
-		p.options[lookup] = pos.Value
-		if err := p.setBoundVariable(pos.Value, lookup); err != nil {
-			p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
+		
+		if !found {
+			// Check if a flag was provided that takes precedence
+			flagFromArg := p.flagOrShortFlag(decl.key, decl.flag.CommandPath)
+			if p.HasRawFlag(flagFromArg) {
+				continue
+			}
+			
+			if decl.flag.Argument.DefaultValue != "" {
+				// Apply default value
+				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+				p.registerFlagValue(lookup, decl.flag.Argument.DefaultValue, decl.flag.Argument.DefaultValue)
+				p.options[lookup] = decl.flag.Argument.DefaultValue
+				if err := p.setBoundVariable(decl.flag.Argument.DefaultValue, lookup); err != nil {
+					p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
+				}
+				
+				// Add a positional argument entry for the default value
+				positional = append(positional, PositionalArgument{
+					Position: decl.index, // Use the declared position
+					Value:    decl.flag.Argument.DefaultValue,
+					Argument: decl.flag.Argument,
+					ArgPos:   decl.index,
+				})
+			} else if decl.required {
+				// Missing required positional
+				p.addError(errs.ErrRequiredPositionalFlag.WithArgs(decl.key, decl.index))
+			}
 		}
 	}
 
@@ -480,11 +505,11 @@ func (p *Parser) evalExecOnParse(lastCommandPath string) string {
 	return ""
 }
 
-func (p *Parser) evalFlagWithPath(state parse.State, currentCommandPath string) {
+func (p *Parser) evalFlagWithPath(state parse.State, currentCommandPath string) bool {
 	if p.posixCompatible {
-		p.parsePosixFlag(state, currentCommandPath)
+		return p.parsePosixFlag(state, currentCommandPath)
 	} else {
-		p.parseFlag(state, currentCommandPath)
+		return p.parseFlag(state, currentCommandPath)
 	}
 }
 
@@ -642,6 +667,11 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 		if registered, found := p.getCommand(currentArg); found {
 			cmd = registered
 			p.registerCommand(cmd, currentArg)
+			// If we found a root command and we already have a command path,
+			// we're starting a new command chain - clear the path
+			if len(*commandPathSlice) > 0 {
+				*commandPathSlice = (*commandPathSlice)[:0]
+			}
 		}
 	}
 

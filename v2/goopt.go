@@ -375,6 +375,7 @@ func (p *Parser) Parse(args []string) bool {
 				// We now iterate over the stack to handle flags for each command context
 				// We need to restore the state position for each command context
 				// because the state position is relative to the command context
+				flagProcessed := false
 				for i := ctxStack.Len() - 1; i >= 0; i-- {
 					cmdContext, ok := ctxStack.At(i)
 					if ok {
@@ -385,13 +386,20 @@ func (p *Parser) Parse(args []string) bool {
 
 					originalPos := state.Pos()
 
-					p.evalFlagWithPath(state, currentCommandPath)
+					if p.evalFlagWithPath(state, currentCommandPath) {
+						flagProcessed = true
+						processedStack = true
+						// Continue to process flag for other contexts that might also need it
+					}
 
 					// Only allow state advancement for the first command context
 					if ctxStack.Len() > 1 && state.Pos() > originalPos {
 						// For subsequent command contexts, restore the position
 						state.SetPos(originalPos)
 					}
+				}
+
+				if !flagProcessed && ctxStack.Len() > 0 {
 					processedStack = true
 				}
 
@@ -401,7 +409,11 @@ func (p *Parser) Parse(args []string) bool {
 
 				if !processedStack {
 					// fallback - possibly POSIX style
-					p.evalFlagWithPath(state, "")
+					if !p.evalFlagWithPath(state, "") {
+						// Flag not found in any context
+						flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
+						p.addError(errs.ErrUnknownFlag.WithArgs(flagName))
+					}
 				}
 			}
 

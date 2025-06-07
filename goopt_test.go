@@ -4882,24 +4882,27 @@ func TestParser_ComplexPositionalArgumentsWithGapsAndDefaults(t *testing.T) {
 	assert.Equal(t, "opt", cfg.Optional, "should bind third positional")
 
 	// Test with required and default
-	cfg = Config{}
-	p.ClearAll()
-	assert.True(t, p.ParseString("src dest"), "should parse with missing optional argument")
-	assert.Equal(t, "src", cfg.Source, "should bind first positional")
-	assert.Equal(t, "dest", cfg.Destination, "should bind second positional")
-	assert.Equal(t, "default_value", cfg.Optional, "should use default value for missing optional")
+	cfg2 := Config{}
+	p2, err := NewParserFromStruct(&cfg2)
+	assert.NoError(t, err)
+	assert.True(t, p2.ParseString("src dest"), "should parse with missing optional argument")
+	assert.Equal(t, "src", cfg2.Source, "should bind first positional")
+	assert.Equal(t, "dest", cfg2.Destination, "should bind second positional")
+	assert.Equal(t, "default_value", cfg2.Optional, "should use default value for missing optional")
 
 	// Test missing required
-	cfg = Config{}
-	p.ClearAll()
-	assert.False(t, p.ParseString(""), "should not parse empty string when flags are required")
-	assert.NotEmpty(t, p.GetErrors(), "should have error for missing required positional")
+	cfg3 := Config{}
+	p3, err := NewParserFromStruct(&cfg3)
+	assert.NoError(t, err)
+	assert.False(t, p3.ParseString(""), "should not parse empty string when flags are required")
+	assert.NotEmpty(t, p3.GetErrors(), "should have error for missing required positional")
 
 	// Test positions are preserved
-	cfg = Config{}
-	p.ClearAll()
-	assert.True(t, p.ParseString("src dest"))
-	posArgs := p.GetPositionalArgs()
+	cfg4 := Config{}
+	p4, err := NewParserFromStruct(&cfg4)
+	assert.NoError(t, err)
+	assert.True(t, p4.ParseString("src dest"))
+	posArgs := p4.GetPositionalArgs()
 	assert.Equal(t, 3, len(posArgs), "should have three positional arguments")
 	assert.Equal(t, 0, posArgs[0].Position, "first positional should have position 0")
 	assert.Equal(t, 1, posArgs[1].Position, "second positional should have position 1")
@@ -5098,6 +5101,135 @@ Positional Arguments:
 			}
 		})
 	}
+}
+
+type MigrateCommand struct {
+	Up     struct{ Exec CommandFunc } `goopt:"kind:command;name:up;desc:Run pending migrations"`
+	Down   struct{ Exec CommandFunc } `goopt:"kind:command;name:down;desc:Rollback last migration"`
+	Status struct{ Exec CommandFunc } `goopt:"kind:command;name:status;desc:Show migration status"`
+	Create struct {
+		Name string `goopt:"pos:0;desc:Migration name"`
+		Exec CommandFunc
+	} `goopt:"kind:command;name:create;desc:Create new migration"`
+}
+
+type PluginCommand struct {
+	List    struct{ Exec CommandFunc } `goopt:"kind:command;name:list;desc:List installed plugins"`
+	Install struct {
+		Path string `goopt:"pos:0;desc:Plugin path or URL;required:true"`
+		Exec CommandFunc
+	} `goopt:"kind:command;name:install;desc:Install a plugin"`
+	Remove struct {
+		Name string `goopt:"pos:0;desc:Plugin name;required:true"`
+		Exec CommandFunc
+	} `goopt:"kind:command;name:remove;desc:Remove a plugin"`
+	Enable struct {
+		Name string `goopt:"pos:0;desc:Plugin name;required:true"`
+		Exec CommandFunc
+	} `goopt:"kind:command;name:enable;desc:Enable a plugin"`
+	Disable struct {
+		Name    string `goopt:"pos:0;desc:Plugin name;required:true"`
+		Verbose bool   `goopt:"short:v;desc:Show verbose output"`
+		Path    string `goopt:"pos:1;desc:Plugin path;required:true"`
+		Exec    CommandFunc
+	} `goopt:"kind:command;name:disable;desc:Disable a plugin"`
+}
+
+type testCommandPositional struct {
+	Help    bool           `goopt:"short:h;desc:Show help"`
+	Migrate MigrateCommand `goopt:"kind:command;name:migrate;desc:Database migration commands"`
+	Plugin  PluginCommand  `goopt:"kind:command;name:plugin;desc:Import data from other systems"`
+}
+
+func TestParser_CommandPositionalWithFlagOrder(t *testing.T) {
+	var cmd *testCommandPositional
+
+	// Test case: flag after positionals in single command
+	cmd = &testCommandPositional{}
+	p, err := NewParserFromStruct(cmd)
+	assert.NoError(t, err)
+	ok := p.ParseString("plugin disable name1 path1 -v")
+	if !ok {
+		t.Logf("Parse errors for 'plugin disable name1 path1 -v': %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "name1", cmd.Plugin.Disable.Name)
+	assert.Equal(t, "path1", cmd.Plugin.Disable.Path)
+	assert.True(t, cmd.Plugin.Disable.Verbose)
+
+	// Test case: flag between positionals
+	cmd = &testCommandPositional{}
+	p, err = NewParserFromStruct(cmd)
+	assert.NoError(t, err)
+	ok = p.ParseString("plugin disable name2 -v path2")
+	if !ok {
+		t.Logf("Parse errors for 'plugin disable name2 -v path2': %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "name2", cmd.Plugin.Disable.Name)
+	assert.Equal(t, "path2", cmd.Plugin.Disable.Path)
+	assert.True(t, cmd.Plugin.Disable.Verbose)
+}
+
+func TestParser_CommandPositional(t *testing.T) {
+	var cmd *testCommandPositional
+	cmd = &testCommandPositional{}
+	p, err := NewParserFromStruct(cmd)
+	assert.NoError(t, err)
+	ok := p.ParseString("plugin install test")
+	if !ok {
+		t.Logf("Parse errors for 'plugin install test': %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "test", cmd.Plugin.Install.Path)
+	cmd = &testCommandPositional{}
+	p, err = NewParserFromStruct(&cmd)
+	assert.NoError(t, err)
+	ok = p.ParseString("migrate create test plugin remove jar")
+	if !ok {
+		t.Logf("Parse errors: %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "test", cmd.Migrate.Create.Name)
+	assert.Equal(t, "jar", cmd.Plugin.Remove.Name)
+	cmd = &testCommandPositional{}
+	p, err = NewParserFromStruct(&cmd)
+	assert.NoError(t, err)
+	ok = p.ParseString("plugin disable test2 -v ./loc")
+	if !ok {
+		t.Logf("Parse errors: %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "test2", cmd.Plugin.Disable.Name)
+	assert.Equal(t, "./loc", cmd.Plugin.Disable.Path)
+	assert.True(t, cmd.Plugin.Disable.Verbose)
+
+	// Test chained commands without flags first
+	cmd = &testCommandPositional{}
+	p, err = NewParserFromStruct(cmd)
+	assert.NoError(t, err)
+	ok = p.ParseString("migrate create test1 plugin disable test2 ./loc")
+	if !ok {
+		t.Logf("Parse errors for chained without flags: %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "test1", cmd.Migrate.Create.Name)
+	assert.Equal(t, "test2", cmd.Plugin.Disable.Name)
+	assert.Equal(t, "./loc", cmd.Plugin.Disable.Path)
+
+	// Now test with the flag - place flag before last positional
+	cmd = &testCommandPositional{}
+	p, err = NewParserFromStruct(cmd)
+	assert.NoError(t, err)
+	ok = p.ParseString("migrate create test1 plugin disable -v test2 ./loc")
+	if !ok {
+		t.Logf("Parse errors for chained with flag before positionals: %v", p.GetErrors())
+	}
+	assert.True(t, ok)
+	assert.Equal(t, "test1", cmd.Migrate.Create.Name)
+	assert.Equal(t, "test2", cmd.Plugin.Disable.Name)
+	assert.Equal(t, "./loc", cmd.Plugin.Disable.Path)
+	assert.True(t, cmd.Plugin.Disable.Verbose)
 }
 
 // Helper function for comparing string slices
