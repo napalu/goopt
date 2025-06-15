@@ -48,6 +48,20 @@ func TestInsertSlice(t *testing.T) {
 			elements: []int{},
 			want:     []int{1, 2},
 		},
+		{
+			name:     "position negative",
+			arr:      []int{1, 2, 3},
+			pos:      -1,
+			elements: []int{0},
+			want:     []int{0, 1, 2, 3},
+		},
+		{
+			name:     "position beyond length",
+			arr:      []int{1, 2, 3},
+			pos:      10,
+			elements: []int{4},
+			want:     []int{1, 2, 3, 4},
+		},
 	}
 
 	for _, tt := range tests {
