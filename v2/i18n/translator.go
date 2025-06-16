@@ -10,6 +10,6 @@ import "golang.org/x/text/language"
 type Translator interface {
 	T(key string, args ...interface{}) string
 	TL(lang language.Tag, key string, args ...interface{}) string
-	SetDefaultLanguage(lang language.Tag)
+	SetDefaultLanguage(lang language.Tag) error
 	GetDefaultLanguage() language.Tag
 }

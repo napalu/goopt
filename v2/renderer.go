@@ -2,7 +2,6 @@ package goopt
 
 import (
 	"fmt"
-	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/internal/messages"
 )
 
@@ -19,9 +18,8 @@ func NewRenderer(parser *Parser) *DefaultRenderer {
 // Otherwise, it retrieves the long name of the flag and returns it.
 // If the long name contains a comand-path, it only returns the flag part of the path.
 func (r *DefaultRenderer) FlagName(f *Argument) string {
-	bundle := r.GetBundle()
 	if f.NameKey != "" {
-		return bundle.T(f.NameKey)
+		return r.parser.layeredProvider.GetMessage(f.NameKey)
 	}
 
 	longName := f.GetLongName(r.parser)
@@ -37,18 +35,16 @@ func (r *DefaultRenderer) FlagName(f *Argument) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the flag's Description field.
 func (r *DefaultRenderer) FlagDescription(f *Argument) string {
-	bundle := r.GetBundle()
 	if f.DescriptionKey == "" {
 		return f.Description
 	}
 
-	return bundle.T(f.DescriptionKey)
+	return r.parser.layeredProvider.GetMessage(f.DescriptionKey)
 }
 
 func (r *DefaultRenderer) CommandName(c *Command) string {
-	bundle := r.GetBundle()
 	if c.NameKey != "" {
-		return bundle.T(c.NameKey)
+		return r.parser.layeredProvider.GetMessage(c.NameKey)
 	}
 
 	return c.Name
@@ -63,59 +59,61 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 		return c.Description
 	}
 
-	bundle := r.GetBundle()
-	return bundle.T(c.DescriptionKey)
+	return r.parser.layeredProvider.GetMessage(c.DescriptionKey)
 }
 
 // FlagUsage generates a usage string for a given command-line argument.
 // The usage string includes the flag name, short name (if available), description,
 // default value (if any), and whether the flag is required, optional, or conditional.
+// This method respects the HelpConfig settings.
 func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 	var usage string
+	config := r.parser.GetHelpConfig()
 
 	usage = "--" + r.FlagName(f)
-	if f.Short != "" {
-		usage += " " + r.parser.i18n.T(messages.MsgOrKey) + " -" + f.Short
+	if f.Short != "" && config.ShowShortFlags {
+		usage += " " + r.parser.layeredProvider.GetMessage(messages.MsgOrKey) + " -" + f.Short
 	}
 
-	description := r.FlagDescription(f)
-	if description != "" {
-		usage += " \"" + description + "\""
+	if config.ShowDescription {
+		description := r.FlagDescription(f)
+		if description != "" {
+			usage += " \"" + description + "\""
+		}
 	}
 
-	if f.DefaultValue != "" {
-		usage += fmt.Sprintf(" (%s: %s)", r.parser.i18n.T(messages.MsgDefaultsToKey), f.DefaultValue)
+	if f.DefaultValue != "" && config.ShowDefaults {
+		usage += fmt.Sprintf(" (%s: %s)", r.parser.layeredProvider.GetMessage(messages.MsgDefaultsToKey), f.DefaultValue)
 	}
 
-	requiredOrOptional := r.parser.i18n.T(messages.MsgOptionalKey)
-	if f.Required {
-		requiredOrOptional = r.parser.i18n.T(messages.MsgRequiredKey)
-	} else if f.RequiredIf != nil {
-		requiredOrOptional = r.parser.i18n.T(messages.MsgConditionalKey)
+	if config.ShowRequired {
+		requiredOrOptional := r.parser.layeredProvider.GetMessage(messages.MsgOptionalKey)
+		if f.Required {
+			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgRequiredKey)
+		} else if f.RequiredIf != nil {
+			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgConditionalKey)
+		}
+		usage += " (" + requiredOrOptional + ")"
 	}
-
-	return usage + " (" + requiredOrOptional + ")"
-}
-
-// CommandUsage generates a usage string for a given command.
-// The usage string includes the command name, description, and any subcommands.
-func (r *DefaultRenderer) CommandUsage(c *Command) string {
-	var usage string
-
-	usage = r.CommandName(c)
-	usage += " \"" + r.CommandDescription(c) + "\""
 
 	return usage
 }
 
-func (r *DefaultRenderer) GetBundle() *i18n.Bundle {
-	if r.parser == nil {
-		return nil
+// CommandUsage generates a usage string for a given command.
+// The usage string includes the command name, description, and any subcommands.
+// This method respects the HelpConfig settings.
+func (r *DefaultRenderer) CommandUsage(c *Command) string {
+	var usage string
+	config := r.parser.GetHelpConfig()
+
+	usage = r.CommandName(c)
+
+	if config.ShowDescription {
+		description := r.CommandDescription(c)
+		if description != "" {
+			usage += " \"" + description + "\""
+		}
 	}
 
-	if r.parser.userI18n != nil {
-		return r.parser.userI18n
-	}
-
-	return r.parser.i18n
+	return usage
 }

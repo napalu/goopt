@@ -9,12 +9,18 @@ import (
 )
 
 func TestUpdateMessageProvider(t *testing.T) {
+	// Skip this test in short mode to avoid global state issues
+	if testing.Short() {
+		t.Skip("Skipping TestUpdateMessageProvider in short mode due to global state modification")
+	}
+
 	originalMsg := ErrEmptyFlag.Error()
 
 	// Create a bundle with Finnish as default language
 	bundle := i18n.NewEmptyBundle()
-	bundle.SetDefaultLanguage(language.Finnish)
-	err := bundle.AddLanguage(language.Finnish, map[string]string{
+	err := bundle.SetDefaultLanguage(language.Finnish)
+	assert.NoError(t, err)
+	err = bundle.AddLanguage(language.Finnish, map[string]string{
 		"goopt.error.empty_flag":          "Tyhjä lippu",
 		"goopt.error.flag_already_exists": "Lippu on jo olemassa: %s",
 	})

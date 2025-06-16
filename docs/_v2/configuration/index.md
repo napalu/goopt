@@ -11,5 +11,5 @@ goopt supports multiple configuration sources with clear precedence:
 
 1. Command-line flags (highest priority)
 2. External configuration (via ParseWithDefaults)
-4. Environment variables
-3. Default values (lowest priority) 
+3. Environment variables
+4. Default values (lowest priority) 

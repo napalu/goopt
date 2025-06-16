@@ -111,6 +111,52 @@ type FlagInfo struct {
 	CommandPath string // The path of the command that owns this flag
 }
 
+// HelpBehavior defines when help should go to stdout vs stderr
+type HelpBehavior int
+
+const (
+	HelpBehaviorStdout HelpBehavior = iota // Always use stdout (default)
+	HelpBehaviorSmart                      // stdout for --help, stderr for errors
+	HelpBehaviorStderr                     // Always use stderr
+)
+
+// HelpStyle defines different help output formats
+type HelpStyle int
+
+const (
+	HelpStyleFlat         HelpStyle = iota // PrintUsage
+	HelpStyleGrouped                       // PrintUsageWithGroups
+	HelpStyleCompact                       // Deduplicated, minimal
+	HelpStyleHierarchical                  // Command-focused, drill-down
+	HelpStyleSmart                         // Auto-detect based on CLI size
+)
+
+// HelpConfig allows customization of help output (applies to "raw" --help outpout)
+type HelpConfig struct {
+	Style            HelpStyle
+	ShowDefaults     bool
+	ShowShortFlags   bool
+	ShowRequired     bool
+	ShowDescription  bool
+	MaxGlobals       int
+	MaxWidth         int
+	GroupSharedFlags bool
+	CompactThreshold int // Number of flags before switching to compact mode
+}
+
+// DefaultHelpConfig provides sensible defaults
+var DefaultHelpConfig = HelpConfig{
+	Style:            HelpStyleSmart,
+	ShowDefaults:     true, // Show default values by default
+	ShowShortFlags:   true,
+	ShowRequired:     true,
+	ShowDescription:  true, // Show descriptions by default (essential for help!)
+	MaxWidth:         80,
+	MaxGlobals:       15,
+	GroupSharedFlags: true,
+	CompactThreshold: 20,
+}
+
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
 	posixCompatible         bool
@@ -139,10 +185,34 @@ type Parser struct {
 	stderr                  io.Writer
 	stdout                  io.Writer
 	maxDependencyDepth      int
-	i18n                    *i18n.Bundle
-	userI18n                *i18n.Bundle
+	defaultBundle           *i18n.Bundle // Immutable default bundle
+	systemBundle            *i18n.Bundle // Parser-specific overrides
+	userI18n                *i18n.Bundle // User-provided bundle
+	layeredProvider         *i18n.LayeredMessageProvider
 	renderer                Renderer
 	structCtx               any
+	helpConfig              HelpConfig
+	helpBehavior            HelpBehavior
+	autoHelp                bool
+	parseHelp               bool
+	helpFlags               []string
+	helpExecuted            bool
+	helpEndFunc             EndShowHelpHookFunc
+	autoRegisteredHelp      map[string]bool
+	version                 string
+	versionFunc             func() string
+	versionFormatter        func(string) string
+	versionFlags            []string
+	autoVersion             bool
+	showVersionInHelp       bool
+	versionExecuted         bool
+	autoRegisteredVersion   map[string]bool
+	globalPreHooks          []PreHookFunc
+	globalPostHooks         []PostHookFunc
+	commandPreHooks         map[string][]PreHookFunc
+	commandPostHooks        map[string][]PostHookFunc
+	hookOrder               HookOrder
+	validationHook          ValidationHookFunc
 	mu                      sync.Mutex
 }
 
@@ -168,3 +238,23 @@ type Renderer interface {
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies
 const DefaultMaxDependencyDepth = 10
+
+// PreHookFunc is called before command execution
+type PreHookFunc func(p *Parser, cmd *Command) error
+
+// PostHookFunc is called after command execution
+type PostHookFunc func(p *Parser, cmd *Command, cmdErr error) error
+
+type EndShowHelpHookFunc func() error
+
+// HookOrder defines the order in which hooks are executed
+type HookOrder int
+
+const (
+	// OrderGlobalFirst executes global hooks before command-specific hooks
+	OrderGlobalFirst HookOrder = iota
+	// OrderCommandFirst executes command-specific hooks before global hooks
+	OrderCommandFirst
+)
+
+type ValidationHookFunc func(*Parser) error

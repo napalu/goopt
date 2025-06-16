@@ -6,6 +6,7 @@ import (
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/internal/util"
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/validation"
 )
 
 // WithShortFlag represents the short form of a flag. Since by default and design, no max length is enforced,
@@ -120,7 +121,9 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 		for i := 0; i < len(values); i++ {
 			re, e := regexp.Compile(argument.AcceptedValues[i].Pattern)
 			if e != nil {
-				*err = e
+				if err != nil {
+					*err = e
+				}
 				return
 			}
 
@@ -144,5 +147,26 @@ func WithPosition(idx int) ConfigureArgumentFunc {
 func WithDescriptionKey(key string) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.DescriptionKey = key
+	}
+}
+
+// WithValidator adds a single validator to the argument
+func WithValidator(validator validation.Validator) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Validators = append(argument.Validators, validator)
+	}
+}
+
+// WithValidators adds multiple validators to the argument
+func WithValidators(validators ...validation.Validator) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Validators = append(argument.Validators, validators...)
+	}
+}
+
+// SetValidators replaces all validators for the argument
+func SetValidators(validators ...validation.Validator) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Validators = validators
 	}
 }

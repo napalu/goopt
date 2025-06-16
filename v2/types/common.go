@@ -79,6 +79,7 @@ type TagConfig struct {
 	DependsOn      map[string][]string
 	Capacity       int
 	Position       *int
+	Validators     []string // List of validator specifications
 }
 
 // Describe a PatternValue (regular expression with a human-readable explanation of the pattern)

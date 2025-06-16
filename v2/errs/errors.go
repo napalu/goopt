@@ -1,3 +1,6 @@
+// Package errs provides translatable error definitions for goopt.
+// All errors use the global default bundle for translations, which allows
+// adding new languages but ensures consistency across all parser instances.
 package errs
 
 import (
@@ -22,6 +25,7 @@ var (
 	ErrEmptyArgumentPrefixList      = i18n.NewError(ErrEmptyArgumentPrefixListKey)
 	ErrEmptyFlag                    = i18n.NewError(ErrEmptyFlagKey)
 	ErrFlagAlreadyExists            = i18n.NewError(ErrFlagAlreadyExistsKey)
+	ErrFlagDoesNotExist             = i18n.NewError(ErrFlagDoesNotExistKey)
 	ErrPosixShortForm               = i18n.NewError(ErrPosixShortFormKey)
 	ErrShortFlagConflict            = i18n.NewError(ErrShortFlagConflictKey)
 	ErrShortFlagConflictContext     = i18n.NewError(ErrShortFlagConflictKeyContext)
@@ -63,6 +67,7 @@ var (
 	ErrCommandExpectsSubcommand     = i18n.NewError(ErrCommandExpectsSubcommandKey)
 	ErrSecureFlagExpectsValue       = i18n.NewError(ErrSecureFlagExpectsValueKey)
 	ErrInvalidArgument              = i18n.NewError(ErrInvalidArgumentKey)
+	ErrNoValues                     = i18n.NewError(ErrNoValuesKey)
 	ErrCircularDependency           = i18n.NewError(ErrCircularDependencyKey)
 	ErrDependencyNotFound           = i18n.NewError(ErrDependencyNotFoundKey)
 	ErrDependencyValueNotSpecified  = i18n.NewError(ErrDependencyValueNotSpecifiedKey)
@@ -70,6 +75,7 @@ var (
 	ErrIndexOutOfBounds             = i18n.NewError(ErrIndexOutOfBoundsKey)
 	ErrUnknownFlag                  = i18n.NewError(ErrUnknownFlagKey)
 	ErrPositionMustBeNonNegative    = i18n.NewError(ErrPositionMustBeNonNegativeKey)
+	ErrPositionalArgumentNotFound   = i18n.NewError(ErrPositionalArgumentNotFoundKey)
 	ErrUnknownFlagInCommandPath     = i18n.NewError(ErrUnknownFlagInCommandPathKey)
 	ErrInvalidTagFormat             = i18n.NewError(ErrInvalidTagFormatKey)
 	ErrInvalidKind                  = i18n.NewError(ErrInvalidKindKey)
@@ -110,6 +116,47 @@ var (
 	ErrParseEmptyKey          = i18n.NewError(ErrParseEmptyKeyKey)
 	ErrParseMissingValue      = i18n.NewError(ErrParseMissingValueKey)
 	ErrParseNegativeIndex     = i18n.NewError(ErrParseNegativeIndexKey)
+
+	// Validation errors
+	ErrValidationCombinedFailed      = i18n.NewError(ErrValidationCombinedFailedKey)
+	ErrValueMustBeNumber             = i18n.NewError(ErrValueMustBeNumberKey)
+	ErrInvalidEmailFormat            = i18n.NewError(ErrInvalidEmailFormatKey)
+	ErrInvalidURL                    = i18n.NewError(ErrInvalidURLKey)
+	ErrURLSchemeMustBeOneOf          = i18n.NewError(ErrURLSchemeMustBeOneOfKey)
+	ErrURLMustHaveHost               = i18n.NewError(ErrURLMustHaveHostKey)
+	ErrMinLength                     = i18n.NewError(ErrMinLengthKey)
+	ErrMaxLength                     = i18n.NewError(ErrMaxLengthKey)
+	ErrExactLength                   = i18n.NewError(ErrExactLengthKey)
+	ErrMinByteLength                 = i18n.NewError(ErrMinByteLengthKey)
+	ErrMaxByteLength                 = i18n.NewError(ErrMaxByteLengthKey)
+	ErrExactByteLength               = i18n.NewError(ErrExactByteLengthKey)
+	ErrValueBetween                  = i18n.NewError(ErrValueBetweenKey)
+	ErrValueAtLeast                  = i18n.NewError(ErrValueAtLeastKey)
+	ErrValueAtMost                   = i18n.NewError(ErrValueAtMostKey)
+	ErrPatternMatch                  = i18n.NewError(ErrPatternMatchKey)
+	ErrValueMustBeOneOf              = i18n.NewError(ErrValueMustBeOneOfKey)
+	ErrValueCannotBe                 = i18n.NewError(ErrValueCannotBeKey)
+	ErrValueMustBeInteger            = i18n.NewError(ErrValueMustBeIntegerKey)
+	ErrValueMustBeBoolean            = i18n.NewError(ErrValueMustBeBooleanKey)
+	ErrValueMustBeAlphanumeric       = i18n.NewError(ErrValueMustBeAlphanumericKey)
+	ErrValueMustBeIdentifier         = i18n.NewError(ErrValueMustBeIdentifierKey)
+	ErrValueMustNotContainWhitespace = i18n.NewError(ErrValueMustNotContainWhitespaceKey)
+	ErrFileMustHaveExtension         = i18n.NewError(ErrFileMustHaveExtensionKey)
+	ErrHostnameTooLong               = i18n.NewError(ErrHostnameTooLongKey)
+	ErrInvalidHostnameFormat         = i18n.NewError(ErrInvalidHostnameFormatKey)
+	ErrInvalidIPv4Address            = i18n.NewError(ErrInvalidIPv4AddressKey)
+	ErrValueMustBeValidIP            = i18n.NewError(ErrValueMustBeValidIPKey)
+
+	// Validator parsing errors
+	ErrInvalidValidator                    = i18n.NewError(ErrInvalidValidatorKey)
+	ErrValidatorRequiresArgument           = i18n.NewError(ErrValidatorRequiresArgumentKey)
+	ErrValidatorArgumentMustBeInteger      = i18n.NewError(ErrValidatorArgumentMustBeIntegerKey)
+	ErrValidatorArgumentMustBeNumber       = i18n.NewError(ErrValidatorArgumentMustBeNumberKey)
+	ErrValidatorRequiresAtLeastOneArgument = i18n.NewError(ErrValidatorRequiresAtLeastOneArgumentKey)
+	ErrUnknownValidator                    = i18n.NewError(ErrUnknownValidatorKey)
+	ErrValidatorArgumentCannotBeNegative   = i18n.NewError(ErrValidatorArgumentCannotBeNegativeKey)
+	ErrValidatorRecursionDepthExceeded     = i18n.NewError(ErrValidatorRecursionDepthExceededKey)
+	ErrValidatorMustUseParentheses         = i18n.NewError(ErrValidatorMustUseParenthesesKey)
 )
 
 type builtInErrors struct {
@@ -134,6 +181,7 @@ var sysErrors = &builtInErrors{
 		ErrEmptyArgumentPrefixList,
 		ErrEmptyFlag,
 		ErrFlagAlreadyExists,
+		ErrFlagDoesNotExist,
 		ErrPosixShortForm,
 		ErrShortFlagConflict,
 		ErrInvalidListDelimiterFunc,
@@ -174,6 +222,7 @@ var sysErrors = &builtInErrors{
 		ErrCommandExpectsSubcommand,
 		ErrSecureFlagExpectsValue,
 		ErrInvalidArgument,
+		ErrNoValues,
 		ErrCircularDependency,
 		ErrDependencyNotFound,
 		ErrDependencyValueNotSpecified,
@@ -181,6 +230,7 @@ var sysErrors = &builtInErrors{
 		ErrIndexOutOfBounds,
 		ErrUnknownFlag,
 		ErrPositionMustBeNonNegative,
+		ErrPositionalArgumentNotFound,
 		ErrUnknownFlagInCommandPath,
 		ErrInvalidTagFormat,
 		ErrInvalidKind,
@@ -216,6 +266,42 @@ var sysErrors = &builtInErrors{
 		ErrParseEmptyKey,
 		ErrParseMissingValue,
 		ErrParseNegativeIndex,
+		// Validation errors
+		ErrValidationCombinedFailed,
+		ErrValueMustBeNumber,
+		ErrInvalidEmailFormat,
+		ErrInvalidURL,
+		ErrURLSchemeMustBeOneOf,
+		ErrURLMustHaveHost,
+		ErrMinLength,
+		ErrMaxLength,
+		ErrExactLength,
+		ErrMinByteLength,
+		ErrMaxByteLength,
+		ErrExactByteLength,
+		ErrValueBetween,
+		ErrValueAtLeast,
+		ErrValueAtMost,
+		ErrPatternMatch,
+		ErrValueMustBeOneOf,
+		ErrValueCannotBe,
+		ErrValueMustBeInteger,
+		ErrValueMustBeBoolean,
+		ErrValueMustBeAlphanumeric,
+		ErrValueMustBeIdentifier,
+		ErrValueMustNotContainWhitespace,
+		ErrFileMustHaveExtension,
+		ErrHostnameTooLong,
+		ErrInvalidHostnameFormat,
+		ErrInvalidIPv4Address,
+		ErrValueMustBeValidIP,
+		// Validator parsing errors
+		ErrInvalidValidator,
+		ErrValidatorRequiresArgument,
+		ErrValidatorArgumentMustBeInteger,
+		ErrValidatorArgumentMustBeNumber,
+		ErrValidatorRequiresAtLeastOneArgument,
+		ErrUnknownValidator,
 	},
 }
 

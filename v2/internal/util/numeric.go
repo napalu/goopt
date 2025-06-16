@@ -1,6 +1,10 @@
 package util
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/napalu/goopt/v2/errs"
+)
 
 type Numeric interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
@@ -54,4 +58,20 @@ func Min[T Numeric](x, y T) T {
 		return x
 	}
 	return y
+}
+
+// MinOf returns the minimum of multiple values
+func MinOf[T Numeric](values ...T) (T, error) {
+	var zero T
+	if len(values) == 0 {
+		return zero, errs.ErrNoValues
+	}
+
+	minVal := values[0]
+	for _, v := range values[1:] {
+		if v < minVal {
+			minVal = v
+		}
+	}
+	return minVal, nil
 }

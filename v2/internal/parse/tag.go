@@ -122,6 +122,10 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			if config.Secure.IsSecure {
 				config.Secure.Prompt = value
 			}
+		case "help":
+			if value == "" {
+				value = field.Name
+			}
 		case "path":
 			config.Path = value
 		case "accepted":
@@ -158,6 +162,8 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 				return nil, errs.ErrInvalidAttributeForType.WithArgs("'position'", field.Name, value)
 			}
 			config.Position = &posData.Index
+		case "validators":
+			config.Validators = ParseValidatorSpecs(value)
 		default:
 			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", key, field.Name)
 		}
@@ -171,7 +177,6 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 	if config.TypeOf == types.Empty && config.Kind != types.KindCommand {
 		config.TypeOf = InferFieldType(field)
 	}
-
 
 	return config, nil
 }

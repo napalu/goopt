@@ -93,6 +93,17 @@ func NewError(key string) *TrError {
 	}
 }
 
+// NewErrorWithProvider creates a new translatable error with a key and specific provider
+func NewErrorWithProvider(key string, provider MessageProvider) *TrError {
+	defaultMsg := provider.GetMessage(key)
+	sentinel := errors.New(defaultMsg)
+	return &TrError{
+		sentinel:        sentinel,
+		key:             key,
+		messageProvider: provider,
+	}
+}
+
 // Error returns the default message, formatted with args if provided
 func (e *TrError) Error() string {
 	msg := e.messageProvider.GetMessage(e.key)

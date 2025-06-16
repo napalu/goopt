@@ -1,9 +1,12 @@
-module github.com/napalu/goopt/v2/examples/i18n-demo
+module i18n-demo
 
 go 1.18
 
+replace github.com/napalu/goopt/v2 => ../..
+
 require (
-	github.com/napalu/goopt/v2 v2.2.3
+	github.com/napalu/goopt/v2 v2.2.6
+	github.com/napalu/goopt/v2/examples/i18n-demo v0.0.0-20250607122655-e12cd04a3737
 	golang.org/x/text v0.21.0
 )
 

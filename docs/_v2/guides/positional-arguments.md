@@ -2,7 +2,7 @@
 layout: default
 title: Positional Arguments
 parent: Guides
-nav_order: 4
+nav_order: 6
 ---
 
 # Positional Arguments
@@ -132,37 +132,12 @@ func main() {
 
 ***Command Line Scenarios***:
 
-```bash
-    ./myapp in.txt out.txt
+| Command Line                        | cfg.InputFile | cgf.OutputFile | Unbound positionals | Reasoning                                        |
+|-------------------------------------|---------------|----------------|---------------------|--------------------------------------------------|
+| ./myapp in.txt out.txt              | "in.txt"      | "out.txt       | none                | Mapped by pos:0 and pos:1.                       | 
+| ./myapp in.txt --output flag.txt	   | "in.txt"      | "flag.txt"     | none                | Named flag --output takes precedence for pos:1   |
+| ./myapp in.txt --output flag.txt p2 | "in.txt"      | "flag.txt"     | p2                  | --output binds; p2 becomes an unbound positional |
 
-        cfg.InputFile = "in.txt" (from pos:0)
-
-        cfg.OutputFile = "out.txt" (from pos:1)
-
-    ./myapp in.txt --output flag.txt
-
-        cfg.InputFile = "in.txt" (from pos:0)
-
-        cfg.OutputFile = "flag.txt" (from --output, takes precedence over default for pos:1)
-
-    ./myapp in.txt --output flag.txt pos.txt
-
-        cfg.InputFile = "in.txt" (from pos:0)
-
-        cfg.OutputFile = "flag.txt" (from --output, takes precedence)
-
-        pos.txt remains as an unbound positional argument (original index 3), available via GetPositionalArgs() but not bound to cfg.OutputFile.
-
-    ./myapp -v in.txt pos.txt --output flag.txt
-
-        cfg.Verbose = true
-
-        cfg.InputFile = "in.txt" (from pos:0)
-
-        cfg.OutputFile = "flag.txt" (from --output, takes precedence)
-
-        pos.txt remains as an unbound positional argument (original index 2).
-```
 
 ***Accessing all positional arguments***
 

@@ -2,7 +2,7 @@
 layout: default
 title: Internationalization
 parent: Guides
-nav_order: 5
+nav_order: 7
 ---
 
 # Internationalization (i18n) Guide
@@ -88,22 +88,33 @@ Example JSON file (`translations/de.json`):
 
 Once you have created bundles, you can use them with your parser:
 
-### Setting the Default Bundle
+### Bundle Architecture
 
-You can replace the default bundle with your own:
+goopt v2 uses a three-tier translation system:
+
+1. **Default Bundle**: System-wide translations (shared by all parsers)
+2. **System Bundle**: Parser-specific system message overrides  
+3. **User Bundle**: Application-specific translations
+
+### Extending System Messages
+
+You can override system messages for a specific parser:
 
 ```go
 parser := goopt.NewParser()
 
-// Create a custom bundle
-customBundle, err := i18n.NewBundle()
-if err != nil {
-    log.Fatal(err)
-}
+// Create a bundle with custom system messages
+customBundle := i18n.NewEmptyBundle()
+customBundle.AddLanguage(language.German, map[string]string{
+    "goopt.error.flag_not_found": "Flag '%s' nicht gefunden",
+    "goopt.error.required_flag": "Erforderliches Flag '%s' fehlt",
+})
 
-// Replace the default bundle
-parser.ReplaceDefaultBundle(customBundle)
+// Extend the parser's system bundle
+parser.ExtendSystemBundle(customBundle)
 ```
+
+**Note**: The deprecated `ReplaceDefaultBundle` method now calls `ExtendSystemBundle` internally.
 
 ### Setting a User Bundle
 
@@ -163,7 +174,11 @@ Recommended patterns for organizing translation keys:
 
 ## Translatable Errors
 
-All system errors in goopt are automatically translatable:
+All system errors in goopt are automatically translatable. Error messages use the global default bundle, which means:
+
+- All parsers share the same error translations
+- You can extend the default bundle to add new languages for errors
+- Error messages will be displayed in the language set on the default bundle
 
 ```go
 if !parser.Parse(os.Args) {
@@ -173,6 +188,34 @@ if !parser.Parse(os.Args) {
     }
 }
 ```
+
+### Adding Error Translations for New Languages
+
+You can add error translations for new languages using the default bundle:
+
+```go
+// Method 1: Using AddLanguage for programmatic addition
+defaultBundle := i18n.Default()
+err := defaultBundle.AddLanguage(language.Spanish, map[string]string{
+    "goopt.error.flag_not_found": "bandera %[1]s no encontrada",
+    "goopt.error.required_flag": "falta la bandera requerida: %[1]s",
+    // ... add other error translations
+})
+
+// Method 2: Using LoadFromFS for file-based translations
+//go:embed system-locales/*.json
+var systemLocales embed.FS
+
+err = defaultBundle.LoadFromFS(systemLocales, "system-locales")
+if err != nil {
+    log.Fatalf("Failed to load system translations: %v", err)
+}
+
+// Set the language for all error messages
+defaultBundle.SetDefaultLanguage(language.Spanish)
+```
+
+**Note**: System error messages are global and cannot be customized per parser. This design choice simplifies the architecture while still allowing language extensions through the default bundle.
 
 ## Complete Example
 

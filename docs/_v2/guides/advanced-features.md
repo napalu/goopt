@@ -2,7 +2,7 @@
 layout: default
 title: Advanced Features
 parent: Guides
-nav_order: 6
+nav_order: 8
 ---
 
 # Advanced Features
@@ -13,25 +13,26 @@ This guide covers the advanced features of goopt v2 including struct tags, neste
 
 goopt v2 uses a more structured and consistent tag format:
 
-| Feature | Format | Example |
-|---------|--------|---------|
-| Tag Name | `goopt` | `goopt:"name:value"` |
-| Separator | Semicolon (;) | `goopt:"name:value;short:v"` |
-| Key-Value Delimiter | Colon (:) | `goopt:"name:value"` |
-| Kind | `kind:flag|command` | `goopt:"kind:command"` |
-| Name | `name:value` | `goopt:"name:output"` |
-| Short Name | `short:value` | `goopt:"short:o"` |
-| Description | `desc:value` | `goopt:"desc:Output file"` |
-| Description Key | `desckey:value` | `goopt:"desckey:flag.output"` |
-| Type | `type:single|standalone|chained|file` | `goopt:"type:file"` |
-| Required | `required:true|false` | `goopt:"required:true"` |
-| Default Value | `default:value` | `goopt:"default:stdout"` |
-| Secure Input | `secure:true|false` | `goopt:"secure:true"` |
-| Prompt Text | `prompt:value` | `goopt:"prompt:Password:"` |
-| Slice Capacity | `capacity:value` | `goopt:"capacity:5"` |
+| Feature | Format                                      | Example |
+|---------|---------------------------------------------|---------|
+| Tag Name | `goopt`                                     | `goopt:"name:value"` |
+| Separator | Semicolon (;)                               | `goopt:"name:value;short:v"` |
+| Key-Value Delimiter | Colon (:)                                   | `goopt:"name:value"` |
+| Kind | `kind:flag                                  |command` | `goopt:"kind:command"` |
+| Name | `name:value`                                | `goopt:"name:output"` |
+| Short Name | `short:value`                               | `goopt:"short:o"` |
+| Description | `desc:value`                                | `goopt:"desc:Output file"` |
+| Description Key | `desckey:value`                             | `goopt:"desckey:flag.output"` |
+| Type | `type:single                                |standalone|chained|file` | `goopt:"type:file"` |
+| Required | `required:true                              |false` | `goopt:"required:true"` |
+| Default Value | `default:value`                             | `goopt:"default:stdout"` |
+| Secure Input | `secure:true                                |false` | `goopt:"secure:true"` |
+| Prompt Text | `prompt:value`                              | `goopt:"prompt:Password:"` |
+| Slice Capacity | `capacity:value`                            | `goopt:"capacity:5"` |
+| Associated command path | `path:values`   | `goopt:"path:create user,create group"` |
 | Accepted Values | `accepted:{pattern:regex,desc:description}` | `goopt:"accepted:{pattern:json|yaml,desc:Format type}"` |
-| Dependencies | `depends:{flag:name,values:[val1,val2]}` | `goopt:"depends:{flag:format,values:[json,yaml]}"` |
-| Positional | `pos:value` | `goopt:"pos:0"` |
+| Dependencies | `depends:{flag:name,values:[val1,val2]}`    | `goopt:"depends:{flag:format,values:[json,yaml]}"` |
+| Positional | `pos:value`                                 | `goopt:"pos:0"` |
 
 ### Complex Tag Formats
 
@@ -48,6 +49,9 @@ type Config struct {
     Mode string `goopt:"name:mode;accepted:{pattern:read|write,desc:Access mode},{pattern:sync|async,desc:Operation mode}"`
 }
 ```
+
+See [Struct-tag guide]({{ site.baseurl }}/v2/guides/struct-tags/) for more info.
+
 
 #### Dependencies
 
@@ -96,6 +100,7 @@ goopt supports two types of slices:
 ### 1. Terminal Flag Slices
 
 Slices bound to flags with type `chained` (or inferred as such) are split using the parser's configured delimiter function (which defaults to space, comma, pipe):
+Alternatively `chained` flags can be repeated to append values as in tradition CLIs. See [Repeated-flag example](https://github.com/napalu/goopt/tree/v2/examples/repeated-flags)
 
 ```go
 type Config struct {
@@ -104,6 +109,8 @@ type Config struct {
 
 // Usage:
 // --tags="tag1,tag2,tag3"
+// or the more verbose
+// --tags tag1 --tags tag2 --tags tag3
 ```
 
 ### 2. Nested Structure Slices

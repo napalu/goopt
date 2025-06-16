@@ -529,4 +529,5 @@ goopt supports all Go versions from 1.18 onward. See our [compatibility policy](
 - [Configuration Guide]({{ site.baseurl }}/v2/configuration/index/) - Environment variables and external config
 - [Shell Completion]({{ site.baseurl }}/v2/shell/completion/) - Set up shell completions
 - [Advanced Features]({{ site.baseurl }}/v2/guides/advanced-features/) - Explore dependencies, validation, and more
+- [Help Configuration]({{ site.baseurl }}/v2/guides/help-configuration/) - Learn how to configure and use the help system
 

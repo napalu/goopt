@@ -1,0 +1,17 @@
+module validation-demo
+
+go 1.24.3
+
+replace github.com/napalu/goopt/v2 => ../..
+
+require github.com/napalu/goopt/v2 v2.2.6
+
+require (
+	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/iancoleman/strcase v0.3.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/term v0.32.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
+)

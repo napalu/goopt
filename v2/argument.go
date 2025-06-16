@@ -3,6 +3,7 @@ package goopt
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/napalu/goopt/v2/validation"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -15,10 +16,12 @@ type Argument struct {
 	Description    string
 	DescriptionKey string
 	TypeOf         types.OptionType
+	IsHelp         bool
 	Required       bool
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
+	Validators     []validation.Validator // Interface-based validators
 	AcceptedValues []types.PatternValue
 	DependencyMap  map[string][]string
 	Secure         types.Secure
@@ -29,7 +32,9 @@ type Argument struct {
 	uuid           string
 }
 
-// NewArg convenience initialization method to configure flags
+// NewArg convenience initialization method to configure flags.
+// Note: This function ignores configuration errors for backward compatibility.
+// Use NewArgE if you need error handling.
 func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument := &Argument{}
 	for _, config := range configs {
@@ -38,6 +43,22 @@ func NewArg(configs ...ConfigureArgumentFunc) *Argument {
 	argument.ensureInit()
 
 	return argument
+}
+
+// NewArgE creates a new Argument with error handling.
+// Returns an error if any configuration function fails.
+func NewArgE(configs ...ConfigureArgumentFunc) (*Argument, error) {
+	argument := &Argument{}
+	var err error
+	for _, config := range configs {
+		config(argument, &err)
+		if err != nil {
+			return nil, err
+		}
+	}
+	argument.ensureInit()
+
+	return argument, nil
 }
 
 // Set configures the Argument instance with the provided ConfigureArgumentFunc(s),
@@ -73,6 +94,9 @@ func (a *Argument) ensureInit() {
 	if a.DependencyMap == nil {
 		a.DependencyMap = map[string][]string{}
 	}
+	if a.Validators == nil {
+		a.Validators = []validation.Validator{}
+	}
 	if a.uuid == "" {
 		a.uuid = uuid.New().String()
 	}
@@ -80,6 +104,38 @@ func (a *Argument) ensureInit() {
 
 func (a *Argument) isPositional() bool {
 	return a.Position != nil
+}
+
+// HasConvertedAcceptedValues returns true if this argument has validators
+// that were converted from AcceptedValues
+func (a *Argument) HasConvertedAcceptedValues() bool {
+	for _, v := range a.Validators {
+		if v.IsConvertedFromAcceptedValues() {
+			return true
+		}
+	}
+	return false
+}
+
+// GetValidatorByName returns a validator by its name
+func (a *Argument) GetValidatorByName(name string) (validation.Validator, bool) {
+	for _, v := range a.Validators {
+		if v.Name() == name {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// GetValidatorsByType returns all validators of a specific type
+func (a *Argument) GetValidatorsByType(validatorType string) []validation.Validator {
+	var result []validation.Validator
+	for _, v := range a.Validators {
+		if v.Type() == validatorType {
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 func (a *Argument) GetLongName(parser *Parser) string {

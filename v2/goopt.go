@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"github.com/napalu/goopt/v2/input"
 	"github.com/napalu/goopt/v2/internal/messages"
+	"github.com/napalu/goopt/v2/validation"
 	"golang.org/x/text/language"
 	"sync"
 
@@ -44,6 +45,12 @@ import (
 // NewParser convenience initialization method. Use NewCmdLine to
 // configure CmdLineOption using option functions.
 func NewParser() *Parser {
+	defaultBundle := i18n.Default()
+	systemBundle := i18n.NewEmptyBundle()
+
+	// Create layered provider
+	layeredProvider := i18n.NewLayeredMessageProvider(defaultBundle, systemBundle, nil)
+
 	p := &Parser{
 		acceptedFlags:        orderedmap.NewOrderedMap[string, *FlagInfo](),
 		lookup:               map[string]string{},
@@ -65,8 +72,29 @@ func NewParser() *Parser {
 		flagNameConverter:    DefaultFlagNameConverter,
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
-		i18n:                 i18n.Default(),
-		mu:                   sync.Mutex{},
+		defaultBundle:        defaultBundle,
+		systemBundle:         systemBundle,
+		layeredProvider:      layeredProvider,
+		helpConfig:           DefaultHelpConfig,
+		autoHelp:             true,
+		helpFlags:            []string{"help", "h"},
+		helpExecuted:         false,
+		helpEndFunc: func() error {
+			os.Exit(0)
+			return nil
+		},
+		autoRegisteredHelp:    make(map[string]bool),
+		autoVersion:           true,
+		versionFlags:          []string{"version", "v"},
+		showVersionInHelp:     false,
+		versionExecuted:       false,
+		autoRegisteredVersion: make(map[string]bool),
+		globalPreHooks:        []PreHookFunc{},
+		globalPostHooks:       []PostHookFunc{},
+		commandPreHooks:       make(map[string][]PreHookFunc),
+		commandPostHooks:      make(map[string][]PostHookFunc),
+		hookOrder:             OrderGlobalFirst,
+		mu:                    sync.Mutex{},
 	}
 	p.renderer = NewRenderer(p)
 
@@ -130,8 +158,15 @@ func (p *Parser) SetExecOnParseComplete(value bool) {
 	p.callbackOnParseComplete = value
 }
 
-func (p *Parser) SetSystemLanguage(lang language.Tag) {
-	p.i18n.SetDefaultLanguage(lang)
+func (p *Parser) SetSystemLanguage(lang language.Tag) error {
+	// Set language on the system bundle (not the immutable default)
+	err := p.systemBundle.SetDefaultLanguage(lang)
+	if err != nil {
+		return err
+	}
+
+	// The layered provider will automatically use the new language
+	return nil
 }
 
 // SetCommandNameConverter allows setting a custom name converter for command names
@@ -194,9 +229,28 @@ func (p *Parser) ExecuteCommands() int {
 	for p.callbackQueue.Len() > 0 {
 		cmd, _ := p.callbackQueue.Pop()
 		if cmd.Callback != nil {
-			err := cmd.Callback(p, cmd)
-			p.callbackResults[cmd.path] = err
-			if err != nil {
+			// Execute pre-hooks
+			preErr := p.executePreHooks(cmd)
+			if preErr != nil {
+				p.callbackResults[cmd.path] = preErr
+				callbackErrors++
+				// Execute post-hooks even on pre-hook failure
+				p.executePostHooks(cmd, preErr)
+				continue
+			}
+
+			// Execute the command
+			cmdErr := cmd.Callback(p, cmd)
+			p.callbackResults[cmd.path] = cmdErr
+			if cmdErr != nil {
+				callbackErrors++
+			}
+
+			// Execute post-hooks
+			postErr := p.executePostHooks(cmd, cmdErr)
+			if postErr != nil && cmdErr == nil {
+				// Only count post-hook error if command succeeded
+				p.callbackResults[cmd.path] = postErr
 				callbackErrors++
 			}
 		}
@@ -211,11 +265,27 @@ func (p *Parser) ExecuteCommand() error {
 	if p.callbackQueue.Len() > 0 {
 		cmd, _ := p.callbackQueue.Pop()
 		if cmd.Callback != nil {
-			err := cmd.Callback(p, cmd)
-			p.callbackResults[cmd.path] = err
-			if err != nil {
-				return err
+			// Execute pre-hooks
+			if preErr := p.executePreHooks(cmd); preErr != nil {
+				p.callbackResults[cmd.path] = preErr
+				// Execute post-hooks even on pre-hook failure
+				p.executePostHooks(cmd, preErr)
+				return preErr
 			}
+
+			// Execute the command
+			cmdErr := cmd.Callback(p, cmd)
+			p.callbackResults[cmd.path] = cmdErr
+
+			// Execute post-hooks
+			if postErr := p.executePostHooks(cmd, cmdErr); postErr != nil {
+				if cmdErr == nil {
+					p.callbackResults[cmd.path] = postErr
+					return postErr
+				}
+			}
+
+			return cmdErr
 		}
 	}
 
@@ -347,9 +417,36 @@ func (p *Parser) AddCommand(cmd *Command) error {
 // Parse this function should be called on os.Args (or a user-defined array of arguments). Returns true when
 // user command line arguments match the defined Flag and Command rules
 // Parse processes user command line arguments matching the defined Flag and Command rules.
-func (p *Parser) Parse(args []string) bool {
+func (p *Parser) Parse(args []string, defaults ...string) bool {
 	p.ensureInit()
 	pruneExecPathFromArgs(&args)
+
+	// Auto-register help flags if enabled
+	if err := p.ensureHelpFlags(); err != nil {
+		p.addError(err)
+		return false
+	}
+
+	// Auto-register version flags if enabled
+	if err := p.ensureVersionFlags(); err != nil {
+		p.addError(err)
+		return false
+	}
+
+	// Early check for help request
+	if p.autoHelp && p.hasHelpInArgs(args) {
+		improvedParser := NewHelpParser(p, p.helpConfig)
+
+		// The improved parser will handle all parsing and error detection
+		err := improvedParser.Parse(args)
+		p.helpExecuted = true
+		if p.helpEndFunc != nil {
+			return p.helpEndFunc() == nil
+		}
+
+		// Return true if help was shown successfully
+		return err == nil
+	}
 
 	var (
 		envFlagsByCommand  = p.groupEnvVarsByCommand() // Get env flags split by command
@@ -362,7 +459,7 @@ func (p *Parser) Parse(args []string) bool {
 		processedStack     bool
 	)
 
-	state := parse.NewState(args)
+	state := parse.NewState(args, defaults...)
 	if g, ok := envFlagsByCommand["global"]; ok && len(g) > 0 {
 		state.InsertArgsAt(0, g...)
 	}
@@ -476,7 +573,55 @@ func (p *Parser) Parse(args []string) bool {
 	}
 	p.secureArguments = nil
 
+	// Check for auto-version after successful parsing
+	if p.autoVersion && p.IsVersionRequested() {
+		p.PrintVersion(p.stdout)
+		p.versionExecuted = true
+	}
+
+	// Run validation hook if set and parsing was successful so far
+	if success && p.validationHook != nil {
+		if err := p.validationHook(p); err != nil {
+			p.addError(err)
+			success = false
+		}
+	}
+
 	return success
+}
+
+// SetHelpBehavior sets the help output behavior
+func (p *Parser) SetHelpBehavior(behavior HelpBehavior) {
+	p.helpBehavior = behavior
+}
+
+// shouldUseStderrForHelp determines if help should use stderr based on context
+func (p *Parser) shouldUseStderrForHelp(isError bool) bool {
+	switch p.helpBehavior {
+	case HelpBehaviorStderr:
+		return true
+	case HelpBehaviorSmart:
+		return isError
+	default:
+		return false
+	}
+}
+
+// PrintHelpWithContext prints help to the appropriate output stream
+func (p *Parser) PrintHelpWithContext(isError bool) {
+	writer := p.stdout
+	if p.shouldUseStderrForHelp(isError) {
+		writer = p.stderr
+	}
+	p.PrintHelp(writer)
+}
+
+// GetHelpWriter returns the appropriate writer for help output
+func (p *Parser) GetHelpWriter(isError bool) io.Writer {
+	if p.shouldUseStderrForHelp(isError) {
+		return p.stderr
+	}
+	return p.stdout
 }
 
 // ParseString calls Parse
@@ -506,14 +651,15 @@ func (p *Parser) ParseWithDefaults(defaults map[string]string, args []string) bo
 		}
 	}
 
+	defaultArgs := make([]string, 0, len(defaults))
 	for key, val := range defaults {
 		if _, found := argMap[key]; !found {
-			args = append(args, string(p.prefixes[0])+key)
-			args = append(args, val)
+			defaultArgs = append(defaultArgs, string(p.prefixes[0])+key)
+			defaultArgs = append(defaultArgs, val)
 		}
 	}
 
-	return p.Parse(args)
+	return p.Parse(args, defaultArgs...)
 }
 
 // ParseStringWithDefaults calls Parse supplementing missing arguments in argString with default values from defaults
@@ -697,14 +843,30 @@ func (p *Parser) SetUserBundle(bundle *i18n.Bundle) error {
 		return errs.ErrNilPointer.WithArgs("bundle")
 	}
 
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.userI18n = bundle
+	p.layeredProvider.SetUserBundle(bundle)
 
 	return nil
 }
 
-// ReplaceDefaultBundle replaces the default i18n bundle in the parser with the specified bundle.
-// If the provided bundle is nil, it returns an ErrNilPointer error. Updates the global message provider.
+// ReplaceDefaultBundle is deprecated. Use ExtendSystemBundle instead.
+// This method now extends the system bundle with translations from the provided bundle.
+//
+// Deprecated: using ExtendSystemBundle instead
 func (p *Parser) ReplaceDefaultBundle(bundle *i18n.Bundle) error {
+	if bundle == nil {
+		return errs.ErrNilPointer.WithArgs("bundle")
+	}
+
+	return p.ExtendSystemBundle(bundle)
+}
+
+// ExtendSystemBundle adds translations from the provided bundle to the parser's system bundle.
+// This allows parser-specific translations without modifying global state.
+func (p *Parser) ExtendSystemBundle(bundle *i18n.Bundle) error {
 	if bundle == nil {
 		return errs.ErrNilPointer.WithArgs("bundle")
 	}
@@ -712,15 +874,20 @@ func (p *Parser) ReplaceDefaultBundle(bundle *i18n.Bundle) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.i18n = bundle
-	m := i18n.NewBundleMessageProvider(bundle)
-	i18n.SetDefaultMessageProvider(m)
-	errs.UpdateMessageProvider(m)
+	// Copy all translations from the provided bundle to the system bundle
+	for _, lang := range bundle.GetSupportedLanguages() {
+		if translations := bundle.GetTranslations(lang); len(translations) > 0 {
+			if err := p.systemBundle.AddLanguage(lang, translations); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
 func (p *Parser) GetSystemBundle() *i18n.Bundle {
-	return p.i18n
+	return p.systemBundle
 }
 
 // GetUserBundle returns the user-defined i18n bundle if available, otherwise returns nil.
@@ -829,6 +996,11 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	if argument.TypeOf == types.Empty {
 		argument.TypeOf = types.Single
+	}
+
+	// Convert AcceptedValues to validators with translation support
+	if len(argument.AcceptedValues) > 0 {
+		p.convertAcceptedValuesToValidators(argument)
 	}
 
 	p.acceptedFlags.Set(lookupFlag, &FlagInfo{
@@ -1343,32 +1515,43 @@ func (p *Parser) GenerateCompletion(shell, programName string) string {
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
 func (p *Parser) PrintUsage(writer io.Writer) {
-	_, _ = writer.Write([]byte(fmt.Sprintf("%s\n", p.i18n.T(messages.MsgUsageKey, os.Args[0]))))
+	// Show version in header if configured
+	if p.showVersionInHelp && (p.version != "" || p.versionFunc != nil) {
+		fmt.Fprintf(writer, "%s %s\n\n", filepath.Base(os.Args[0]), p.GetVersion())
+	}
+
+	_, _ = writer.Write([]byte(p.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]) + "\n"))
 	p.PrintPositionalArgs(writer)
 	p.PrintFlags(writer)
 	if p.registeredCommands.Count() > 0 {
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgCommandsKey))))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandsKey))))
 		p.PrintCommands(writer)
 	}
 }
 
 // PrintUsageWithGroups pretty prints accepted Flags and show command-specific Flags grouped by Commands to io.Writer.
-func (p *Parser) PrintUsageWithGroups(writer io.Writer) {
-	_, _ = writer.Write([]byte(fmt.Sprintf("%s\n", p.i18n.T(messages.MsgUsageKey, os.Args[0]))))
+func (p *Parser) PrintUsageWithGroups(writer io.Writer, config ...*PrettyPrintConfig) {
+	_, _ = writer.Write([]byte(p.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]) + "\n"))
+	var prettyPrintConfig *PrettyPrintConfig
+	if config != nil && len(config) > 0 {
+		prettyPrintConfig = config[0]
+	} else {
+		prettyPrintConfig = &PrettyPrintConfig{
+			NewCommandPrefix:     " +  ",
+			DefaultPrefix:        " ├─ ",
+			TerminalPrefix:       " └─ ",
+			InnerLevelBindPrefix: " ** ",
+			OuterLevelBindPrefix: " │  ",
+		}
+	}
 
 	p.PrintPositionalArgs(writer)
 	p.PrintGlobalFlags(writer)
 
 	// Print command-specific flags and commands
 	if p.registeredCommands.Count() > 0 {
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgCommandsKey))))
-		p.PrintCommandsWithFlags(writer, &PrettyPrintConfig{
-			NewCommandPrefix:     " +  ",
-			DefaultPrefix:        " │─ ",
-			TerminalPrefix:       " └─ ",
-			InnerLevelBindPrefix: " ** ",
-			OuterLevelBindPrefix: " |  ",
-		})
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandsKey))))
+		p.PrintCommandsWithFlags(writer, prettyPrintConfig)
 	}
 }
 
@@ -1398,12 +1581,12 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 
 	// Print args with indices
 	if len(args) > 0 {
-		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.i18n.T(messages.MsgPositionalArgumentsKey))))
+		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.layeredProvider.GetMessage(messages.MsgPositionalArgumentsKey))))
 		for _, arg := range args {
 			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (%s: %d)\n",
 				arg.Value,
 				p.renderer.FlagDescription(arg.Argument),
-				p.i18n.T(messages.MsgPositionalKey),
+				p.layeredProvider.GetMessage(messages.MsgPositionalKey),
 				arg.Position)))
 		}
 	}
@@ -1412,14 +1595,39 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 
 // PrintGlobalFlags prints global (non-command-specific) flags
 func (p *Parser) PrintGlobalFlags(writer io.Writer) {
-	_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n\n", p.i18n.T(messages.MsgGlobalFlagsKey))))
+	_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n\n", p.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))))
 
+	count := 0
+	totalGlobals := 0
+
+	// First count total globals
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.Argument.isPositional() {
+			continue
+		}
+		if f.Value.CommandPath == "" {
+			totalGlobals++
+		}
+	}
+
+	// Print globals up to MaxGlobals limit
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.Argument.isPositional() {
 			continue
 		}
 		if f.Value.CommandPath == "" { // Global flags have no command path
+			if p.helpConfig.MaxGlobals > 0 && count >= p.helpConfig.MaxGlobals {
+				remaining := totalGlobals - count
+				if remaining > 0 {
+					_, _ = writer.Write([]byte(fmt.Sprintf(" ... %s %d %s\n",
+						p.layeredProvider.GetMessage(messages.MsgAndKey),
+						remaining,
+						p.layeredProvider.GetMessage(messages.MsgMoreKey))))
+				}
+				break
+			}
 			_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
+			count++
 		}
 	}
 }
@@ -1440,7 +1648,14 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 				}
 
 				// Print the command itself with proper indentation
-				command := fmt.Sprintf("%s%s%s \"%s\"\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), cmd.path, p.renderer.CommandDescription(cmd))
+				commandStr := cmd.path
+				if p.helpConfig.ShowDescription {
+					desc := p.renderer.CommandDescription(cmd)
+					if desc != "" {
+						commandStr += " \"" + desc + "\""
+					}
+				}
+				command := fmt.Sprintf("%s%s%s\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), commandStr)
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
@@ -1467,19 +1682,93 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 
 // PrintFlags pretty prints accepted command-line switches to io.Writer
 func (p *Parser) PrintFlags(writer io.Writer) {
+	// Track which flags we've already printed to avoid duplicates
+	printedFlags := make(map[string]bool)
+
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		// Extract the base flag name (without command path)
+		flagKey := *f.Key
+		flagParts := splitPathFlag(flagKey)
+		baseFlagName := flagParts[0] // Flag name is the first part
+
+		// Skip if we've already printed this flag
+		if printedFlags[baseFlagName] {
+			continue
+		}
+
+		// Skip positional arguments
+		if f.Value.Argument.isPositional() {
+			continue
+		}
+
+		// Mark as printed and output
+		printedFlags[baseFlagName] = true
 		_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
 	}
 }
 
+// SetHelpStyle sets the help output style
+func (p *Parser) SetHelpStyle(style HelpStyle) {
+	p.helpConfig.Style = style
+}
+
+// SetHelpConfig sets the complete help configuration
+func (p *Parser) SetHelpConfig(config HelpConfig) {
+	p.helpConfig = config
+}
+
+// GetHelpConfig returns the current help configuration
+func (p *Parser) GetHelpConfig() HelpConfig {
+	return p.helpConfig
+}
+
+// PrintHelp prints help according to the configured style
+func (p *Parser) PrintHelp(writer io.Writer) {
+	style := p.helpConfig.Style
+
+	// Auto-detect style if set to Smart
+	if style == HelpStyleSmart {
+		style = p.detectBestStyle()
+	}
+
+	switch style {
+	case HelpStyleFlat:
+		p.printFlatHelp(writer)
+	case HelpStyleGrouped:
+		p.printGroupedHelp(writer)
+	case HelpStyleCompact:
+		p.printCompactHelp(writer)
+	case HelpStyleHierarchical:
+		p.printHierarchicalHelp(writer)
+	default:
+		p.printFlatHelp(writer)
+	}
+}
+
+func (p *Parser) DefaultPrettyPrintConfig() *PrettyPrintConfig {
+	return &PrettyPrintConfig{
+		NewCommandPrefix:     " +  ",
+		DefaultPrefix:        " ├─ ",
+		TerminalPrefix:       " └─ ",
+		InnerLevelBindPrefix: " ** ",
+		OuterLevelBindPrefix: " │  ",
+	}
+}
+
 // PrintCommands writes the list of accepted Command structs to io.Writer.
-func (p *Parser) PrintCommands(writer io.Writer) {
-	p.PrintCommandsUsing(writer, &PrettyPrintConfig{
-		NewCommandPrefix:     " +",
-		DefaultPrefix:        " │",
-		TerminalPrefix:       " └",
-		OuterLevelBindPrefix: "─",
-	})
+func (p *Parser) PrintCommands(writer io.Writer, config ...*PrettyPrintConfig) {
+	var prettyPrintConfig *PrettyPrintConfig
+	if len(config) > 0 {
+		prettyPrintConfig = config[0]
+	} else {
+		prettyPrintConfig = &PrettyPrintConfig{
+			NewCommandPrefix:     " +",
+			DefaultPrefix:        " │",
+			TerminalPrefix:       " └",
+			OuterLevelBindPrefix: "─",
+		}
+	}
+	p.PrintCommandsUsing(writer, prettyPrintConfig)
 }
 
 // PrintCommandsUsing writes the list of accepted Command structs to io.Writer using PrettyPrintConfig.
@@ -1499,8 +1788,8 @@ func (p *Parser) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig)
 				case len(cmd.Subcommands) == 0:
 					start = config.TerminalPrefix
 				}
-				command := fmt.Sprintf("%s%s %s \"%s\"\n", start, strings.Repeat(config.OuterLevelBindPrefix, level),
-					cmd.Name, p.renderer.CommandDescription(cmd))
+				command := fmt.Sprintf("%s%s %s\n", start, strings.Repeat(config.OuterLevelBindPrefix, level),
+					p.renderer.CommandUsage(cmd))
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
@@ -1594,4 +1883,474 @@ func (c *Command) Path() string {
 // IsTopLevel returns whether this is a top-level command
 func (c *Command) IsTopLevel() bool {
 	return c.topLevel
+}
+
+// SetAutoHelp enables or disables automatic help flag registration
+func (p *Parser) SetAutoHelp(enabled bool) {
+	p.autoHelp = enabled
+}
+
+// GetAutoHelp returns whether automatic help is enabled
+func (p *Parser) GetAutoHelp() bool {
+	return p.autoHelp
+}
+
+// SetHelpFlags sets custom help flag names (default: "help" and "h")
+func (p *Parser) SetHelpFlags(flags []string) {
+	p.helpFlags = flags
+}
+
+// GetHelpFlags returns the current help flag names
+func (p *Parser) GetHelpFlags() []string {
+	return p.helpFlags
+}
+
+// hasHelpInArgs quickly scans args to check if help is requested without full parsing
+func (p *Parser) hasHelpInArgs(args []string) bool {
+	if !p.autoHelp || len(p.helpFlags) == 0 {
+		return false
+	}
+
+	for _, arg := range args {
+		if p.isFlag(arg) {
+			stripped := strings.TrimLeftFunc(arg, p.prefixFunc)
+			for _, helpFlag := range p.helpFlags {
+				// Only trigger on help flags that we auto-registered
+				if p.autoRegisteredHelp[helpFlag] && stripped == helpFlag {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// IsHelpRequested returns true if any help flag was provided on the command line
+func (p *Parser) IsHelpRequested() bool {
+	if !p.autoHelp {
+		return false
+	}
+
+	// If help was executed, it was requested
+	if p.helpExecuted {
+		return true
+	}
+
+	// Only check flags that we auto-registered
+	for _, flag := range p.helpFlags {
+		if p.autoRegisteredHelp[flag] && p.HasFlag(flag) {
+			return true
+		}
+	}
+	return false
+}
+
+// WasHelpShown returns true if help was automatically displayed during Parse
+func (p *Parser) WasHelpShown() bool {
+	return p.helpExecuted
+}
+
+// ensureHelpFlags automatically registers help flags if not already defined by the user
+func (p *Parser) ensureHelpFlags() error {
+	if !p.autoHelp || len(p.helpFlags) == 0 {
+		return nil
+	}
+
+	// Check which help flags are available
+	longFlag := ""
+	shortFlag := ""
+
+	// Check long flag (first in array)
+	if len(p.helpFlags) > 0 {
+		if _, err := p.GetArgument(p.helpFlags[0]); err != nil {
+			// Long flag is available
+			longFlag = p.helpFlags[0]
+		}
+	}
+
+	// Check short flag (second in array)
+	if len(p.helpFlags) > 1 {
+		// Check if short flag is already taken by any flag
+		if _, conflict := p.checkShortFlagConflict(p.helpFlags[1], longFlag); !conflict {
+			// Also check if the short flag exists as a main flag
+			if _, err := p.GetArgument(p.helpFlags[1]); err != nil {
+				shortFlag = p.helpFlags[1]
+			}
+		}
+	}
+
+	// If no flags are available, user has defined all help flags
+	if longFlag == "" && shortFlag == "" {
+		return nil
+	}
+
+	// Auto-register help flag with available flags
+	helpArg := &Argument{
+		Description:  p.layeredProvider.GetMessage(messages.MsgHelpDescriptionKey),
+		TypeOf:       types.Standalone,
+		DefaultValue: "false",
+	}
+
+	// Use the first available flag as primary
+	primaryFlag := longFlag
+	if primaryFlag == "" {
+		primaryFlag = shortFlag
+		shortFlag = "" // Don't use it as short flag
+	}
+
+	// Set short flag if available
+	if shortFlag != "" {
+		helpArg.Short = shortFlag
+	}
+
+	var err error
+	if !p.autoRegisteredHelp[primaryFlag] {
+		err = p.AddFlag(primaryFlag, helpArg)
+		if err == nil {
+			// Track that we auto-registered these flags
+			p.autoRegisteredHelp[primaryFlag] = true
+			if shortFlag != "" {
+				p.autoRegisteredHelp[shortFlag] = true
+			}
+		}
+	}
+
+	return err
+}
+
+// SetVersion sets a static version string
+func (p *Parser) SetVersion(version string) {
+	p.version = version
+}
+
+// GetVersion returns the current version string
+func (p *Parser) GetVersion() string {
+	if p.versionFunc != nil {
+		return p.versionFunc()
+	}
+	return p.version
+}
+
+// SetVersionFunc sets a function to dynamically generate version info
+func (p *Parser) SetVersionFunc(f func() string) {
+	p.versionFunc = f
+}
+
+// SetVersionFormatter sets a custom formatter for version output
+func (p *Parser) SetVersionFormatter(f func(string) string) {
+	p.versionFormatter = f
+}
+
+// SetAutoVersion enables or disables automatic version flag registration
+func (p *Parser) SetAutoVersion(enabled bool) {
+	p.autoVersion = enabled
+}
+
+// GetAutoVersion returns whether automatic version is enabled
+func (p *Parser) GetAutoVersion() bool {
+	return p.autoVersion
+}
+
+// SetVersionFlags sets custom version flag names (default: "version" and "v")
+func (p *Parser) SetVersionFlags(flags []string) {
+	p.versionFlags = flags
+}
+
+// GetVersionFlags returns the current version flag names
+func (p *Parser) GetVersionFlags() []string {
+	return p.versionFlags
+}
+
+// SetShowVersionInHelp controls whether version is shown in help output
+func (p *Parser) SetShowVersionInHelp(show bool) {
+	p.showVersionInHelp = show
+}
+
+// IsVersionRequested returns true if any version flag was provided
+func (p *Parser) IsVersionRequested() bool {
+	if !p.autoVersion || p.version == "" && p.versionFunc == nil {
+		return false
+	}
+
+	// Only check flags that we auto-registered
+	for _, flag := range p.versionFlags {
+		if p.autoRegisteredVersion[flag] && p.HasFlag(flag) {
+			return true
+		}
+	}
+	return false
+}
+
+// WasVersionShown returns true if version was automatically displayed
+func (p *Parser) WasVersionShown() bool {
+	return p.versionExecuted
+}
+
+// PrintVersion outputs the version information
+func (p *Parser) PrintVersion(w io.Writer) {
+	version := p.GetVersion()
+	if version == "" {
+		version = "unknown"
+	}
+
+	var output string
+	if p.versionFormatter != nil {
+		output = p.versionFormatter(version)
+	} else {
+		// Default format: just the version
+		output = version
+	}
+
+	fmt.Fprintln(w, output)
+}
+
+// ensureVersionFlags automatically registers version flags if not already defined
+func (p *Parser) ensureVersionFlags() error {
+	if !p.autoVersion || len(p.versionFlags) == 0 {
+		return nil
+	}
+
+	// Only register if we have a version set
+	if p.version == "" && p.versionFunc == nil {
+		return nil
+	}
+
+	// Check which version flags are available
+	longFlag := ""
+	shortFlag := ""
+
+	// Check long flag (first in array)
+	if len(p.versionFlags) > 0 {
+		if _, err := p.GetArgument(p.versionFlags[0]); err != nil {
+			// Long flag is available
+			longFlag = p.versionFlags[0]
+		}
+	}
+
+	// Check short flag (second in array)
+	if len(p.versionFlags) > 1 {
+		if _, conflict := p.checkShortFlagConflict(p.versionFlags[1], p.versionFlags[0]); !conflict {
+			// Short flag is available
+			shortFlag = p.versionFlags[1]
+		}
+	}
+
+	// If no flags are available, user has defined all version flags
+	if longFlag == "" && shortFlag == "" {
+		return nil
+	}
+
+	// Auto-register version flag with available flags
+	versionArg := &Argument{
+		Description:  p.layeredProvider.GetMessage(messages.MsgVersionDescriptionKey),
+		TypeOf:       types.Standalone,
+		DefaultValue: "false",
+	}
+
+	// Use the first available flag as primary
+	primaryFlag := longFlag
+	if primaryFlag == "" {
+		primaryFlag = shortFlag
+		shortFlag = "" // Don't use it as short flag
+	}
+
+	// Set short flag if available
+	if shortFlag != "" {
+		versionArg.Short = shortFlag
+	}
+
+	var err error
+	if !p.autoRegisteredVersion[primaryFlag] {
+		err = p.AddFlag(primaryFlag, versionArg)
+		if err == nil {
+			// Track that we auto-registered these flags
+			p.autoRegisteredVersion[primaryFlag] = true
+			if shortFlag != "" {
+				p.autoRegisteredVersion[shortFlag] = true
+			}
+		}
+	}
+
+	return err
+}
+
+// AddGlobalPreHook adds a pre-execution hook that runs before any command
+func (p *Parser) AddGlobalPreHook(hook PreHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.globalPreHooks = append(p.globalPreHooks, hook)
+}
+
+// AddGlobalPostHook adds a post-execution hook that runs after any command
+func (p *Parser) AddGlobalPostHook(hook PostHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.globalPostHooks = append(p.globalPostHooks, hook)
+}
+
+// AddCommandPreHook adds a pre-execution hook for a specific command
+func (p *Parser) AddCommandPreHook(commandPath string, hook PreHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.commandPreHooks[commandPath] == nil {
+		p.commandPreHooks[commandPath] = []PreHookFunc{}
+	}
+	p.commandPreHooks[commandPath] = append(p.commandPreHooks[commandPath], hook)
+}
+
+// AddCommandPostHook adds a post-execution hook for a specific command
+func (p *Parser) AddCommandPostHook(commandPath string, hook PostHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.commandPostHooks[commandPath] == nil {
+		p.commandPostHooks[commandPath] = []PostHookFunc{}
+	}
+	p.commandPostHooks[commandPath] = append(p.commandPostHooks[commandPath], hook)
+}
+
+// SetHookOrder sets the order in which hooks are executed
+func (p *Parser) SetHookOrder(order HookOrder) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.hookOrder = order
+}
+
+// GetHookOrder returns the current hook execution order
+func (p *Parser) GetHookOrder() HookOrder {
+	return p.hookOrder
+}
+
+// ClearGlobalHooks removes all global hooks
+func (p *Parser) ClearGlobalHooks() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.globalPreHooks = []PreHookFunc{}
+	p.globalPostHooks = []PostHookFunc{}
+}
+
+// ClearCommandHooks removes all hooks for a specific command
+func (p *Parser) ClearCommandHooks(commandPath string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.commandPreHooks, commandPath)
+	delete(p.commandPostHooks, commandPath)
+}
+
+// executePreHooks executes all applicable pre-hooks for a command
+func (p *Parser) executePreHooks(cmd *Command) error {
+	var preHooks []PreHookFunc
+
+	// Get command-specific hooks
+	cmdHooks := p.commandPreHooks[cmd.Path()]
+
+	// Determine execution order
+	if p.hookOrder == OrderGlobalFirst {
+		preHooks = append(preHooks, p.globalPreHooks...)
+		preHooks = append(preHooks, cmdHooks...)
+	} else {
+		preHooks = append(preHooks, cmdHooks...)
+		preHooks = append(preHooks, p.globalPreHooks...)
+	}
+
+	// Execute all pre-hooks
+	for _, hook := range preHooks {
+		if err := hook(p, cmd); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// executePostHooks executes all applicable post-hooks for a command
+func (p *Parser) executePostHooks(cmd *Command, cmdErr error) error {
+	var postHooks []PostHookFunc
+
+	// Get command-specific hooks
+	cmdHooks := p.commandPostHooks[cmd.Path()]
+
+	// Determine execution order (reverse of pre-hooks for cleanup)
+	if p.hookOrder == OrderGlobalFirst {
+		postHooks = append(postHooks, cmdHooks...)
+		postHooks = append(postHooks, p.globalPostHooks...)
+	} else {
+		postHooks = append(postHooks, p.globalPostHooks...)
+		postHooks = append(postHooks, cmdHooks...)
+	}
+
+	// Execute all post-hooks
+	var lastErr error
+	for _, hook := range postHooks {
+		if err := hook(p, cmd, cmdErr); err != nil {
+			lastErr = err
+		}
+	}
+
+	return lastErr
+}
+
+// AddFlagValidators adds multiple validators for a flag
+func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validator) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Check if flag exists
+	flagInfo, found := p.acceptedFlags.Get(flag)
+	if !found {
+		return errs.ErrFlagDoesNotExist.WithArgs(flag)
+	}
+
+	// Add validators to the flag's argument
+	flagInfo.Argument.Validators = append(flagInfo.Argument.Validators, validators...)
+	return nil
+}
+
+// SetFlagValidators replaces all validators for a flag
+func (p *Parser) SetFlagValidators(flag string, validators ...validation.Validator) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Check if flag exists
+	flagInfo, found := p.acceptedFlags.Get(flag)
+	if !found {
+		return errs.ErrFlagDoesNotExist.WithArgs(flag)
+	}
+
+	// Replace validators
+	flagInfo.Argument.Validators = validators
+	return nil
+}
+
+// ClearFlagValidators removes all validators for a flag
+func (p *Parser) ClearFlagValidators(flag string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Check if flag exists
+	flagInfo, found := p.acceptedFlags.Get(flag)
+	if !found {
+		return errs.ErrFlagDoesNotExist.WithArgs(flag)
+	}
+
+	// Clear validators
+	flagInfo.Argument.Validators = nil
+	return nil
+}
+
+// convertAcceptedValuesToValidators converts AcceptedValues to validators
+// This is an internal helper method used during argument processing
+func (p *Parser) convertAcceptedValuesToValidators(arg *Argument) {
+	if len(arg.AcceptedValues) == 0 {
+		return
+	}
+
+	// Create a new ConvertedAcceptedValuesValidator using the new interface
+	acceptedValidator := validation.NewConvertedAcceptedValuesValidator(arg.AcceptedValues, p.layeredProvider)
+
+	// Prepend to the validators list
+	arg.Validators = append([]validation.Validator{acceptedValidator}, arg.Validators...)
+
+	// Keep AcceptedValues populated for backward compatibility with HasAcceptedValues
+	// The actual validation will use the validators, but we maintain the original
+	// AcceptedValues for inspection methods like HasAcceptedValues and GetAcceptPatterns
 }

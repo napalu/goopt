@@ -10,13 +10,77 @@ nav_order: 2
 goopt offers several approaches to organizing commands and flags:
 
 ## 1. Flag-Centric Approach (Path-Based)
+
+For scenarios where multiple commands share common flags, or when you prefer a more declarative, flat structure, 
+the path tag is an exceptionally powerful tool. It allows you to define your command structure directly from your flag definitions, rather than through nested structs.
+
+### Core Concepts
+1. **Dynamic Command Creation**: When you specify a path like create user, goopt automatically creates the create command and its subcommand user if they don't already exist. This lets you define your entire command hierarchy without a single kind:command tag.
+2. **Flag Association and Sharing**: By listing comma-separated command paths, you make a single flag field available to multiple commands. The flag is evaluated within the context of the command that is invoked, and its value is populated into the shared struct field.
+
+### Example
+
+In this example, SharedFlag is made available to both the create user and create group commands. Its value is populated into the CLI.SharedFlag field, which can be checked after determining which command was run.
+
 ```go
 
- // path is a comma-separated list of command paths - commands are created on the fly and flags are shared across commands
-type Options struct {
-    Host string `goopt:"name:host;path:server start,server stop"`
-    Port int    `goopt:"name:port;path:server start"`
+package main
+
+import (
+   "fmt"
+   "github.com/napalu/goopt/v2"
+   "log"
+   "os"
+)
+
+// The CLI struct defines flags. Commands are created dynamically via `path`.
+type CLI struct {
+      // This flag is associated with two different command paths.
+      SharedFlag string `goopt:"short:s;desc:A shared flag for user and group creation;path:create user,create group"`
+      
+      // This flag is specific to the 'create user' command.
+      UserEmail string `goopt:"short:e;desc:Email for the new user;path:create user"`
 }
+
+func main() {
+      opts := &CLI{}
+      
+      // The `path` directives in the struct will dynamically create the command
+      // hierarchy: 'create user' and 'create group'.
+      parser, err := goopt.NewParserFromStruct(opts)
+      if err != nil {
+		  log.Fatalf("failed to create parser: %w", err)
+      }
+      
+      ok := parser.Parse(os.Args)
+      if !ok {
+         // If parsing fails, PrintUsage will show the dynamically created commands.
+         parser.PrintUsage(os.Stderr)
+         os.Exit(1)
+      }
+      
+      // -- Command Line Examples --
+      //
+      // 1. Run with the 'create user' command:
+      //    go run . create user -s "common value" -e "user@example.com"
+      //
+      // 2. Run with the 'create group' command:
+      //    go run . create group -s "common value"
+      
+      // Check which command was executed and access the flag values.
+      if parser.HasCommand("create user") {
+         fmt.Println("Executing 'create user' command...")
+         fmt.Printf(" -> Shared Flag: %s\n", opts.SharedFlag)
+         fmt.Printf(" -> User Email: %s\n", opts.UserEmail)
+      } else if parser.HasCommand("create group") {
+         fmt.Println("Executing 'create group' command...")
+         // Note: opts.UserEmail would be empty here, as it's not in the path.
+         //fmt.Printf(" -> Shared Flag: %s\n", opts.SharedFlag)
+      } else {
+         fmt.Println("No specific 'create' command was run.")
+      }
+}
+  
 ```
 
 ### Advantages:

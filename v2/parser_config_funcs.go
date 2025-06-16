@@ -3,6 +3,7 @@ package goopt
 import (
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/validation"
 	"golang.org/x/text/language"
 )
 
@@ -155,7 +156,9 @@ func WithEnvNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
 // WithLanguage allows setting the language for the parser.
 func WithLanguage(lang language.Tag) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
-		cmdLine.i18n.SetDefaultLanguage(lang)
+		if setErr := cmdLine.SetSystemLanguage(lang); setErr != nil && err != nil {
+			*err = setErr
+		}
 	}
 }
 
@@ -168,8 +171,146 @@ func WithUserBundle(bundle *i18n.Bundle) ConfigureCmdLineFunc {
 
 // WithReplaceBundle allows setting a user-defined i18n bundle which will replace the default i18n bundle and be used to
 // for translations of struct field tags, error messages and so on.
+//
+// Deprecated: use WithExtendBundle instead
 func WithReplaceBundle(rbundle *i18n.Bundle) ConfigureCmdLineFunc {
+	return WithExtendBundle(rbundle)
+}
+
+func WithExtendBundle(eBundle *i18n.Bundle) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
-		*err = cmdLine.ReplaceDefaultBundle(rbundle)
+		*err = cmdLine.ExtendSystemBundle(eBundle)
+	}
+}
+
+// WithHelpStyle sets the help output style
+func WithHelpStyle(style HelpStyle) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetHelpStyle(style)
+	}
+}
+
+// WithHelpConfig sets the complete help configuration
+func WithHelpConfig(config HelpConfig) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetHelpConfig(config)
+	}
+}
+
+// WithAutoHelp enables or disables automatic help flag registration (default: true)
+func WithAutoHelp(enabled bool) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetAutoHelp(enabled)
+	}
+}
+
+// WithHelpFlags sets custom help flag names (default: "help", "h")
+func WithHelpFlags(flags ...string) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetHelpFlags(flags)
+	}
+}
+
+// WithVersion sets a static version string and enables auto-version
+func WithVersion(version string) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetVersion(version)
+	}
+}
+
+// WithVersionFunc sets a function to dynamically generate version info
+func WithVersionFunc(f func() string) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetVersionFunc(f)
+	}
+}
+
+// WithVersionFormatter sets a custom formatter for version output
+func WithVersionFormatter(f func(string) string) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetVersionFormatter(f)
+	}
+}
+
+// WithAutoVersion enables or disables automatic version flag registration
+func WithAutoVersion(enabled bool) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetAutoVersion(enabled)
+	}
+}
+
+// WithVersionFlags sets custom version flag names (default: "version", "v")
+func WithVersionFlags(flags ...string) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetVersionFlags(flags)
+	}
+}
+
+// WithShowVersionInHelp controls whether version is shown in help output
+func WithShowVersionInHelp(show bool) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetShowVersionInHelp(show)
+	}
+}
+
+// WithGlobalPreHook adds a global pre-execution hook
+func WithGlobalPreHook(hook PreHookFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.AddGlobalPreHook(hook)
+	}
+}
+
+// WithGlobalPostHook adds a global post-execution hook
+func WithGlobalPostHook(hook PostHookFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.AddGlobalPostHook(hook)
+	}
+}
+
+// WithCommandPreHook adds a pre-execution hook for a specific command
+func WithCommandPreHook(commandPath string, hook PreHookFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.AddCommandPreHook(commandPath, hook)
+	}
+}
+
+// WithCommandPostHook adds a post-execution hook for a specific command
+func WithCommandPostHook(commandPath string, hook PostHookFunc) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.AddCommandPostHook(commandPath, hook)
+	}
+}
+
+// WithHookOrder sets the order in which hooks are executed
+func WithHookOrder(order HookOrder) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetHookOrder(order)
+	}
+}
+
+// WithFlagValidators adds one or more validators for a flag (including positional arguments)
+func WithFlagValidators(flag string, validators ...validation.Validator) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		if e := cmdLine.AddFlagValidators(flag, validators...); e != nil && err != nil {
+			*err = e
+		}
+	}
+}
+
+// WithValidationHook sets a validation hook that runs after all field parsing and validation
+// but before Parse returns success. This allows for cross-field validation and conditional logic.
+// The hook receives the parser instance and can access parsed values via parser.Get() or
+// GetStructCtxAs[T](parser) for struct-based parsers.
+// If the hook returns an error, it will be added to parser errors and Parse will return false.
+func WithValidationHook(hook func(*Parser) error) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.validationHook = hook
+	}
+}
+
+// WithHelpBehavior sets the help output behavior
+func WithHelpBehavior(behavior HelpBehavior) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetHelpBehavior(behavior)
 	}
 }
