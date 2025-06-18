@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// ParseValidatorSpecs parses validator specifications with escape support
+// ValidatorSpecs parses validator specifications with escape support
 // This allows regex patterns with commas like: regex:^.{5\,10}$
 // It also handles parentheses and braces for compositional validators
 //
@@ -13,7 +13,7 @@ import (
 //	\,  -> , (comma in regex patterns)
 //	\:  -> : (colon in regex patterns)
 //	\\  -> \ (single backslash)
-func ParseValidatorSpecs(input string) []string {
+func ValidatorSpecs(input string) []string {
 	if input == "" {
 		return nil
 	}

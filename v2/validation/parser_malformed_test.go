@@ -128,7 +128,7 @@ func TestParserMalformedInput(t *testing.T) {
 					// If it parses, it should at least be callable
 					assert.NotNil(t, validator)
 					// Test that it doesn't crash
-					_ = validator.Validate("test")
+					_ = validator("test")
 				}
 			})
 		}
@@ -162,7 +162,7 @@ func TestParserMalformedInput(t *testing.T) {
 				assert.NotNil(t, validator)
 
 				// Test functionality
-				err = validator.Validate("user@example.com")
+				err = validator("user@example.com")
 				assert.NoError(t, err)
 			})
 		}

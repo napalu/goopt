@@ -1,34 +1,35 @@
 package i18n
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/text/language"
-	"testing"
 )
 
 func TestNewLayeredMessageProvider(t *testing.T) {
-	defaultBundle := NewEmptyBundle()
+	defBundle := NewEmptyBundle()
 	systemBundle := NewEmptyBundle()
 	var userBundle *Bundle = nil
 
-	provider := NewLayeredMessageProvider(defaultBundle, systemBundle, userBundle)
+	provider := NewLayeredMessageProvider(defBundle, systemBundle, userBundle)
 	assert.NotNil(t, provider)
-	assert.Equal(t, defaultBundle, provider.defaultBundle)
+	assert.Equal(t, defBundle, provider.defaultBundle)
 	assert.Equal(t, systemBundle, provider.systemBundle)
 	assert.Nil(t, provider.userBundle)
 }
 
-func TestLayeredMessageProvider_GetMessage(t *testing.T) {
+func TestLayeredMessageProviderBase_GetMessage(t *testing.T) {
 	// Create bundles with test messages
-	defaultBundle := NewEmptyBundle()
-	defaultBundle.translations[defaultBundle.defaultLang] = map[string]string{
+	defBundle := NewEmptyBundle()
+	defBundle.translations[defBundle.defaultLang] = map[string]string{
 		"default_msg": "Default message",
 	}
 
 	systemBundle := NewEmptyBundle()
 	userBundle := NewEmptyBundle()
 
-	provider := NewLayeredMessageProvider(defaultBundle, systemBundle, userBundle)
+	provider := NewLayeredMessageProvider(defBundle, systemBundle, userBundle)
 
 	// Test with a known message key
 	msg := provider.GetMessage("default_msg")
@@ -39,10 +40,64 @@ func TestLayeredMessageProvider_GetMessage(t *testing.T) {
 	assert.Equal(t, "unknown_key_12345", msg)
 }
 
+func TestLayeredProvider_GetMessage(t *testing.T) {
+	t.Run("with nil bundle", func(t *testing.T) {
+		provider := NewLayeredMessageProvider(nil, nil, nil)
+		msg := provider.GetMessage("test_key")
+		assert.Equal(t, "test_key", msg)
+	})
+
+	t.Run("with bundle and translation", func(t *testing.T) {
+		bundle := NewEmptyBundle()
+		bundle.translations[bundle.defaultLang] = map[string]string{
+			"greeting": "Hello",
+			"farewell": "Goodbye",
+		}
+
+		provider := NewLayeredMessageProvider(bundle, nil, nil)
+
+		assert.Equal(t, "Hello", provider.GetMessage("greeting"))
+		assert.Equal(t, "Goodbye", provider.GetMessage("farewell"))
+	})
+
+	t.Run("with missing key returns key", func(t *testing.T) {
+		bundle := NewEmptyBundle()
+		bundle.translations[bundle.defaultLang] = map[string]string{
+			"greeting": "Hello",
+		}
+
+		provider := NewLayeredMessageProvider(bundle, nil, nil)
+		assert.Equal(t, "unknown_key", provider.GetMessage("unknown_key"))
+	})
+
+	t.Run("fallback to English", func(t *testing.T) {
+		bundle := NewEmptyBundle()
+		bundle.defaultLang = language.French
+
+		// Add English translation but not French
+		bundle.translations[language.English] = map[string]string{
+			"greeting": "Hello",
+		}
+
+		provider := NewLayeredMessageProvider(bundle, nil, nil)
+		// Should fallback to English when French not available
+		assert.Equal(t, "Hello", provider.GetMessage("greeting"))
+	})
+
+	t.Run("no translation in any language", func(t *testing.T) {
+		bundle := NewEmptyBundle()
+		bundle.defaultLang = language.Spanish
+
+		provider := NewLayeredMessageProvider(bundle, nil, nil)
+		// Should return the key when no translation exists
+		assert.Equal(t, "no_translation", provider.GetMessage("no_translation"))
+	})
+}
+
 func TestLayeredMessageProvider_SetUserBundle(t *testing.T) {
-	defaultBundle := NewEmptyBundle()
+	defBundle := NewEmptyBundle()
 	systemBundle := NewEmptyBundle()
-	provider := NewLayeredMessageProvider(defaultBundle, systemBundle, nil)
+	provider := NewLayeredMessageProvider(defBundle, systemBundle, nil)
 
 	// Create a user bundle with custom messages
 	userBundle := NewEmptyBundle()
@@ -58,8 +113,8 @@ func TestLayeredMessageProvider_SetUserBundle(t *testing.T) {
 }
 
 func TestLayeredMessageProvider_SetSystemBundle(t *testing.T) {
-	defaultBundle := NewEmptyBundle()
-	provider := NewLayeredMessageProvider(defaultBundle, nil, nil)
+	defBundle := NewEmptyBundle()
+	provider := NewLayeredMessageProvider(defBundle, nil, nil)
 
 	// Create a custom system bundle
 	systemBundle := NewEmptyBundle()
@@ -75,9 +130,9 @@ func TestLayeredMessageProvider_SetSystemBundle(t *testing.T) {
 }
 
 func TestLayeredMessageProvider_GetFormattedMessage(t *testing.T) {
-	defaultBundle := NewEmptyBundle()
+	defBundle := NewEmptyBundle()
 	systemBundle := NewEmptyBundle()
-	provider := NewLayeredMessageProvider(defaultBundle, systemBundle, nil)
+	provider := NewLayeredMessageProvider(defBundle, systemBundle, nil)
 
 	// Create a bundle with a formatted message
 	userBundle := NewEmptyBundle()
@@ -97,16 +152,16 @@ func TestLayeredMessageProvider_GetFormattedMessage(t *testing.T) {
 
 func TestLayeredMessageProvider_GetLanguage(t *testing.T) {
 	// Create bundles with different languages
-	defaultBundle := NewEmptyBundle()
-	defaultBundle.defaultLang = language.French
+	defBundle := NewEmptyBundle()
+	defBundle.defaultLang = language.French
 
-	provider := NewLayeredMessageProvider(defaultBundle, nil, nil)
+	provider := NewLayeredMessageProvider(defBundle, nil, nil)
 	assert.Equal(t, language.French, provider.GetLanguage())
 }
 
 func TestLayeredMessageProvider_tryGetMessage(t *testing.T) {
-	defaultBundle := NewEmptyBundle()
-	defaultBundle.translations[defaultBundle.defaultLang] = map[string]string{
+	defBundle := NewEmptyBundle()
+	defBundle.translations[defBundle.defaultLang] = map[string]string{
 		"default_only": "Default only message",
 		"shared_msg":   "Default version",
 	}
@@ -124,7 +179,7 @@ func TestLayeredMessageProvider_tryGetMessage(t *testing.T) {
 		"shared_msg": "System version",
 	}
 
-	provider := NewLayeredMessageProvider(defaultBundle, systemBundle, userBundle)
+	provider := NewLayeredMessageProvider(defBundle, systemBundle, userBundle)
 
 	// User bundle should take precedence for shared messages
 	msg := provider.GetMessage("shared_msg")

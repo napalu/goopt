@@ -1,8 +1,9 @@
 package goopt
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParserGetters(t *testing.T) {

@@ -9,8 +9,8 @@ github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/mattn/go-runewidth v0.0.10/go.mod h1:RAqKPSqVFrSLVXbA8x7dzmKdmGzieGRCM46jaSJTDAk=
-github.com/napalu/goopt/v2/examples/i18n-demo v0.0.0-20250607122655-e12cd04a3737 h1:BGa8623KtYiYL5DbcezNRoPoOrAlQB2NI0eEQN3+7gQ=
-github.com/napalu/goopt/v2/examples/i18n-demo v0.0.0-20250607122655-e12cd04a3737/go.mod h1:1xmfI5446Mi0amgqRkp+OpQTd1y8HVHJVZSBjHPTkNU=
+github.com/napalu/goopt/v2 v2.2.6 h1:Ll6ng6t8bj0+gtXoOiEdcqF8Z3ytEAM+W9GgsdPhEK8=
+github.com/napalu/goopt/v2 v2.2.6/go.mod h1:sb8+fSnazYa5Tfd+AUX0gXHszgwqStSL9nNV/KRHLSw=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=

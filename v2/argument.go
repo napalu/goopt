@@ -1,12 +1,12 @@
 package goopt
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/napalu/goopt/v2/validation"
 	"reflect"
 
-	"github.com/google/uuid"
+	"github.com/napalu/goopt/v2/internal/util"
+	"github.com/napalu/goopt/v2/validation"
+
 	"github.com/napalu/goopt/v2/types"
 )
 
@@ -21,7 +21,7 @@ type Argument struct {
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
-	Validators     []validation.Validator // Interface-based validators
+	Validators     []validation.ValidatorFunc
 	AcceptedValues []types.PatternValue
 	DependencyMap  map[string][]string
 	Secure         types.Secure
@@ -29,7 +29,7 @@ type Argument struct {
 	DefaultValue   string
 	Capacity       int // For slices, the capacity of the slice, ignored for other types
 	Position       *int
-	uuid           string
+	uniqueID       string
 }
 
 // NewArg convenience initialization method to configure flags.
@@ -95,10 +95,10 @@ func (a *Argument) ensureInit() {
 		a.DependencyMap = map[string][]string{}
 	}
 	if a.Validators == nil {
-		a.Validators = []validation.Validator{}
+		a.Validators = []validation.ValidatorFunc{}
 	}
-	if a.uuid == "" {
-		a.uuid = uuid.New().String()
+	if a.uniqueID == "" {
+		a.uniqueID = util.UniqueID("arg")
 	}
 }
 
@@ -106,45 +106,13 @@ func (a *Argument) isPositional() bool {
 	return a.Position != nil
 }
 
-// HasConvertedAcceptedValues returns true if this argument has validators
-// that were converted from AcceptedValues
-func (a *Argument) HasConvertedAcceptedValues() bool {
-	for _, v := range a.Validators {
-		if v.IsConvertedFromAcceptedValues() {
-			return true
-		}
-	}
-	return false
-}
-
-// GetValidatorByName returns a validator by its name
-func (a *Argument) GetValidatorByName(name string) (validation.Validator, bool) {
-	for _, v := range a.Validators {
-		if v.Name() == name {
-			return v, true
-		}
-	}
-	return nil, false
-}
-
-// GetValidatorsByType returns all validators of a specific type
-func (a *Argument) GetValidatorsByType(validatorType string) []validation.Validator {
-	var result []validation.Validator
-	for _, v := range a.Validators {
-		if v.Type() == validatorType {
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
 func (a *Argument) GetLongName(parser *Parser) string {
 	if parser == nil {
 		return ""
 	}
 
-	if a.uuid != "" {
-		return parser.lookup[a.uuid]
+	if a.uniqueID != "" {
+		return parser.lookup[a.uniqueID]
 	}
 
 	return ""
@@ -155,7 +123,65 @@ func (a *Argument) DisplayID() string {
 		return fmt.Sprintf("pos%d", *a.Position)
 	}
 
-	return fmt.Sprintf("%s-%s", a.uuid[:8], a.DescriptionKey)
+	return fmt.Sprintf("%s-%s", a.uniqueID[:8], a.DescriptionKey)
+}
+
+type comparableArgument struct {
+	NameKey        string
+	Description    string
+	DescriptionKey string
+	TypeOf         types.OptionType
+	IsHelp         bool
+	Required       bool
+	Validators     []validation.ValidatorFunc
+	AcceptedValues []types.PatternValue
+	DependencyMap  map[string][]string
+	Secure         types.Secure
+	Short          string
+	DefaultValue   string
+	Capacity       int // For slices, the capacity of the slice, ignored for other types
+	Position       *int
+}
+
+func toComparable(a *Argument) comparableArgument {
+	return comparableArgument{
+		NameKey:        a.NameKey,
+		Description:    a.Description,
+		DescriptionKey: a.DescriptionKey,
+		TypeOf:         a.TypeOf,
+		IsHelp:         a.IsHelp,
+		Required:       a.Required,
+		Validators:     normalizeSlice(a.Validators),
+		AcceptedValues: normalizeSlice(a.AcceptedValues),
+		DependencyMap:  normalizeMap(a.DependencyMap),
+		Secure:         a.Secure,
+		Short:          a.Short,
+		DefaultValue:   a.DefaultValue,
+		Capacity:       a.Capacity,
+		Position:       normalizePosition(a.Position),
+	}
+}
+
+func normalizeSlice[T any](in []T) []T {
+	if in == nil {
+		return []T{}
+	}
+	return in
+}
+
+func normalizeMap(m map[string][]string) map[string][]string {
+	if m == nil {
+		return map[string][]string{}
+	}
+	return m
+}
+
+func normalizePosition(p *int) *int {
+	if p == nil {
+		i := 0
+		return &i
+	}
+	return p
 }
 
 // Equal compares two Argument variables for equality across their exported fields
@@ -164,14 +190,8 @@ func (a *Argument) Equal(other *Argument) bool {
 		return false
 	}
 
-	//nolint:SA1026 // Ignoring "unsupported type" warning as we only care about marshallable fields
-	aj, _ := json.Marshal(a)
-	//nolint:SA1026 // Ignoring "unsupported type" warning as we only care about marshallable fields
-	oj, _ := json.Marshal(other)
+	ca := toComparable(a)
+	cb := toComparable(other)
 
-	var am, om map[string]interface{}
-	_ = json.Unmarshal(aj, &am)
-	_ = json.Unmarshal(oj, &om)
-
-	return reflect.DeepEqual(am, om)
+	return reflect.DeepEqual(ca, cb)
 }

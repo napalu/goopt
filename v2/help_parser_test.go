@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/v2/errs"
+
 	"github.com/napalu/goopt/v2/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -765,7 +767,7 @@ func TestHelpParser_InvalidCommand(t *testing.T) {
 
 	// Should have error
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "command path invalid not found")
+	assert.ErrorIs(t, errs.ErrCommandNotFound, err)
 
 	// Should output to stderr due to error context
 	assert.NotEmpty(t, stderr.String())

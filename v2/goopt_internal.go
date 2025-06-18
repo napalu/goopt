@@ -3,8 +3,6 @@ package goopt
 import (
 	"errors"
 	"fmt"
-	"github.com/napalu/goopt/v2/input"
-	"github.com/napalu/goopt/v2/internal/messages"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +11,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/napalu/goopt/v2/input"
+	"github.com/napalu/goopt/v2/internal/messages"
 
 	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/errs"
@@ -127,7 +128,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
-					if err := validator.Validate(boolVal); err != nil {
+					if err := validator(boolVal); err != nil {
 						p.addError(wrapProcessingFlagError(err, lookup))
 						return
 					}
@@ -390,16 +391,15 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				argPos = 0 // Reset position counter for new command
 			}
 		} else {
-			if p.isCommand(strings.Join(append(currentCmdPath, arg), " ")) {
+			switch {
+			case p.isCommand(strings.Join(append(currentCmdPath, arg), " ")):
 				currentCmdPath = append(currentCmdPath, arg)
 				isCmd = true
-			} else if p.isCommand(arg) {
-				// Start a new command path for root-level command
+			case p.isCommand(arg):
 				currentCmdPath = []string{arg}
 				isCmd = true
-				argPos = 0 // Reset position counter for new command
-			} else {
-				// This is a positional argument, don't clear the path
+				argPos = 0
+			default:
 			}
 		}
 
@@ -428,7 +428,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				// Run validators on positional argument
 				if len(decl.flag.Argument.Validators) > 0 {
 					for _, validator := range decl.flag.Argument.Validators {
-						if err := validator.Validate(arg); err != nil {
+						if err := validator(arg); err != nil {
 							p.addError(wrapProcessingFlagError(err, lookup))
 						}
 					}
@@ -624,11 +624,19 @@ func (p *Parser) addError(err error) {
 }
 
 // wrapProcessingFlagError wraps an error with ErrProcessingFlag if it's not already wrapped
-func wrapProcessingFlagError(err error, flag string) error {
-	if errors.Is(err, errs.ErrProcessingFlag) {
-		return err
+func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
+	// 1) If err already wraps ErrProcessingFlag, just extract
+	//    the TranslatableError for that sentinel and return it.
+	var te i18n.TranslatableError
+	if errors.Is(err, errs.ErrProcessingFlag) && errors.As(err, &te) {
+		return te
 	}
-	return errs.ErrProcessingFlag.WithArgs(flag).Wrap(err)
+
+	// 2) Otherwise wrap whatever you got in a new TrError
+	return errs.
+		ErrProcessingFlag.
+		WithArgs(flag).
+		Wrap(err)
 }
 
 func (p *Parser) getCommand(name string) (*Command, bool) {
@@ -910,7 +918,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	// Also skip if validation already failed in processSingleValue
 	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
 		for _, validator := range argument.Validators {
-			if err := validator.Validate(processed); err != nil {
+			if err := validator(processed); err != nil {
 				return wrapProcessingFlagError(err, currentArg)
 			}
 		}
@@ -943,7 +951,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 			// Run validators on secure value
 			if len(argInfo.Argument.Validators) > 0 {
 				for _, validator := range argInfo.Argument.Validators {
-					if err := validator.Validate(pass); err != nil {
+					if err := validator(pass); err != nil {
 						p.addError(wrapProcessingFlagError(err, name))
 						return
 					}
@@ -1025,7 +1033,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	// Run validators (if any) - this includes converted AcceptedValues
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
-			if err := validator.Validate(value); err != nil {
+			if err := validator(value); err != nil {
 				p.addError(wrapProcessingFlagError(err, flag))
 				return "", false
 			}
@@ -1079,10 +1087,9 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 			}
 		}
 
-		// Run validators (if any) on each individual value - this includes converted AcceptedValues
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
-				if err := validator.Validate(args[i]); err != nil {
+				if err := validator(args[i]); err != nil {
 					p.addError(wrapProcessingFlagError(err, flag))
 					return "", false
 				}
@@ -1449,6 +1456,7 @@ func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg
 }
 
 func toArgument(c *types.TagConfig) (*Argument, error) {
+
 	configs := []ConfigureArgumentFunc{
 		WithType(c.TypeOf),
 		WithDescription(c.Description),
@@ -1457,11 +1465,13 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 		WithDependencyMap(c.DependsOn),
 		WithShortFlag(c.Short),
 		WithRequired(c.Required),
+		WithAcceptedValues(c.AcceptedValues),
+		WithDefaultValue(c.Default),
 	}
 
 	// Convert AcceptedValues to validators for internal processing
 	// but still store them as AcceptedValues for backward compatibility (help text, etc.)
-	var acceptedValueValidators []validation.Validator
+	var acceptedValueValidators []validation.ValidatorFunc
 	if len(c.AcceptedValues) > 0 {
 		// Store AcceptedValues for help text and backward compatibility
 		configs = append(configs, WithAcceptedValues(c.AcceptedValues))
@@ -1469,17 +1479,13 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 		// Create validators from AcceptedValues
 		for _, av := range c.AcceptedValues {
 			// Each AcceptedValue becomes a regex validator
-			validator, err := validation.Regex(av.Pattern, av.Description)
-			if err != nil {
-				// If regex compilation fails, return error
-				return nil, err
-			}
+			validator := validation.Regex(av.Pattern, av.Description)
 			acceptedValueValidators = append(acceptedValueValidators, validator)
 		}
 	}
 
 	// Parse and add validators
-	var allValidators []validation.Validator
+	var allValidators []validation.ValidatorFunc
 
 	// First add validators from accepted values (if any)
 	if len(acceptedValueValidators) > 0 {
@@ -1505,13 +1511,8 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 
 	arg := NewArg(configs...)
 
-	if c.Secure.IsSecure {
-		arg.Secure = c.Secure
-	}
-
-	if c.Position != nil {
-		arg.Position = c.Position
-	}
+	arg.Secure = c.Secure
+	arg.Position = c.Position
 
 	return arg, nil
 }
@@ -2271,11 +2272,7 @@ func isStructOrSliceType(field reflect.StructField) bool {
 
 func isFunction(field reflect.StructField) bool {
 	unwrappedType := util.UnwrapType(field.Type)
-	if unwrappedType.Kind() == reflect.Func {
-		return true
-	}
-
-	return false
+	return unwrappedType.Kind() == reflect.Func
 }
 
 func isStructType(field reflect.StructField) bool {
@@ -2694,12 +2691,13 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 		ppConfig := p.DefaultPrettyPrintConfig()
 		if cmd.Value.topLevel {
 			fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
-			for i, sub := range cmd.Value.Subcommands {
+			for i := range cmd.Value.Subcommands {
 				prefix := ppConfig.DefaultPrefix
 				if i == len(cmd.Value.Subcommands)-1 {
 					prefix = ppConfig.TerminalPrefix
 				}
-				desc := util.Truncate(p.renderer.CommandDescription(&sub), 50)
+				sub := &cmd.Value.Subcommands[i]
+				desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
 				fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
 			}
 		}

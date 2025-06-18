@@ -33,9 +33,7 @@ type DefaultState struct {
 
 // NewState creates a new State instance with the given argument list
 func NewState(args []string, defaults ...string) State {
-	for _, d := range defaults {
-		args = append(args, d)
-	}
+	args = append(args, defaults...)
 	return &DefaultState{
 		pos:  -1,
 		args: args,

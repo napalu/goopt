@@ -674,3 +674,46 @@ Contributions are welcome! Please see the main [goopt repository](https://github
 ## License
 
 Same as goopt v2 - see the main repository for details.
+
+---
+
+## For goopt-i18n-gen Maintainers Only
+
+### Dealing with the Chicken-and-Egg Problem
+
+When renaming commands or making structural changes to goopt-i18n-gen itself, you may encounter a chicken-and-egg problem where the code references message keys that don't exist yet in the generated messages file.
+
+#### Example: Renaming a command (like scan → audit)
+
+1. **The Problem**: 
+   - Your code uses `messages.Keys.AppAudit.SomeField`
+   - But the messages file still has `AppScan` because it hasn't been regenerated
+   - You can't build to regenerate because the code won't compile
+
+2. **The Solution**:
+   ```bash
+   # Step 1: Temporarily revert code to use old keys
+   cd /Users/florent/Documents/src/goopt/v2/cmd/goopt-i18n-gen
+   sed -i '' 's/messages\.Keys\.AppAudit/messages.Keys.AppScan/g' main.go
+   
+   # Step 2: Regenerate messages with the new locale keys
+   go run . -i "locales/*.json" generate -o messages/messages.go -p messages
+   
+   # Step 3: Change code back to use new keys
+   sed -i '' 's/messages\.Keys\.AppScan/messages.Keys.AppAudit/g' main.go
+   
+   # Step 4: Build and test
+   go build
+   ```
+
+3. **Prevention**:
+   - Always update locale JSON files first
+   - Keep old message keys temporarily when making structural changes
+   - Consider using go:generate with build tags for bootstrap scenarios
+
+### Other Maintenance Notes
+
+- The tool uses its own i18n system (eat-your-dog-food)
+- Always test with multiple locales after changes
+- Keep in mind that goopt's bundle validation requires all locales to have identical keys
+- The generated messages file is committed to avoid bootstrap issues

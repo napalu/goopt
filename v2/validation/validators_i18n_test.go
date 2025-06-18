@@ -35,7 +35,7 @@ func TestLengthValidatorsUnicode(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -70,7 +70,7 @@ func TestLengthValidatorsUnicode(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -102,7 +102,7 @@ func TestLengthValidatorsUnicode(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -144,7 +144,7 @@ func TestFileExtensionUnicode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -223,7 +223,7 @@ func TestHostnameASCIIOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

@@ -5,7 +5,6 @@ package errs
 
 import (
 	"github.com/napalu/goopt/v2/i18n"
-	"sync"
 )
 
 // Core parser errors
@@ -159,6 +158,7 @@ var (
 	ErrValidatorMustUseParentheses         = i18n.NewError(ErrValidatorMustUseParenthesesKey)
 )
 
+/*
 type builtInErrors struct {
 	mu  sync.Mutex
 	All []i18n.TranslatableError
@@ -291,6 +291,7 @@ var sysErrors = &builtInErrors{
 		ErrValueMustBeIdentifier,
 		ErrValueMustNotContainWhitespace,
 		ErrFileMustHaveExtension,
+
 		ErrHostnameTooLong,
 		ErrInvalidHostnameFormat,
 		ErrInvalidIPv4Address,
@@ -322,3 +323,4 @@ func UpdateMessageProvider(provider i18n.MessageProvider) {
 	}
 	sysErrors.mu.Unlock()
 }
+*/

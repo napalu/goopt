@@ -2,6 +2,7 @@ package goopt
 
 import (
 	"fmt"
+
 	"github.com/napalu/goopt/v2/internal/messages"
 )
 

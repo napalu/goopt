@@ -50,31 +50,31 @@ type AddCmd struct {
 
 // ExtractCmd handles the extract command configuration
 type ExtractCmd struct {
-	Files          string `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.extract_cmd.files_desc"`
-	MatchOnly      string `goopt:"short:M;desc:Regex to match strings for inclusion;descKey:app.extract_cmd.match_only_desc"`
-	SkipMatch      string `goopt:"short:S;desc:Regex to match strings for exclusion;descKey:app.extract_cmd.skip_match_desc"`
-	KeyPrefix      string `goopt:"short:P;desc:Prefix for generated keys;default:app.extracted;descKey:app.extract_cmd.key_prefix_desc"`
-	MinLength      int    `goopt:"short:L;desc:Minimum string length;default:2;descKey:app.extract_cmd.min_length_desc"`
-	DryRun         bool   `goopt:"short:n;desc:Preview what would be extracted;descKey:app.extract_cmd.dry_run_desc"`
-	AutoUpdate     bool   `goopt:"short:u;desc:Update source files (add comments or replace strings);descKey:app.extract_cmd.auto_update_desc"`
-	TrPattern      string `goopt:"desc:Translator pattern for replacements;default:tr.T;descKey:app.extract_cmd.tr_pattern_desc"`
-	Package        string `goopt:"short:p;desc:Package name for imports;default:messages;descKey:app.extract_cmd.package_desc"`
-	KeepComments   bool   `goopt:"desc:Keep i18n comments after replacement;descKey:app.extract_cmd.keep_comments_desc"`
-	CleanComments  bool   `goopt:"desc:Remove all i18n-* comments;descKey:app.extract_cmd.clean_comments_desc"`
-	BackupDir      string `goopt:"desc:Directory for backup files;default:.goopt-i18n-backup;descKey:app.extract_cmd.backup_dir_desc"`
-	TransformMode        string   `goopt:"desc:What strings to transform: user-facing, with-comments, all-marked, all;default:user-facing;descKey:app.extract_cmd.transform_mode_desc"`
-	UserFacingRegex      []string `goopt:"desc:Regex patterns to identify user-facing functions;descKey:app.extract_cmd.user_facing_regex_desc"`
-	FormatFunctionRegex  []string `goopt:"desc:Regex pattern and format arg index (pattern:index);descKey:app.extract_cmd.format_function_regex_desc"`
-	Exec                 goopt.CommandFunc
+	Files               string   `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.extract_cmd.files_desc"`
+	MatchOnly           string   `goopt:"short:M;desc:Regex to match strings for inclusion;descKey:app.extract_cmd.match_only_desc"`
+	SkipMatch           string   `goopt:"short:S;desc:Regex to match strings for exclusion;descKey:app.extract_cmd.skip_match_desc"`
+	KeyPrefix           string   `goopt:"short:P;desc:Prefix for generated keys;default:app.extracted;descKey:app.extract_cmd.key_prefix_desc"`
+	MinLength           int      `goopt:"short:L;desc:Minimum string length;default:2;descKey:app.extract_cmd.min_length_desc"`
+	DryRun              bool     `goopt:"short:n;desc:Preview what would be extracted;descKey:app.extract_cmd.dry_run_desc"`
+	AutoUpdate          bool     `goopt:"short:u;desc:Update source files (add comments or replace strings);descKey:app.extract_cmd.auto_update_desc"`
+	TrPattern           string   `goopt:"desc:Translator pattern for replacements;default:tr.T;descKey:app.extract_cmd.tr_pattern_desc"`
+	Package             string   `goopt:"short:p;desc:Package name for imports;default:messages;descKey:app.extract_cmd.package_desc"`
+	KeepComments        bool     `goopt:"desc:Keep i18n comments after replacement;descKey:app.extract_cmd.keep_comments_desc"`
+	CleanComments       bool     `goopt:"desc:Remove all i18n-* comments;descKey:app.extract_cmd.clean_comments_desc"`
+	BackupDir           string   `goopt:"desc:Directory for backup files;default:.goopt-i18n-backup;descKey:app.extract_cmd.backup_dir_desc"`
+	TransformMode       string   `goopt:"desc:What strings to transform: user-facing, with-comments, all-marked, all;default:user-facing;descKey:app.extract_cmd.transform_mode_desc"`
+	UserFacingRegex     []string `goopt:"desc:Regex patterns to identify user-facing functions;descKey:app.extract_cmd.user_facing_regex_desc"`
+	FormatFunctionRegex []string `goopt:"desc:Regex pattern and format arg index (pattern:index);descKey:app.extract_cmd.format_function_regex_desc"`
+	Exec                goopt.CommandFunc
 }
 
 // SyncCmd command configuration
 type SyncCmd struct {
-	Target       []string `goopt:"short:t;desc:Target JSON files to sync against reference files (-i flag);descKey:app.sync_cmd.target_desc"`
-	RemoveExtra  bool     `goopt:"short:r;desc:Remove keys that don't exist in reference;descKey:app.sync_cmd.remove_extra_desc"`
-	TodoPrefix   string   `goopt:"desc:Prefix for new non-English translations;default:[TODO];descKey:app.sync_cmd.todo_prefix_desc"`
-	DryRun       bool     `goopt:"short:n;desc:Preview what would be changed;descKey:app.sync_cmd.dry_run_desc"`
-	Exec         goopt.CommandFunc
+	Target      []string `goopt:"short:t;desc:Target JSON files to sync against reference files (-i flag);descKey:app.sync_cmd.target_desc"`
+	RemoveExtra bool     `goopt:"short:r;desc:Remove keys that don't exist in reference;descKey:app.sync_cmd.remove_extra_desc"`
+	TodoPrefix  string   `goopt:"desc:Prefix for new non-English translations;default:[TODO];descKey:app.sync_cmd.todo_prefix_desc"`
+	DryRun      bool     `goopt:"short:n;desc:Preview what would be changed;descKey:app.sync_cmd.dry_run_desc"`
+	Exec        goopt.CommandFunc
 }
 
 // AppConfig main application configuration

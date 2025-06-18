@@ -1,9 +1,10 @@
 package goopt
 
 import (
+	"testing"
+
 	"github.com/napalu/goopt/v2/validation"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestSetValidators(t *testing.T) {
@@ -29,11 +30,11 @@ func TestSetValidators(t *testing.T) {
 		assert.Len(t, arg2.Validators, 2)
 
 		// Test with a valid email
-		err := arg2.Validators[0].Validate("test@example.com")
+		err := arg2.Validators[0]("test@example.com")
 		assert.NoError(t, err)
 
 		// Test with invalid email
-		err = arg2.Validators[0].Validate("not-an-email")
+		err = arg2.Validators[0]("not-an-email")
 		assert.Error(t, err)
 	})
 
@@ -58,7 +59,7 @@ func TestSetValidators(t *testing.T) {
 		assert.Len(t, arg.Validators, 1)
 
 		// Verify it's the email validator
-		err = arg.Validators[0].Validate("user@example.com")
+		err = arg.Validators[0]("user@example.com")
 		assert.NoError(t, err)
 	})
 }

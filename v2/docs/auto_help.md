@@ -2,7 +2,7 @@
 
 The goopt v2 auto-help feature provides automatic help flag registration and display, eliminating the need for repetitive help handling code in every CLI application.
 
-> **See also:** [Help Configuration Guide](https://napalu.github.io/goopt/v2/guides/help-configuration/) for information about customizing help output styles, formats, and advanced features.
+> **See also:** [Help Configuration Guide](./help_configuration.md) for information about customizing help output styles, formats, and advanced features.
 
 ## Overview
 

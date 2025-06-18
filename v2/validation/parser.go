@@ -1,9 +1,10 @@
 package validation
 
 import (
-	"github.com/napalu/goopt/v2/internal/util"
 	"strconv"
 	"strings"
+
+	"github.com/napalu/goopt/v2/internal/util"
 
 	"github.com/napalu/goopt/v2/errs"
 )
@@ -85,8 +86,8 @@ const (
 // - Simple: "email", "integer", "alphanumeric"
 // - With args: "minlength:5", "range:1:100", "oneof:red:green:blue"
 // - Combined: "email,minlength:5"
-func ParseValidators(specs []string) ([]Validator, error) {
-	var validators []Validator
+func ParseValidators(specs []string) ([]ValidatorFunc, error) {
+	var validators []ValidatorFunc
 
 	for _, spec := range specs {
 		spec = strings.TrimSpace(spec)
@@ -159,11 +160,11 @@ func parseParenthesesArgs(input string) []string {
 
 const maxRecursionDepth = 10 // Prevent infinite recursion
 
-func parseValidator(spec string) (Validator, error) {
+func parseValidator(spec string) (ValidatorFunc, error) {
 	return parseValidatorWithDepth(spec, 0)
 }
 
-func parseValidatorWithDepth(spec string, depth int) (Validator, error) {
+func parseValidatorWithDepth(spec string, depth int) (ValidatorFunc, error) {
 	if depth > maxRecursionDepth {
 		return nil, errs.ErrValidatorRecursionDepthExceeded
 	}
@@ -222,7 +223,7 @@ func parseValidatorWithDepth(spec string, depth int) (Validator, error) {
 	return createValidatorWithDepth(spec, nil, depth)
 }
 
-func createValidatorWithDepth(name string, args []string, depth int) (Validator, error) {
+func createValidatorWithDepth(name string, args []string, depth int) (ValidatorFunc, error) {
 	// Use EqualFold for case-insensitive comparison that handles Unicode correctly
 	switch {
 	case strings.EqualFold(name, ValidatorEmail):
@@ -320,21 +321,13 @@ func createValidatorWithDepth(name string, args []string, depth int) (Validator,
 		}
 		var startR, endR int
 		err := util.ConvertString(args[0], &startR, name, func(matchOn rune) bool {
-			if matchOn == ',' {
-				return true
-			}
-
-			return false
+			return matchOn == ','
 		})
 		if err != nil {
 			return nil, errs.ErrValidatorArgumentMustBeNumber.WithArgs("range min")
 		}
 		err = util.ConvertString(args[1], &endR, name, func(matchOn rune) bool {
-			if matchOn == ',' {
-				return true
-			}
-
-			return false
+			return matchOn == ','
 		})
 		if err != nil {
 			return nil, errs.ErrValidatorArgumentMustBeNumber.WithArgs("range max")
@@ -372,47 +365,32 @@ func createValidatorWithDepth(name string, args []string, depth int) (Validator,
 		// 3. regex({pattern:xxx,desc:xxx}) - JSON-like format for backward compatibility
 
 		// Check for structured formats
-		if strings.HasPrefix(arg, JSONFormatPrefix) && strings.HasSuffix(arg, JSONFormatSuffix) {
-			// JSON-like format - use RegexSpec
-			v, err := RegexSpec(arg)
-			if err != nil {
-				return nil, err
-			}
-			return v, nil
-		} else if strings.HasPrefix(arg, PatternPrefix) {
-			// New structured format: pattern:xxx,desc:xxx
+		switch {
+		case strings.HasPrefix(arg, JSONFormatPrefix) && strings.HasSuffix(arg, JSONFormatSuffix):
+			return RegexSpec(arg), nil
+		case strings.HasPrefix(arg, PatternPrefix):
 			parts := strings.SplitN(arg, DescriptionSeparator, 2)
 			if len(parts) == 2 {
 				pattern := strings.TrimPrefix(parts[0], PatternPrefix)
 				desc := parts[1]
-				return Regex(pattern, desc)
+				return Regex(pattern, desc), nil
 			}
-			// No desc part, just pattern
 			pattern := strings.TrimPrefix(arg, PatternPrefix)
-			return Regex(pattern, pattern)
-		} else {
-			// Plain pattern - use pattern as description
-			return Regex(arg, arg)
+			return Regex(pattern, pattern), nil
+		default:
+			return Regex(arg, arg), nil
 		}
 	case strings.EqualFold(name, ValidatorMustMatch):
 		if len(args) != 1 {
 			return nil, errs.ErrValidatorRequiresArgument.WithArgs(ValidatorMustMatch, 1)
 		}
-		v, err := RegexSpec(args[0])
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
+		return RegexSpec(args[0]), nil
 	case strings.EqualFold(name, ValidatorMustNotMatch):
 		if len(args) != 1 {
 			return nil, errs.ErrValidatorRequiresArgument.WithArgs(ValidatorMustNotMatch, 1)
 		}
 		// Use Not composition with RegexSpec
-		v, err := RegexSpec(args[0])
-		if err != nil {
-			return nil, err
-		}
-		return Not(v), nil
+		return Not(RegexSpec(args[0])), nil
 
 	// String matching validators
 	case strings.EqualFold(name, ValidatorIsOneOf):
@@ -455,7 +433,7 @@ func createValidatorWithDepth(name string, args []string, depth int) (Validator,
 			return nil, errs.ErrValidatorRequiresAtLeastOneArgument.WithArgs(ValidatorOneOf)
 		}
 		// Parse each validator spec and compose with OneOf
-		var subValidators []Validator
+		var subValidators []ValidatorFunc
 		for _, arg := range args {
 			subValidator, err := parseValidatorWithDepth(arg, depth+1)
 			if err != nil {
@@ -469,7 +447,7 @@ func createValidatorWithDepth(name string, args []string, depth int) (Validator,
 			return nil, errs.ErrValidatorRequiresAtLeastOneArgument.WithArgs(ValidatorAll)
 		}
 		// Parse each validator spec and compose with All
-		var subValidators []Validator
+		var subValidators []ValidatorFunc
 		for _, arg := range args {
 			subValidator, err := parseValidatorWithDepth(arg, depth+1)
 			if err != nil {

@@ -3,10 +3,11 @@ package goopt
 import (
 	"errors"
 	"fmt"
-	"github.com/napalu/goopt/v2/validation"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/napalu/goopt/v2/validation"
 
 	"github.com/napalu/goopt/v2/types"
 
@@ -343,7 +344,7 @@ func TestValidationHook(t *testing.T) {
 				return nil
 			}),
 		)
-		parser2.AddFlag("api-key", NewArg(WithType(types.Single)))
+		_ = parser2.AddFlag("api-key", NewArg(WithType(types.Single)))
 
 		success = parser2.Parse([]string{"cmd", "--mode", "prod"})
 		assert.False(t, success)
@@ -368,7 +369,7 @@ func TestValidationHook(t *testing.T) {
 				return nil
 			}),
 		)
-		parser3.AddFlag("api-key", NewArg(WithType(types.Single)))
+		_ = parser3.AddFlag("api-key", NewArg(WithType(types.Single)))
 
 		success = parser3.Parse([]string{"cmd", "--mode", "prod", "--api-key", "secret123"})
 		assert.True(t, success)

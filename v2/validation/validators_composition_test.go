@@ -29,7 +29,7 @@ func TestCompositionalValidators(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.valid {
 				assert.NoError(t, err, "Expected %s to be valid", tt.value)
 			} else {
@@ -41,7 +41,7 @@ func TestCompositionalValidators(t *testing.T) {
 	t.Run("Not validator negation", func(t *testing.T) {
 		tests := []struct {
 			name      string
-			validator Validator
+			validator ValidatorFunc
 			value     string
 			valid     bool
 		}{
@@ -73,7 +73,7 @@ func TestCompositionalValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := tt.validator.Validate(tt.value)
+				err := tt.validator(tt.value)
 				if tt.valid {
 					assert.NoError(t, err)
 				} else {
@@ -110,7 +110,7 @@ func TestCompositionalValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.reason, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.valid {
 					assert.NoError(t, err, "Expected %s to be valid: %s", tt.value, tt.reason)
 				} else {
@@ -125,50 +125,50 @@ func TestCompositionalValidators(t *testing.T) {
 		notReserved := IsNotOneOf("admin", "root", "system")
 
 		// Test IsOneOf
-		assert.NoError(t, colors.Validate("red"))
-		assert.NoError(t, colors.Validate("green"))
-		assert.NoError(t, colors.Validate("blue"))
-		assert.Error(t, colors.Validate("yellow"))
-		assert.Error(t, colors.Validate(""))
+		assert.NoError(t, colors("red"))
+		assert.NoError(t, colors("green"))
+		assert.NoError(t, colors("blue"))
+		assert.Error(t, colors("yellow"))
+		assert.Error(t, colors(""))
 
 		// Test IsNotOneOf
-		assert.NoError(t, notReserved.Validate("user"))
-		assert.NoError(t, notReserved.Validate("john"))
-		assert.Error(t, notReserved.Validate("admin"))
-		assert.Error(t, notReserved.Validate("root"))
-		assert.Error(t, notReserved.Validate("system"))
+		assert.NoError(t, notReserved("user"))
+		assert.NoError(t, notReserved("john"))
+		assert.Error(t, notReserved("admin"))
+		assert.Error(t, notReserved("root"))
+		assert.Error(t, notReserved("system"))
 	})
 
 	t.Run("String helper validators", func(t *testing.T) {
 		t.Run("Contains", func(t *testing.T) {
 			validator := Contains("@example.com")
-			assert.NoError(t, validator.Validate("user@example.com"))
-			assert.NoError(t, validator.Validate("admin@example.com"))
-			assert.Error(t, validator.Validate("user@other.com"))
+			assert.NoError(t, validator("user@example.com"))
+			assert.NoError(t, validator("admin@example.com"))
+			assert.Error(t, validator("user@other.com"))
 		})
 
 		t.Run("HasPrefix", func(t *testing.T) {
 			validator := HasPrefix("EMP-")
-			assert.NoError(t, validator.Validate("EMP-12345"))
-			assert.NoError(t, validator.Validate("EMP-ABC"))
-			assert.Error(t, validator.Validate("USR-12345"))
-			assert.Error(t, validator.Validate("12345"))
+			assert.NoError(t, validator("EMP-12345"))
+			assert.NoError(t, validator("EMP-ABC"))
+			assert.Error(t, validator("USR-12345"))
+			assert.Error(t, validator("12345"))
 		})
 
 		t.Run("HasSuffix", func(t *testing.T) {
 			validator := HasSuffix(".pdf")
-			assert.NoError(t, validator.Validate("document.pdf"))
-			assert.NoError(t, validator.Validate("report.pdf"))
-			assert.Error(t, validator.Validate("image.jpg"))
-			assert.Error(t, validator.Validate("pdf"))
+			assert.NoError(t, validator("document.pdf"))
+			assert.NoError(t, validator("report.pdf"))
+			assert.Error(t, validator("image.jpg"))
+			assert.Error(t, validator("pdf"))
 		})
 
 		t.Run("Equals", func(t *testing.T) {
 			validator := Equals("exact-match")
-			assert.NoError(t, validator.Validate("exact-match"))
-			assert.Error(t, validator.Validate("EXACT-MATCH"))
-			assert.Error(t, validator.Validate("exact"))
-			assert.Error(t, validator.Validate(""))
+			assert.NoError(t, validator("exact-match"))
+			assert.Error(t, validator("EXACT-MATCH"))
+			assert.Error(t, validator("exact"))
+			assert.Error(t, validator(""))
 		})
 	})
 
@@ -202,7 +202,7 @@ func TestCompositionalValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.reason, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.valid {
 					assert.NoError(t, err)
 				} else {
@@ -215,12 +215,12 @@ func TestCompositionalValidators(t *testing.T) {
 	t.Run("Empty validators", func(t *testing.T) {
 		// OneOf with no validators should always pass
 		emptyOneOf := OneOf()
-		assert.NoError(t, emptyOneOf.Validate("anything"))
-		assert.NoError(t, emptyOneOf.Validate(""))
+		assert.NoError(t, emptyOneOf("anything"))
+		assert.NoError(t, emptyOneOf(""))
 
 		// All with no validators should always pass
 		emptyAll := All()
-		assert.NoError(t, emptyAll.Validate("anything"))
-		assert.NoError(t, emptyAll.Validate(""))
+		assert.NoError(t, emptyAll("anything"))
+		assert.NoError(t, emptyAll(""))
 	})
 }

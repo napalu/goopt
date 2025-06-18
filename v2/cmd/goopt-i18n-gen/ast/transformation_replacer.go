@@ -27,16 +27,16 @@ type Replacement struct {
 
 // TransformationConfig holds configuration for the TransformationReplacer
 type TransformationConfig struct {
-	Translator           i18n.Translator
-	TrPattern            string
-	KeepComments         bool
-	CleanComments        bool
-	IsUpdateMode         bool
-	TransformMode        string   // "user-facing", "with-comments", "all-marked", "all"
-	BackupDir            string
-	PackagePath          string
-	UserFacingRegex      []string // regex patterns to identify user-facing functions
-	FormatFunctionRegex  []string // regex patterns with format arg index (pattern:index)
+	Translator          i18n.Translator
+	TrPattern           string
+	KeepComments        bool
+	CleanComments       bool
+	IsUpdateMode        bool
+	TransformMode       string // "user-facing", "with-comments", "all-marked", "all"
+	BackupDir           string
+	PackagePath         string
+	UserFacingRegex     []string // regex patterns to identify user-facing functions
+	FormatFunctionRegex []string // regex patterns with format arg index (pattern:index)
 }
 
 // TransformationReplacer handles replacing strings with translation calls using AST transformation
@@ -78,7 +78,7 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
 	sr.formatTransformer.SetMessagePackagePath(sr.config.PackagePath)
 	sr.formatTransformer.SetTransformMode(sr.config.TransformMode)
-	
+
 	// Set user-facing regex patterns
 	if len(sr.config.UserFacingRegex) > 0 {
 		if err := sr.formatTransformer.SetUserFacingRegexes(sr.config.UserFacingRegex); err != nil {
@@ -86,7 +86,7 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		}
 	}
-	
+
 	// Set format function patterns
 	if len(sr.config.FormatFunctionRegex) > 0 {
 		if err := sr.formatTransformer.SetFormatFunctionPatterns(sr.config.FormatFunctionRegex); err != nil {

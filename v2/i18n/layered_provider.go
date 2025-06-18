@@ -35,11 +35,12 @@ func (p *LayeredMessageProvider) GetMessage(key string) string {
 
 	// Determine the language to use
 	lang := language.English
-	if p.userBundle != nil {
+	switch {
+	case p.userBundle != nil:
 		lang = p.userBundle.GetDefaultLanguage()
-	} else if p.systemBundle != nil {
+	case p.systemBundle != nil:
 		lang = p.systemBundle.GetDefaultLanguage()
-	} else if p.defaultBundle != nil {
+	case p.defaultBundle != nil:
 		lang = p.defaultBundle.GetDefaultLanguage()
 	}
 

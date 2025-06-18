@@ -315,7 +315,6 @@ func (ft *FormatTransformer) applyI18nTodoTransformations(file *ast.File) {
 	})
 }
 
-
 // transformNode examines and transforms individual AST nodes
 func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 	call, ok := n.(*ast.CallExpr)
@@ -365,9 +364,6 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 
 	return true
 }
-
-
-
 
 // createTrCall creates a tr.T function call expression
 func (ft *FormatTransformer) createTrCall(key string, args []ast.Expr) *ast.CallExpr {
@@ -582,7 +578,6 @@ func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
 		file.Decls = newDecls
 	}
 }
-
 
 // Generic transformation methods that work with FormatCallInfo
 

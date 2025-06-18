@@ -1,8 +1,9 @@
 package validation
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRegexSpec(t *testing.T) {
@@ -40,13 +41,8 @@ func TestRegexSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validator, err := RegexSpec(tt.spec)
-			if err != nil {
-				// If spec parsing failed, test should expect error
-				assert.True(t, tt.wantErr, "unexpected error parsing spec: %v", err)
-				return
-			}
-			err = validator.Validate(tt.value)
+			validator := RegexSpec(tt.spec)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -89,11 +85,8 @@ func TestRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validator, err := Regex(tt.pattern, tt.desc)
-			if err != nil {
-				t.Fatalf("unexpected error creating validator: %v", err)
-			}
-			err = validator.Validate(tt.value)
+			validator := Regex(tt.pattern, tt.desc)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -110,88 +103,50 @@ func TestRegexes(t *testing.T) {
 		{`^[a-z]+$`, "lowercase letters"},
 	}
 
-	validator, err := Regexes(patterns...)
-	if err != nil {
-		t.Fatalf("unexpected error creating validator: %v", err)
-	}
+	validator := Regexes(patterns...)
 
 	// Test value that matches first pattern
-	err = validator.Validate("12345")
+	err := validator("12345")
 	assert.NoError(t, err)
 
 	// Test value that matches second pattern
-	err = validator.Validate("HELLO")
+	err = validator("HELLO")
 	assert.NoError(t, err)
 
 	// Test value that matches third pattern
-	err = validator.Validate("hello")
+	err = validator("hello")
 	assert.NoError(t, err)
 
 	// Test value that matches none
-	err = validator.Validate("Hello123!")
+	err = validator("Hello123!")
 	assert.Error(t, err)
 }
 
 func TestMustMatch(t *testing.T) {
-	validator, err := MustMatch(`^[A-Z]{3}$`, "three uppercase letters")
-	if err != nil {
-		t.Fatalf("unexpected error creating validator: %v", err)
-	}
+	validator := MustMatch(`^[A-Z]{3}$`, "three uppercase letters")
 
 	// Valid match
-	err = validator.Validate("ABC")
+	err := validator("ABC")
 	assert.NoError(t, err)
 
 	// Invalid match
-	err = validator.Validate("abc")
+	err = validator("abc")
 	assert.Error(t, err)
 
 	// Too long
-	err = validator.Validate("ABCD")
+	err = validator("ABCD")
 	assert.Error(t, err)
 }
 
 func TestMustNotMatch(t *testing.T) {
 	// Must not contain numbers
-	validator, err := MustNotMatch(`\d`, "no digits allowed")
-	if err != nil {
-		t.Fatalf("unexpected error creating validator: %v", err)
-	}
+	validator := MustNotMatch(`\d`, "no digits allowed")
 
 	// Valid - no numbers
-	err = validator.Validate("HelloWorld")
+	err := validator("HelloWorld")
 	assert.NoError(t, err)
 
 	// Invalid - contains numbers
-	err = validator.Validate("Hello123")
-	assert.Error(t, err)
-}
-
-func TestRegexFromValues(t *testing.T) {
-	// Test creating regex from accepted values
-	values := []string{"red", "green", "blue"}
-
-	validator := RegexFromValues(values, "color choices")
-
-	// Test valid values
-	assert.NoError(t, validator.Validate("red"))
-	assert.NoError(t, validator.Validate("green"))
-	assert.NoError(t, validator.Validate("blue"))
-
-	// Test invalid value
-	err := validator.Validate("yellow")
-	assert.Error(t, err)
-
-	// Test case sensitivity
-	err = validator.Validate("RED")
-	assert.Error(t, err)
-}
-
-func TestRegexFromValues_Empty(t *testing.T) {
-	// Test with empty values
-	validator := RegexFromValues([]string{}, "no choices")
-
-	// Should reject everything
-	err := validator.Validate("anything")
+	err = validator("Hello123")
 	assert.Error(t, err)
 }

@@ -1,9 +1,11 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/v2/i18n"
 	"strings"
 	"testing"
+
+	"github.com/napalu/goopt/v2/errs"
+	"github.com/napalu/goopt/v2/i18n"
 
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/types"
@@ -449,13 +451,13 @@ func TestReplaceDefaultBundle(t *testing.T) {
 		defer func() {
 			// Restore the original bundle to avoid affecting other tests
 			if originalBundle != nil {
-				p.ReplaceDefaultBundle(originalBundle)
+				_ = p.ReplaceDefaultBundle(originalBundle)
 			}
 		}()
 
 		// Create a new bundle with custom translations
 		bundle := i18n.NewEmptyBundle()
-		bundle.AddLanguage(language.English, map[string]string{
+		_ = bundle.AddLanguage(language.English, map[string]string{
 			"test.key": "Test Value",
 		})
 
@@ -471,8 +473,7 @@ func TestReplaceDefaultBundle(t *testing.T) {
 
 		err := p.ReplaceDefaultBundle(nil)
 		assert.Error(t, err)
-		// The error will contain the actual error message
-		assert.Contains(t, err.Error(), "nil pointer encountered")
+		assert.ErrorIs(t, errs.ErrNilPointer, err)
 	})
 }
 

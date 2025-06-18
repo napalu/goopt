@@ -1,12 +1,13 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/v2/input"
 	"io"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/napalu/goopt/v2/input"
 
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/i18n"
@@ -194,7 +195,6 @@ type Parser struct {
 	helpConfig              HelpConfig
 	helpBehavior            HelpBehavior
 	autoHelp                bool
-	parseHelp               bool
 	helpFlags               []string
 	helpExecuted            bool
 	helpEndFunc             EndShowHelpHookFunc

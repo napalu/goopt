@@ -122,7 +122,7 @@ func TestGetArgumentInfoByID(t *testing.T) {
 
 		// The UUID is set internally by ensureInit()
 		// Test getArgumentInfoByID
-		info := p.getArgumentInfoByID(arg.uuid)
+		info := p.getArgumentInfoByID(arg.uniqueID)
 		assert.NotNil(t, info)
 		assert.Equal(t, "Test flag", info.Argument.Description)
 	})

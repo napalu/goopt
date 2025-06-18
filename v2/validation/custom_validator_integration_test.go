@@ -16,7 +16,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 		p := goopt.NewParser()
 
 		// Create a UUID validator
-		uuidValidator := validation.Custom("uuid", func(value string) error {
+		uuidValidator := validation.Custom(func(value string) error {
 			uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 			if !uuidRegex.MatchString(strings.ToLower(value)) {
 				return errors.New("value must be a valid UUID")
@@ -26,7 +26,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("id", &goopt.Argument{
 			Description: "Unique identifier",
-			Validators:  []validation.Validator{uuidValidator},
+			Validators:  []validation.ValidatorFunc{uuidValidator},
 		})
 		assert.NoError(t, err)
 
@@ -55,7 +55,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 		p := goopt.NewParser()
 
 		// Create a password strength validator
-		passwordValidator := validation.Custom("password-8", func(value string) error {
+		passwordValidator := validation.Custom(func(value string) error {
 			if len(value) < 8 {
 				return errors.New("password must be at least 8 characters")
 			}
@@ -97,7 +97,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("password", &goopt.Argument{
 			Description: "User password",
-			Validators:  []validation.Validator{passwordValidator},
+			Validators:  []validation.ValidatorFunc{passwordValidator},
 		})
 		assert.NoError(t, err)
 
@@ -126,7 +126,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		// Create a custom validator that checks for reserved usernames
 		reservedUsernames := []string{"admin", "root", "system", "operator"}
-		notReservedValidator := validation.Custom("reserved", func(value string) error {
+		notReservedValidator := validation.Custom(func(value string) error {
 			lower := strings.ToLower(value)
 			for _, reserved := range reservedUsernames {
 				if lower == reserved {
@@ -138,7 +138,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("username", &goopt.Argument{
 			Description: "Username",
-			Validators: []validation.Validator{
+			Validators: []validation.ValidatorFunc{
 				validation.MinLength(3),   // Built-in validator
 				validation.MaxLength(20),  // Built-in validator
 				validation.AlphaNumeric(), // Built-in validator
@@ -174,7 +174,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 	t.Run("Custom validator via struct tags", func(t *testing.T) {
 		// Create an email domain validator
-		emailDomainValidator := validation.Custom("email-domain", func(value string) error {
+		emailDomainValidator := validation.Custom(func(value string) error {
 			if !strings.Contains(value, "@") {
 				return errors.New("invalid email format")
 			}

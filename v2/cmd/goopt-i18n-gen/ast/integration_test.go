@@ -188,9 +188,13 @@ func main() {
 			for i, line := range lines {
 				if strings.Contains(line, "Application") || strings.Contains(line, "initialized") {
 					start := i - 1
-					if start < 0 { start = 0 }
+					if start < 0 {
+						start = 0
+					}
 					end := i + 2
-					if end > len(lines) { end = len(lines) }
+					if end > len(lines) {
+						end = len(lines)
+					}
 					for j := start; j < end; j++ {
 						t.Logf("  %d: %s", j+1, lines[j])
 					}

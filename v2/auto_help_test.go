@@ -161,26 +161,20 @@ func TestIsHelpRequested(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "help requested with --help",
-			setup: func() *Parser {
-				return NewParser()
-			},
+			name:     "help requested with --help",
+			setup:    NewParser,
 			args:     []string{"--help"},
 			expected: true,
 		},
 		{
-			name: "help requested with -h",
-			setup: func() *Parser {
-				return NewParser()
-			},
+			name:     "help requested with -h",
+			setup:    NewParser,
 			args:     []string{"-h"},
 			expected: true,
 		},
 		{
-			name: "help not requested",
-			setup: func() *Parser {
-				return NewParser()
-			},
+			name:     "help not requested",
+			setup:    NewParser,
 			args:     []string{"--verbose"},
 			expected: false,
 		},

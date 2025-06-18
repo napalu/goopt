@@ -8,20 +8,20 @@ import (
 func TestFormatTransformer(t *testing.T) {
 	// Create a string map for testing
 	stringMap := map[string]string{
-		`"User %s logged in"`:             "messages.Keys.App.Extracted.UserSLoggedIn",
-		`"Error code: %d"`:                "messages.Keys.App.Extracted.ErrorCodeD",
-		`"Welcome %s!"`:                   "messages.Keys.App.Extracted.WelcomeS",
-		`"failed to connect to %s"`:       "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"Server started on port %d"`:     "messages.Keys.App.Extracted.ServerStartedOnPortD",
-		`"Authentication failed for %s"`:  "messages.Keys.App.Extracted.AuthenticationFailedForS",
-		`"connection failed: %w"`:         "messages.Keys.App.Extracted.ConnectionFailed",
-		`"Hello world"`:                   "messages.Keys.App.Extracted.HelloWorld",
-		`"Result: %v"`:                    "messages.Keys.App.Extracted.ResultV",
-		`"Progress: %d%%"`:                "messages.Keys.App.Extracted.ProgressD",
-		`"Critical error: %v"`:            "messages.Keys.App.Extracted.CriticalErrorV",
-		`"Panic: %s"`:                     "messages.Keys.App.Extracted.PanicS",
-		`"failed to connect"`:             "messages.Keys.App.Extracted.FailedToConnect",
-		`"Response: %s"`:                  "messages.Keys.App.Extracted.ResponseS",
+		`"User %s logged in"`:            "messages.Keys.App.Extracted.UserSLoggedIn",
+		`"Error code: %d"`:               "messages.Keys.App.Extracted.ErrorCodeD",
+		`"Welcome %s!"`:                  "messages.Keys.App.Extracted.WelcomeS",
+		`"failed to connect to %s"`:      "messages.Keys.App.Extracted.FailedToConnectToS",
+		`"Server started on port %d"`:    "messages.Keys.App.Extracted.ServerStartedOnPortD",
+		`"Authentication failed for %s"`: "messages.Keys.App.Extracted.AuthenticationFailedForS",
+		`"connection failed: %w"`:        "messages.Keys.App.Extracted.ConnectionFailed",
+		`"Hello world"`:                  "messages.Keys.App.Extracted.HelloWorld",
+		`"Result: %v"`:                   "messages.Keys.App.Extracted.ResultV",
+		`"Progress: %d%%"`:               "messages.Keys.App.Extracted.ProgressD",
+		`"Critical error: %v"`:           "messages.Keys.App.Extracted.CriticalErrorV",
+		`"Panic: %s"`:                    "messages.Keys.App.Extracted.PanicS",
+		`"failed to connect"`:            "messages.Keys.App.Extracted.FailedToConnect",
+		`"Response: %s"`:                 "messages.Keys.App.Extracted.ResponseS",
 	}
 
 	tests := []struct {

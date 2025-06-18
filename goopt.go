@@ -17,6 +17,7 @@ package goopt
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 
 	"io"
 	"os"
@@ -61,6 +62,7 @@ func NewParser() *Parser {
 		commandNameConverter: DefaultCommandNameConverter,
 		maxDependencyDepth:   DefaultMaxDependencyDepth,
 		i18n:                 i18n.Default(),
+		ID:                   uuid.NewString(),
 	}
 	p.renderer = NewRenderer(p)
 

@@ -79,7 +79,7 @@ func TestAlphaNumericUnicode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err, "Expected error for value: %s", tt.value)
 			} else {
@@ -138,7 +138,7 @@ func TestIdentifierUnicode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err, "Expected error for value: %s", tt.value)
 			} else {
@@ -196,7 +196,7 @@ func TestNoWhitespaceUnicode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err, "Expected error for value: %q", tt.value)
 			} else {

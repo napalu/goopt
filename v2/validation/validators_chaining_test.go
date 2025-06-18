@@ -6,14 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Helper function for tests to handle regex creation with error
-func mustRegex(v Validator, err error) Validator {
-	if err != nil {
-		panic(err)
-	}
-	return v
-}
-
 func TestValidatorChaining(t *testing.T) {
 	t.Run("Multiple validators via ParseValidators", func(t *testing.T) {
 		// Test that we can chain multiple validators
@@ -46,7 +38,7 @@ func TestValidatorChaining(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := combined.Validate(tt.value)
+				err := combined(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -59,10 +51,10 @@ func TestValidatorChaining(t *testing.T) {
 	t.Run("Multiple regex validators", func(t *testing.T) {
 		// Since we can't use commas in regex patterns in struct tags,
 		// we need to test programmatically
-		validators := []Validator{
-			mustRegex(Regex("^[A-Z]", "Must start with uppercase")), // Must start with uppercase letter
-			mustRegex(Regex("[0-9]$", "Must end with digit")),       // Must end with digit
-			mustRegex(Regex("^.{5,10}$", "Must be 5-10 chars")),     // Must be 5-10 chars long
+		validators := []ValidatorFunc{
+			Regex("^[A-Z]", "Must start with uppercase"), // Must start with uppercase letter
+			Regex("[0-9]$", "Must end with digit"),       // Must end with digit
+			Regex("^.{5,10}$", "Must be 5-10 chars"),     // Must be 5-10 chars long
 		}
 
 		combined := All(validators...)
@@ -83,7 +75,7 @@ func TestValidatorChaining(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := combined.Validate(tt.value)
+				err := combined(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -123,7 +115,7 @@ func TestValidatorChaining(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := combined.Validate(tt.value)
+				err := combined(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -133,15 +125,15 @@ func TestValidatorChaining(t *testing.T) {
 		}
 	})
 
-	t.Run("OneOf combinator", func(t *testing.T) {
-		// Test the OneOf combinator - at least one must pass
-		validators := []Validator{
-			Email(), // Valid email
-			mustRegex(Regex("^[0-9]{10}$", "10-digit phone")),       // OR 10 digit number
-			mustRegex(Regex("^[A-Z]{2}-[0-9]{4}$", "Code XX-1234")), // OR pattern like XX-1234
+	t.Run("Any combinator", func(t *testing.T) {
+		// Test the Any combinator - at least one must pass
+		validators := []ValidatorFunc{
+			Email(),                                // Valid email
+			Regex("^[0-9]{10}$", "10-digit phone"), // OR 10 digit number
+			Regex("^[A-Z]{2}-[0-9]{4}$", "Code XX-1234"), // OR pattern like XX-1234
 		}
 
-		combined := OneOf(validators...)
+		combined := Any(validators...)
 
 		tests := []struct {
 			name    string
@@ -158,7 +150,7 @@ func TestValidatorChaining(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := combined.Validate(tt.value)
+				err := combined(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {

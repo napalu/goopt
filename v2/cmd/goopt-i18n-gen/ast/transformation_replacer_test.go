@@ -120,7 +120,7 @@ func main() {
 		"Failed to process %s",
 		"Application started",
 		"With metadata",
-		"key",           // First arg to Str()
+		"key", // First arg to Str()
 		"Nested %s",
 	}
 
@@ -134,9 +134,9 @@ func main() {
 	expectedNotDetected := []string{
 		"Regular string",
 		"No format specifier",
-		"world",      // argument to Printf, not format string
-		"value",      // second arg to Str()
-		"format",     // argument to Sprintf
+		"world",  // argument to Printf, not format string
+		"value",  // second arg to Str()
+		"format", // argument to Sprintf
 	}
 
 	for _, expected := range expectedNotDetected {
@@ -162,11 +162,11 @@ func test() {
 	slog.Error("Failed to connect", "error", err, "retry", 3)
 }`,
 			expected: map[string]bool{
-				"Server started":    true,  // slog.Info IS a user-facing function
-				"Failed to connect": true,  // slog.Error IS a user-facing function
-				"port":             true,   // argument to a user-facing function
-				"error":            true,   // argument to a user-facing function
-				"retry":            true,   // argument to a user-facing function
+				"Server started":    true, // slog.Info IS a user-facing function
+				"Failed to connect": true, // slog.Error IS a user-facing function
+				"port":              true, // argument to a user-facing function
+				"error":             true, // argument to a user-facing function
+				"retry":             true, // argument to a user-facing function
 			},
 		},
 		{
@@ -179,10 +179,10 @@ func test() {
 			expected: map[string]bool{
 				"request_id":         true,  // Str() is in a chained logging call
 				"Processing request": true,  // Msg() IS a user-facing function
-				"file":              true,   // Str() is in a chained logging call
-				"Failed: %s":        true,   // Msgf() IS a format function
-				"rid123":            false,  // Str() second arg, not translatable
-				"main.go":           false,  // Str() second arg, not translatable
+				"file":               true,  // Str() is in a chained logging call
+				"Failed: %s":         true,  // Msgf() IS a format function
+				"rid123":             false, // Str() second arg, not translatable
+				"main.go":            false, // Str() second arg, not translatable
 			},
 		},
 		{

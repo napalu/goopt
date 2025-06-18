@@ -9,14 +9,6 @@ import (
 	"github.com/napalu/goopt/v2/validation"
 )
 
-// Helper function to handle validator creation with error
-func mustHave(v validation.Validator, err error) validation.Validator {
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create validator: %v", err))
-	}
-	return v
-}
-
 func main() {
 	// Create parser with various validated flags
 	parser, err := goopt.NewParserWith(
@@ -64,9 +56,9 @@ func main() {
 			goopt.WithSecurePrompt("Enter password: "),
 			goopt.WithValidator(validation.All(
 				validation.MinLength(8),
-				mustHave(validation.Regex(`[A-Z]`, "Must contain uppercase")), // At least one uppercase
-				mustHave(validation.Regex(`[a-z]`, "Must contain lowercase")), // At least one lowercase
-				mustHave(validation.Regex(`[0-9]`, "Must contain digit")),     // At least one digit
+				validation.Regex(`[A-Z]`, "Must contain uppercase"), // At least one uppercase
+				validation.Regex(`[a-z]`, "Must contain lowercase"), // At least one lowercase
+				validation.Regex(`[0-9]`, "Must contain digit"),     // At least one digit
 			)),
 		)),
 
@@ -122,8 +114,8 @@ func main() {
 
 	// Parse command line arguments
 	if !parser.Parse(os.Args) {
-		for _, err := range parser.GetErrors() {
-			fmt.Fprintln(os.Stderr, err)
+		for _, e := range parser.GetErrors() {
+			fmt.Fprintf(os.Stderr, "%v\n", e)
 		}
 		fmt.Fprintln(os.Stderr, "")
 		parser.PrintHelp(os.Stderr)

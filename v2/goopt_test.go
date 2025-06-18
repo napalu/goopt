@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/napalu/goopt/v2/validation"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/napalu/goopt/v2/validation"
+
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -27,14 +28,6 @@ import (
 
 	"golang.org/x/text/language"
 )
-
-// Helper function for tests to handle validator creation with error
-func mustValidate(v validation.Validator, err error) validation.Validator {
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create validator: %v", err))
-	}
-	return v
-}
 
 type arrayWriter struct {
 	data *[]string
@@ -6108,17 +6101,17 @@ func TestArgument_DisplayID(t *testing.T) {
 			want: "pos5",
 		},
 		{
-			name: "non-positional with uuid and description key",
+			name: "non-positional with uniqueID and description key",
 			arg: &Argument{
-				uuid:           "12345678-abcd-efgh-ijkl-mnopqrstuvwx",
+				uniqueID:       "12345678-abcd-efgh-ijkl-mnopqrstuvwx",
 				DescriptionKey: "mykey",
 			},
 			want: "12345678-mykey",
 		},
 		{
-			name: "non-positional with uuid only",
+			name: "non-positional with uniqueID only",
 			arg: &Argument{
-				uuid:           "abcdefgh-1234-5678-90ab-cdefghijklmn",
+				uniqueID:       "abcdefgh-1234-5678-90ab-cdefghijklmn",
 				DescriptionKey: "",
 			},
 			want: "abcdefgh-",
@@ -6947,8 +6940,8 @@ func TestValidationHooks(t *testing.T) {
 				WithType(types.Single),
 				WithValidator(validation.All(
 					validation.MinLength(8),
-					mustValidate(validation.Regex(`[A-Z]`, "Must contain uppercase")), // At least one uppercase
-					mustValidate(validation.Regex(`[0-9]`, "Must contain digit")),     // At least one number
+					validation.Regex(`[A-Z]`, "Must contain uppercase"), // At least one uppercase
+					validation.Regex(`[0-9]`, "Must contain digit"),     // At least one number
 				)),
 			)),
 		)
@@ -6964,7 +6957,7 @@ func TestValidationHooks(t *testing.T) {
 			WithType(types.Single),
 			WithValidator(validation.All(
 				validation.MinLength(8),
-				mustValidate(validation.Regex(`[A-Z]`, "Must contain uppercase")),
+				validation.Regex(`[A-Z]`, "Must contain uppercase"),
 			)),
 		))
 		success = parser.Parse([]string{"--password", "password123"})
@@ -6975,9 +6968,9 @@ func TestValidationHooks(t *testing.T) {
 		parser, err := NewParserWith(
 			WithFlag("id", NewArg(
 				WithType(types.Single),
-				WithValidator(validation.OneOf(
+				WithValidator(validation.Any(
 					validation.Email(),
-					mustValidate(validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$")), // 6+ digit ID
+					validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"), // 6+ digit ID
 				)),
 			)),
 		)
@@ -6991,9 +6984,9 @@ func TestValidationHooks(t *testing.T) {
 		parser = NewParser()
 		parser.AddFlag("id", NewArg(
 			WithType(types.Single),
-			WithValidator(validation.OneOf(
+			WithValidator(validation.Any(
 				validation.Email(),
-				mustValidate(validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$")),
+				validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"),
 			)),
 		))
 		success = parser.Parse([]string{"--id", "123456"})
@@ -7003,9 +6996,9 @@ func TestValidationHooks(t *testing.T) {
 		parser = NewParser()
 		parser.AddFlag("id", NewArg(
 			WithType(types.Single),
-			WithValidator(validation.OneOf(
+			WithValidator(validation.Any(
 				validation.Email(),
-				mustValidate(validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$")),
+				validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"),
 			)),
 		))
 		success = parser.Parse([]string{"--id", "12345"})
@@ -7014,12 +7007,12 @@ func TestValidationHooks(t *testing.T) {
 
 	t.Run("validate standalone flag", func(t *testing.T) {
 		// Custom validator that only accepts "true"
-		onlyTrue := validation.Custom("only-true", func(value string) error {
+		onlyTrue := func(value string) error {
 			if value != "true" {
 				return errors.New("value must be true")
 			}
 			return nil
-		})
+		}
 
 		parser, err := NewParserWith(
 			WithFlag("enabled", NewArg(
@@ -7119,7 +7112,7 @@ func TestValidationHooks(t *testing.T) {
 	})
 
 	t.Run("custom validator", func(t *testing.T) {
-		evenNumber := validation.Custom("even-number", func(value string) error {
+		evenNumber := validation.Custom(func(value string) error {
 			num, err := strconv.Atoi(value)
 			if err != nil {
 				return errors.New("value must be a number")
@@ -7251,9 +7244,9 @@ func TestValidationWithSecureFlags(t *testing.T) {
 			WithSecurePrompt("Enter password: "),
 			WithValidators(
 				validation.MinLength(8),
-				mustValidate(validation.Regex(`[A-Z]`, "Must contain uppercase")),
-				mustValidate(validation.Regex(`[a-z]`, "Must contain lowercase")),
-				mustValidate(validation.Regex(`[0-9]`, "Must contain digit")),
+				validation.Regex(`[A-Z]`, "Must contain uppercase"),
+				validation.Regex(`[a-z]`, "Must contain lowercase"),
+				validation.Regex(`[0-9]`, "Must contain digit"),
 			),
 		))
 
@@ -7329,7 +7322,7 @@ func TestValidationIntegration(t *testing.T) {
 func TestBuiltInValidators(t *testing.T) {
 	tests := []struct {
 		name      string
-		validator validation.Validator
+		validator validation.ValidatorFunc
 		valid     []string
 		invalid   []string
 	}{
@@ -7386,12 +7379,12 @@ func TestBuiltInValidators(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, valid := range tt.valid {
-				err := tt.validator.Validate(valid)
+				err := tt.validator(valid)
 				assert.NoError(t, err, "Expected %q to be valid", valid)
 			}
 
 			for _, invalid := range tt.invalid {
-				err := tt.validator.Validate(invalid)
+				err := tt.validator(invalid)
 				assert.Error(t, err, "Expected %q to be invalid", invalid)
 			}
 		})
@@ -7765,9 +7758,9 @@ func TestComposableValidatorsProgrammatic(t *testing.T) {
 			WithFlag("id", NewArg(
 				WithDescription("User or Employee ID"),
 				WithValidator(validation.OneOf(
-					mustValidate(validation.Regex("^EMP-\\d{6}$", "Employee ID (EMP-123456)")),
-					mustValidate(validation.Regex("^USR-\\d{8}$", "User ID (USR-12345678)")),
-					mustValidate(validation.Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "UUID")),
+					validation.Regex("^EMP-\\d{6}$", "Employee ID (EMP-123456)"),
+					validation.Regex("^USR-\\d{8}$", "User ID (USR-12345678)"),
+					validation.Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "UUID"),
 				)),
 			)),
 		)
@@ -7803,10 +7796,10 @@ func TestComposableValidatorsProgrammatic(t *testing.T) {
 						validation.Email(),
 						validation.All(
 							validation.URL("http", "https"),
-							validation.Not(mustValidate(validation.Regex("://localhost", "localhost URL"))),
+							validation.Not(validation.Regex("://localhost", "localhost URL")),
 						),
 					),
-					validation.Not(mustValidate(validation.Regex("test", "contains 'test'"))),
+					validation.Not(validation.Regex("test", "contains 'test'")),
 				)),
 			)),
 		)
@@ -7844,10 +7837,10 @@ func TestParserValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator.Validate("user@example.com"), "should accept email")
-		assert.NoError(t, validator.Validate("http://example.com"), "should accept URL")
-		assert.NoError(t, validator.Validate("12345"), "should accept integer")
-		assert.Error(t, validator.Validate("not-valid"), "should reject invalid input")
+		assert.NoError(t, validator("user@example.com"), "should accept email")
+		assert.NoError(t, validator("http://example.com"), "should accept URL")
+		assert.NoError(t, validator("12345"), "should accept integer")
+		assert.Error(t, validator("not-valid"), "should reject invalid input")
 	})
 
 	t.Run("Parse nested composition", func(t *testing.T) {
@@ -7859,10 +7852,10 @@ func TestParserValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator.Validate("longuser@example.com"), "10+ char email")
-		assert.NoError(t, validator.Validate("http://short.com"), "URL under 50 chars")
-		assert.Error(t, validator.Validate("a@b.c"), "email too short")
-		assert.Error(t, validator.Validate("http://"+strings.Repeat("x", 50)+".com"), "URL too long")
+		assert.NoError(t, validator("longuser@example.com"), "10+ char email")
+		assert.NoError(t, validator("http://short.com"), "URL under 50 chars")
+		assert.Error(t, validator("a@b.c"), "email too short")
+		assert.Error(t, validator("http://"+strings.Repeat("x", 50)+".com"), "URL too long")
 	})
 
 	t.Run("Parse not validator", func(t *testing.T) {
@@ -7874,9 +7867,9 @@ func TestParserValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator.Validate("user"), "should accept non-reserved")
-		assert.Error(t, validator.Validate("admin"), "should reject reserved")
-		assert.Error(t, validator.Validate("root"), "should reject reserved")
+		assert.NoError(t, validator("user"), "should accept non-reserved")
+		assert.Error(t, validator("admin"), "should reject reserved")
+		assert.Error(t, validator("root"), "should reject reserved")
 	})
 }
 
@@ -8450,21 +8443,22 @@ func TestStructTagValidators(t *testing.T) {
 
 func TestStructTagValidatorCombinations(t *testing.T) {
 	// Test more complex validator combinations
+
 	type Config struct {
 		// Email with multiple validations
-		AdminEmail string `goopt:"name:admin-email;validators:email,minlength(10)"`
+		AdminEmail string `goopt:"name:admin-email;validators:email,minlength(10);path:cmd"`
 
 		// Port number with range
-		Port int `goopt:"name:port;validators:range(1024,65535)"`
+		Port int `goopt:"name:port;validators:range(1024,65535);path:cmd"`
 
 		// Percentage with min/max
-		Percentage float64 `goopt:"name:percentage;validators:min(0),max(100)"`
+		Percentage float64 `goopt:"name:percentage;validators:min(0),max(100);path:cmd"`
 
 		// Strong password requirements
-		Password string `goopt:"name:password;validators:minlength(12)"`
+		Password string `goopt:"name:password;validators:minlength(12);path:cmd"`
 
 		// Identifier with specific pattern
-		ProjectID string `goopt:"name:project-id;validators:regex(^proj-[0-9]{4}$)"`
+		ProjectID string `goopt:"name:project-id;validators:regex(pattern:^proj-[0-9]{4}$,desc:goopt.msg.help_mode_flags_desc);path:cmd"`
 	}
 
 	parser, err := NewParserFromStruct(&Config{})
@@ -8517,6 +8511,7 @@ func TestStructTagValidatorCombinations(t *testing.T) {
 
 		errors := parser.GetErrors()
 		assert.True(t, hasError(errors, test.expectedErr), "Expected %v for args %v, got: %v", test.expectedErr, test.args, errors)
+		fmt.Println(errors[0])
 	}
 }
 
@@ -8580,7 +8575,7 @@ func TestAcceptedValuesI18n(t *testing.T) {
 	t.Run("desc as translation key in user bundle", func(t *testing.T) {
 		// Create a user bundle with translations
 		userBundle := i18n.NewEmptyBundle()
-		userBundle.SetDefaultLanguage(language.English)
+
 		userBundle.AddLanguage(language.English, map[string]string{
 			"format.description": "Supported output formats",
 			"env.description":    "Environment to deploy to",
@@ -8588,7 +8583,6 @@ func TestAcceptedValuesI18n(t *testing.T) {
 
 		parser := NewParser()
 		parser.SetUserBundle(userBundle)
-
 		// Add flag with accepted values using translation keys
 		parser.AddFlag("format", NewArg(
 			WithType(types.Single),

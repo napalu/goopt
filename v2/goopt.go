@@ -16,12 +16,14 @@
 package goopt
 
 import (
+	"errors"
 	"fmt"
+	"sync"
+
 	"github.com/napalu/goopt/v2/input"
 	"github.com/napalu/goopt/v2/internal/messages"
 	"github.com/napalu/goopt/v2/validation"
 	"golang.org/x/text/language"
-	"sync"
 
 	"io"
 	"os"
@@ -165,7 +167,6 @@ func (p *Parser) SetSystemLanguage(lang language.Tag) error {
 		return err
 	}
 
-	// The layered provider will automatically use the new language
 	return nil
 }
 
@@ -235,7 +236,7 @@ func (p *Parser) ExecuteCommands() int {
 				p.callbackResults[cmd.path] = preErr
 				callbackErrors++
 				// Execute post-hooks even on pre-hook failure
-				p.executePostHooks(cmd, preErr)
+				_ = p.executePostHooks(cmd, preErr)
 				continue
 			}
 
@@ -269,7 +270,7 @@ func (p *Parser) ExecuteCommand() error {
 			if preErr := p.executePreHooks(cmd); preErr != nil {
 				p.callbackResults[cmd.path] = preErr
 				// Execute post-hooks even on pre-hook failure
-				p.executePostHooks(cmd, preErr)
+				_ = p.executePostHooks(cmd, preErr)
 				return preErr
 			}
 
@@ -547,7 +548,7 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 
 	// Execute any remaining command callback after parsing is done
 	if lastCommandPath != "" {
-		lastCommandPath = p.evalExecOnParse(lastCommandPath)
+		_ = p.evalExecOnParse(lastCommandPath)
 	}
 
 	// Validate all processed options
@@ -992,15 +993,10 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 		p.storeShortFlag(argument.Short, lookupFlag, commandPath...)
 	}
 
-	p.lookup[argument.uuid] = flag
+	p.lookup[argument.uniqueID] = flag
 
 	if argument.TypeOf == types.Empty {
 		argument.TypeOf = types.Single
-	}
-
-	// Convert AcceptedValues to validators with translation support
-	if len(argument.AcceptedValues) > 0 {
-		p.convertAcceptedValuesToValidators(argument)
 	}
 
 	p.acceptedFlags.Set(lookupFlag, &FlagInfo{
@@ -1461,7 +1457,16 @@ func (p *Parser) FlagPath(flag string) string {
 
 // GetErrors returns a list of the errors encountered during Parse
 func (p *Parser) GetErrors() []error {
-	return p.errors
+	out := make([]error, len(p.errors))
+	var te i18n.TranslatableError
+	for i, e := range p.errors {
+		if errors.As(e, &te) {
+			out[i] = errs.WithProvider(te, p.layeredProvider)
+		} else {
+			out[i] = e
+		}
+	}
+	return out
 }
 
 // GetErrorCount is greater than zero when errors were encountered during Parse.
@@ -1533,7 +1538,7 @@ func (p *Parser) PrintUsage(writer io.Writer) {
 func (p *Parser) PrintUsageWithGroups(writer io.Writer, config ...*PrettyPrintConfig) {
 	_, _ = writer.Write([]byte(p.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]) + "\n"))
 	var prettyPrintConfig *PrettyPrintConfig
-	if config != nil && len(config) > 0 {
+	if len(config) > 0 {
 		prettyPrintConfig = config[0]
 	} else {
 		prettyPrintConfig = &PrettyPrintConfig{
@@ -1639,11 +1644,12 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 			kv.Value.Visit(func(cmd *Command, level int) bool {
 				// Determine the correct prefix based on command level and position
 				var prefix string
-				if level == 0 {
+				switch {
+				case level == 0:
 					prefix = config.NewCommandPrefix
-				} else if len(cmd.Subcommands) == 0 {
+				case len(cmd.Subcommands) == 0:
 					prefix = config.TerminalPrefix
-				} else {
+				default:
 					prefix = config.DefaultPrefix
 				}
 
@@ -2290,7 +2296,7 @@ func (p *Parser) executePostHooks(cmd *Command, cmdErr error) error {
 }
 
 // AddFlagValidators adds multiple validators for a flag
-func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validator) error {
+func (p *Parser) AddFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -2306,7 +2312,7 @@ func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validat
 }
 
 // SetFlagValidators replaces all validators for a flag
-func (p *Parser) SetFlagValidators(flag string, validators ...validation.Validator) error {
+func (p *Parser) SetFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -2335,22 +2341,4 @@ func (p *Parser) ClearFlagValidators(flag string) error {
 	// Clear validators
 	flagInfo.Argument.Validators = nil
 	return nil
-}
-
-// convertAcceptedValuesToValidators converts AcceptedValues to validators
-// This is an internal helper method used during argument processing
-func (p *Parser) convertAcceptedValuesToValidators(arg *Argument) {
-	if len(arg.AcceptedValues) == 0 {
-		return
-	}
-
-	// Create a new ConvertedAcceptedValuesValidator using the new interface
-	acceptedValidator := validation.NewConvertedAcceptedValuesValidator(arg.AcceptedValues, p.layeredProvider)
-
-	// Prepend to the validators list
-	arg.Validators = append([]validation.Validator{acceptedValidator}, arg.Validators...)
-
-	// Keep AcceptedValues populated for backward compatibility with HasAcceptedValues
-	// The actual validation will use the validators, but we maintain the original
-	// AcceptedValues for inspection methods like HasAcceptedValues and GetAcceptPatterns
 }

@@ -25,9 +25,7 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		if !doAppend {
 			*(t) = values
 		} else {
-			for _, v := range values {
-				*t = append(*t, v)
-			}
+			*t = append(*t, values...)
 		}
 	case *complex64:
 		val, err := strconv.ParseComplex(value, 64)

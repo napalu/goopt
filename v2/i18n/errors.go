@@ -3,9 +3,6 @@ package i18n
 import (
 	"errors"
 	"fmt"
-	"sync"
-
-	"golang.org/x/text/language"
 )
 
 // TranslatableError represents an error that can be translated
@@ -17,46 +14,7 @@ type TranslatableError interface {
 	WithArgs(args ...interface{}) TranslatableError
 	Wrap(err error) TranslatableError
 	Is(target error) bool
-	SetProvider(provider MessageProvider)
-}
-
-// MessageProvider defines an interface for getting default messages
-type MessageProvider interface {
-	GetMessage(key string) string
-}
-
-// BundleMessageProvider implements MessageProvider using a bundle
-type BundleMessageProvider struct {
-	bundle *Bundle
-}
-
-// NewBundleMessageProvider creates a new provider with a bundle
-func NewBundleMessageProvider(bundle *Bundle) *BundleMessageProvider {
-	return &BundleMessageProvider{
-		bundle: bundle,
-	}
-}
-
-// GetMessage returns the message for the given key from the bundle
-func (p *BundleMessageProvider) GetMessage(key string) string {
-	if p.bundle == nil {
-		return key
-	}
-
-	if translations, ok := p.bundle.translations[p.bundle.GetDefaultLanguage()]; ok {
-		if translation, ok := translations[key]; ok {
-			return translation
-		}
-	}
-
-	// Fallback to English
-	if translations, ok := p.bundle.translations[language.English]; ok {
-		if translation, ok := translations[key]; ok {
-			return translation
-		}
-	}
-
-	return key
+	Format(provider MessageProvider) string
 }
 
 // TrError represents a translatable error with optional formatting arguments
@@ -77,19 +35,14 @@ type TrError struct {
 	args []interface{}
 	// Optional wrapped error
 	wrapped error
-	// New field
-	messageProvider MessageProvider
 }
 
 // NewError creates a new translatable error with a key
 func NewError(key string) *TrError {
-	provider := getDefaultProvider()
-	defaultMsg := provider.GetMessage(key)
-	sentinel := errors.New(defaultMsg)
+	sentinel := errors.New(key)
 	return &TrError{
-		sentinel:        sentinel,
-		key:             key,
-		messageProvider: provider,
+		sentinel: sentinel,
+		key:      key,
 	}
 }
 
@@ -98,44 +51,33 @@ func NewErrorWithProvider(key string, provider MessageProvider) *TrError {
 	defaultMsg := provider.GetMessage(key)
 	sentinel := errors.New(defaultMsg)
 	return &TrError{
-		sentinel:        sentinel,
-		key:             key,
-		messageProvider: provider,
+		sentinel: sentinel,
+		key:      key,
 	}
 }
 
 // Error returns the default message, formatted with args if provided
 func (e *TrError) Error() string {
-	msg := e.messageProvider.GetMessage(e.key)
-	if len(e.args) > 0 {
-		msg = fmt.Sprintf(msg, e.args...)
-	}
-
-	if e.wrapped != nil {
-		return fmt.Sprintf("%s: %v", msg, e.wrapped)
-	}
-	return msg
+	return e.Format(getDefaultProvider())
 }
 
 // WithArgs returns a copy of the error with format arguments
 func (e *TrError) WithArgs(args ...interface{}) TranslatableError {
 	return &TrError{
-		sentinel:        e.sentinel,
-		key:             e.key,
-		args:            args,
-		wrapped:         e.wrapped,
-		messageProvider: e.messageProvider,
+		sentinel: e.sentinel,
+		key:      e.key,
+		args:     args,
+		wrapped:  e.wrapped,
 	}
 }
 
 // Wrap returns a new error that wraps another error
 func (e *TrError) Wrap(err error) TranslatableError {
 	return &TrError{
-		sentinel:        e.sentinel,
-		key:             e.key,
-		args:            e.args,
-		wrapped:         err,
-		messageProvider: e.messageProvider,
+		sentinel: e.sentinel,
+		key:      e.key,
+		args:     e.args,
+		wrapped:  err,
 	}
 }
 
@@ -164,37 +106,22 @@ func (e *TrError) Unwrap() error {
 	return e.wrapped
 }
 
-func (e *TrError) SetProvider(provider MessageProvider) {
-	e.messageProvider = provider
-}
-
-// Package-level provider management
-var (
-	defaultProvider    MessageProvider
-	defaultProviderMux sync.RWMutex
-)
-
-// SetDefaultMessageProvider allows users to set their own provider
-func SetDefaultMessageProvider(p MessageProvider) {
-	defaultProviderMux.Lock()
-	defer defaultProviderMux.Unlock()
-	defaultProvider = p
-}
-
-func getDefaultProvider() MessageProvider {
-	defaultProviderMux.RLock()
-	if defaultProvider != nil {
-		defer defaultProviderMux.RUnlock()
-		return defaultProvider
+func (e *TrError) Format(provider MessageProvider) string {
+	msg := provider.GetMessage(e.key)
+	if len(e.args) > 0 {
+		translatedArgs := make([]interface{}, len(e.args))
+		for i, arg := range e.args {
+			if t, ok := arg.(Translatable); ok {
+				translatedArgs[i] = t.T(provider)
+			} else {
+				translatedArgs[i] = arg
+			}
+		}
+		msg = fmt.Sprintf(msg, translatedArgs...)
 	}
-	defaultProviderMux.RUnlock()
 
-	// Upgrade to write lock for initialization
-	defaultProviderMux.Lock()
-	defer defaultProviderMux.Unlock()
-
-	if defaultProvider == nil {
-		defaultProvider = NewBundleMessageProvider(Default())
+	if e.wrapped != nil {
+		return fmt.Sprintf("%s: %v", msg, e.wrapped)
 	}
-	return defaultProvider
+	return msg
 }

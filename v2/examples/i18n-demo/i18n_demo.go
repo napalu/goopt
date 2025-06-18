@@ -6,12 +6,13 @@ package main
 import (
 	"embed"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/examples/i18n-demo/messages"
 	"github.com/napalu/goopt/v2/i18n"
 	"golang.org/x/text/language"
-	"os"
-	"strings"
 )
 
 //go:embed locales/*.json

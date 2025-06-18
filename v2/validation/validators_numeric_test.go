@@ -34,7 +34,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -68,7 +68,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -98,7 +98,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -129,7 +129,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -163,7 +163,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -209,7 +209,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -244,7 +244,7 @@ func TestNumericValidators(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := validator.Validate(tt.value)
+				err := validator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -292,7 +292,7 @@ func TestIPValidator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.Validate(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -304,7 +304,7 @@ func TestIPValidator(t *testing.T) {
 
 func TestCustomValidator(t *testing.T) {
 	// Test a custom validator that checks if string starts with "test_"
-	customValidator := Custom("starts-with-test", func(value string) error {
+	customValidator := Custom(func(value string) error {
 		if len(value) >= 5 && value[:5] == "test_" {
 			return nil
 		}
@@ -326,7 +326,7 @@ func TestCustomValidator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := customValidator.Validate(tt.value)
+			err := customValidator(tt.value)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -337,15 +337,15 @@ func TestCustomValidator(t *testing.T) {
 
 	// Test nil function
 	t.Run("Nil function", func(t *testing.T) {
-		validator := Custom("any value", nil)
-		err := validator.Validate("any value")
+		validator := Custom(nil)
+		err := validator("any value")
 		assert.NoError(t, err, "nil custom function should not error")
 	})
 
 	// Test a real-world example: UUID validator
 	t.Run("UUID validator", func(t *testing.T) {
 		uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-		uuidValidator := Custom("uuid", func(value string) error {
+		uuidValidator := Custom(func(value string) error {
 			if !uuidRegex.MatchString(strings.ToLower(value)) {
 				return errors.New("value must be a valid UUID")
 			}
@@ -368,7 +368,7 @@ func TestCustomValidator(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := uuidValidator.Validate(tt.value)
+				err := uuidValidator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -380,7 +380,7 @@ func TestCustomValidator(t *testing.T) {
 
 	// Test custom validator with structured errors
 	t.Run("Password strength validator", func(t *testing.T) {
-		passwordValidator := Custom("password-8", func(value string) error {
+		passwordValidator := Custom(func(value string) error {
 			if len(value) < 8 {
 				return errors.New("password must be at least 8 characters")
 			}
@@ -437,7 +437,7 @@ func TestCustomValidator(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				err := passwordValidator.Validate(tt.value)
+				err := passwordValidator(tt.value)
 				if tt.wantErr {
 					assert.Error(t, err)
 					if tt.errMsg != "" {

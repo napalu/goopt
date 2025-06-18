@@ -84,13 +84,13 @@ func TestUserFacingRegex(t *testing.T) {
 
 func TestUserFacingRegexInvalidPattern(t *testing.T) {
 	transformer := NewFormatTransformer(map[string]string{})
-	
+
 	// Test invalid regex pattern
 	err := transformer.SetUserFacingRegexes([]string{"[invalid"})
 	if err == nil {
 		t.Error("Expected error for invalid regex pattern")
 	}
-	
+
 	// Test empty pattern (should be ignored)
 	err = transformer.SetUserFacingRegexes([]string{""})
 	if err != nil {
@@ -106,23 +106,23 @@ func TestUserFacingRegexIntegration(t *testing.T) {
 	stringMap := map[string]string{
 		`"test message"`: "messages.Keys.TestMessage",
 	}
-	
+
 	transformer := NewFormatTransformer(stringMap)
 	err := transformer.SetUserFacingRegexes([]string{`.*\.MsgAll$`})
 	if err != nil {
 		t.Fatalf("Failed to set regex: %v", err)
 	}
-	
+
 	// Should match via regex
 	if !transformer.isUserFacingFunction("s.Log.MsgAll") {
 		t.Error("Expected s.Log.MsgAll to match regex")
 	}
-	
+
 	// Should still match built-in patterns
 	if !transformer.isUserFacingFunction("fmt.Println") {
 		t.Error("Expected fmt.Println to match built-in pattern")
 	}
-	
+
 	// Should not match neither
 	if transformer.isUserFacingFunction("db.Query") {
 		t.Error("Expected db.Query to not match")

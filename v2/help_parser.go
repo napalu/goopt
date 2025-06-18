@@ -188,8 +188,6 @@ func (h *HelpParser) Parse(args []string) error {
 			return h.renderCommandHelp(writer, commandPath)
 		}
 	}
-
-	return nil
 }
 
 func (h *HelpParser) normalize(args []string) ([]string, int) {
@@ -323,8 +321,10 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 
 	// Show available commands
 	fmt.Fprintf(writer, "%s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableCommandsKey))
-	h.showCommandsOnly(writer)
-
+	err := h.showCommandsOnly(writer)
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(writer, "\n%s\n",
 		h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUseHelpForInfoKey, os.Args[0]))
 
@@ -804,7 +804,7 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 // showAll shows all help information
 func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 	h.showVersionHeader(writer)
-
+	var err error
 	if commandPath == "" {
 		// Show usage
 		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
@@ -829,17 +829,20 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		fmt.Fprintln(writer)
 
 		// Show examples
-		h.showExamples(writer, "")
+		err = h.showExamples(writer, "")
 	} else {
 		// Show detailed command help
-		h.renderCommandHelp(writer, commandPath)
+		err = h.renderCommandHelp(writer, commandPath)
+		if err != nil {
+			return err
+		}
 		fmt.Fprintln(writer)
 
 		// Show command-specific examples
-		h.showExamples(writer, commandPath)
+		err = h.showExamples(writer, commandPath)
 	}
 
-	return nil
+	return err
 }
 
 // Helper methods
@@ -1062,16 +1065,17 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 		mainPrefix := strings.TrimSpace(pp.DefaultPrefix)
 		termPrefix := strings.TrimSpace(pp.TerminalPrefix)
 
-		for i, subcmd := range cmd.Subcommands {
+		for i := range cmd.Subcommands {
 			prefix := mainPrefix
 			if i == len(cmd.Subcommands)-1 {
 				prefix = termPrefix
 			}
 
+			subCmd := &cmd.Subcommands[i]
 			fmt.Fprintf(writer, " %s %s - %s\n",
 				prefix,
-				subcmd.Name,
-				h.mainParser.renderer.CommandDescription(&subcmd))
+				subCmd.Name,
+				h.mainParser.renderer.CommandDescription(subCmd))
 		}
 	}
 
