@@ -55,9 +55,6 @@ type Bundle struct {
 	isImmutable        bool // Prevents modification when true
 }
 
-// TranslatableFunc is a function which returns a translated string with formatted arguments
-type TranslatableFunc func(args ...interface{}) string
-
 // Translator is an interface for handling internationalization and localization of strings in an application.
 // T retrieves a localized string based on a key and optional arguments for formatting.
 // TL retrieves a localized string based on language, key and optional arguments for formatting.
