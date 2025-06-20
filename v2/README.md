@@ -13,7 +13,7 @@
 
 `goopt`'s built-in internationalization system allows you to ship a single binary that provides a localized experience for users around the world. All system messages, error descriptions, and help text can be translated.
 
-![goopt Internationalization Demo](https://github.com/napalu/goopt/blob/main/docs/assets/i18n-demo.gif?raw=true)
+![goopt Internationalization Demo](https://github.com/napalu/goopt/blob/main/v2/docs/assets/i18n-demo.gif?raw=true)
 *(This demo shows the same `--help` flag producing fully translated output for English, German, French, Spanish, and Japanese, switched dynamically at runtime.)*
 
 ---
@@ -111,14 +111,14 @@ Hello, World!
 
 For detailed guides, tutorials, and a full API reference, visit the official documentation site.
 
-➡️ **[Explore the Full `goopt` Documentation](https://napalu.github.io/goopt/v2/)**
+➡️ **[Explore the Full `goopt` Documentation](https://napalu.github.io/goopt/)**
 
 Start with these key topics:
-- **[Core Concepts](./v2/core-concepts.md)**
-- **[Defining Your CLI](./v2/defining-your-cli/index.md)**
-- **[Validation Guide](./v2/advanced-features/01-validation.md)**
-- **[Execution Hooks](./v2/advanced-features/02-execution-hooks.md)**
-- **[Internationalization](./v2/internationalization/index.md)**
+- **[Core Concepts](https://napalu.github.io/goopt/v2/core-concepts/)**
+- **[Defining Your CLI](https://napalu.github.io/goopt/v2/defining-your-cli/index/)**
+- **[Validation Guide](https://napalu.github.io/goopt/v2/advanced-features/01-validation/)**
+- **[Execution Hooks](https://napalu.github.io/goopt/v2/advanced-features/02-execution-hooks/)**
+- **[Internationalization](https://napalu.github.io/goopt/v2/internationalization/index/)**
 
 ---
 
