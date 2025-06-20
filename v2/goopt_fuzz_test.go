@@ -37,7 +37,6 @@ func FuzzParseFlags(f *testing.F) {
 
 		// Setup parser with common flags
 		p := NewParser()
-		//p.SetPosix(true)
 		p.AddFlag("a", NewArg(WithShortFlag("a")))
 		p.AddFlag("xtra", NewArg(WithShortFlag("x"), WithType(types.Standalone)))
 		p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone)))

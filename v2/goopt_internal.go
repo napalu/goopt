@@ -3,7 +3,7 @@ package goopt
 import (
 	"errors"
 	"fmt"
-	"github.com/napalu/goopt/v2/input"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +11,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/napalu/goopt/v2/input"
+	"github.com/napalu/goopt/v2/internal/messages"
 
 	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/errs"
@@ -20,6 +23,7 @@ import (
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/napalu/goopt/v2/types/queue"
+	"github.com/napalu/goopt/v2/validation"
 )
 
 func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
@@ -120,11 +124,22 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 					}
 				}
 			}
+
+			// Run validators on standalone flag value
+			if len(argument.Validators) > 0 {
+				for _, validator := range argument.Validators {
+					if err := validator(boolVal); err != nil {
+						p.addError(wrapProcessingFlagError(err, lookup))
+						return
+					}
+				}
+			}
+
 			p.registerFlagValue(lookup, boolVal, currentArg)
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(errs.ErrProcessingFlag.WithArgs(lookup).Wrap(err))
+				p.addError(wrapProcessingFlagError(err, lookup))
 			}
 		}
 	case types.Single, types.Chained, types.File:
@@ -231,9 +246,6 @@ func (p *Parser) ensureInit() {
 	}
 	if p.maxDependencyDepth <= 0 {
 		p.maxDependencyDepth = DefaultMaxDependencyDepth
-	}
-	if p.i18n == nil {
-		p.i18n = i18n.Default()
 	}
 }
 
@@ -379,16 +391,15 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				argPos = 0 // Reset position counter for new command
 			}
 		} else {
-			if p.isCommand(strings.Join(append(currentCmdPath, arg), " ")) {
+			switch {
+			case p.isCommand(strings.Join(append(currentCmdPath, arg), " ")):
 				currentCmdPath = append(currentCmdPath, arg)
 				isCmd = true
-			} else if p.isCommand(arg) {
-				// Start a new command path for root-level command
+			case p.isCommand(arg):
 				currentCmdPath = []string{arg}
 				isCmd = true
-				argPos = 0 // Reset position counter for new command
-			} else {
-				// This is a positional argument, don't clear the path
+				argPos = 0
+			default:
 			}
 		}
 
@@ -413,6 +424,16 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			if decl.flag.CommandPath == cmdPath && *decl.flag.Argument.Position == argPos {
 				pa.Argument = decl.flag.Argument
 				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+
+				// Run validators on positional argument
+				if len(decl.flag.Argument.Validators) > 0 {
+					for _, validator := range decl.flag.Argument.Validators {
+						if err := validator(arg); err != nil {
+							p.addError(wrapProcessingFlagError(err, lookup))
+						}
+					}
+				}
+
 				p.registerFlagValue(lookup, arg, arg)
 				p.options[lookup] = arg
 				if err := p.setBoundVariable(arg, lookup); err != nil {
@@ -602,6 +623,22 @@ func (p *Parser) addError(err error) {
 	p.errors = append(p.errors, err)
 }
 
+// wrapProcessingFlagError wraps an error with ErrProcessingFlag if it's not already wrapped
+func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
+	// 1) If err already wraps ErrProcessingFlag, just extract
+	//    the TranslatableError for that sentinel and return it.
+	var te i18n.TranslatableError
+	if errors.Is(err, errs.ErrProcessingFlag) && errors.As(err, &te) {
+		return te
+	}
+
+	// 2) Otherwise wrap whatever you got in a new TrError
+	return errs.
+		ErrProcessingFlag.
+		WithArgs(flag).
+		Wrap(err)
+}
+
 func (p *Parser) getCommand(name string) (*Command, bool) {
 	cmd, found := p.registeredCommands.Get(name)
 
@@ -743,7 +780,7 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
-					p.addError(errs.ErrProcessingFlag.WithArgs(flag).Wrap(err))
+					p.addError(wrapProcessingFlagError(err, flag))
 				}
 			}
 		}
@@ -783,6 +820,32 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 	return arg, err
 }
 
+// findSimilarSubcommands finds subcommands similar to the input
+func (p *Parser) findSimilarSubcommands(subcommands []Command, input string) []string {
+	var suggestions []string
+	threshold := 2 // Levenshtein distance threshold
+
+	for _, cmd := range subcommands {
+		distance := util.LevenshteinDistance(input, cmd.Name)
+		// Skip exact matches (distance 0) and only suggest similar commands
+		if distance > 0 && distance <= threshold {
+			suggestions = append(suggestions, cmd.Name)
+		}
+	}
+
+	// Sort by similarity
+	sort.Slice(suggestions, func(i, j int) bool {
+		return util.LevenshteinDistance(input, suggestions[i]) < util.LevenshteinDistance(input, suggestions[j])
+	})
+
+	// Limit to top 3
+	if len(suggestions) > 3 {
+		suggestions = suggestions[:3]
+	}
+
+	return suggestions
+}
+
 func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string) (bool, *Command) {
 	found := false
 	var sub Command
@@ -804,7 +867,21 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		cmdQueue.Push(&sub) // Keep subcommands in the queue
 		return true, &sub
 	} else if len(currentCmd.Subcommands) > 0 {
-		p.addError(errs.ErrCommandExpectsSubcommand.WithArgs(currentCmd.Name, currentCmd.Subcommands))
+		// Check if the current arg looks like it was meant to be a subcommand
+		// (not a flag or positional argument)
+		if !p.isFlag(currentArg) {
+			// Find similar subcommands
+			suggestions := p.findSimilarSubcommands(currentCmd.Subcommands, currentArg)
+			if len(suggestions) > 0 {
+				// Create a more helpful error message
+				p.addError(errs.ErrCommandNotFound.WithArgs(currentCmd.Name + " " + currentArg))
+				// Add a hint about similar commands
+				p.addError(fmt.Errorf("Did you mean one of these?\n  %s", strings.Join(suggestions, "\n  ")))
+			} else {
+				// No similar commands found, show available subcommands
+				p.addError(errs.ErrCommandExpectsSubcommand.WithArgs(currentCmd.Name, currentCmd.Subcommands))
+			}
+		}
 	}
 
 	return false, nil
@@ -812,8 +889,11 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 
 func (p *Parser) processValueFlag(currentArg string, next string, argument *Argument) error {
 	var processed string
-	if len(argument.AcceptedValues) > 0 {
-		processed = p.processSingleValue(next, currentArg, argument)
+	var validationPassed bool = true
+
+	// Use processSingleValue if we have AcceptedValues or Validators
+	if len(argument.AcceptedValues) > 0 || len(argument.Validators) > 0 {
+		processed, validationPassed = p.processSingleValue(next, currentArg, argument)
 	} else {
 		haveFilters := argument.PreFilter != nil || argument.PostFilter != nil
 		if argument.PreFilter != nil {
@@ -833,7 +913,22 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 		}
 	}
 
-	return p.setBoundVariable(processed, currentArg)
+	// Run validators on the final processed value
+	// Skip for chained types as they are validated individually in checkMultiple
+	// Also skip if validation already failed in processSingleValue
+	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
+		for _, validator := range argument.Validators {
+			if err := validator(processed); err != nil {
+				return wrapProcessingFlagError(err, currentArg)
+			}
+		}
+	}
+
+	// Only set bound variable if validation passed
+	if validationPassed {
+		return p.setBoundVariable(processed, currentArg)
+	}
+	return nil
 }
 
 func (p *Parser) processSecureFlag(name string, config *types.Secure) {
@@ -851,16 +946,29 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 		prompt = config.Prompt
 	}
 	if pass, err := input.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader()); err == nil {
+		// Get the argument info to run validators
+		if argInfo := p.getArgumentInfoByID(name); argInfo != nil && argInfo.Argument != nil {
+			// Run validators on secure value
+			if len(argInfo.Argument.Validators) > 0 {
+				for _, validator := range argInfo.Argument.Validators {
+					if err := validator(pass); err != nil {
+						p.addError(wrapProcessingFlagError(err, name))
+						return
+					}
+				}
+			}
+		}
+
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
-			p.addError(errs.ErrProcessingFlag.WithArgs(name).Wrap(err))
+			p.addError(wrapProcessingFlagError(err, name))
 		}
 	} else {
 		p.addError(errs.ErrSecureFlagExpectsValue.WithArgs(name).Wrap(err))
 	}
 }
 
-func (p *Parser) processSingleValue(next, key string, argument *Argument) string {
+func (p *Parser) processSingleValue(next, key string, argument *Argument) (string, bool) {
 	switch argument.TypeOf {
 	case types.Single:
 		return p.checkSingle(next, key, argument)
@@ -868,10 +976,27 @@ func (p *Parser) processSingleValue(next, key string, argument *Argument) string
 		return p.checkMultiple(next, key, argument)
 	}
 
-	return ""
+	return "", false
 }
 
-func (p *Parser) checkSingle(next, flag string, argument *Argument) string {
+// getPatternDescription returns the description for a PatternValue, checking i18n first
+func (p *Parser) getPatternDescription(pv types.PatternValue) string {
+	if pv.Description == "" {
+		return pv.Pattern
+	}
+
+	// First check if it's a translation key
+	msg := p.layeredProvider.GetMessage(pv.Description)
+	if msg != pv.Description {
+		// It was translated, return the translation
+		return msg
+	}
+
+	// Otherwise return the description as-is (literal string)
+	return pv.Description
+}
+
+func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, bool) {
 	var errBuf = strings.Builder{}
 	var valid = false
 	var value string
@@ -881,68 +1006,106 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) string {
 		value = next
 	}
 
-	lenValues := len(argument.AcceptedValues)
-	for i, v := range argument.AcceptedValues {
-		if v.Compiled.MatchString(value) {
-			valid = true
-		} else {
-			errBuf.WriteString(v.Describe())
-			if i+1 < lenValues {
-				errBuf.WriteString(", ")
+	// Skip AcceptedValues check if we have validators (they're converted to validators now)
+	if len(argument.Validators) == 0 && len(argument.AcceptedValues) > 0 {
+		// Legacy path: Check AcceptedValues only if no validators
+		for _, v := range argument.AcceptedValues {
+			if v.Compiled != nil && v.Compiled.MatchString(value) {
+				valid = true
+				break
+			}
+		}
+
+		if !valid {
+			// Build error message with all accepted patterns
+			lenValues := len(argument.AcceptedValues)
+			for i, v := range argument.AcceptedValues {
+				errBuf.WriteString(p.getPatternDescription(v))
+				if i+1 < lenValues {
+					errBuf.WriteString(", ")
+				}
+			}
+			p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
+			return "", false
+		}
+	}
+
+	// Run validators (if any) - this includes converted AcceptedValues
+	if len(argument.Validators) > 0 {
+		for _, validator := range argument.Validators {
+			if err := validator(value); err != nil {
+				p.addError(wrapProcessingFlagError(err, flag))
+				return "", false
 			}
 		}
 	}
 
+	// Step 3: Apply post-filter
 	if argument.PostFilter != nil {
 		value = argument.PostFilter(value)
 	}
-	if valid {
-		p.registerFlagValue(flag, value, next)
-	} else {
-		p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
-	}
 
-	return value
+	// All validations passed
+	p.registerFlagValue(flag, value, next)
+	return value, true
 }
 
-func (p *Parser) checkMultiple(next, flag string, argument *Argument) string {
-	valid := 0
-	errBuf := strings.Builder{}
+func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, bool) {
 	listDelimFunc := p.getListDelimiterFunc()
 	args := strings.FieldsFunc(next, listDelimFunc)
 
+	// Process each value in the list
 	for i := 0; i < len(args); i++ {
+		// Apply pre-filter
 		if argument.PreFilter != nil {
 			args[i] = argument.PreFilter(args[i])
 		}
 
-		for _, v := range argument.AcceptedValues {
-			if v.Compiled.MatchString(args[i]) {
-				valid++
+		// Skip AcceptedValues check if we have validators (they're converted to validators now)
+		if len(argument.Validators) == 0 && len(argument.AcceptedValues) > 0 {
+			// Legacy path: Check AcceptedValues only if no validators
+			matched := false
+			for _, v := range argument.AcceptedValues {
+				if v.Compiled != nil && v.Compiled.MatchString(args[i]) {
+					matched = true
+					break
+				}
+			}
+
+			if !matched {
+				// Build error message with all accepted patterns
+				var errBuf strings.Builder
+				lenValues := len(argument.AcceptedValues)
+				for j, v := range argument.AcceptedValues {
+					errBuf.WriteString(p.getPatternDescription(v))
+					if j+1 < lenValues {
+						errBuf.WriteString(", ")
+					}
+				}
+				p.addError(errs.ErrInvalidArgument.WithArgs(args[i], flag, errBuf.String()))
+				return "", false
 			}
 		}
 
+		if len(argument.Validators) > 0 {
+			for _, validator := range argument.Validators {
+				if err := validator(args[i]); err != nil {
+					p.addError(wrapProcessingFlagError(err, flag))
+					return "", false
+				}
+			}
+		}
+
+		// Step 3: Apply post-filter
 		if argument.PostFilter != nil {
 			args[i] = argument.PostFilter(args[i])
 		}
 	}
 
+	// All validations passed for all values
 	value := strings.Join(args, "|")
-	if valid == len(args) {
-		p.registerFlagValue(flag, value, next)
-	} else {
-		lenValues := len(argument.AcceptedValues)
-		for i := 0; i < lenValues; i++ {
-			v := argument.AcceptedValues[i]
-			errBuf.WriteString(v.Describe())
-			if i+1 < lenValues {
-				errBuf.WriteString(", ")
-			}
-		}
-		p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
-	}
-
-	return value
+	p.registerFlagValue(flag, value, next)
+	return value, true
 }
 
 func (p *Parser) validateProcessedOptions() {
@@ -1277,7 +1440,11 @@ func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg
 			}
 		}
 
-		*arg = *toArgument(config)
+		newArg, err := toArgument(config)
+		if err != nil {
+			return "", "", err
+		}
+		*arg = *newArg
 		return config.Name, config.Path, nil
 	}
 
@@ -1288,25 +1455,66 @@ func unmarshalTagsToArgument(bundle *i18n.Bundle, field reflect.StructField, arg
 	return "", "", errs.ErrNoValidTags
 }
 
-func toArgument(c *types.TagConfig) *Argument {
-	arg := NewArg(WithType(c.TypeOf),
+func toArgument(c *types.TagConfig) (*Argument, error) {
+
+	configs := []ConfigureArgumentFunc{
+		WithType(c.TypeOf),
 		WithDescription(c.Description),
 		WithDefaultValue(c.Default),
 		WithDescriptionKey(c.DescriptionKey),
-		WithAcceptedValues(c.AcceptedValues),
 		WithDependencyMap(c.DependsOn),
 		WithShortFlag(c.Short),
 		WithRequired(c.Required),
-	)
-	if c.Secure.IsSecure {
-		arg.Secure = c.Secure
+		WithAcceptedValues(c.AcceptedValues),
+		WithDefaultValue(c.Default),
 	}
 
-	if c.Position != nil {
-		arg.Position = c.Position
+	// Convert AcceptedValues to validators for internal processing
+	// but still store them as AcceptedValues for backward compatibility (help text, etc.)
+	var acceptedValueValidators []validation.ValidatorFunc
+	if len(c.AcceptedValues) > 0 {
+		// Store AcceptedValues for help text and backward compatibility
+		configs = append(configs, WithAcceptedValues(c.AcceptedValues))
+
+		// Create validators from AcceptedValues
+		for _, av := range c.AcceptedValues {
+			// Each AcceptedValue becomes a regex validator
+			validator := validation.Regex(av.Pattern, av.Description)
+			acceptedValueValidators = append(acceptedValueValidators, validator)
+		}
 	}
 
-	return arg
+	// Parse and add validators
+	var allValidators []validation.ValidatorFunc
+
+	// First add validators from accepted values (if any)
+	if len(acceptedValueValidators) > 0 {
+		// Use OneOf so any accepted value matches
+		allValidators = append(allValidators, validation.OneOf(acceptedValueValidators...))
+	}
+
+	// Then add explicit validators
+	if len(c.Validators) > 0 {
+		validators, err := validation.ParseValidators(c.Validators)
+		if err != nil {
+			return nil, err
+		}
+		if len(validators) > 0 {
+			allValidators = append(allValidators, validators...)
+		}
+	}
+
+	// Add all validators to the argument
+	if len(allValidators) > 0 {
+		configs = append(configs, WithValidators(allValidators...))
+	}
+
+	arg := NewArg(configs...)
+
+	arg.Secure = c.Secure
+	arg.Position = c.Position
+
+	return arg, nil
 }
 
 func (p *Parser) buildCommand(commandPath, description, descriptionKey string, parent *Command) (*Command, error) {
@@ -1444,21 +1652,17 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			pathTag  string
 		)
 		arg := &Argument{}
-		var bundle *i18n.Bundle
-		if parser.userI18n != nil {
-			bundle = parser.userI18n
-		} else if parser.i18n != nil {
-			bundle = parser.i18n
-		}
-
-		if bundle == nil {
-			bundle = i18n.Default()
-		}
-		longName, pathTag, err = unmarshalTagsToArgument(bundle, field, arg)
+		longName, pathTag, err = unmarshalTagsToArgument(nil, field, arg)
 		if err != nil {
 			// ErrNoValidTags is not an error - it just means the field has no goopt tags
 			if errors.Is(err, errs.ErrNoValidTags) {
 				continue
+			}
+
+			// Check if this is a validator syntax error that should fail immediately
+			var validatorErr *i18n.TrError
+			if errors.As(err, &validatorErr) && errors.Is(err, errs.ErrValidatorMustUseParentheses) {
+				return nil, errs.ErrProcessingField.WithArgs(field.Name).Wrap(err)
 			}
 
 			// For other errors, decide based on field type
@@ -1536,13 +1740,13 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		// Process the path tag to associate the flag with commands or global
 		if pathTag != "" {
 			if err = parser.processPathTag(pathTag, fieldValue, fullFlagName, arg); err != nil {
-				return parser, errs.ErrProcessingFlag.WithArgs(fullFlagName).Wrap(err)
+				return parser, wrapProcessingFlagError(err, fullFlagName)
 			}
 		} else {
 			// If no path specified, use current command path (if any)
 			err = parser.bindArgument(commandPath, fieldValue, fullFlagName, arg)
 			if err != nil {
-				return parser, errs.ErrProcessingFlag.WithArgs(fullFlagName).Wrap(err)
+				return parser, wrapProcessingFlagError(err, fullFlagName)
 			}
 		}
 	}
@@ -2068,11 +2272,7 @@ func isStructOrSliceType(field reflect.StructField) bool {
 
 func isFunction(field reflect.StructField) bool {
 	unwrappedType := util.UnwrapType(field.Type)
-	if unwrappedType.Kind() == reflect.Func {
-		return true
-	}
-
-	return false
+	return unwrappedType.Kind() == reflect.Func
 }
 
 func isStructType(field reflect.StructField) bool {
@@ -2200,4 +2400,326 @@ func (p *Parser) checkShortFlagConflict(shortFlag, newFlag string, commandPath .
 	}
 
 	return "", false
+}
+
+// detectBestStyle automatically selects the best help style based on CLI complexity
+func (p *Parser) detectBestStyle() HelpStyle {
+	flagCount := p.acceptedFlags.Count()
+	cmdCount := p.registeredCommands.Count()
+
+	// Large CLI with many flags and commands
+	if float64(flagCount) > float64(p.helpConfig.CompactThreshold)*1.4 && cmdCount > 5 {
+		return HelpStyleHierarchical
+	}
+
+	// Medium CLI with moderate complexity
+	if flagCount > p.helpConfig.CompactThreshold {
+		return HelpStyleCompact
+	}
+
+	// Small CLI with commands
+	if cmdCount > 3 {
+		return HelpStyleGrouped
+	}
+
+	// Simple CLI
+	return HelpStyleFlat
+}
+
+// printFlatHelp prints traditional flat help
+func (p *Parser) printFlatHelp(writer io.Writer) {
+	p.PrintUsage(writer)
+}
+
+// printGroupedHelp prints help with flags grouped by command
+func (p *Parser) printGroupedHelp(writer io.Writer) {
+	p.PrintUsageWithGroups(writer)
+}
+
+// printCompactHelp prints deduplicated, compact help
+func (p *Parser) printCompactHelp(writer io.Writer) {
+	fmt.Fprintln(writer, p.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
+
+	// Positional args if any
+	p.PrintPositionalArgs(writer)
+
+	// Global flags in compact form
+	globalFlags := p.getGlobalFlags()
+	if len(globalFlags) > 0 {
+		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
+		for _, flag := range globalFlags {
+			p.printCompactFlag(writer, flag)
+		}
+	}
+
+	// Shared flag groups
+	sharedGroups := p.detectSharedFlagGroups()
+	if len(sharedGroups) > 0 {
+		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgSharedFlagsKey))
+
+		// Sort groups for consistent output
+		var groupNames []string
+		for name := range sharedGroups {
+			groupNames = append(groupNames, name)
+		}
+		sort.Strings(groupNames)
+
+		for _, prefix := range groupNames {
+			info := sharedGroups[prefix]
+			if len(info.commands) > 1 {
+				fmt.Fprintf(writer, "\n%s.* (%s: %s)\n",
+					prefix,
+					p.layeredProvider.GetMessage(messages.MsgUsedByKey),
+					strings.Join(info.commands, ", "))
+
+				// Show first few flags as examples
+				for i, flag := range info.flags {
+					if i >= 3 {
+						fmt.Fprintf(writer, "  ... %s %d %s\n",
+							p.layeredProvider.GetMessage(messages.MsgAndKey),
+							len(info.flags)-3,
+							p.layeredProvider.GetMessage(messages.MsgMoreKey))
+						break
+					}
+					p.printCompactFlag(writer, flag)
+				}
+			}
+		}
+	}
+
+	// Commands with flag counts
+	if p.registeredCommands.Count() > 0 {
+		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandsKey))
+		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
+			if cmd.Value.topLevel {
+				flagCount := p.countCommandFlags(cmd.Value.Name)
+				fmt.Fprintf(writer, "  %-15s %-40s",
+					cmd.Value.Name,
+					util.Truncate(p.renderer.CommandDescription(cmd.Value), 40))
+				if flagCount > 0 {
+					fmt.Fprintf(writer, " [%d %s]", flagCount, p.layeredProvider.GetMessage(messages.MsgFlagsKey))
+				}
+				fmt.Fprintln(writer)
+			}
+		}
+	}
+
+	fmt.Fprintf(writer, "\n%s\n", p.layeredProvider.GetMessage(messages.MsgHelpHintKey))
+}
+
+// printHierarchicalHelp prints hierarchical help for complex CLIs
+func (p *Parser) printHierarchicalHelp(writer io.Writer) {
+	fmt.Fprintf(writer, "%s\n\n", p.layeredProvider.GetFormattedMessage(messages.MsgUsageHierarchicalKey, os.Args[0]))
+
+	// Only essential global flags
+	globalFlags := p.getGlobalFlags()
+	if len(globalFlags) > 0 {
+		fmt.Fprintf(writer, "%s:\n", p.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
+		shown := 0
+		maxToShow := p.helpConfig.MaxGlobals
+		if maxToShow <= 0 {
+			maxToShow = len(globalFlags) // Show all if MaxGlobals is 0 or negative
+		}
+		for _, flag := range globalFlags {
+			// Only show help and essential flags
+			if flag.Short == "h" || flag.Short == "help" || flag.Required {
+				p.printCompactFlag(writer, flag)
+				shown++
+			}
+			if shown >= maxToShow {
+				break
+			}
+		}
+		if len(globalFlags) > shown {
+			fmt.Fprintf(writer, "  ... %s %d %s\n",
+				p.layeredProvider.GetMessage(messages.MsgAndKey),
+				len(globalFlags)-shown,
+				p.layeredProvider.GetMessage(messages.MsgMoreKey))
+		}
+	}
+
+	// Shared flag groups summary
+	sharedGroups := p.detectSharedFlagGroups()
+	if len(sharedGroups) > 0 {
+		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgSharedFlagGroupsKey))
+
+		// Sort and display
+		type groupInfo struct {
+			name     string
+			cmdCount int
+		}
+		var groups []groupInfo
+		for prefix, info := range sharedGroups {
+			if len(info.commands) > 1 {
+				groups = append(groups, groupInfo{prefix, len(info.commands)})
+			}
+		}
+		sort.Slice(groups, func(i, j int) bool {
+			return groups[i].cmdCount > groups[j].cmdCount
+		})
+
+		for _, g := range groups {
+			fmt.Fprintf(writer, "  %-20s %s %d %s\n",
+				g.name+".*",
+				p.layeredProvider.GetMessage(messages.MsgUsedByKey),
+				g.cmdCount,
+				p.layeredProvider.GetMessage(messages.MsgCommandsKey))
+		}
+	}
+
+	// Command structure
+	if p.registeredCommands.Count() > 0 {
+		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandStructureKey))
+		p.printCommandTree(writer)
+	}
+
+	// Examples
+	fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgExamplesKey))
+	fmt.Fprintf(writer, "  %s --help                    # %s\n",
+		os.Args[0], p.layeredProvider.GetMessage(messages.MsgThisHelpKey))
+	if p.registeredCommands.Count() > 0 {
+		// Show first command as example
+		if first := p.registeredCommands.Front(); first != nil {
+			fmt.Fprintf(writer, "  %s %s --help              # %s\n",
+				os.Args[0], first.Value.Name, p.layeredProvider.GetMessage(messages.MsgCommandHelpKey))
+			if len(first.Value.Subcommands) > 0 {
+				fmt.Fprintf(writer, "  %s %s %s --help       # %s\n",
+					os.Args[0], first.Value.Name, first.Value.Subcommands[0].Name,
+					p.layeredProvider.GetMessage(messages.MsgSubcommandHelpKey))
+			}
+		}
+	}
+}
+
+// Helper functions
+
+// getGlobalFlags returns flags with no command path
+func (p *Parser) getGlobalFlags() []*Argument {
+	var globalFlags []*Argument
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.CommandPath == "" && !f.Value.Argument.isPositional() {
+			globalFlags = append(globalFlags, f.Value.Argument)
+		}
+	}
+	return globalFlags
+}
+
+// detectSharedFlagGroups finds flags shared across multiple commands
+func (p *Parser) detectSharedFlagGroups() map[string]*flagGroupInfo {
+	groups := make(map[string]*flagGroupInfo)
+	flagsByPrefix := make(map[string]map[string]bool) // Track unique flags per prefix
+
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		flagName := *f.Key
+		flagParts := splitPathFlag(flagName)
+		baseName := flagParts[0] // Flag name is the first part
+
+		// Extract prefix (e.g., "core.ldap" from "core.ldap.host")
+		prefix := extractFlagPrefix(baseName)
+		if prefix == "" {
+			continue
+		}
+
+		if groups[prefix] == nil {
+			groups[prefix] = &flagGroupInfo{
+				flags:    []*Argument{},
+				commands: []string{},
+			}
+			flagsByPrefix[prefix] = make(map[string]bool)
+		}
+
+		// Only add unique flags to the group
+		if !flagsByPrefix[prefix][baseName] {
+			groups[prefix].flags = append(groups[prefix].flags, f.Value.Argument)
+			flagsByPrefix[prefix][baseName] = true
+		}
+
+		// Always track which commands use this flag
+		if f.Value.CommandPath != "" {
+			if !util.Contains(groups[prefix].commands, f.Value.CommandPath) {
+				groups[prefix].commands = append(groups[prefix].commands, f.Value.CommandPath)
+			}
+		}
+	}
+
+	return groups
+}
+
+// flagGroupInfo holds information about a group of related flags
+type flagGroupInfo struct {
+	flags    []*Argument
+	commands []string
+}
+
+// printCompactFlag prints a flag in compact format
+func (p *Parser) printCompactFlag(writer io.Writer, arg *Argument) {
+	name := p.renderer.FlagName(arg)
+
+	// Build the flag representation
+	var flagStr string
+	if p.helpConfig.ShowShortFlags && arg.Short != "" {
+		flagStr = fmt.Sprintf("--%s, -%s", name, arg.Short)
+	} else {
+		flagStr = fmt.Sprintf("--%s", name)
+	}
+
+	if p.helpConfig.ShowDescription {
+		flagStr += fmt.Sprintf(" \"%s\"", p.renderer.FlagDescription(arg))
+	}
+
+	if p.helpConfig.ShowDefaults && arg.DefaultValue != "" {
+		flagStr += fmt.Sprintf(" %s (%s)", p.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
+			arg.DefaultValue)
+	}
+
+	// Add required/optional indicator
+	required := ""
+	if p.helpConfig.ShowRequired {
+		if arg.Required {
+			required = fmt.Sprintf(" (%s)", p.layeredProvider.GetMessage(messages.MsgRequiredKey))
+		} else if arg.RequiredIf != nil {
+			required = fmt.Sprintf(" (%s)", p.layeredProvider.GetMessage(messages.MsgConditionalKey))
+		}
+	}
+
+	fmt.Fprintf(writer, "  %s%s\n", flagStr, required)
+}
+
+// printCommandTree prints the command hierarchy as a tree
+func (p *Parser) printCommandTree(writer io.Writer) {
+	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
+		ppConfig := p.DefaultPrettyPrintConfig()
+		if cmd.Value.topLevel {
+			fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
+			for i := range cmd.Value.Subcommands {
+				prefix := ppConfig.DefaultPrefix
+				if i == len(cmd.Value.Subcommands)-1 {
+					prefix = ppConfig.TerminalPrefix
+				}
+				sub := &cmd.Value.Subcommands[i]
+				desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
+				fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+			}
+		}
+	}
+}
+
+// countCommandFlags counts flags specific to a command
+func (p *Parser) countCommandFlags(cmdPath string) int {
+	count := 0
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.CommandPath == cmdPath {
+			count++
+		}
+	}
+	return count
+}
+
+// extractFlagPrefix extracts the prefix from a flag name (e.g., "core.ldap" from "core.ldap.host")
+func extractFlagPrefix(flagName string) string {
+	parts := strings.Split(flagName, ".")
+	if len(parts) > 1 {
+		return strings.Join(parts[:len(parts)-1], ".")
+	}
+	return ""
 }

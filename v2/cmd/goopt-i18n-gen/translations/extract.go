@@ -2,6 +2,10 @@ package translations
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
@@ -9,9 +13,6 @@ import (
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
-	"regexp"
-	"sort"
-	"strings"
 )
 
 // Extract handles string extraction from go files and supports 2 modes: Comment-based extraction or code transformation
@@ -219,7 +220,7 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 func generateKey(prefix, value string) string {
 	// Count and replace format specifiers with numbered placeholders
 	formatCounts := make(map[string]int)
-	
+
 	// Simple format specifier patterns - just the common ones
 	formatPatterns := []struct {
 		pattern string
@@ -235,9 +236,9 @@ func generateKey(prefix, value string) string {
 		{`%w`, "w"},
 		{`%%`, "percent"}, // Escaped percent
 	}
-	
+
 	key := value
-	
+
 	// Replace format specifiers with readable placeholders
 	for _, fp := range formatPatterns {
 		count := strings.Count(key, fp.pattern)
@@ -255,7 +256,7 @@ func generateKey(prefix, value string) string {
 			formatCounts[fp.name] += count
 		}
 	}
-	
+
 	// Now apply the regex to remove other non-word chars
 	key = regexp.MustCompile(`[^\w\s]+`).ReplaceAllString(key, " ")
 	key = strings.TrimSpace(key)
@@ -274,7 +275,6 @@ func generateKey(prefix, value string) string {
 
 	return fmt.Sprintf("%s.%s", prefix, key)
 }
-
 
 // handleAutoUpdate handles the auto-update functionality
 func handleAutoUpdate(config *options.AppConfig, translations map[string]string, files []string, dryRun bool) error {

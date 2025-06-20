@@ -1,72 +1,57 @@
 ---
 layout: default
 title: Guides
-nav_order: 2
+nav_order: 3 
 has_children: true
+version: v2
 ---
 
-# When to use goopt
+# goopt Guides
 
-`goopt` is particularly well-suited for:
+Welcome to the `goopt` documentation guides. This collection provides a comprehensive learning path, from building your first application to mastering advanced features.
 
-- **Flexible command definition** supporting struct-first, builder pattern, or imperative style
-- **Multiple command organization approaches**: support for a variety of command organization styles
-- **Type-safe configurations** with compile-time validation
-- **First-class internationalization (i18n)** with built-in translations and comprehensive tooling
-- **Ordered command execution** where commands need to be processed in sequence
+Whether you're a new user or an experienced developer, these guides are designed to help you get the most out of `goopt`.
 
-Feature overview:
-- Flexible command organization:
-  - Flag-centric with base paths
-  - Command-centric with struct grouping
-  - Hybrid approaches
-- First-class internationalization (i18n):
-  - Built-in translations for English, French, and German
-  - All error messages and system text automatically translated
-  - Translation bundle system for custom messages
-  - Type-safe translation key generation with goopt-i18n-gen
-  - Comprehensive tooling for managing translations
-  - Zero-effort i18n - works out of the box
-- Nested commands with command-specific flags
-- Command callbacks (explicit or automatic)
-- Environment variable support
-- Configurable defaults through ParseWithDefaults:
-  - Load defaults from any source (JSON, YAML, etc.)
-  - Implement only the configuration features you need
-  - Clear precedence: Explicit ordering (Default values → ENV vars → config files → CLI flags) where CLI flags have the highest precedence
-- Ordered command execution
-- Type-safe flag parsing
-- Flag dependencies and validation
-- Pattern matching for flag values
-- Shell completion support:
-  - Bash completion (flags and commands)
-  - Zsh completion (rich command/flag descriptions, file type hints)
-  - Fish completion (command/flag descriptions, custom suggestions)
-  - PowerShell completion (parameter sets, dynamic completion)
-  - Custom completion functions for dynamic values
-  - Built-in completion installation commands
+## Learning Path
 
-While [Cobra](https://github.com/spf13/cobra) and [Viper](https://github.com/spf13/viper) provide a comprehensive configuration management 
-solution with persistent and global flags, `goopt` offers unique flexibility in how commands and flags can be organized, along with guaranteed execution order
-and exceptional internationalization support out of the box.
+We recommend reading the guides in the following order.
 
-Unlike most CLI frameworks that require external i18n libraries or manual setup, `goopt` includes:
-- Pre-translated system messages in multiple languages
-- Runtime-switchable language support
-- Zero-configuration i18n that just works
-- Professional tooling for managing translations across your entire application
+### 1. The Basics
+Start here to learn the fundamentals of building a CLI with `goopt`.
 
-Choose `goopt` when you:
-- Want freedom to choose between struct tags, builder pattern, or imperative style
-- Need flexibility in organizing commands (flag-centric, command-centric, or mixed)
-- Need guaranteed command execution order
-- Want built-in internationalization without external dependencies
-- Need to support multiple languages with minimal effort
-- Want type-safe translation management with compile-time validation
-- Need strong compile-time guarantees about your command structure
-- Need completion support across multiple shell types
-- Prefer implementing specific configuration features over a full-featured solution
+*   **[Getting Started]({{ site.baseurl }}/v2/01-getting-started/):** Build your first application in 5 minutes.
+*   **[Core Concepts]({{ site.baseurl }}/v2/02-core-concepts/):** Understand the key building blocks and design philosophy of the library.
 
-# Guides
+### 2. Structuring Your Application
+These guides cover the patterns for defining your flags, commands, and arguments.
 
-A number of guides are available to help you get started with goopt.
+*   **[Defining Your CLI]({{ site.baseurl }}/v2/03-defining-your-cli/index/):** An overview of the different ways to structure your application's interface.
+  *   **[Struct Tags Reference]({{ site.baseurl }}/v2/03-defining-your-cli/01-struct-tags-reference/):** A quick reference for all available `goopt:"..."` tags.
+  *   **[Command Patterns]({{ site.baseurl }}/v2/03-defining-your-cli/02-command-patterns/):** Learn to organize commands using nested structs, paths, and programmatic builders.
+  *   **[Flag Patterns]({{ site.baseurl }}/v2/03-defining-your-cli/03-flag-patterns/):** Explore patterns for namespacing and reusing flag groups.
+  *   **[Positional Arguments]({{ site.baseurl }}/v2/03-defining-your-cli/04-positional-arguments/):** A detailed guide on position-dependent arguments.
+  *   **[Command Callbacks]({{ site.baseurl }}/v2/03-defining-your-cli/05-command-callbacks/):** Learn how to attach behavior to your commands.
+
+### 3. Advanced Features
+Dive deeper into the powerful features that make `goopt` suitable for complex, production-grade applications.
+
+*   **[Advanced Features Overview]({{ site.baseurl }}/v2/04-advanced-features/index/)**
+  *   **[Validation]({{ site.baseurl }}/v2/04-advanced-features/01-validation/):** Ensure data correctness with built-in and custom validators.
+  *   **[Execution Hooks]({{ site.baseurl }}/v2/04-advanced-features/02-execution-hooks/):** Manage the command lifecycle with pre- and post-execution hooks.
+  *   **[Error Handling]({{ site.baseurl }}/v2/04-advanced-features/03-error-handling/):** Best practices for robust error handling during setup.
+  *   **[Flag Inheritance]({{ site.baseurl }}/v2/04-advanced-features/04-flag-inheritance/):** Understand how flags are resolved in nested command hierarchies.
+
+### 4. Built-in Functionality
+Learn about the powerful "batteries-included" features that come with `goopt`.
+
+*   **[Built-in Features Overview]({{ site.baseurl }}/v2/05-built-in-features/index/)**
+  *   **[The Help System]({{ site.baseurl }}/v2/05-built-in-features/01-help-system/):** Customize the adaptive and interactive help system.
+  *   **[Version Flag Support]({{ site.baseurl }}/v2/05-built-in-features/02-version-support/):** Automatically add a `--version` flag.
+  *   **[Shell Completion]({{ site.baseurl }}/v2/05-built-in-features/03-shell-completion/):** Generate completion scripts for popular shells.
+  *   **[Environment & External Configuration]({{ site.baseurl }}/v2/05-built-in-features/04-environment-config/):** Load configuration from environment variables or files.
+
+### 5. Internationalization (i18n)
+A comprehensive guide to creating multi-language CLIs.
+
+*   **[Internationalization Overview]({{ site.baseurl }}/v2/06-internationalization/index/)**
+  *   **[Tooling: `goopt-i18n-gen`]({{ site.baseurl }}/v2/06-internationalization/01-tooling-goopt-i18n-gen/):** A deep dive into the powerful code generation and workflow tool for i18n.

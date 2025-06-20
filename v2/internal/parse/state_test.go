@@ -91,4 +91,32 @@ func TestDefaultState(t *testing.T) {
 		_, err = state.ArgAt(2)
 		assert.ErrorIs(t, err, ErrInvalidPosition)
 	})
+
+	t.Run("HasNext", func(t *testing.T) {
+		state := NewState([]string{"arg1", "arg2", "arg3"})
+
+		// At beginning (pos = -1)
+		assert.True(t, state.HasNext())
+
+		// Move to position 0
+		state.SetPos(0)
+		assert.True(t, state.HasNext())
+
+		// Move to position 1
+		state.SetPos(1)
+		assert.True(t, state.HasNext())
+
+		// Move to last position
+		state.SetPos(2)
+		assert.False(t, state.HasNext())
+
+		// Test with empty args
+		emptyState := NewState([]string{})
+		assert.False(t, emptyState.HasNext())
+
+		// Test with single arg
+		singleState := NewState([]string{"only"})
+		singleState.SetPos(0)
+		assert.False(t, singleState.HasNext())
+	})
 }

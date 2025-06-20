@@ -3,11 +3,6 @@ package translations
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/napalu/goopt/v2"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/templates"
-	"github.com/napalu/goopt/v2/types/orderedmap"
 	"go/format"
 	"log"
 	"os"
@@ -15,6 +10,12 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+
+	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/templates"
+	"github.com/napalu/goopt/v2/types/orderedmap"
 )
 
 func Generate(parser *goopt.Parser, _ *goopt.Command) error {

@@ -9,65 +9,52 @@ version: v2
 
 # What's New in goopt v2
 
-goopt v2 introduces several major improvements:
+`goopt` v2 is a major update focused on providing powerful, out-of-the-box solutions for building professional, robust, and user-friendly command-line applications.
 
-## Internationalization (i18n)
-Note: i18n has been backported to v1.
+## New Major Features
 
-goopt v2 comes with comprehensive internationalization support:
+### ✨ A Powerful Validation Engine (Replaces `accepted`)
+The old `accepted` tag has been **deprecated** in favor of a completely new validation engine that is more powerful, composable, and easier to use.
 
-- **Built-in language support** for English, French, and German
-- **Extensible translation system** for adding custom languages
-- **Translatable error messages** for better user experience
-- **User-defined message bundles** to override built-in translations
-- **Powerful tools for i18n workflows** to help internationalize new projects or migrate existing projects 
-See [Internationalization]({{ site.baseurl }}/v2/guides/internationalization/) for details.
+- **Directly in Struct Tags:** Define complex validation rules right where you define your flag.
+- **Composable Logic:** Chain built-in validators (`email`, `port`, `range`) or combine them with logical operators (`oneof`, `all`, `not`).
+- **Custom Validators:** Easily write and integrate your own domain-specific validation logic.
+- **Clearer Syntax:** The new `validators` tag uses a more intuitive parenthesis-based syntax (e.g., `validators:"minlength(5)"`).
+- **➡️ [Read the Validation Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/01-validation/)**
 
-## Enhanced Error Handling
-Note: the error system has been backported to v1.
+### Command Execution Hooks
+Manage the entire lifecycle of your commands with pre- and post-execution hooks. This is perfect for handling cross-cutting concerns without cluttering your command logic.
+- **Use cases:** Authentication checks, database connection management, logging, metrics, and resource cleanup.
+- **Flexible scope:** Apply hooks globally to all commands or target specific commands.
+- **➡️ [Read the Execution Hooks Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/02-execution-hooks/)**
 
-The error system has been completely overhauled:
+### Advanced Help & Version Systems
+The help and version systems are now fully automatic and highly configurable.
+- **Auto-Help:** `--help` and `-h` flags are now provided by default, with an adaptive display style that suits your CLI's complexity.
+- **Interactive Help:** Users can now query the help system with commands like `myapp --help --search "database"`.
+- **Auto-Version:** Enable a `--version` flag with a single line of configuration, with support for dynamic build-time variables.
+- **➡️ [See the Help System Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/) and [Version Support Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/02-version-support/)**
 
-- **Structured errors** with detailed context information
-- **Error chaining** with proper cause tracking
-- **Translatable error messages** that adapt to the configured language
-- **Improved error testing utilities** for better test coverage
-- **Standard errors package** (`errs`) with consistent error types
+## 🏗️ Architectural Improvements
 
+### Enhanced Internationalization (i18n)
+The i18n system is now more robust and easier to use.
+- **Layered Bundles:** A clearer separation between the default system bundle and your application's user bundle.
+- **Improved Tooling:** The `goopt-i18n-gen` tool is more powerful than ever, with a "360° workflow" to automate adding i18n to existing projects.
+- **➡️ [Read the i18n Guide]({{ site.baseurl }}/v2/guides/06-internationalization/)**
 
-## Hierarchical Flag Inheritance
+### Hierarchical Flag Inheritance
+Flag handling is now fully hierarchical and more predictable.
+- **Parent-child flag resolution:** Flags defined on parent commands are available to all children.
+- **Clear precedence rules:** Command-specific flags correctly override inherited flags.
+- **➡️ [See the Flag Inheritance Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/04-flag-inheritance/)**
 
-Flag handling is now fully hierarchical:
-
-- **Parent-child flag resolution** - flags defined on parent commands are available to children
-- **Precedence rules** - command-specific flags take precedence over inherited flags
-- **Short flag resolution** - proper resolution of short flags in command hierarchies
-- **Context-aware parsing** - flag values are evaluated in the proper command context
-
-See [Hierarchical flags]({{ site.baseurl }}/v2/guides/advanced-features/#flag-inheritance) for details.
-
-## API Cleanup
-
-The API has been cleaned up and modernized:
-
-- **Removal of deprecated methods**
-- **More consistent naming** throughout the codebase
-- **Better documentation** with examples and usage patterns
-- **Simplified initialization** with functional options
-
-## Command Callbacks with Struct Context
-
-goopt v2 enhances command callbacks with the ability to access the original configuration struct:
-
-- **Type-safe struct access** - Command callbacks can retrieve the original struct used to initialize the parser
-- **Generic helper function** - Use `GetStructContextAs[T]()` to retrieve the struct in a type-safe manner
-- **Better code organization** - Separate command handling logic from CLI definition while maintaining type safety
-- **Package separation** - Organize command handlers in separate packages while maintaining access to configuration
-
-See [Command Callbacks with Struct Context]({{ site.baseurl }}/v2/guides/advanced-features/#command-callbacks-with-struct-context) for details on implementation and usage.
+### API Cleanup
+The public API has been modernized and simplified.
+- Deprecated methods from v1 have been removed.
+- Naming has been made more consistent throughout the library.
+- Error handling at initialization is more robust with the introduction of `NewArgE`.
 
 ## Breaking Changes
 
-See the [Migration Guide]({{ site.baseurl }}/v2/migration/) for a complete list of breaking changes and how to update your code.
-
-[Back to v2 Documentation]({{ site.baseurl }}/v2/index/) | [Migration Guide]({{ site.baseurl }}/v2/migration/)
+For a complete list of breaking changes and instructions on how to update your code from v1, please see the **[Migration Guide]({{ site.baseurl }}/v2/migration/)**.

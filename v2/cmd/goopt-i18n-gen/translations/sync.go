@@ -28,7 +28,7 @@ func ExecuteSyncCommand(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	if len(cmd.Target) == 0 {
 		return syncWithinFiles(cfg, cmd)
 	}
-	
+
 	// Otherwise, sync target files against reference files
 	return syncTargetFiles(cfg, cmd)
 }
@@ -66,7 +66,7 @@ func syncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 
 	// Get all keys from base file
 	baseKeys := getAllKeys(baseData)
-	
+
 	// Process sync, skipping the base file
 	return processSyncWithinFiles(cfg, cmd, baseFile, baseKeys, baseData, locales)
 }
@@ -96,14 +96,14 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	// Load all reference files and merge their keys
 	allRefKeys := make(map[string]interface{})
 	refData := make(map[string]map[string]interface{})
-	
+
 	for _, file := range refFiles {
 		data, err := loadJSONFile(file)
 		if err != nil {
 			return fmt.Errorf("failed to load reference file %s: %w", file, err)
 		}
 		refData[file] = data
-		
+
 		// Merge keys from this file
 		mergeKeys(allRefKeys, data)
 	}
@@ -125,7 +125,7 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	baseDataMap := make(map[string]map[string]interface{})
 	for targetFile := range targetData {
 		targetLang := extractLanguageFromPath(targetFile)
-		
+
 		// Find matching reference file
 		var matchingRef string
 		var englishRef string
@@ -140,7 +140,7 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 				englishRef = refFile
 			}
 		}
-		
+
 		// If no matching language found, use English if available, otherwise first file
 		if matchingRef == "" {
 			if englishRef != "" {
@@ -155,9 +155,9 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 }
 
 // processSyncWithinFiles handles synchronization between input files
-func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFile string, 
+func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFile string,
 	baseKeys []string, baseData map[string]interface{}, locales map[string]map[string]interface{}) error {
-	
+
 	// Track changes
 	var changes []string
 	totalAdded := 0
@@ -171,10 +171,10 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 		}
 
 		currentKeys := getAllKeys(data)
-		
+
 		// Find missing keys
 		missingKeys := findMissingKeys(baseKeys, currentKeys)
-		
+
 		// Find extra keys
 		extraKeys := findMissingKeys(currentKeys, baseKeys)
 
@@ -202,7 +202,7 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 		} else {
 			// Make actual changes
 			modified := false
-			
+
 			// Add missing keys
 			for _, key := range missingKeys {
 				value := getValueFromPath(baseData, key)
@@ -218,7 +218,7 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 				modified = true
 				totalAdded++
 			}
-			
+
 			// Remove extra keys if requested
 			if cmd.RemoveExtra {
 				for _, key := range extraKeys {
@@ -227,13 +227,13 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 					totalRemoved++
 				}
 			}
-			
+
 			// Save file if modified
 			if modified {
 				if err := saveJSONFile(file, data); err != nil {
 					return fmt.Errorf("failed to save %s: %w", file, err)
 				}
-				
+
 				msg := fmt.Sprintf("%s: ", filepath.Base(file))
 				if len(missingKeys) > 0 {
 					msg += fmt.Sprintf("added %d keys", len(missingKeys))
@@ -255,7 +255,7 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 		for _, change := range changes {
 			fmt.Println(change)
 		}
-		
+
 		if !cmd.DryRun && (totalAdded > 0 || totalRemoved > 0) {
 			fmt.Printf("\nTotal: %d keys added, %d keys removed\n", totalAdded, totalRemoved)
 		}
@@ -270,7 +270,7 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKeys []string,
 	allRefKeys map[string]interface{}, targetFiles map[string]map[string]interface{},
 	baseDataMap map[string]map[string]interface{}) error {
-	
+
 	// Track changes
 	var changes []string
 	totalAdded := 0
@@ -279,10 +279,10 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 	// Process each target file
 	for file, data := range targetFiles {
 		currentKeys := getAllKeys(data)
-		
+
 		// Find missing keys
 		missingKeys := findMissingKeys(refKeys, currentKeys)
-		
+
 		// Find extra keys
 		extraKeys := findMissingKeys(currentKeys, refKeys)
 
@@ -310,13 +310,13 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 		} else {
 			// Make actual changes
 			modified := false
-			
+
 			// Use the matched base data for this target file, or fallback to allRefKeys
 			sourceData := allRefKeys
 			if baseData, exists := baseDataMap[file]; exists && baseData != nil {
 				sourceData = baseData
 			}
-			
+
 			// Add missing keys
 			for _, key := range missingKeys {
 				value := getValueFromPath(sourceData, key)
@@ -331,7 +331,7 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 				modified = true
 				totalAdded++
 			}
-			
+
 			// Remove extra keys if requested
 			if cmd.RemoveExtra {
 				for _, key := range extraKeys {
@@ -340,13 +340,13 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 					totalRemoved++
 				}
 			}
-			
+
 			// Save file if modified
 			if modified {
 				if err := saveJSONFile(file, data); err != nil {
 					return fmt.Errorf("failed to save %s: %w", file, err)
 				}
-				
+
 				msg := fmt.Sprintf("%s: ", filepath.Base(file))
 				if len(missingKeys) > 0 {
 					msg += fmt.Sprintf("added %d keys", len(missingKeys))
@@ -368,7 +368,7 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 		for _, change := range changes {
 			fmt.Println(change)
 		}
-		
+
 		if !cmd.DryRun && (totalAdded > 0 || totalRemoved > 0) {
 			fmt.Printf("\nTotal: %d keys added, %d keys removed\n", totalAdded, totalRemoved)
 		}
@@ -397,11 +397,11 @@ func mergeKeys(dest, source map[string]interface{}) {
 // getAllKeys gets all keys from a map (handles both flat and nested structures)
 func getAllKeys(data map[string]interface{}) []string {
 	var keys []string
-	
+
 	for k := range data {
 		keys = append(keys, k)
 	}
-	
+
 	sort.Strings(keys)
 	return keys
 }
@@ -412,7 +412,7 @@ func findMissingKeys(source, target []string) []string {
 	for _, k := range target {
 		targetMap[k] = true
 	}
-	
+
 	var missing []string
 	for _, k := range source {
 		if !targetMap[k] {
@@ -453,12 +453,12 @@ func loadJSONFile(filename string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result map[string]interface{}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
-	
+
 	return result, nil
 }
 
@@ -468,6 +468,6 @@ func saveJSONFile(filename string, data map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(filename, jsonData, 0644)
 }

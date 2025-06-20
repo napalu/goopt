@@ -30,7 +30,7 @@ func TestStringConcatenation(t *testing.T) {
 			description:  "Should combine strings and transform",
 		},
 		{
-			name:  "multi-line concatenation",
+			name: "multi-line concatenation",
 			input: `fmt.Printf("This is " +
 				"a message with %s and " +
 				"another %s", first, second)`,

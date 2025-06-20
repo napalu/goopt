@@ -13,12 +13,12 @@ func toGoName(s string) string {
 	// Split by dots first to preserve hierarchy
 	dotParts := strings.Split(s, ".")
 	var result []string
-	
+
 	for _, part := range dotParts {
 		// Replace common separators with underscores
 		part = strings.ReplaceAll(part, "-", "_")
 		part = strings.ReplaceAll(part, " ", "_")
-		
+
 		// Split on underscores and capitalize each part
 		subParts := strings.Split(part, "_")
 		var pascalPart []string
@@ -27,12 +27,12 @@ func toGoName(s string) string {
 				pascalPart = append(pascalPart, strings.ToUpper(subPart[:1])+subPart[1:])
 			}
 		}
-		
+
 		if len(pascalPart) > 0 {
 			result = append(result, strings.Join(pascalPart, ""))
 		}
 	}
-	
+
 	return strings.Join(result, ".")
 }
 
@@ -118,7 +118,7 @@ type TranslationUpdateResult struct {
 // UpdateTranslationFile updates a translation file with new key-value pairs
 func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts TranslationUpdateOptions) (*TranslationUpdateResult, error) {
 	result := &TranslationUpdateResult{}
-	
+
 	// Read existing content
 	existing := make(map[string]interface{})
 	if data, err := os.ReadFile(filename); err == nil && len(data) > 0 {
@@ -126,11 +126,11 @@ func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts Tr
 			return nil, fmt.Errorf("failed to parse JSON: %w", err)
 		}
 	}
-	
+
 	// Detect language from filename
 	isEnglish := strings.Contains(strings.ToLower(filename), "en.json") ||
 		strings.Contains(strings.ToLower(filename), "english")
-	
+
 	// Process each key
 	for key, value := range keysToAdd {
 		if _, exists := existing[key]; exists {
@@ -158,18 +158,18 @@ func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts Tr
 			result.Modified = true
 		}
 	}
-	
+
 	// Write back if modified and not dry-run
 	if result.Modified && !opts.DryRun {
 		data, err := json.MarshalIndent(existing, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 		}
-		
+
 		if err := os.WriteFile(filename, data, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write file: %w", err)
 		}
 	}
-	
+
 	return result, nil
 }
