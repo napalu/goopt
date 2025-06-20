@@ -22,13 +22,13 @@
 
 While `goopt` handles the basics with ease, its real strength lies in providing sophisticated features that solve common, complex CLI development challenges out of the box.
 
-*   **A Best-in-Class Help System:** Move beyond static help text. `goopt` features an **adaptive help system** that automatically chooses the best display style (`flat`, `grouped`, `compact`, `hierarchical`) based on your CLI's complexity. Its **interactive help parser** allows users to query for help on specific topics (e.g., `myapp --help globals`, `myapp --help --search "database"`), providing a vastly superior user experience.
+*   **Adaptive Help System:** Move beyond static help text. `goopt` features an **adaptive help system** that automatically chooses the best display style (`flat`, `grouped`, `compact`, `hierarchical`) based on your CLI's complexity. Its **interactive help parser** allows users to query for help on specific topics (e.g., `myapp --help globals`, `myapp --help --search "database"`), providing a vastly superior user experience.
 
-*   **Powerful, Composable Validation:** Stop writing tedious input validation boilerplate. `goopt`'s new validation engine allows you to define validation rules directly in your struct tags. Compose built-in validators (`email`, `port`, `range`) with custom logic and logical operators (`oneof`, `all`, `not`) to create robust and readable validation for your flags.
+*   **Powerful, Composable Validation:** No tedious input validation boilerplate. `goopt`'s validation engine allows you to define validation rules directly in your struct tags. Compose built-in validators (`email`, `port`, `range`) with custom logic and logical operators (`oneof`, `all`, `not`) to create robust and readable validation for your flags.
 
 *   **Lifecycle Management with Execution Hooks:** Implement cross-cutting concerns cleanly with a powerful pre- and post-execution hook system. Perfect for handling authentication, setting up database connections, logging metrics, or ensuring resource cleanup, hooks can be applied globally or to specific commands, giving you full control over the command lifecycle.
 
-*   **Truly First-Class Internationalization (i18n):** `goopt` was built from the ground up for i18n. Use `descKey` tags to reference translations, and let the included `goopt-i18n-gen` tool automate the entire workflow—from auditing your code for missing keys to generating type-safe message constants that eliminate runtime errors.
+*   **First-Class Internationalization (i18n):** i18n is a core feature of `goopt`. Use `descKey` tags to reference translations, and let the included `goopt-i18n-gen` tool automate the entire workflow—from auditing your code for missing keys to generating type-safe message constants that eliminate runtime errors.
 
 ## Key Features
 
@@ -46,7 +46,7 @@ While `goopt` handles the basics with ease, its real strength lies in providing 
 
 #### Developer Experience
 - **Auto-Help & Auto-Version:** Zero-config `--help` and `--version` flags that just work.
-- **Full i18n Tooling:** The `goopt-i18n-gen` tool automates translation management.
+- **Full i18n Tooling:** The `goopt-i18n-gen` tool facilitates translation management.
 - **Shell Completion:** Generate completion scripts for Bash, Zsh, Fish, and PowerShell.
 - **Secure Input:** Built-in support for securely prompting for passwords and other secrets.
 
