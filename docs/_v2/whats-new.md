@@ -13,7 +13,7 @@ version: v2
 
 ## New Major Features
 
-### ✨ A Powerful Validation Engine (Replaces `accepted`)
+### A Powerful Validation Engine (Replaces `accepted`)
 The old `accepted` tag has been **deprecated** in favor of a completely new validation engine that is more powerful, composable, and easier to use.
 
 - **Directly in Struct Tags:** Define complex validation rules right where you define your flag.
@@ -35,7 +35,7 @@ The help and version systems are now fully automatic and highly configurable.
 - **Auto-Version:** Enable a `--version` flag with a single line of configuration, with support for dynamic build-time variables.
 - **➡️ [See the Help System Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/) and [Version Support Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/02-version-support/)**
 
-## 🏗️ Architectural Improvements
+## Architectural Improvements
 
 ### Enhanced Internationalization (i18n)
 The i18n system is now more robust and easier to use.
