@@ -113,7 +113,7 @@ func TestFormatDetectorCustomPatterns(t *testing.T) {
 
 func TestFormatDetectorInvalidRegex(t *testing.T) {
 	detector := NewFormatDetector()
-	
+
 	// Test invalid regex
 	err := detector.RegisterCustomFormatPattern("[invalid", 0)
 	if err == nil {
@@ -123,7 +123,7 @@ func TestFormatDetectorInvalidRegex(t *testing.T) {
 
 func TestFormatDetectorMultiplePatterns(t *testing.T) {
 	detector := NewFormatDetector()
-	
+
 	// Register multiple patterns
 	patterns := []struct {
 		pattern  string
@@ -133,14 +133,14 @@ func TestFormatDetectorMultiplePatterns(t *testing.T) {
 		{`.*\.Logf$`, 0},
 		{`.*\.(Infof|Warnf|Errorf)$`, 0},
 	}
-	
+
 	for _, p := range patterns {
 		err := detector.RegisterCustomFormatPattern(p.pattern, p.argIndex)
 		if err != nil {
 			t.Fatalf("Failed to register pattern %s: %v", p.pattern, err)
 		}
 	}
-	
+
 	// Test each pattern
 	testCases := []struct {
 		code           string
@@ -151,19 +151,19 @@ func TestFormatDetectorMultiplePatterns(t *testing.T) {
 		{`logger.Logf("Debug: %v", val)`, 0, "Debug: %v"},
 		{`log.Errorf("Error: %w", err)`, 0, "Error: %w"},
 	}
-	
+
 	for _, tc := range testCases {
 		call, err := parseCallExpr(tc.code)
 		if err != nil {
 			t.Fatalf("Failed to parse %s: %v", tc.code, err)
 		}
-		
+
 		info := detector.DetectFormatCall(call)
 		if info == nil {
 			t.Errorf("Expected detection for %s", tc.code)
 			continue
 		}
-		
+
 		if info.FormatStringIndex != tc.expectedIndex {
 			t.Errorf("For %s: expected index %d, got %d", tc.code, tc.expectedIndex, info.FormatStringIndex)
 		}

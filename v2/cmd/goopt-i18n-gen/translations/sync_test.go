@@ -14,7 +14,10 @@ import (
 )
 
 // Helper function to create OrderedMap for test files
-func createTestFiles(files ...struct{ name string; content map[string]interface{} }) *orderedmap.OrderedMap[string, map[string]interface{}] {
+func createTestFiles(files ...struct {
+	name    string
+	content map[string]interface{}
+}) *orderedmap.OrderedMap[string, map[string]interface{}] {
 	om := orderedmap.NewOrderedMap[string, map[string]interface{}]()
 	for _, file := range files {
 		om.Set(file.name, file.content)
@@ -24,24 +27,30 @@ func createTestFiles(files ...struct{ name string; content map[string]interface{
 
 func TestSyncCommand(t *testing.T) {
 	tests := []struct {
-		name         string
-		setupFiles   *orderedmap.OrderedMap[string, map[string]interface{}]
-		targetFiles  map[string]map[string]interface{}
-		syncCmd      options.SyncCmd
-		expectError  bool
-		expectFiles  map[string]map[string]interface{}
+		name        string
+		setupFiles  *orderedmap.OrderedMap[string, map[string]interface{}]
+		targetFiles map[string]map[string]interface{}
+		syncCmd     options.SyncCmd
+		expectError bool
+		expectFiles map[string]map[string]interface{}
 	}{
 		{
 			name: "sync within files - add missing keys",
 			setupFiles: createTestFiles(
-				struct{ name string; content map[string]interface{} }{
-					"en.json", 
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
+					"en.json",
 					map[string]interface{}{
 						"app.title":   "My App",
 						"app.welcome": "Welcome",
 					},
 				},
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"de.json",
 					map[string]interface{}{
 						"app.title": "Meine App",
@@ -66,7 +75,10 @@ func TestSyncCommand(t *testing.T) {
 		{
 			name: "sync target files against reference",
 			setupFiles: createTestFiles(
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"locales/en.json",
 					map[string]interface{}{
 						"app.title":   "My App",
@@ -74,7 +86,10 @@ func TestSyncCommand(t *testing.T) {
 						"app.help":    "Help",
 					},
 				},
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"locales/de.json",
 					map[string]interface{}{
 						"app.title":   "Meine App",
@@ -104,13 +119,19 @@ func TestSyncCommand(t *testing.T) {
 		{
 			name: "remove extra keys",
 			setupFiles: createTestFiles(
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"en.json",
 					map[string]interface{}{
 						"app.title": "My App",
 					},
 				},
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"de.json",
 					map[string]interface{}{
 						"app.title":  "Meine App",
@@ -134,14 +155,20 @@ func TestSyncCommand(t *testing.T) {
 		{
 			name: "dry run mode",
 			setupFiles: createTestFiles(
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"en.json",
 					map[string]interface{}{
 						"app.title": "My App",
 						"app.new":   "New",
 					},
 				},
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"de.json",
 					map[string]interface{}{
 						"app.title": "Meine App",
@@ -161,14 +188,20 @@ func TestSyncCommand(t *testing.T) {
 		{
 			name: "flat keys with dots",
 			setupFiles: createTestFiles(
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"en.json",
 					map[string]interface{}{
 						"app.ui.button.ok":     "OK",
 						"app.ui.button.cancel": "Cancel",
 					},
 				},
-				struct{ name string; content map[string]interface{} }{
+				struct {
+					name    string
+					content map[string]interface{}
+				}{
 					"de.json",
 					map[string]interface{}{
 						"app.ui.button.ok": "OK",
@@ -262,7 +295,7 @@ func TestSyncCommand(t *testing.T) {
 				}
 
 				if !deepEqual(actual, expectedContent) {
-					t.Errorf("file %s content mismatch\nexpected: %+v\nactual: %+v", 
+					t.Errorf("file %s content mismatch\nexpected: %+v\nactual: %+v",
 						filename, expectedContent, actual)
 				}
 			}
@@ -303,18 +336,18 @@ func deepEqual(a, b map[string]interface{}) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	
+
 	for k, v1 := range a {
 		v2, ok := b[k]
 		if !ok {
 			return false
 		}
-		
+
 		// Convert both values to strings for comparison
 		// This handles the case where one might be a string and the other an interface{}
 		str1 := fmt.Sprintf("%v", v1)
 		str2 := fmt.Sprintf("%v", v2)
-		
+
 		if str1 != str2 {
 			return false
 		}

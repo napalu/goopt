@@ -404,6 +404,64 @@ func TestCompletionManager_IsShellSupported(t *testing.T) {
 	}
 }
 
+func TestManager_Accept(t *testing.T) {
+	tests := []struct {
+		name        string
+		shell       string
+		programName string
+		data        CompletionData
+	}{
+		{
+			name:        "bash with commands and flags",
+			shell:       "bash",
+			programName: "myapp",
+			data: CompletionData{
+				Commands: []string{"serve", "config"},
+				Flags: []FlagPair{
+					{Long: "verbose", Short: "v", Description: "Enable verbose output"},
+				},
+			},
+		},
+		{
+			name:        "zsh empty data",
+			shell:       "zsh",
+			programName: "myapp",
+			data:        CompletionData{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, err := NewManager(tt.shell, tt.programName)
+			if err != nil {
+				t.Fatalf("NewManager() error = %v", err)
+			}
+
+			// Initially script should be empty
+			if manager.script != "" {
+				t.Error("Initial script should be empty")
+			}
+
+			// Accept the data
+			manager.Accept(tt.data)
+
+			// Script should now be populated
+			if manager.script == "" {
+				t.Error("Script should not be empty after Accept")
+			}
+
+			// Verify the script contains expected content
+			if len(tt.data.Commands) > 0 {
+				for _, cmd := range tt.data.Commands {
+					if !strings.Contains(manager.script, cmd) {
+						t.Errorf("Script should contain command %q", cmd)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestCompletionManager_HasExistingCompletion(t *testing.T) {
 	tempDir := t.TempDir()
 

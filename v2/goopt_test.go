@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/napalu/goopt/v2/validation"
+
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -985,8 +987,8 @@ func TestParser_PrintUsage(t *testing.T) {
 
 	assert.Len(t, *writer.data, 22, "PrintCommands in this test should return 22 elements")
 	assert.Contains(t, *writer.data, " └───── wacky8 \"wacky8 expects a user value on the command line\"\n")
-	assert.Contains(t, *writer.data, " │───── wacky9 \"\"\n")
-	assert.Contains(t, *writer.data, " └────── wacky10 \"\"\n")
+	assert.Contains(t, *writer.data, " │───── wacky9\n")
+	assert.Contains(t, *writer.data, " └────── wacky10\n")
 
 }
 
@@ -1236,11 +1238,11 @@ Global Flags:
 
 Commands:
  +  create "Create resources"
- │─  ** create user "Manage users"
- |   |  --email or -e "Email for user creation" (optional)
+ ├─  ** create user "Manage users"
+ │   │  --email or -e "Email for user creation" (optional)
  └─  **  ** create user type "Specify user type"
- |   |   |  --username "Username for user creation" (required)
- |   |   |  --firstName "User first name" (optional)
+ │   │   │  --username "Username for user creation" (required)
+ │   │   │  --firstName "User first name" (optional)
  └─  ** create group "Manage groups"
 `
 	output := strings.Join(*writer.data, "")
@@ -2915,17 +2917,8 @@ func TestParser_SetMaxDependencyDepth(t *testing.T) {
 }
 
 func TestParser_CommandExecution(t *testing.T) {
-	testBundle := i18n.Default()
-	sentinel := i18n.NewError("err.test_failed")
-	err := testBundle.AddLanguage(language.English, map[string]string{
-		"goopt.error.command_callback_error": "command failed '%[1]s'",
-		"err.test_failed":                    "test failed '%[1]s'",
-		"err.cmd1_failed":                    "cmd1 failed '%[1]s'",
-		"err.cmd2_failed":                    "cmd2 failed '%[1]s'",
-	})
-	if err != nil {
-		t.Fatalf("failed to add language: %v", err)
-	}
+	// Test command execution error handling.
+	// Note: Error messages use the global default bundle translations.
 	tests := []struct {
 		name        string
 		setupFunc   func(p *Parser) error
@@ -2940,14 +2933,15 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmd := &Command{
 					Name: "test",
 					Callback: func(cmdLine *Parser, command *Command) error {
-						return sentinel.WithArgs(command.Name)
+						// Use a standard error since we can no longer customize messages
+						return errs.ErrCommandCallbackError.WithArgs(command.Name)
 					},
 				}
 				return p.AddCommand(cmd)
 			},
 			args:        []string{"test"},
 			execMethod:  "single",
-			wantErrs:    map[string]string{"test": "test failed 'test'"},
+			wantErrs:    map[string]string{"test": "error in command callback: test"},
 			description: "Should execute single command via ExecuteCommand",
 		},
 		{
@@ -2971,8 +2965,8 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"cmd1", "cmd2"},
 			execMethod: "all",
 			wantErrs: map[string]string{
-				"cmd1": "command failed 'cmd1'",
-				"cmd2": "command failed 'cmd2'",
+				"cmd1": "error in command callback: cmd1",
+				"cmd2": "error in command callback: cmd2",
 			},
 			description: "Should execute all commands via ExecuteCommands",
 		},
@@ -2991,7 +2985,7 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"test"},
 			execMethod: "onParse",
 			wantErrs: map[string]string{
-				"test": "error processing command test: command failed 'test': custom error",
+				"test": "error processing command test: error in command callback: test: custom error",
 			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},
@@ -3010,7 +3004,7 @@ func TestParser_CommandExecution(t *testing.T) {
 			args:       []string{"test"},
 			execMethod: "onParse",
 			wantErrs: map[string]string{
-				"test": "error processing command test: command failed 'test': custom error",
+				"test": "error processing command test: error in command callback: test: custom error",
 			},
 			description: "Should execute commands during Parse when ExecOnParse is true",
 		},
@@ -3033,8 +3027,7 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedKey := tt.wantErrs[kv.Key]
-					expectedMsg := testBundle.T(expectedKey)
+					expectedMsg := tt.wantErrs[kv.Key]
 					renderedMsg := kv.Value.Error()
 					assert.Equal(t, expectedMsg, renderedMsg)
 				}
@@ -3045,8 +3038,7 @@ func TestParser_CommandExecution(t *testing.T) {
 				cmdErrs := p.GetCommandExecutionErrors()
 				assert.Equal(t, len(tt.wantErrs), len(cmdErrs))
 				for _, kv := range cmdErrs {
-					expectedKey := tt.wantErrs[kv.Key]
-					expectedMsg := testBundle.T(expectedKey)
+					expectedMsg := tt.wantErrs[kv.Key]
 					renderedMsg := kv.Value.Error()
 					assert.Equal(t, expectedMsg, renderedMsg)
 				}
@@ -5637,7 +5629,18 @@ func TestParser_StructCallbackOnTerminalCommand(t *testing.T) {
 		parser.SetExecOnParse(true)
 		assert.False(t, parser.ParseString("create user --username foo"))
 		assert.Len(t, parser.GetErrors(), 1, "Should set error for callback on non-terminal command")
-		assert.True(t, errors.Is(parser.GetErrors()[0], errs.ErrProcessingCommand))
+		// Check that the error is a processing command error by checking its key
+		// The error might be wrapped, so we need to unwrap it
+		checkErr := parser.GetErrors()[0]
+		for checkErr != nil {
+			if trErr, ok := checkErr.(*i18n.TrError); ok {
+				if trErr.Key() == errs.ErrProcessingCommandKey {
+					break // Found it
+				}
+			}
+			checkErr = errors.Unwrap(checkErr)
+		}
+		assert.NotNil(t, checkErr, "Should find ErrProcessingCommand in error chain")
 		assert.False(t, executed, "Callback should not have been executed")
 	})
 
@@ -6098,17 +6101,17 @@ func TestArgument_DisplayID(t *testing.T) {
 			want: "pos5",
 		},
 		{
-			name: "non-positional with uuid and description key",
+			name: "non-positional with uniqueID and description key",
 			arg: &Argument{
-				uuid:           "12345678-abcd-efgh-ijkl-mnopqrstuvwx",
+				uniqueID:       "12345678-abcd-efgh-ijkl-mnopqrstuvwx",
 				DescriptionKey: "mykey",
 			},
 			want: "12345678-mykey",
 		},
 		{
-			name: "non-positional with uuid only",
+			name: "non-positional with uniqueID only",
 			arg: &Argument{
-				uuid:           "abcdefgh-1234-5678-90ab-cdefghijklmn",
+				uniqueID:       "abcdefgh-1234-5678-90ab-cdefghijklmn",
 				DescriptionKey: "",
 			},
 			want: "abcdefgh-",
@@ -6543,7 +6546,7 @@ type Test struct {
 	Include []string `goopt:"short:i;desc:a slice of strings"`
 }
 
-func TestRepeatedFlagsWithChainedType(t *testing.T) {
+func TestParser_RepeatedFlagsWithChainedType(t *testing.T) {
 	t.Run("using struct-tags", func(t *testing.T) {
 		test := &Test{}
 		p, err := NewParserFromStruct(test)
@@ -6730,7 +6733,7 @@ func TestRepeatedFlagsWithChainedType(t *testing.T) {
 }
 
 // TestRepeatedFlagsEdgeCases tests edge cases for repeated flags
-func TestRepeatedFlagsEdgeCases(t *testing.T) {
+func TestParser_RepeatedFlagsEdgeCases(t *testing.T) {
 	t.Run("repeated flags with empty values between", func(t *testing.T) {
 		var values []string
 		p := NewParser()
@@ -6797,7 +6800,7 @@ func TestRepeatedFlagsEdgeCases(t *testing.T) {
 }
 
 // TestRepeatedFlagsWithStructTags tests repeated flags when using struct tags
-func TestRepeatedFlagsWithStructTags(t *testing.T) {
+func TestParser_FlagsWithStructTags(t *testing.T) {
 	t.Run("struct with various repeated slice types", func(t *testing.T) {
 		type Config struct {
 			Strings   []string        `goopt:"name:string;type:chained"`
@@ -6822,6 +6825,3276 @@ func TestRepeatedFlagsWithStructTags(t *testing.T) {
 		assert.Equal(t, []float64{1.5, 2.5}, cfg.Floats)
 		assert.Equal(t, []time.Duration{time.Hour, 30 * time.Minute}, cfg.Durations)
 	})
+}
+
+func TestParser_ValidationHooks(t *testing.T) {
+	t.Run("validate email flag", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("email", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Email()),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid email
+		success := parser.Parse([]string{"--email", "test@example.com"})
+		assert.True(t, success)
+		assert.Equal(t, "test@example.com", parser.options["email"])
+
+		// Invalid email
+		parser = NewParser()
+		parser.AddFlag("email", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Email()),
+		))
+		success = parser.Parse([]string{"--email", "not-an-email"})
+		assert.False(t, success)
+		assert.Greater(t, len(parser.errors), 0)
+	})
+
+	t.Run("validate URL with schemes", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("url", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.URL("http", "https")),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid HTTPS URL
+		success := parser.Parse([]string{"--url", "https://example.com"})
+		assert.True(t, success)
+
+		// Invalid scheme
+		parser = NewParser()
+		parser.AddFlag("url", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.URL("http", "https")),
+		))
+		success = parser.Parse([]string{"--url", "ftp://example.com"})
+		assert.False(t, success)
+	})
+
+	t.Run("validate range", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("port", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Port()),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid port
+		success := parser.Parse([]string{"--port", "8080"})
+		assert.True(t, success)
+
+		// Invalid port (too high)
+		parser = NewParser()
+		parser.AddFlag("port", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Port()),
+		))
+		success = parser.Parse([]string{"--port", "70000"})
+		assert.False(t, success)
+
+		// Invalid port (not a number)
+		parser = NewParser()
+		parser.AddFlag("port", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Port()),
+		))
+		success = parser.Parse([]string{"--port", "abc"})
+		assert.False(t, success)
+	})
+
+	t.Run("validate string length", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("username", NewArg(
+				WithType(types.Single),
+				WithValidators(
+					validation.MinLength(3),
+					validation.MaxLength(20),
+				),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid length
+		success := parser.Parse([]string{"--username", "johndoe"})
+		assert.True(t, success)
+
+		// Too short
+		parser = NewParser()
+		parser.AddFlag("username", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.MinLength(3)),
+		))
+		success = parser.Parse([]string{"--username", "ab"})
+		assert.False(t, success)
+	})
+
+	t.Run("multiple validators with All", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("password", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.All(
+					validation.MinLength(8),
+					validation.Regex(`[A-Z]`, "Must contain uppercase"), // At least one uppercase
+					validation.Regex(`[0-9]`, "Must contain digit"),     // At least one number
+				)),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid password
+		success := parser.Parse([]string{"--password", "Password123"})
+		assert.True(t, success)
+
+		// Invalid - no uppercase
+		parser = NewParser()
+		parser.AddFlag("password", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.All(
+				validation.MinLength(8),
+				validation.Regex(`[A-Z]`, "Must contain uppercase"),
+			)),
+		))
+		success = parser.Parse([]string{"--password", "password123"})
+		assert.False(t, success)
+	})
+
+	t.Run("validators with Any", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("id", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Any(
+					validation.Email(),
+					validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"), // 6+ digit ID
+				)),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid email
+		success := parser.Parse([]string{"--id", "user@example.com"})
+		assert.True(t, success)
+
+		// Valid numeric ID
+		parser = NewParser()
+		parser.AddFlag("id", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Any(
+				validation.Email(),
+				validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"),
+			)),
+		))
+		success = parser.Parse([]string{"--id", "123456"})
+		assert.True(t, success)
+
+		// Invalid - neither email nor 6+ digits
+		parser = NewParser()
+		parser.AddFlag("id", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Any(
+				validation.Email(),
+				validation.Regex(`^[0-9]{6,}$`, "Pattern: ^[0-9]{6,}$"),
+			)),
+		))
+		success = parser.Parse([]string{"--id", "12345"})
+		assert.False(t, success)
+	})
+
+	t.Run("validate standalone flag", func(t *testing.T) {
+		// Custom validator that only accepts "true"
+		onlyTrue := func(value string) error {
+			if value != "true" {
+				return errors.New("value must be true")
+			}
+			return nil
+		}
+
+		parser, err := NewParserWith(
+			WithFlag("enabled", NewArg(
+				WithType(types.Standalone),
+				WithValidator(onlyTrue),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid - defaults to true
+		success := parser.Parse([]string{"--enabled"})
+		assert.True(t, success)
+
+		// Invalid - explicitly false
+		parser = NewParser()
+		parser.AddFlag("enabled", NewArg(
+			WithType(types.Standalone),
+			WithValidator(onlyTrue),
+		))
+		success = parser.Parse([]string{"--enabled", "false"})
+		assert.False(t, success)
+	})
+
+	t.Run("validate with filters and validators", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithPreValidationFilter(strings.TrimSpace),
+				WithPostValidationFilter(strings.ToLower),
+				WithValidator(validation.MinLength(3)),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid after filtering
+		success := parser.Parse([]string{"--name", "  JOHN  "})
+		assert.True(t, success)
+		assert.Equal(t, "john", parser.options["name"])
+
+		// Invalid after filtering (too short)
+		parser = NewParser()
+		parser.AddFlag("name", NewArg(
+			WithType(types.Single),
+			WithPreValidationFilter(strings.TrimSpace),
+			WithValidator(validation.MinLength(3)),
+		))
+		success = parser.Parse([]string{"--name", "  AB  "})
+		assert.False(t, success)
+	})
+
+	t.Run("add validators after flag creation", func(t *testing.T) {
+		parser := NewParser()
+		parser.AddFlag("age", NewArg(WithType(types.Single)))
+
+		// Add validators later
+		err := parser.AddFlagValidators("age",
+			validation.Integer(),
+			validation.Range(0, 150),
+		)
+		assert.NoError(t, err)
+
+		// Valid age
+		success := parser.Parse([]string{"--age", "25"})
+		assert.True(t, success)
+
+		// Invalid age (not a number)
+		parser = NewParser()
+		parser.AddFlag("age", NewArg(WithType(types.Single)))
+		parser.AddFlagValidators("age", validation.Integer())
+		success = parser.Parse([]string{"--age", "twenty-five"})
+		assert.False(t, success)
+	})
+
+	t.Run("positional argument validation", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("file", NewArg(
+				WithType(types.Single),
+				WithPosition(0),
+				WithValidator(validation.FileExtension(".txt", ".md")),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid extension
+		success := parser.Parse([]string{"document.txt"})
+		assert.True(t, success)
+
+		// Invalid extension
+		parser = NewParser()
+		parser.AddFlag("file", NewArg(
+			WithType(types.Single),
+			WithPosition(0),
+			WithValidator(validation.FileExtension(".txt", ".md")),
+		))
+		success = parser.Parse([]string{"document.pdf"})
+		assert.False(t, success)
+	})
+
+	t.Run("custom validator", func(t *testing.T) {
+		evenNumber := validation.Custom(func(value string) error {
+			num, err := strconv.Atoi(value)
+			if err != nil {
+				return errors.New("value must be a number")
+			}
+			if num%2 != 0 {
+				return errors.New("value must be even")
+			}
+			return nil
+		})
+
+		parser, err := NewParserWith(
+			WithFlag("count", NewArg(
+				WithType(types.Single),
+				WithValidator(evenNumber),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid even number
+		success := parser.Parse([]string{"--count", "4"})
+		assert.True(t, success)
+
+		// Invalid odd number
+		parser = NewParser()
+		parser.AddFlag("count", NewArg(
+			WithType(types.Single),
+			WithValidator(evenNumber),
+		))
+		success = parser.Parse([]string{"--count", "5"})
+		assert.False(t, success)
+	})
+
+	// Note: Required() validator has been removed.
+	// Use required:true flag attribute instead for required non-empty values.
+
+	t.Run("clear and replace validators", func(t *testing.T) {
+		parser := NewParser()
+		parser.AddFlag("value", NewArg(WithType(types.Single)))
+
+		// Add initial validator
+		parser.AddFlagValidators("value", validation.MinLength(5))
+
+		// Replace with new validators
+		err := parser.SetFlagValidators("value",
+			validation.MaxLength(10),
+			validation.AlphaNumeric(),
+		)
+		assert.NoError(t, err)
+
+		// Valid under new rules
+		success := parser.Parse([]string{"--value", "abc123"})
+		assert.True(t, success)
+
+		// Would have failed old rule (min 5) but passes new rules
+		parser = NewParser()
+		parser.AddFlag("value", NewArg(WithType(types.Single)))
+		parser.SetFlagValidators("value", validation.MaxLength(10))
+		success = parser.Parse([]string{"--value", "ab"})
+		assert.True(t, success)
+
+		// Clear all validators
+		err = parser.ClearFlagValidators("value")
+		assert.NoError(t, err)
+
+		// Any value should work now
+		parser = NewParser()
+		parser.AddFlag("value", NewArg(WithType(types.Single)))
+		parser.AddFlagValidators("value", validation.MinLength(100)) // Add restrictive validator
+		parser.ClearFlagValidators("value")                          // Clear it
+		success = parser.Parse([]string{"--value", "x"})             // Short value should work
+		assert.True(t, success)
+	})
+
+	t.Run("validate hostname", func(t *testing.T) {
+		_, err := NewParserWith(
+			WithFlag("host", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Hostname()),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// Valid hostnames
+		validHosts := []string{
+			"localhost",
+			"example.com",
+			"sub.example.com",
+			"test-server",
+			"192-168-1-1",
+		}
+
+		for _, host := range validHosts {
+			p := NewParser()
+			p.AddFlag("host", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Hostname()),
+			))
+			success := p.Parse([]string{"--host", host})
+			assert.True(t, success, "Expected %s to be valid", host)
+		}
+
+		// Invalid hostnames
+		invalidHosts := []string{
+			"-example.com",           // starts with hyphen
+			"example.com-",           // ends with hyphen
+			"ex ample.com",           // contains space
+			"example..com",           // double dot
+			strings.Repeat("a", 254), // too long
+		}
+
+		for _, host := range invalidHosts {
+			p := NewParser()
+			p.AddFlag("host", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Hostname()),
+			))
+			success := p.Parse([]string{"--host", host})
+			assert.False(t, success, "Expected %s to be invalid", host)
+		}
+	})
+}
+
+func TestParser_ValidationWithSecureFlags(t *testing.T) {
+	t.Run("validate secure password", func(t *testing.T) {
+		// This test would need mock input, so we'll test the validator setup
+		parser := NewParser()
+		parser.AddFlag("password", NewArg(
+			WithType(types.Single),
+			WithSecurePrompt("Enter password: "),
+			WithValidators(
+				validation.MinLength(8),
+				validation.Regex(`[A-Z]`, "Must contain uppercase"),
+				validation.Regex(`[a-z]`, "Must contain lowercase"),
+				validation.Regex(`[0-9]`, "Must contain digit"),
+			),
+		))
+
+		// Verify validators were added
+		flagInfo, found := parser.acceptedFlags.Get("password")
+		assert.True(t, found)
+		assert.Len(t, flagInfo.Argument.Validators, 4)
+	})
+}
+
+func TestParser_ValidationIntegration(t *testing.T) {
+	t.Run("complex validation scenario", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("email", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+				WithValidator(validation.Email()),
+			)),
+			WithFlag("age", NewArg(
+				WithType(types.Single),
+				WithValidators(
+					validation.Integer(),
+					validation.Range(18, 100),
+				),
+			)),
+			WithFlag("website", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.URL("http", "https")),
+			)),
+			WithFlag("username", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+				WithValidators(
+					validation.MinLength(3),
+					validation.MaxLength(20),
+					validation.Identifier(),
+				),
+			)),
+		)
+		assert.NoError(t, err)
+
+		// All valid
+		success := parser.Parse([]string{
+			"--email", "user@example.com",
+			"--age", "25",
+			"--website", "https://example.com",
+			"--username", "john_doe",
+		})
+		assert.True(t, success)
+
+		// Invalid username (has hyphen, not identifier)
+		parser = NewParser()
+		parser.AddFlag("username", NewArg(
+			WithType(types.Single),
+			WithValidator(validation.Identifier()),
+		))
+		success = parser.Parse([]string{"--username", "john-doe"})
+		assert.False(t, success)
+	})
+
+	t.Run("validation with parser config functions", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("port", NewArg(WithType(types.Single))),
+			WithFlagValidators("port", validation.Port()),
+		)
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"--port", "8080"})
+		assert.True(t, success)
+	})
+}
+
+func TestParser_BuiltInValidators(t *testing.T) {
+	tests := []struct {
+		name      string
+		validator validation.ValidatorFunc
+		valid     []string
+		invalid   []string
+	}{
+		{
+			name:      "Integer",
+			validator: validation.Integer(),
+			valid:     []string{"0", "123", "-456", "+789"},
+			invalid:   []string{"", "abc", "12.34", "1e5"},
+		},
+		{
+			name:      "Float",
+			validator: validation.Float(),
+			valid:     []string{"0", "123", "-456.78", "1.23e4", ".5"},
+			invalid:   []string{"", "abc", "1.2.3"},
+		},
+		{
+			name:      "Boolean",
+			validator: validation.Boolean(),
+			valid:     []string{"true", "false", "1", "0", "True", "FALSE"},
+			invalid:   []string{"", "yes", "no", "2"},
+		},
+		{
+			name:      "AlphaNumeric",
+			validator: validation.AlphaNumeric(),
+			valid:     []string{"abc", "ABC", "123", "abc123", "ABC123"},
+			invalid:   []string{"", "abc-123", "abc_123", "abc 123", "abc!"},
+		},
+		{
+			name:      "NoWhitespace",
+			validator: validation.NoWhitespace(),
+			valid:     []string{"abc", "123", "abc-123", "abc_123"},
+			invalid:   []string{"abc 123", "abc\t123", "abc\n123", " abc"},
+		},
+		{
+			name:      "OneOf",
+			validator: validation.IsOneOf("red", "green", "blue"),
+			valid:     []string{"red", "green", "blue"},
+			invalid:   []string{"", "yellow", "RED", "Green"},
+		},
+		{
+			name:      "NotIn",
+			validator: validation.IsNotOneOf("admin", "root", "system"),
+			valid:     []string{"user", "guest", "john"},
+			invalid:   []string{"admin", "root", "system"},
+		},
+		{
+			name:      "IP",
+			validator: validation.IP(),
+			valid:     []string{"192.168.1.1", "0.0.0.0", "255.255.255.255", "::1", "2001:db8::1"},
+			invalid:   []string{"", "192.168.1", "192.168.1.256", "not.an.ip", "192.168.1.1.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, valid := range tt.valid {
+				err := tt.validator(valid)
+				assert.NoError(t, err, "Expected %q to be valid", valid)
+			}
+
+			for _, invalid := range tt.invalid {
+				err := tt.validator(invalid)
+				assert.Error(t, err, "Expected %q to be invalid", invalid)
+			}
+		})
+	}
+}
+
+func TestParser_CombinedAcceptedValuesAndValidators(t *testing.T) {
+	t.Run("email from specific domains", func(t *testing.T) {
+		type Config struct {
+			// Must be a valid email AND from specific domains
+			Email string `goopt:"name:email;accepted:{pattern:.*@(company|example)\\.com$,desc:Company or Example email};validators:email()"`
+		}
+
+		tests := []struct {
+			email      string
+			shouldPass bool
+			errorHint  string
+		}{
+			{"user@company.com", true, ""},
+			{"admin@example.com", true, ""},
+			{"user@gmail.com", false, "Company or Example email"}, // Valid email but wrong domain
+			{"invalid-email", false, "Company or Example email"},  // Invalid format
+			{"user@", false, "Company or Example email"},          // Invalid format
+		}
+
+		for _, tt := range tests {
+			parser, _ := NewParserFromStruct(&Config{})
+			success := parser.Parse([]string{"cmd", "--email", tt.email})
+
+			if tt.shouldPass {
+				assert.True(t, success, "Expected %s to be valid", tt.email)
+			} else {
+				assert.False(t, success, "Expected %s to be invalid", tt.email)
+				if tt.errorHint != "" {
+					errors := parser.GetErrors()
+					found := false
+					for _, err := range errors {
+						if strings.Contains(err.Error(), tt.errorHint) {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "Expected error to contain '%s' for %s", tt.errorHint, tt.email)
+				}
+			}
+		}
+	})
+
+	t.Run("project ID with format and length", func(t *testing.T) {
+		type Config struct {
+			// Must match pattern AND be exactly 12 characters
+			ProjectID string `goopt:"name:project;accepted:{pattern:^PROJ-[0-9]+$,desc:Project ID format};validators:length(12)"`
+		}
+
+		tests := []struct {
+			id         string
+			shouldPass bool
+		}{
+			{"PROJ-1234567", true},   // Correct format and length
+			{"PROJ-123", false},      // Correct format, wrong length
+			{"PROJ-12345678", false}, // Correct format, wrong length
+			{"TEST-1234567", false},  // Wrong format
+			{"PROJ1234567", false},   // Missing dash
+		}
+
+		for _, tt := range tests {
+			parser, _ := NewParserFromStruct(&Config{})
+			success := parser.Parse([]string{"cmd", "--project", tt.id})
+
+			if tt.shouldPass {
+				assert.True(t, success, "Expected %s to be valid", tt.id)
+			} else {
+				assert.False(t, success, "Expected %s to be invalid", tt.id)
+			}
+		}
+	})
+
+	t.Run("port with pattern and range", func(t *testing.T) {
+		type Config struct {
+			// Must be in specific patterns AND within range
+			Port int `goopt:"name:port;accepted:{pattern:^(8080|8443|9[0-9]{3})$,desc:Port 8080/8443/9xxx};validators:range(8000,9999)"`
+		}
+
+		tests := []struct {
+			port       string
+			shouldPass bool
+		}{
+			{"8080", true},   // Allowed by pattern
+			{"8443", true},   // Allowed by pattern
+			{"9000", true},   // Matches 9xxx pattern and in range
+			{"9999", true},   // Matches 9xxx pattern and in range
+			{"8081", false},  // In range but not in pattern
+			{"7080", false},  // Not in pattern or range
+			{"10000", false}, // Not in pattern or range
+		}
+
+		for _, tt := range tests {
+			parser, _ := NewParserFromStruct(&Config{})
+			success := parser.Parse([]string{"cmd", "--port", tt.port})
+
+			if tt.shouldPass {
+				assert.True(t, success, "Expected port %s to be valid", tt.port)
+			} else {
+				assert.False(t, success, "Expected port %s to be invalid", tt.port)
+			}
+		}
+	})
+
+	t.Run("chained values with both validations", func(t *testing.T) {
+		type Config struct {
+			// Each tag must match pattern AND be from allowed set
+			Tags []string `goopt:"name:tags;type:chained;accepted:{pattern:^[a-z]+-[0-9]+$,desc:Environment tag format};validators:oneof(isoneof(env-1,env-2,test-1,test-2,prod-1,prod-2))"`
+		}
+
+		parser, _ := NewParserFromStruct(&Config{})
+
+		// Valid: all match pattern and are in allowed set
+		success := parser.Parse([]string{"cmd", "--tags", "env-1,test-2,prod-1"})
+		assert.True(t, success, "Expected valid tags to pass")
+
+		// Invalid: env-3 matches pattern but not in allowed set
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--tags", "env-1,env-3"})
+		assert.False(t, success2, "Expected env-3 to fail validator")
+
+		// Invalid: ENV-1 is in set but doesn't match lowercase pattern
+		parser3, _ := NewParserFromStruct(&Config{})
+		success3 := parser3.Parse([]string{"cmd", "--tags", "ENV-1"})
+		assert.False(t, success3, "Expected ENV-1 to fail pattern")
+	})
+
+	t.Run("validation order - accepted values first", func(t *testing.T) {
+		type Config struct {
+			// Pattern check should fail before email validation
+			Email string `goopt:"name:email;accepted:{pattern:^[a-z]+@example\\.com$,desc:Lowercase example.com email};validators:email()"`
+		}
+
+		parser, _ := NewParserFromStruct(&Config{})
+		success := parser.Parse([]string{"cmd", "--email", "User@example.com"})
+		assert.False(t, success, "Expected uppercase to fail pattern check")
+
+		errors := parser.GetErrors()
+		found := false
+		for _, err := range errors {
+			// Should get pattern error, not email validation error
+			if strings.Contains(err.Error(), "Lowercase example.com email") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected pattern error, not email validator error")
+	})
+
+	t.Run("complex validation with filters", func(t *testing.T) {
+		type Config struct {
+			// Combine with secure field (though we can't test secure input easily)
+			APIKey string `goopt:"name:api-key;validators:regex(^[A-Z]{4}-[0-9]{4}-[A-Z]{4}$),length(14)"`
+
+			// Multiple validators on username
+			Username string `goopt:"name:username;validators:minlength(3),maxlength(20),alphanumeric(),nowhitespace()"`
+		}
+
+		parser, _ := NewParserFromStruct(&Config{})
+		success := parser.Parse([]string{"cmd",
+			"--api-key", "ABCD-1234-EFGH",
+			"--username", "johndoe123",
+		})
+		assert.True(t, success, "Expected valid values to pass")
+
+		// Test invalid API key format
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--api-key", "abcd-1234-efgh"})
+		assert.False(t, success2, "Expected lowercase to fail")
+
+		// Test invalid username (with space)
+		parser3, _ := NewParserFromStruct(&Config{})
+		success3 := parser3.Parse([]string{"cmd", "--username", "john doe"})
+		assert.False(t, success3, "Expected username with space to fail")
+	})
+}
+
+func TestParser_ValidatorEdgeCases(t *testing.T) {
+	t.Run("empty value handling", func(t *testing.T) {
+		type Config struct {
+			Optional string `goopt:"name:optional;validators:minlength(5)"`
+			Required string `goopt:"name:required;required:true;validators:minlength(5)"`
+		}
+
+		// Empty optional field should not trigger validator
+		parser, _ := NewParserFromStruct(&Config{})
+		success := parser.Parse([]string{"cmd", "--required", "hello"})
+		assert.True(t, success, "Expected parsing to succeed with empty optional")
+
+		// Empty required field should fail on required check, not validator
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd"})
+		assert.False(t, success2, "Expected parsing to fail on required")
+		errors := parser2.GetErrors()
+		found := false
+		for _, err := range errors {
+			if strings.Contains(err.Error(), "required flag missing") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected required flag error")
+	})
+
+	t.Run("default values with validators", func(t *testing.T) {
+		type Config struct {
+			Port int `goopt:"name:port;default:8080;validators:range(1000,9999)"`
+		}
+
+		// Default value should pass validation
+		cfg := &Config{}
+		parser, _ := NewParserFromStruct(cfg)
+		success := parser.Parse([]string{"cmd"})
+		assert.True(t, success, "Expected default value to pass validation")
+		assert.Equal(t, 8080, cfg.Port, "Expected default value to be set")
+	})
+}
+
+func TestParser_ComposableValidatorsInStructTags(t *testing.T) {
+	t.Run("OneOf validator in struct tag", func(t *testing.T) {
+		type Config struct {
+			// Accept either 5-digit ZIP or ZIP+4 format
+			ZipCode string `goopt:"validators:oneof(regex({pattern:^\\d{5}$,desc:5-digit ZIP}),regex({pattern:^\\d{5}-\\d{4}$,desc:ZIP+4}))"`
+		}
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--zip-code", "12345"}, true, "5-digit ZIP"},
+			{[]string{"cmd", "--zip-code", "12345-6789"}, true, "ZIP+4 format"},
+			{[]string{"cmd", "--zip-code", "1234"}, false, "too short"},
+			{[]string{"cmd", "--zip-code", "123456"}, false, "too long"},
+			{[]string{"cmd", "--zip-code", "abcde"}, false, "not digits"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser, err := NewParserFromStruct(&Config{}, WithFlagNameConverter(ToKebabCase))
+				assert.NoError(t, err)
+
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+
+	t.Run("Not validator in struct tag", func(t *testing.T) {
+		type Config struct {
+			// Must be alphanumeric but NOT a reserved name
+			Username string `goopt:"validators:all(alphanumeric,not(isoneof(admin,root,system,guest)))"`
+		}
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--username", "john123"}, true, "valid username"},
+			{[]string{"cmd", "--username", "admin"}, false, "reserved name"},
+			{[]string{"cmd", "--username", "root"}, false, "reserved name"},
+			{[]string{"cmd", "--username", "user-name"}, false, "not alphanumeric"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser, err := NewParserFromStruct(&Config{}, WithFlagNameConverter(ToKebabCase))
+				assert.NoError(t, err)
+
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+
+	t.Run("Nested composition in struct tag", func(t *testing.T) {
+		type Config struct {
+			// Either (secret key: 32+ chars starting with sk_) OR (public key: 36+ chars starting with pk_)
+			APIKey string `goopt:"validators:oneof(all(minlength(32),regex({pattern:^sk_,desc:Secret key})),all(minlength(36),regex({pattern:^pk_,desc:Public key})))"`
+		}
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--api-key", "sk_" + strings.Repeat("a", 29)}, true, "valid secret key (32 chars)"},
+			{[]string{"cmd", "--api-key", "pk_" + strings.Repeat("b", 33)}, true, "valid public key (36 chars)"},
+			{[]string{"cmd", "--api-key", "sk_short"}, false, "secret key too short"},
+			{[]string{"cmd", "--api-key", "pk_short"}, false, "public key too short"},
+			{[]string{"cmd", "--api-key", "invalid_" + strings.Repeat("c", 40)}, false, "wrong prefix"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser, err := NewParserFromStruct(&Config{}, WithFlagNameConverter(ToKebabCase))
+				assert.NoError(t, err)
+
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+
+	t.Run("All validator explicit in struct tag", func(t *testing.T) {
+		type Config struct {
+			// Explicitly use All (though comma-separated has same effect)
+			Password string `goopt:"validators:all(minlength(8),regex({pattern:[A-Z],desc:uppercase}),regex({pattern:[0-9],desc:digit}))"`
+		}
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--password", "Secret123"}, true, "valid password"},
+			{[]string{"cmd", "--password", "secret123"}, false, "no uppercase"},
+			{[]string{"cmd", "--password", "SecretPW"}, false, "no digit"},
+			{[]string{"cmd", "--password", "Sec1"}, false, "too short"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser, err := NewParserFromStruct(&Config{}, WithFlagNameConverter(ToKebabCase))
+				assert.NoError(t, err)
+
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+
+	t.Run("Complex nested validation", func(t *testing.T) {
+		type Config struct {
+			// Must be one of the valid ID formats, but NOT test IDs
+			ID string `goopt:"validators:all(oneof(regex({pattern:^EMP-\\d{6}$,desc:Employee}),regex({pattern:^USR-\\d{8}$,desc:User})),not(isoneof(EMP-000000,USR-00000000)))"`
+		}
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--id", "EMP-123456"}, true, "valid employee ID"},
+			{[]string{"cmd", "--id", "USR-12345678"}, true, "valid user ID"},
+			{[]string{"cmd", "--id", "EMP-000000"}, false, "test employee ID"},
+			{[]string{"cmd", "--id", "USR-00000000"}, false, "test user ID"},
+			{[]string{"cmd", "--id", "ADM-123456"}, false, "invalid prefix"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser, err := NewParserFromStruct(&Config{}, WithFlagNameConverter(ToKebabCase))
+				assert.NoError(t, err)
+
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+}
+
+func TestComposableValidatorsProgrammatic(t *testing.T) {
+	t.Run("OneOf with regex validators", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("id", NewArg(
+				WithDescription("User or Employee ID"),
+				WithValidator(validation.OneOf(
+					validation.Regex("^EMP-\\d{6}$", "Employee ID (EMP-123456)"),
+					validation.Regex("^USR-\\d{8}$", "User ID (USR-12345678)"),
+					validation.Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "UUID"),
+				)),
+			)),
+		)
+		assert.NoError(t, err)
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--id", "EMP-123456"}, true, "employee ID"},
+			{[]string{"cmd", "--id", "USR-12345678"}, true, "user ID"},
+			{[]string{"cmd", "--id", "550e8400-e29b-41d4-a716-446655440000"}, true, "UUID"},
+			{[]string{"cmd", "--id", "invalid"}, false, "invalid format"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser.ClearErrors() // Reset parser state
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+
+	t.Run("Deep nesting of composable validators", func(t *testing.T) {
+		// Complex rule: (Email OR (URL but not localhost)) AND (not containing "test")
+		parser, err := NewParserWith(
+			WithFlag("contact", NewArg(
+				WithDescription("Contact info"),
+				WithValidator(validation.All(
+					validation.OneOf(
+						validation.Email(),
+						validation.All(
+							validation.URL("http", "https"),
+							validation.Not(validation.Regex("://localhost", "localhost URL")),
+						),
+					),
+					validation.Not(validation.Regex("test", "contains 'test'")),
+				)),
+			)),
+		)
+		assert.NoError(t, err)
+
+		tests := []struct {
+			args  []string
+			valid bool
+			desc  string
+		}{
+			{[]string{"cmd", "--contact", "user@example.com"}, true, "valid email"},
+			{[]string{"cmd", "--contact", "https://example.com"}, true, "valid URL"},
+			{[]string{"cmd", "--contact", "http://localhost:8080"}, false, "localhost URL"},
+			{[]string{"cmd", "--contact", "test@example.com"}, false, "contains 'test'"},
+			{[]string{"cmd", "--contact", "https://test.com"}, false, "contains 'test'"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.desc, func(t *testing.T) {
+				parser.ClearErrors() // Reset parser state
+				success := parser.Parse(tt.args)
+				assert.Equal(t, tt.valid, success, "Parse result mismatch for %s", tt.desc)
+			})
+		}
+	})
+}
+
+func TestParser_ValidatorParsing(t *testing.T) {
+	t.Run("Parse oneof validator specs", func(t *testing.T) {
+		validators, err := validation.ParseValidators([]string{
+			"oneof(email,url,integer)",
+		})
+		assert.NoError(t, err)
+		assert.Len(t, validators, 1)
+
+		// Test the validator works
+		validator := validators[0]
+		assert.NoError(t, validator("user@example.com"), "should accept email")
+		assert.NoError(t, validator("http://example.com"), "should accept URL")
+		assert.NoError(t, validator("12345"), "should accept integer")
+		assert.Error(t, validator("not-valid"), "should reject invalid input")
+	})
+
+	t.Run("Parse nested composition", func(t *testing.T) {
+		validators, err := validation.ParseValidators([]string{
+			"oneof(all(minlength(10),email),all(url,maxlength(50)))",
+		})
+		assert.NoError(t, err)
+		assert.Len(t, validators, 1)
+
+		// Test the validator works
+		validator := validators[0]
+		assert.NoError(t, validator("longuser@example.com"), "10+ char email")
+		assert.NoError(t, validator("http://short.com"), "URL under 50 chars")
+		assert.Error(t, validator("a@b.c"), "email too short")
+		assert.Error(t, validator("http://"+strings.Repeat("x", 50)+".com"), "URL too long")
+	})
+
+	t.Run("Parse not validator", func(t *testing.T) {
+		validators, err := validation.ParseValidators([]string{
+			"not(isoneof(admin,root,system))",
+		})
+		assert.NoError(t, err)
+		assert.Len(t, validators, 1)
+
+		// Test the validator works
+		validator := validators[0]
+		assert.NoError(t, validator("user"), "should accept non-reserved")
+		assert.Error(t, validator("admin"), "should reject reserved")
+		assert.Error(t, validator("root"), "should reject reserved")
+	})
+}
+
+func TestParser_ValidatorsParenthesesSyntax(t *testing.T) {
+	t.Run("all validators should support parentheses syntax", func(t *testing.T) {
+		type Config struct {
+			// Simple validators
+			Email  string `goopt:"name:email;validators:email()"`
+			Number string `goopt:"name:number;validators:integer()"`
+
+			// Validators with single argument
+			MinLength string `goopt:"name:minlength;validators:minlength(5)"`
+			MaxLength string `goopt:"name:maxlength;validators:maxlength(10)"`
+			Pattern   string `goopt:"name:pattern;validators:regex(^[A-Z]+$)"`
+
+			// Validators with multiple arguments
+			Range   string `goopt:"name:range;validators:range(1,100)"`
+			OneOf   string `goopt:"name:oneof;validators:isoneof(red,green,blue)"`
+			FileExt string `goopt:"name:file;validators:fileext(.jpg,.png,.gif)"`
+
+			// Complex regex with special characters
+			Code     string `goopt:"name:code;validators:regex(^[A-Z]{2,4}-[0-9]{3,5}$)"`
+			TimeCode string `goopt:"name:time;validators:regex(^[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}$)"`
+
+			// Compositional validators
+			Composite string `goopt:"name:composite;validators:oneof(email(),regex(^[0-9]{10}$))"`
+			NotEmail  string `goopt:"name:notemail;validators:not(email())"`
+			AllChecks string `goopt:"name:allchecks;validators:all(minlength(5),maxlength(20),alphanumeric())"`
+
+			// Multiple validators
+			Username string `goopt:"name:username;validators:minlength(3),maxlength(20),alphanumeric()"`
+		}
+
+		// Test that parser can be created
+		_, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err, "Parser should be created successfully with parentheses syntax")
+
+		// Test some valid cases
+		config := &Config{}
+		parser2, _ := NewParserFromStruct(config)
+
+		// Test email
+		success := parser2.Parse([]string{"cmd", "--email", "test@example.com"})
+		if !success {
+			t.Logf("Email validation failed. Errors: %v", parser2.GetErrors())
+		}
+		assert.True(t, success)
+		assert.Equal(t, "test@example.com", config.Email)
+
+		// Test range
+		parser3, _ := NewParserFromStruct(&Config{})
+		success = parser3.Parse([]string{"cmd", "--range", "50"})
+		assert.True(t, success)
+
+		// Test oneof
+		parser4, _ := NewParserFromStruct(&Config{})
+		success = parser4.Parse([]string{"cmd", "--oneof", "green"})
+		assert.True(t, success)
+
+		// Test complex regex
+		parser5, _ := NewParserFromStruct(&Config{})
+		success = parser5.Parse([]string{"cmd", "--code", "ABC-1234"})
+		assert.True(t, success)
+
+		// Test compositional
+		parser6, _ := NewParserFromStruct(&Config{})
+		success = parser6.Parse([]string{"cmd", "--composite", "test@example.com"})
+		assert.True(t, success)
+	})
+
+	t.Run("describable regex with parentheses", func(t *testing.T) {
+		type Config struct {
+			// Describable regex using cleaner syntax within parentheses
+			Phone string `goopt:"name:phone;validators:regex(pattern:^\\+?[0-9]{10,15}$,desc:International phone number)"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		if err != nil {
+			t.Logf("Parser creation error: %v", err)
+		}
+		assert.NoError(t, err)
+
+		// Valid phone
+		config := &Config{}
+		parser2, _ := NewParserFromStruct(config)
+		success := parser2.Parse([]string{"cmd", "--phone", "+12345678901"})
+		if !success {
+			t.Logf("Phone validation failed. Errors: %v", parser2.GetErrors())
+		}
+		assert.True(t, success)
+		assert.Equal(t, "+12345678901", config.Phone)
+
+		// Invalid phone
+		parser3, _ := NewParserFromStruct(&Config{})
+		success = parser3.Parse([]string{"cmd", "--phone", "invalid"})
+		assert.False(t, success)
+	})
+
+	t.Run("backward compatible JSON-like regex syntax", func(t *testing.T) {
+		type Config struct {
+			// JSON-like syntax should still work (using pattern without commas)
+			Email string `goopt:"name:email;validators:regex({pattern:^[a-z]+@[a-z]+\\.[a-z]+$,desc:Lowercase email only})"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		// Valid email
+		config := &Config{}
+		parser2, _ := NewParserFromStruct(config)
+		success := parser2.Parse([]string{"cmd", "--email", "test@example.com"})
+		if !success {
+			t.Logf("JSON-like syntax validation failed. Errors: %v", parser2.GetErrors())
+		}
+		assert.True(t, success)
+		assert.Equal(t, "test@example.com", config.Email)
+	})
+
+	t.Run("colon syntax should not work anymore", func(t *testing.T) {
+		type Config struct {
+			// Old colon syntax should fail
+			MinLen string `goopt:"name:minlen;validators:minlength:5"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		// The error should happen during struct parsing when validators are created
+		assert.Error(t, err, "Parser creation should fail with colon syntax validators")
+
+		// Check that it's the right kind of error using errors.Is
+		assert.True(t, errors.Is(err, errs.ErrProcessingField), "Should be a field processing error")
+
+		// Check that the underlying cause is the validator syntax error
+		var validatorErr *i18n.TrError
+		if errors.As(err, &validatorErr) {
+			// The wrapped error should be about parentheses syntax
+			cause := errors.Unwrap(err)
+			for cause != nil {
+				if errors.Is(cause, errs.ErrValidatorMustUseParentheses) {
+					break
+				}
+				cause = errors.Unwrap(cause)
+			}
+			assert.True(t, errors.Is(cause, errs.ErrValidatorMustUseParentheses), "Should have validator parentheses error in chain")
+		}
+	})
+}
+
+func TestParser_ValidatorsWithEscapedCommas(t *testing.T) {
+	t.Run("regex with quantifier using escaped comma", func(t *testing.T) {
+		type Config struct {
+			// Now we can use {5,10} in regex by escaping the comma!
+			Code string `goopt:"name:code;validators:regex(^[A-Z]{2,4}-[0-9]{3,5}$)"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		// Valid codes
+		validTests := []string{
+			"AB-123",     // Min lengths
+			"ABCD-12345", // Max lengths
+			"ABC-1234",   // Mid lengths
+		}
+
+		for _, code := range validTests {
+			t.Run("valid_"+code, func(t *testing.T) {
+				config := &Config{}
+				parser2, _ := NewParserFromStruct(config)
+				success := parser2.Parse([]string{"cmd", "--code", code})
+				assert.True(t, success, "Expected %s to be valid", code)
+				assert.Equal(t, code, config.Code)
+			})
+		}
+
+		// Invalid codes
+		invalidTests := []string{
+			"A-123",     // Too few letters
+			"ABCDE-123", // Too many letters
+			"AB-12",     // Too few digits
+			"AB-123456", // Too many digits
+			"ab-123",    // Lowercase
+			"AB_123",    // Wrong separator
+		}
+
+		for _, code := range invalidTests {
+			t.Run("invalid_"+code, func(t *testing.T) {
+				parser2, _ := NewParserFromStruct(&Config{})
+				success := parser2.Parse([]string{"cmd", "--code", code})
+				assert.False(t, success, "Expected %s to be invalid", code)
+			})
+		}
+	})
+
+	t.Run("multiple validators with escaped characters", func(t *testing.T) {
+		type Config struct {
+			// Complex pattern with escaped comma and colon
+			TimeCode string `goopt:"name:time;validators:regex(^[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}$),length(12)"`
+		}
+
+		config := &Config{}
+		parser, err := NewParserFromStruct(config)
+		assert.NoError(t, err)
+
+		// Valid: HH:MM:SS,mmm format
+		success := parser.Parse([]string{"cmd", "--time", "12:34:56,789"})
+		assert.True(t, success)
+		assert.Equal(t, "12:34:56,789", config.TimeCode)
+
+		// Invalid: wrong format
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--time", "12-34-56.789"})
+		assert.False(t, success2)
+	})
+
+	t.Run("password complexity with quantifiers", func(t *testing.T) {
+		type Config struct {
+			// Password must be 8-20 chars with specific requirements
+			Password string `goopt:"name:password;validators:all(minlength(8),maxlength(20),regex([a-z]),regex([A-Z]),regex([0-9]),regex([@$!%*?&]))"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		// Valid passwords
+		validPasswords := []string{
+			"Pass123!",           // 8 chars - minimum
+			"MyP@ssw0rd123",      // Medium length
+			"VeryStr0ng!Pass123", // Near maximum
+		}
+
+		for _, pwd := range validPasswords {
+			t.Run("valid_pwd_len_"+strconv.Itoa(len(pwd)), func(t *testing.T) {
+				config := &Config{}
+				parser2, _ := NewParserFromStruct(config)
+				success := parser2.Parse([]string{"cmd", "--password", pwd})
+				assert.True(t, success, "Expected password to be valid")
+				assert.Equal(t, pwd, config.Password)
+			})
+		}
+
+		// Invalid passwords
+		invalidPasswords := []struct {
+			pwd    string
+			reason string
+		}{
+			{"Pass123", "no special char"},
+			{"pass123!", "no uppercase"},
+			{"PASS123!", "no lowercase"},
+			{"Password!", "no number"},
+			{"Pas12!", "too short"},
+			{"ThisPasswordIsWay2Long!123", "too long"},
+		}
+
+		for _, test := range invalidPasswords {
+			t.Run("invalid_"+test.reason, func(t *testing.T) {
+				parser2, _ := NewParserFromStruct(&Config{})
+				success := parser2.Parse([]string{"cmd", "--password", test.pwd})
+				assert.False(t, success, "Expected password to be invalid: %s", test.reason)
+			})
+		}
+	})
+
+	t.Run("version number pattern", func(t *testing.T) {
+		type Config struct {
+			Version string `goopt:"name:version;validators:regex(^v?[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$)"`
+		}
+
+		_, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		validVersions := []string{
+			"1.0.0",
+			"v1.0.0",
+			"12.34.56",
+			"123.456.789",
+		}
+
+		for _, ver := range validVersions {
+			config := &Config{}
+			parser2, _ := NewParserFromStruct(config)
+			success := parser2.Parse([]string{"cmd", "--version", ver})
+			assert.True(t, success, "Expected %s to be valid", ver)
+		}
+
+		invalidVersions := []string{
+			"1.0",        // Too few parts
+			"1.0.0.0",    // Too many parts
+			"1234.0.0",   // Too many digits
+			"a.b.c",      // Not numbers
+			"1.0.0-beta", // Extra suffix
+		}
+
+		for _, ver := range invalidVersions {
+			parser2, _ := NewParserFromStruct(&Config{})
+			success := parser2.Parse([]string{"cmd", "--version", ver})
+			assert.False(t, success, "Expected %s to be invalid", ver)
+		}
+	})
+}
+
+// hasError checks if any error in the slice matches the target error using errors.Is
+func hasError(errs []error, target error) bool {
+	for _, err := range errs {
+		if errors.Is(err, target) {
+			return true
+		}
+		// Also check wrapped errors
+		var wrappedErr interface{ Unwrap() error }
+		if errors.As(err, &wrappedErr) {
+			for unwrapped := wrappedErr.Unwrap(); unwrapped != nil; {
+				if errors.Is(unwrapped, target) {
+					return true
+				}
+				if w, ok := unwrapped.(interface{ Unwrap() error }); ok {
+					unwrapped = w.Unwrap()
+				} else {
+					break
+				}
+			}
+		}
+	}
+	return false
+}
+
+func TestStructTagValidators(t *testing.T) {
+	t.Run("email validator", func(t *testing.T) {
+		type Config struct {
+			Email string `goopt:"name:email;validators:email()"`
+		}
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"cmd", "--email", "user@example.com"})
+		assert.True(t, success)
+	})
+
+	t.Run("email validator - invalid", func(t *testing.T) {
+		type Config struct {
+			Email string `goopt:"name:email;validators:email()"`
+		}
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		success := parser.Parse([]string{"cmd", "--email", "invalid-email"})
+		assert.False(t, success)
+
+		errors := parser.GetErrors()
+		assert.NotEmpty(t, errors)
+		assert.True(t, hasError(errors, errs.ErrInvalidEmailFormat), "Expected ErrInvalidEmailFormat")
+	})
+
+	t.Run("minlength validator", func(t *testing.T) {
+		type Config struct {
+			Password string `goopt:"name:password;validators:minlength(8)"`
+		}
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		// Test too short
+		success := parser.Parse([]string{"cmd", "--password", "short"})
+		assert.False(t, success)
+		errors := parser.GetErrors()
+		assert.True(t, hasError(errors, errs.ErrMinLength), "Expected ErrMinLength")
+
+		// Test valid length
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--password", "longpassword"})
+		assert.True(t, success2)
+	})
+
+	t.Run("multiple validators", func(t *testing.T) {
+		type Config struct {
+			Username string `goopt:"name:username;validators:minlength(3),maxlength(20),alphanumeric()"`
+		}
+
+		// Valid username
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--username", "user123"})
+		assert.True(t, success)
+
+		// Too short
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--username", "ab"})
+		assert.False(t, success2)
+
+		// Non-alphanumeric
+		parser3, _ := NewParserFromStruct(&Config{})
+		success3 := parser3.Parse([]string{"cmd", "--username", "user-name"})
+		assert.False(t, success3)
+	})
+
+	t.Run("range validator", func(t *testing.T) {
+		type Config struct {
+			Age int `goopt:"name:age;validators:range(18,100)"`
+		}
+
+		// Valid age
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--age", "25"})
+		assert.True(t, success)
+
+		// Too young
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--age", "17"})
+		assert.False(t, success2)
+		errors := parser2.GetErrors()
+		assert.True(t, hasError(errors, errs.ErrValueBetween), "Expected ErrValueBetween")
+	})
+
+	t.Run("oneof validator", func(t *testing.T) {
+		type Config struct {
+			Color string `goopt:"name:color;validators:oneof(isoneof(red,green,blue))"`
+		}
+
+		// Valid color
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--color", "red"})
+		assert.True(t, success)
+
+		// Invalid color
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--color", "yellow"})
+		assert.False(t, success2)
+		errors := parser2.GetErrors()
+
+		// Check that validation failed properly
+		assert.True(t, len(errors) > 0, "Expected validation errors")
+		// The error should be a validation error - check for wrapped ErrValueMustBeOneOf
+		foundValidationError := false
+		for _, err := range errors {
+			if hasError([]error{err}, errs.ErrValueMustBeOneOf) || hasError([]error{err}, errs.ErrValidationCombinedFailed) {
+				foundValidationError = true
+				break
+			}
+		}
+		assert.True(t, foundValidationError, "Expected validation error for invalid value")
+	})
+
+	t.Run("oneof validator with chained", func(t *testing.T) {
+		type Config struct {
+			Colors []string `goopt:"name:colors;type:chained;validators:oneof(isoneof(red,green,blue))"`
+		}
+
+		// Valid colors
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--colors", "red,green,blue"})
+		assert.True(t, success)
+
+		// Invalid color in list
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--colors", "red,yellow,blue"})
+		assert.False(t, success2)
+		errors := parser2.GetErrors()
+
+		// Check that validation failed properly
+		assert.True(t, len(errors) > 0, "Expected validation errors")
+		// The error should be a validation error - check for wrapped ErrValueMustBeOneOf
+		foundValidationError := false
+		for _, err := range errors {
+			if hasError([]error{err}, errs.ErrValueMustBeOneOf) || hasError([]error{err}, errs.ErrValidationCombinedFailed) {
+				foundValidationError = true
+				break
+			}
+		}
+		assert.True(t, foundValidationError, "Expected validation error for invalid chained value")
+	})
+
+	t.Run("regex validator", func(t *testing.T) {
+		type Config struct {
+			Code string `goopt:"name:code;validators:regex(^[A-Z]{3}-\\d{3}$)"`
+		}
+
+		// Valid code
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--code", "ABC-123"})
+		assert.True(t, success)
+
+		// Invalid code
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--code", "abc-123"})
+		assert.False(t, success2)
+	})
+
+	t.Run("url validator with schemes", func(t *testing.T) {
+		type Config struct {
+			Website string `goopt:"name:website;validators:url(https,http)"`
+		}
+
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--website", "https://example.com"})
+		assert.True(t, success)
+	})
+
+	t.Run("file extension validator", func(t *testing.T) {
+		type Config struct {
+			File string `goopt:"name:file;validators:fileext(.jpg,.png,.gif)"`
+		}
+
+		// Valid extension
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--file", "image.png"})
+		assert.True(t, success)
+
+		// Invalid extension
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--file", "document.pdf"})
+		assert.False(t, success2)
+	})
+
+	t.Run("integer validator on string field", func(t *testing.T) {
+		type Config struct {
+			Count string `goopt:"name:count;validators:integer"`
+		}
+
+		// Valid integer
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--count", "42"})
+		assert.True(t, success)
+
+		// Invalid integer
+		parser2, _ := NewParserFromStruct(&Config{})
+		success2 := parser2.Parse([]string{"cmd", "--count", "42.5"})
+		assert.False(t, success2)
+	})
+
+	t.Run("invalid validator spec - should fail", func(t *testing.T) {
+		type Config struct {
+			Value string `goopt:"name:value;validators:unknown_validator"`
+		}
+
+		// Parser creation should succeed
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+
+		// But parsing should fail due to unknown validator
+		success := parser.Parse([]string{"cmd", "--value", "anything"})
+		assert.False(t, success)
+
+		// Check that the error mentions the unknown validator
+		parserErrors := parser.GetErrors()
+		assert.NotEmpty(t, parserErrors)
+		foundUnknownValidator := false
+		for _, err := range parserErrors {
+			if errors.Is(err, errs.ErrUnknownValidator) {
+				foundUnknownValidator = true
+				break
+			}
+		}
+		assert.True(t, foundUnknownValidator, "Expected to find ErrUnknownValidator in errors")
+	})
+
+	t.Run("validator with required flag", func(t *testing.T) {
+		type Config struct {
+			ApiKey string `goopt:"name:api-key;required:true;validators:length(32)"`
+		}
+
+		parser, err := NewParserFromStruct(&Config{})
+		assert.NoError(t, err)
+		success := parser.Parse([]string{"cmd", "--api-key", "12345678901234567890123456789012"})
+		assert.True(t, success)
+	})
+}
+
+func TestParser_StructTagValidatorCombinations(t *testing.T) {
+	// Test more complex validator combinations
+
+	type Config struct {
+		// Email with multiple validations
+		AdminEmail string `goopt:"name:admin-email;validators:email,minlength(10);path:cmd"`
+
+		// Port number with range
+		Port int `goopt:"name:port;validators:range(1024,65535);path:cmd"`
+
+		// Percentage with min/max
+		Percentage float64 `goopt:"name:percentage;validators:min(0),max(100);path:cmd"`
+
+		// Strong password requirements
+		Password string `goopt:"name:password;validators:minlength(12);path:cmd"`
+
+		// Identifier with specific pattern
+		ProjectID string `goopt:"name:project-id;validators:regex(pattern:^proj-[0-9]{4}$,desc:goopt.msg.help_mode_flags_desc);path:cmd"`
+	}
+
+	parser, err := NewParserFromStruct(&Config{})
+	assert.NoError(t, err)
+
+	// Test valid inputs
+	validArgs := []string{
+		"cmd",
+		"--admin-email", "admin@example.com",
+		"--port", "8080",
+		"--percentage", "75.5",
+		"--password", "SecurePass123!",
+		"--project-id", "proj-1234",
+	}
+
+	success := parser.Parse(validArgs)
+	assert.True(t, success, "Expected valid inputs to parse successfully")
+
+	// Test various invalid inputs
+	invalidTests := []struct {
+		args        []string
+		expectedErr error
+	}{
+		{
+			args:        []string{"cmd", "--admin-email", "a@b.c"}, // Too short
+			expectedErr: errs.ErrMinLength,
+		},
+		{
+			args:        []string{"cmd", "--port", "999"}, // Below range
+			expectedErr: errs.ErrValueBetween,
+		},
+		{
+			args:        []string{"cmd", "--percentage", "150"}, // Above max
+			expectedErr: errs.ErrValueAtMost,
+		},
+		{
+			args:        []string{"cmd", "--password", "shortpass"}, // Too short
+			expectedErr: errs.ErrMinLength,
+		},
+		{
+			args:        []string{"cmd", "--project-id", "proj-12"}, // Wrong format
+			expectedErr: errs.ErrPatternMatch,
+		},
+	}
+
+	for _, test := range invalidTests {
+		parser, _ := NewParserFromStruct(&Config{})
+		success := parser.Parse(test.args)
+		assert.False(t, success, "Expected parsing to fail for args: %v", test.args)
+
+		errors := parser.GetErrors()
+		assert.True(t, hasError(errors, test.expectedErr), "Expected %v for args %v, got: %v", test.expectedErr, test.args, errors)
+		fmt.Println(errors[0])
+	}
+}
+
+func TestParser_StructTagValidatorIntegration(t *testing.T) {
+	// Test integration with other struct tag features
+	type ServerConfig struct {
+		Host string `goopt:"name:host;desc:Server hostname;validators:hostname;default:localhost"`
+		Port int    `goopt:"name:port;short:p;desc:Server port;validators:range(1,65535);default:8080"`
+
+		Admin struct {
+			Email    string `goopt:"name:email;desc:Admin email;validators:email;required:true"`
+			Username string `goopt:"name:username;desc:Admin username;validators:identifier,minlength(3)"`
+		} `goopt:"name:admin"`
+
+		Features []string `goopt:"name:features;type:chained;validators:oneof(isoneof(auth,api,metrics,logging))"`
+	}
+
+	config := &ServerConfig{}
+	parser, err := NewParserFromStruct(config)
+	assert.NoError(t, err)
+
+	// Test with valid inputs including chained values
+	args := []string{
+		"cmd",
+		"--host", "api.example.com",
+		"--port", "443",
+		"--admin.email", "admin@example.com",
+		"--admin.username", "admin_user",
+		"--features", "auth,api,metrics",
+	}
+
+	success := parser.Parse(args)
+	if !success {
+		t.Logf("Parsing errors: %v", parser.GetErrors())
+	}
+	assert.True(t, success, "Expected parsing to succeed")
+	assert.Equal(t, "api.example.com", config.Host)
+	assert.Equal(t, 443, config.Port)
+	assert.Equal(t, "admin@example.com", config.Admin.Email)
+	assert.Equal(t, "admin_user", config.Admin.Username)
+	assert.Equal(t, []string{"auth", "api", "metrics"}, config.Features)
+
+	// Test invalid feature
+	parser2, _ := NewParserFromStruct(&ServerConfig{})
+	args2 := []string{
+		"cmd",
+		"--admin.email", "admin@example.com",
+		"--features", "auth,invalid_feature",
+	}
+
+	success2 := parser2.Parse(args2)
+	if success2 {
+		t.Logf("Unexpected success - config: %+v", config)
+	} else {
+		t.Logf("Failed as expected with ErrValueMustBeOneOf")
+	}
+	assert.False(t, success2, "Expected parsing to fail with invalid feature")
+}
+
+func TestParser_AcceptedValuesI18n(t *testing.T) {
+	t.Run("desc as translation key in user bundle", func(t *testing.T) {
+		// Create a user bundle with translations
+		userBundle := i18n.NewEmptyBundle()
+
+		userBundle.AddLanguage(language.English, map[string]string{
+			"format.description": "Supported output formats",
+			"env.description":    "Environment to deploy to",
+		})
+
+		parser := NewParser()
+		parser.SetUserBundle(userBundle)
+		// Add flag with accepted values using translation keys
+		parser.AddFlag("format", NewArg(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "json|yaml|xml", Description: "format.description"},
+			}),
+		))
+
+		// Try invalid value
+		success := parser.Parse([]string{"--format", "pdf"})
+		assert.False(t, success)
+
+		// Check that error message contains translated description
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "Supported output formats")
+		assert.NotContains(t, errMsg, "format.description") // Should not show the key
+	})
+
+	t.Run("desc as literal string when not a translation key", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add flag with accepted values using literal descriptions
+		parser.AddFlag("mode", NewArg(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "fast|slow", Description: "Processing speed"},
+			}),
+		))
+
+		// Try invalid value
+		success := parser.Parse([]string{"--mode", "medium"})
+		assert.False(t, success)
+
+		// Check that error message contains literal description
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "Processing speed")
+	})
+
+	t.Run("multiple accepted patterns with mixed translation keys and literals", func(t *testing.T) {
+		// Create a user bundle
+		userBundle := i18n.NewEmptyBundle()
+		userBundle.SetDefaultLanguage(language.English)
+		userBundle.AddLanguage(language.English, map[string]string{
+			"file.json.desc": "JSON configuration files",
+		})
+
+		parser := NewParser()
+		parser.SetUserBundle(userBundle)
+
+		// Add flag with multiple accepted values using NewArgE for better error handling
+		arg, err := NewArgE(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: `.*\.json$`, Description: "file.json.desc"},    // Translation key
+				{Pattern: `.*\.yaml$`, Description: "YAML config files"}, // Literal
+				{Pattern: `.*\.toml$`, Description: "file.toml.desc"},    // Non-existent key (stays literal)
+			}),
+		)
+		assert.NoError(t, err)
+		err = parser.AddFlag("config", arg)
+		assert.NoError(t, err)
+
+		// Try invalid value
+		success := parser.Parse([]string{"--config", "config.xml"})
+		assert.False(t, success)
+
+		// Check error message
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		// Should show all three patterns with appropriate descriptions
+		assert.Contains(t, errMsg, "JSON configuration files") // Translated
+		assert.Contains(t, errMsg, "YAML config files")        // Literal
+		assert.Contains(t, errMsg, "file.toml.desc")           // Key not found, shown as-is
+	})
+
+	t.Run("fallback to system bundle", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add flag using a goopt system translation key
+		parser.AddFlag("required", NewArg(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "yes|no", Description: "goopt.error.required_flag"}, // System key
+			}),
+		))
+
+		// Try invalid value
+		success := parser.Parse([]string{"--required", "maybe"})
+		assert.False(t, success)
+
+		// Check that it found the system translation
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "required flag missing") // System translation
+	})
+
+	t.Run("pattern shown when description is empty", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add flag with no description
+		parser.AddFlag("id", NewArg(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "[A-Z]{3}[0-9]{4}", Description: ""},
+			}),
+		))
+
+		// Try invalid value
+		success := parser.Parse([]string{"--id", "invalid"})
+		assert.False(t, success)
+
+		// Check that pattern is shown
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "[A-Z]{3}[0-9]{4}")
+	})
+
+	t.Run("user bundle takes precedence over system bundle", func(t *testing.T) {
+		// Create user bundle that overrides a system key
+		userBundle := i18n.NewEmptyBundle()
+		userBundle.SetDefaultLanguage(language.English)
+		userBundle.AddLanguage(language.English, map[string]string{
+			"goopt.error.required_flag": "Custom required message",
+		})
+
+		parser := NewParser()
+		parser.SetUserBundle(userBundle)
+
+		// Add flag using the same key
+		parser.AddFlag("test", NewArg(
+			WithType(types.Single),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "a|b", Description: "goopt.error.required_flag"},
+			}),
+		))
+
+		// Try invalid value
+		success := parser.Parse([]string{"--test", "c"})
+		assert.False(t, success)
+
+		// Should use user's translation, not system's
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "Custom required message")
+		assert.NotContains(t, errMsg, "required flag missing")
+	})
+
+	t.Run("different languages", func(t *testing.T) {
+		// Create user bundle with multiple languages
+		userBundle := i18n.NewEmptyBundle()
+		userBundle.SetDefaultLanguage(language.English)
+		userBundle.AddLanguage(language.English, map[string]string{
+			"speed.desc": "Speed setting",
+		})
+		userBundle.AddLanguage(language.German, map[string]string{
+			"speed.desc": "Geschwindigkeitseinstellung",
+		})
+		userBundle.AddLanguage(language.French, map[string]string{
+			"speed.desc": "Réglage de vitesse",
+		})
+
+		// Test each language
+		testCases := []struct {
+			lang     language.Tag
+			expected string
+		}{
+			{language.English, "Speed setting"},
+			{language.German, "Geschwindigkeitseinstellung"},
+			{language.French, "Réglage de vitesse"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.lang.String(), func(t *testing.T) {
+				// Create a new bundle for each test with the desired language
+				testBundle := i18n.NewEmptyBundle()
+				testBundle.SetDefaultLanguage(tc.lang)
+				testBundle.AddLanguage(language.English, map[string]string{
+					"speed.desc": "Speed setting",
+				})
+				testBundle.AddLanguage(language.German, map[string]string{
+					"speed.desc": "Geschwindigkeitseinstellung",
+				})
+				testBundle.AddLanguage(language.French, map[string]string{
+					"speed.desc": "Réglage de vitesse",
+				})
+
+				parser := NewParser()
+				parser.SetUserBundle(testBundle)
+
+				parser.AddFlag("speed", NewArg(
+					WithType(types.Single),
+					WithAcceptedValues([]types.PatternValue{
+						{Pattern: "fast|slow", Description: "speed.desc"},
+					}),
+				))
+
+				success := parser.Parse([]string{"--speed", "medium"})
+				assert.False(t, success)
+
+				assert.Len(t, parser.errors, 1)
+				errMsg := parser.errors[0].Error()
+				assert.Contains(t, errMsg, tc.expected)
+			})
+		}
+	})
+}
+
+func TestParser_AcceptedValuesChained(t *testing.T) {
+	t.Run("chained values with i18n", func(t *testing.T) {
+		// Create user bundle
+		userBundle := i18n.NewEmptyBundle()
+		userBundle.SetDefaultLanguage(language.English)
+		userBundle.AddLanguage(language.English, map[string]string{
+			"log.levels": "Available log levels",
+		})
+
+		parser := NewParser()
+		parser.SetUserBundle(userBundle)
+
+		// Add chained flag
+		parser.AddFlag("levels", NewArg(
+			WithType(types.Chained),
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "debug|info|warn|error", Description: "log.levels"},
+			}),
+		))
+
+		// Try with invalid value in chain
+		success := parser.Parse([]string{"--levels", "debug,info,fatal"})
+		assert.False(t, success)
+
+		// Check error contains translated description
+		assert.Len(t, parser.errors, 1)
+		errMsg := parser.errors[0].Error()
+		assert.Contains(t, errMsg, "Available log levels")
+	})
+}
+
+func TestParser_Getters(t *testing.T) {
+	t.Run("GetAutoHelp", func(t *testing.T) {
+		parser := NewParser()
+
+		// Default should be true
+		assert.True(t, parser.GetAutoHelp())
+
+		// Test setting to false
+		parser.SetAutoHelp(false)
+		assert.False(t, parser.GetAutoHelp())
+
+		// Test setting back to true
+		parser.SetAutoHelp(true)
+		assert.True(t, parser.GetAutoHelp())
+	})
+
+	t.Run("GetHelpFlags", func(t *testing.T) {
+		parser := NewParser()
+
+		// Default should be ["help", "h"]
+		flags := parser.GetHelpFlags()
+		assert.Equal(t, []string{"help", "h"}, flags)
+
+		// Test custom flags
+		parser.SetHelpFlags([]string{"ayuda", "a"})
+		flags = parser.GetHelpFlags()
+		assert.Equal(t, []string{"ayuda", "a"}, flags)
+	})
+
+	t.Run("GetAutoVersion", func(t *testing.T) {
+		parser := NewParser()
+
+		// Default should be true
+		assert.True(t, parser.GetAutoVersion())
+
+		// Test setting to false
+		parser.SetAutoVersion(false)
+		assert.False(t, parser.GetAutoVersion())
+	})
+
+	t.Run("GetVersionFlags", func(t *testing.T) {
+		parser := NewParser()
+
+		// Default should be ["version", "v"]
+		flags := parser.GetVersionFlags()
+		assert.Equal(t, []string{"version", "v"}, flags)
+
+		// Test custom flags
+		parser.SetVersionFlags([]string{"ver", "V"})
+		flags = parser.GetVersionFlags()
+		assert.Equal(t, []string{"ver", "V"}, flags)
+	})
+}
+
+func TestParser_ExecutionHooks(t *testing.T) {
+	t.Run("global pre-hook success", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-hook")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, []string{"pre-hook", "command"}, executed)
+	})
+
+	t.Run("global pre-hook prevents execution", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-hook")
+			return errors.New("auth failed")
+		})
+
+		parser.Parse([]string{"test"})
+		errCount := parser.ExecuteCommands()
+
+		assert.Equal(t, 1, errCount)
+		assert.Equal(t, []string{"pre-hook"}, executed)
+
+		err := parser.GetCommandExecutionError("test")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "auth failed")
+	})
+
+	t.Run("global post-hook runs after command", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, fmt.Sprintf("post-hook(err=%v)", err))
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, []string{"command", "post-hook(err=<nil>)"}, executed)
+	})
+
+	t.Run("post-hook runs even on command failure", func(t *testing.T) {
+		var executed []string
+		cmdErr := errors.New("command failed")
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return cmdErr
+			},
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, fmt.Sprintf("post-hook(err=%v)", err))
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		errors := parser.ExecuteCommands()
+
+		assert.Equal(t, 1, errors)
+		assert.Equal(t, []string{"command", "post-hook(err=command failed)"}, executed)
+	})
+
+	t.Run("post-hook runs even on pre-hook failure", func(t *testing.T) {
+		var executed []string
+		preErr := errors.New("pre-hook failed")
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-hook")
+			return preErr
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, fmt.Sprintf("post-hook(err=%v)", err))
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// Command should not run, but post-hook should
+		assert.Equal(t, []string{"pre-hook", "post-hook(err=pre-hook failed)"}, executed)
+	})
+
+	t.Run("command-specific hooks", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test1",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "test1")
+				return nil
+			},
+		})
+		parser.AddCommand(&Command{
+			Name: "test2",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "test2")
+				return nil
+			},
+		})
+
+		// Add hook only for test1
+		parser.AddCommandPreHook("test1", func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-test1")
+			return nil
+		})
+
+		parser.AddCommandPostHook("test1", func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post-test1")
+			return nil
+		})
+
+		// Execute test1
+		executed = []string{}
+		parser.Parse([]string{"test1"})
+		parser.ExecuteCommands()
+		assert.Equal(t, []string{"pre-test1", "test1", "post-test1"}, executed)
+
+		// Execute test2 (no hooks)
+		executed = []string{}
+		parser.Parse([]string{"test2"})
+		parser.ExecuteCommands()
+		assert.Equal(t, []string{"test2"}, executed)
+	})
+
+	t.Run("multiple hooks execute in order", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		// Add multiple pre-hooks
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre1")
+			return nil
+		})
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre2")
+			return nil
+		})
+
+		// Add multiple post-hooks
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post1")
+			return nil
+		})
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post2")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, []string{"pre1", "pre2", "command", "post1", "post2"}, executed)
+	})
+
+	t.Run("hook order - global first", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.SetHookOrder(OrderGlobalFirst)
+
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "global-pre")
+			return nil
+		})
+		parser.AddCommandPreHook("test", func(p *Parser, c *Command) error {
+			executed = append(executed, "cmd-pre")
+			return nil
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "global-post")
+			return nil
+		})
+		parser.AddCommandPostHook("test", func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "cmd-post")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// Pre: global first, then command
+		// Post: command first, then global (reverse for cleanup)
+		assert.Equal(t, []string{"global-pre", "cmd-pre", "command", "cmd-post", "global-post"}, executed)
+	})
+
+	t.Run("hook order - command first", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.SetHookOrder(OrderCommandFirst)
+
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "global-pre")
+			return nil
+		})
+		parser.AddCommandPreHook("test", func(p *Parser, c *Command) error {
+			executed = append(executed, "cmd-pre")
+			return nil
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "global-post")
+			return nil
+		})
+		parser.AddCommandPostHook("test", func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "cmd-post")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// Pre: command first, then global
+		// Post: global first, then command (reverse for cleanup)
+		assert.Equal(t, []string{"cmd-pre", "global-pre", "command", "global-post", "cmd-post"}, executed)
+	})
+
+	t.Run("hooks have access to parser state", func(t *testing.T) {
+		parser, _ := NewParserWith(
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+		)
+
+		var capturedVerbose bool
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			// Hook can read parser state
+			if val, found := p.Get("verbose"); found && val == "true" {
+				capturedVerbose = true
+			}
+			return nil
+		})
+
+		parser.Parse([]string{"--verbose", "test"})
+		parser.ExecuteCommands()
+
+		assert.True(t, capturedVerbose)
+	})
+
+	t.Run("hooks with nested commands", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+
+		// Create nested command structure
+		serverCmd := &Command{
+			Name: "server",
+			Subcommands: []Command{
+				{
+					Name: "start",
+					Callback: func(p *Parser, c *Command) error {
+						executed = append(executed, "server-start")
+						return nil
+					},
+				},
+			},
+		}
+		parser.AddCommand(serverCmd)
+
+		// Add hooks for nested command
+		parser.AddCommandPreHook("server start", func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-server-start")
+			assert.Equal(t, "server start", c.Path())
+			return nil
+		})
+
+		parser.Parse([]string{"server", "start"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, []string{"pre-server-start", "server-start"}, executed)
+	})
+
+	t.Run("clear hooks", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		// Add hooks
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "global-pre")
+			return nil
+		})
+		parser.AddCommandPreHook("test", func(p *Parser, c *Command) error {
+			executed = append(executed, "cmd-pre")
+			return nil
+		})
+
+		// Clear global hooks
+		parser.ClearGlobalHooks()
+
+		executed = []string{}
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// Only command hook should run
+		assert.Equal(t, []string{"cmd-pre", "command"}, executed)
+
+		// Clear command hooks
+		parser.ClearCommandHooks("test")
+
+		executed = []string{}
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// No hooks should run
+		assert.Equal(t, []string{"command"}, executed)
+	})
+
+	t.Run("with configuration functions", func(t *testing.T) {
+		var executed []string
+
+		parser, _ := NewParserWith(
+			WithGlobalPreHook(func(p *Parser, c *Command) error {
+				executed = append(executed, "global-pre")
+				return nil
+			}),
+			WithGlobalPostHook(func(p *Parser, c *Command, err error) error {
+				executed = append(executed, "global-post")
+				return nil
+			}),
+			WithCommandPreHook("test", func(p *Parser, c *Command) error {
+				executed = append(executed, "cmd-pre")
+				return nil
+			}),
+			WithCommandPostHook("test", func(p *Parser, c *Command, err error) error {
+				executed = append(executed, "cmd-post")
+				return nil
+			}),
+			WithHookOrder(OrderCommandFirst),
+		)
+
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, OrderCommandFirst, parser.GetHookOrder())
+		assert.Equal(t, []string{"cmd-pre", "global-pre", "command", "global-post", "cmd-post"}, executed)
+	})
+}
+
+func TestParser_HookUseCases(t *testing.T) {
+	t.Run("logging use case", func(t *testing.T) {
+		var logs []string
+
+		parser := NewParser()
+
+		// Global logging hooks
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			logs = append(logs, fmt.Sprintf("[START] %s", c.Path()))
+			return nil
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			if err != nil {
+				logs = append(logs, fmt.Sprintf("[ERROR] %s: %v", c.Path(), err))
+			} else {
+				logs = append(logs, fmt.Sprintf("[SUCCESS] %s", c.Path()))
+			}
+			return nil
+		})
+
+		// Commands
+		parser.AddCommand(&Command{
+			Name: "success",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+		parser.AddCommand(&Command{
+			Name: "fail",
+			Callback: func(p *Parser, c *Command) error {
+				return errors.New("operation failed")
+			},
+		})
+
+		// Test success
+		parser.Parse([]string{"success"})
+		parser.ExecuteCommands()
+
+		// Test failure
+		parser.Parse([]string{"fail"})
+		parser.ExecuteCommands()
+
+		assert.Equal(t, []string{
+			"[START] success",
+			"[SUCCESS] success",
+			"[START] fail",
+			"[ERROR] fail: operation failed",
+		}, logs)
+	})
+
+	t.Run("authentication use case", func(t *testing.T) {
+		authenticated := false
+
+		parser := NewParser()
+
+		// Auth check hook
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			// Skip auth for certain commands
+			if c.Name == "login" {
+				return nil
+			}
+
+			if !authenticated {
+				return errors.New("not authenticated")
+			}
+			return nil
+		})
+
+		// Commands
+		parser.AddCommand(&Command{
+			Name: "login",
+			Callback: func(p *Parser, c *Command) error {
+				authenticated = true
+				return nil
+			},
+		})
+		parser.AddCommand(&Command{
+			Name: "protected",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+
+		// Try protected without auth
+		parser.Parse([]string{"protected"})
+		errs := parser.ExecuteCommands()
+		assert.Equal(t, 1, errs)
+
+		// Login
+		parser.Parse([]string{"login"})
+		errs = parser.ExecuteCommands()
+		assert.Equal(t, 0, errs)
+
+		// Now protected should work
+		parser.Parse([]string{"protected"})
+		errs = parser.ExecuteCommands()
+		assert.Equal(t, 0, errs)
+	})
+
+	t.Run("cleanup use case", func(t *testing.T) {
+		var resources []string
+
+		parser := NewParser()
+
+		// Cleanup hook always runs
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			if len(resources) > 0 {
+				// Clean up resources
+				resources = []string{}
+			}
+			return nil
+		})
+
+		parser.AddCommand(&Command{
+			Name: "allocate",
+			Callback: func(p *Parser, c *Command) error {
+				resources = append(resources, "resource1", "resource2")
+				return errors.New("failed after allocation")
+			},
+		})
+
+		parser.Parse([]string{"allocate"})
+		parser.ExecuteCommands()
+
+		// Resources should be cleaned up even though command failed
+		assert.Empty(t, resources)
+	})
+
+	t.Run("metrics use case", func(t *testing.T) {
+		type metric struct {
+			command  string
+			success  bool
+			duration string
+		}
+		var metrics []metric
+
+		parser := NewParser()
+
+		// Track command execution
+		startTimes := make(map[string]string)
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			startTimes[c.Path()] = "start"
+			return nil
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			metrics = append(metrics, metric{
+				command:  c.Path(),
+				success:  err == nil,
+				duration: "100ms", // Simulated
+			})
+			return nil
+		})
+
+		// Commands
+		parser.AddCommand(&Command{
+			Name: "fast",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+		parser.AddCommand(&Command{
+			Name: "slow",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+
+		// Execute commands
+		parser.Parse([]string{"fast"})
+		parser.ExecuteCommands()
+
+		parser.Parse([]string{"slow"})
+		parser.ExecuteCommands()
+
+		// Check metrics
+		assert.Len(t, metrics, 2)
+		assert.True(t, metrics[0].success)
+		assert.True(t, metrics[1].success)
+	})
+}
+
+func TestParser_ExecuteCommandWithHooks(t *testing.T) {
+	t.Run("single command execution with hooks", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre")
+			return nil
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		err := parser.ExecuteCommand()
+
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"pre", "command", "post"}, executed)
+	})
+}
+
+func TestParser_HookErrorHandling(t *testing.T) {
+	t.Run("post-hook error after successful command", func(t *testing.T) {
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				return nil
+			},
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			return errors.New("post-hook error")
+		})
+
+		parser.Parse([]string{"test"})
+		errs := parser.ExecuteCommands()
+
+		// Should count as error
+		assert.Equal(t, 1, errs)
+
+		err := parser.GetCommandExecutionError("test")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "post-hook error")
+	})
+
+	t.Run("post-hook error after failed command", func(t *testing.T) {
+		cmdErr := errors.New("command error")
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				return cmdErr
+			},
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			return errors.New("post-hook error")
+		})
+
+		parser.Parse([]string{"test"})
+		errs := parser.ExecuteCommands()
+
+		// Should only count command error
+		assert.Equal(t, 1, errs)
+
+		// Command error should be preserved
+		err := parser.GetCommandExecutionError("test")
+		assert.Equal(t, cmdErr, err)
+	})
+
+	t.Run("chain stops on first pre-hook error", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre1")
+			return nil
+		})
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre2")
+			return errors.New("pre2 failed")
+		})
+		parser.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			executed = append(executed, "pre3")
+			return nil
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// Should stop at pre2
+		assert.Equal(t, []string{"pre1", "pre2"}, executed)
+	})
+
+	t.Run("all post-hooks run even with errors", func(t *testing.T) {
+		var executed []string
+
+		parser := NewParser()
+		parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = append(executed, "command")
+				return nil
+			},
+		})
+
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post1")
+			return errors.New("post1 error")
+		})
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post2")
+			return nil
+		})
+		parser.AddGlobalPostHook(func(p *Parser, c *Command, err error) error {
+			executed = append(executed, "post3")
+			return errors.New("post3 error")
+		})
+
+		parser.Parse([]string{"test"})
+		parser.ExecuteCommands()
+
+		// All post-hooks should run
+		assert.Equal(t, []string{"command", "post1", "post2", "post3"}, executed)
+	})
+}
+
+func TestParser_HooksWithStructTags(t *testing.T) {
+	t.Run("hooks with struct-based commands", func(t *testing.T) {
+		var executed []string
+
+		// Use regular command registration for this test
+		parser := NewParser()
+
+		// Create command structure
+		serverCmd := &Command{
+			Name:        "server",
+			Description: "Server management",
+			Subcommands: []Command{
+				{
+					Name:        "start",
+					Description: "Start server",
+					Callback: func(p *Parser, c *Command) error {
+						executed = append(executed, "start")
+						return nil
+					},
+				},
+				{
+					Name:        "stop",
+					Description: "Stop server",
+					Callback: func(p *Parser, c *Command) error {
+						executed = append(executed, "stop")
+						return nil
+					},
+				},
+			},
+		}
+		parser.AddCommand(serverCmd)
+
+		// Add hooks for specific commands
+		parser.AddCommandPreHook("server start", func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-start")
+			return nil
+		})
+
+		parser.AddCommandPreHook("server stop", func(p *Parser, c *Command) error {
+			executed = append(executed, "pre-stop")
+			return nil
+		})
+
+		// Test start
+		executed = []string{}
+		parser.Parse([]string{"server", "start"})
+		parser.ExecuteCommands()
+		assert.Equal(t, []string{"pre-start", "start"}, executed)
+
+		// Test stop
+		executed = []string{}
+		parser.Parse([]string{"server", "stop"})
+		parser.ExecuteCommands()
+		assert.Equal(t, []string{"pre-stop", "stop"}, executed)
+	})
+}
+
+func TestParser_ValidationHook(t *testing.T) {
+	t.Run("simple validation hook", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("min", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Integer()),
+			)),
+			WithFlag("max", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Integer()),
+			)),
+			WithValidationHook(func(p *Parser) error {
+				minStr, _ := p.Get("min")
+				maxStr, _ := p.Get("max")
+
+				if minStr != "" && maxStr != "" {
+					minVal, _ := strconv.Atoi(minStr)
+					maxVal, _ := strconv.Atoi(maxStr)
+
+					if minVal > maxVal {
+						return errors.New("min cannot be greater than max")
+					}
+				}
+
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Valid case
+		success := parser.Parse([]string{"cmd", "--min", "1", "--max", "10"})
+		assert.True(t, success)
+
+		// Invalid case
+		parser2, _ := NewParserWith(
+			WithFlag("min", NewArg(WithType(types.Single), WithValidator(validation.Integer()))),
+			WithFlag("max", NewArg(WithType(types.Single), WithValidator(validation.Integer()))),
+			WithValidationHook(func(p *Parser) error {
+				minVal, err := p.GetInt("min", 64)
+				assert.NoError(t, err)
+				maxVal, err := p.GetInt("max", 64)
+				assert.NoError(t, err)
+				if minVal > maxVal {
+					return errors.New("min cannot be greater than max")
+				}
+
+				return nil
+			}),
+		)
+		success = parser2.Parse([]string{"cmd", "--min", "10", "--max", "5"})
+		assert.False(t, success)
+		assert.Contains(t, parser2.GetErrors()[0].Error(), "min cannot be greater than max")
+	})
+
+	t.Run("struct-based validation hook", func(t *testing.T) {
+		type DateRange struct {
+			StartDate string `goopt:"name:start-date"`
+			EndDate   string `goopt:"name:end-date"`
+			MaxDays   int    `goopt:"name:max-days;default:30"`
+		}
+
+		config := &DateRange{}
+		parser, err := NewParserFromStruct(config,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*DateRange](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				if cfg.StartDate != "" && cfg.EndDate != "" {
+					start, err1 := time.Parse("2006-01-02", cfg.StartDate)
+					end, err2 := time.Parse("2006-01-02", cfg.EndDate)
+
+					if err1 != nil || err2 != nil {
+						return errors.New("invalid date format, use YYYY-MM-DD")
+					}
+
+					if start.After(end) {
+						return errors.New("start date must be before end date")
+					}
+
+					days := int(end.Sub(start).Hours() / 24)
+					if days > cfg.MaxDays {
+						return fmt.Errorf("date range exceeds maximum of %d days", cfg.MaxDays)
+					}
+				}
+
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Valid case
+		success := parser.Parse([]string{"cmd", "--start-date", "2024-01-01", "--end-date", "2024-01-15"})
+		assert.True(t, success)
+
+		// Invalid: start after end
+		config2 := &DateRange{}
+		parser2, _ := NewParserFromStruct(config2,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*DateRange](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				if cfg.StartDate != "" && cfg.EndDate != "" {
+					start, _ := time.Parse("2006-01-02", cfg.StartDate)
+					end, _ := time.Parse("2006-01-02", cfg.EndDate)
+
+					if start.After(end) {
+						return errors.New("start date must be before end date")
+					}
+				}
+
+				return nil
+			}),
+		)
+		success = parser2.Parse([]string{"cmd", "--start-date", "2024-01-15", "--end-date", "2024-01-01"})
+		assert.False(t, success)
+		assert.Contains(t, parser2.GetErrors()[0].Error(), "start date must be before end date")
+	})
+
+	t.Run("conditional validation", func(t *testing.T) {
+		type ServerConfig struct {
+			Environment string `goopt:"name:env;validators:isoneof(dev,test,prod)"`
+			Debug       bool   `goopt:"name:debug"`
+			LogLevel    string `goopt:"name:log-level;default:info"`
+		}
+
+		config := &ServerConfig{}
+		parser, err := NewParserFromStruct(config,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*ServerConfig](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				// Production-specific rules
+				if cfg.Environment == "prod" {
+					if cfg.Debug {
+						return errors.New("debug mode not allowed in production")
+					}
+
+					if cfg.LogLevel == "debug" {
+						return errors.New("debug log level not allowed in production")
+					}
+				}
+
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Valid: dev with debug
+		success := parser.Parse([]string{"cmd", "--env", "dev", "--debug"})
+		assert.True(t, success)
+
+		// Invalid: prod with debug
+		config2 := &ServerConfig{}
+		parser2, _ := NewParserFromStruct(config2,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*ServerConfig](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				if cfg.Environment == "prod" && cfg.Debug {
+					return errors.New("debug mode not allowed in production")
+				}
+
+				return nil
+			}),
+		)
+		success = parser2.Parse([]string{"cmd", "--env", "prod", "--debug"})
+		assert.False(t, success)
+		assert.Contains(t, parser2.GetErrors()[0].Error(), "debug mode not allowed in production")
+	})
+
+	t.Run("mutex flags validation", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("config-file", NewArg(WithType(types.Single))),
+			WithFlag("config-url", NewArg(WithType(types.Single))),
+			WithFlag("config-inline", NewArg(WithType(types.Single))),
+			WithValidationHook(func(p *Parser) error {
+				count := 0
+				if _, has := p.Get("config-file"); has {
+					count++
+				}
+				if _, has := p.Get("config-url"); has {
+					count++
+				}
+				if _, has := p.Get("config-inline"); has {
+					count++
+				}
+
+				if count > 1 {
+					return errors.New("only one config source can be specified")
+				}
+
+				if count == 0 {
+					return errors.New("at least one config source must be specified")
+				}
+
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Valid: one source
+		success := parser.Parse([]string{"cmd", "--config-file", "config.yaml"})
+		assert.True(t, success)
+
+		// Invalid: multiple sources
+		parser2, _ := NewParserWith(
+			WithFlag("config-file", NewArg(WithType(types.Single))),
+			WithFlag("config-url", NewArg(WithType(types.Single))),
+			WithValidationHook(func(p *Parser) error {
+				count := 0
+				if _, has := p.Get("config-file"); has {
+					count++
+				}
+				if _, has := p.Get("config-url"); has {
+					count++
+				}
+
+				if count > 1 {
+					return errors.New("only one config source can be specified")
+				}
+
+				return nil
+			}),
+		)
+		success = parser2.Parse([]string{"cmd", "--config-file", "config.yaml", "--config-url", "http://example.com/config"})
+		assert.False(t, success)
+		assert.Contains(t, parser2.GetErrors()[0].Error(), "only one config source can be specified")
+	})
+
+	t.Run("validation hook runs after field validation", func(t *testing.T) {
+		validationHookCalled := false
+
+		parser, err := NewParserWith(
+			WithFlag("email", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Email()),
+			)),
+			WithValidationHook(func(p *Parser) error {
+				validationHookCalled = true
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Invalid email - field validation should fail first
+		success := parser.Parse([]string{"cmd", "--email", "not-an-email"})
+		assert.False(t, success)
+		assert.False(t, validationHookCalled, "validation hook should not be called when field validation fails")
+
+		// Valid email - hook should be called
+		validationHookCalled = false
+		parser2, _ := NewParserWith(
+			WithFlag("email", NewArg(
+				WithType(types.Single),
+				WithValidator(validation.Email()),
+			)),
+			WithValidationHook(func(p *Parser) error {
+				validationHookCalled = true
+				return nil
+			}),
+		)
+		success = parser2.Parse([]string{"cmd", "--email", "test@example.com"})
+		assert.True(t, success)
+		assert.True(t, validationHookCalled, "validation hook should be called when field validation passes")
+	})
+
+	t.Run("mixed struct and dynamic flags", func(t *testing.T) {
+		type BaseConfig struct {
+			Mode string `goopt:"name:mode;validators:isoneof(dev,test,prod)"`
+		}
+
+		base := &BaseConfig{}
+		parser, err := NewParserFromStruct(base,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*BaseConfig](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				// Check dynamic flags based on mode
+				if cfg.Mode == "prod" {
+					apiKey, hasKey := p.Get("api-key")
+					if !hasKey || apiKey == "" {
+						return errors.New("--api-key required in production mode")
+					}
+				}
+
+				return nil
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Add dynamic flag
+		err = parser.AddFlag("api-key", NewArg(
+			WithDescription("API key for production"),
+			WithType(types.Single),
+		))
+		assert.NoError(t, err)
+
+		// Valid: dev mode without api-key
+		success := parser.Parse([]string{"cmd", "--mode", "dev"})
+		assert.True(t, success)
+
+		// Invalid: prod mode without api-key
+		base2 := &BaseConfig{}
+		parser2, _ := NewParserFromStruct(base2,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*BaseConfig](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				if cfg.Mode == "prod" {
+					apiKey, hasKey := p.Get("api-key")
+					if !hasKey || apiKey == "" {
+						return errors.New("--api-key required in production mode")
+					}
+				}
+
+				return nil
+			}),
+		)
+		_ = parser2.AddFlag("api-key", NewArg(WithType(types.Single)))
+
+		success = parser2.Parse([]string{"cmd", "--mode", "prod"})
+		assert.False(t, success)
+		assert.Contains(t, parser2.GetErrors()[0].Error(), "--api-key required in production mode")
+
+		// Valid: prod mode with api-key
+		base3 := &BaseConfig{}
+		parser3, _ := NewParserFromStruct(base3,
+			WithValidationHook(func(p *Parser) error {
+				cfg, ok := GetStructCtxAs[*BaseConfig](p)
+				if !ok {
+					return errors.New("invalid config type")
+				}
+
+				if cfg.Mode == "prod" {
+					apiKey, hasKey := p.Get("api-key")
+					if !hasKey || apiKey == "" {
+						return errors.New("--api-key required in production mode")
+					}
+				}
+
+				return nil
+			}),
+		)
+		_ = parser3.AddFlag("api-key", NewArg(WithType(types.Single)))
+
+		success = parser3.Parse([]string{"cmd", "--mode", "prod", "--api-key", "secret123"})
+		assert.True(t, success)
+	})
+}
+
+type CustomRenderer struct {
+	*DefaultRenderer // Embed the default renderer to reuse its logic
+}
+
+type CustomHelp struct {
+	Cmd struct {
+		Flag1 string `goopt:"short:f;desc:Flag 1"`
+		Flag2 string `goopt:"short:s;desc:Flag 2"`
+	} `goopt:"desc:Command description;kind:command"`
+}
+
+func (r *CustomRenderer) FlagUsage(arg *Argument) string {
+	// Custom flag formatting, e.g., a table-like layout
+	name := r.FlagName(arg)
+	if arg.Short != "" {
+		name = fmt.Sprintf("-%s, --%s", arg.Short, name)
+	} else {
+		name = fmt.Sprintf("    --%s", name)
+	}
+	return fmt.Sprintf("  %-25s %s", name, r.FlagDescription(arg))
+}
+
+func TestParser_SetRenderer(t *testing.T) {
+	output := &bytes.Buffer{}
+	p, err := NewParserFromStruct(&CustomHelp{})
+	p.SetRenderer(&CustomRenderer{
+		DefaultRenderer: NewRenderer(p),
+	})
+	assert.NoError(t, err)
+
+	p.PrintHelp(output)
+	// ensure table-like output from CustomRenderer
+	assert.Contains(t, output.String(), `   -f, --flag1               Flag 1
+   -s, --flag2               Flag 2`)
+
 }
 
 func TestMain(m *testing.M) {

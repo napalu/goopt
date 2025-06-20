@@ -3,13 +3,14 @@ package translations
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
-	"log"
-	"os"
-	"path/filepath"
 )
 
 func Validate(parser *goopt.Parser, _ *goopt.Command) error {

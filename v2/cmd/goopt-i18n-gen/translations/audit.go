@@ -3,13 +3,14 @@ package translations
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
-	"log"
-	"os"
 )
 
 func Audit(parser *goopt.Parser, _ *goopt.Command) error {
@@ -23,7 +24,6 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 		// Default to all Go files in current directory
 		scanPatterns = []string{"*.go"}
 	}
-	
 
 	// Expand glob patterns using our utility that supports **
 	files, err := util.ExpandGlobPatterns(scanPatterns)
@@ -34,7 +34,6 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	if len(files) == 0 {
 		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.NoFiles))
 	}
-	
 
 	// Scan for fields without descKey tags
 	scanner := ast.NewScanner(cfg.TR)

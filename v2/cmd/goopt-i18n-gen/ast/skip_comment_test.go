@@ -6,8 +6,8 @@ import (
 
 func TestI18nSkipComments(t *testing.T) {
 	tests := []struct {
-		name             string
-		code             string
+		name              string
+		code              string
 		expectedExtracted []string
 		expectedSkipped   []string
 	}{
@@ -143,8 +143,8 @@ func test() {
 
 func TestI18nSkipEdgeCases(t *testing.T) {
 	tests := []struct {
-		name             string
-		code             string
+		name              string
+		code              string
 		expectedExtracted []string
 		expectedSkipped   []string
 	}{
@@ -218,8 +218,8 @@ func test() {
 }
 func TestI18nSkipComplexPatterns(t *testing.T) {
 	tests := []struct {
-		name             string
-		code             string
+		name              string
+		code              string
 		expectedExtracted []string
 		expectedSkipped   []string
 	}{
@@ -288,7 +288,7 @@ func test() {
 	fmt.Println("Executing complex query")
 }`,
 			expectedExtracted: []string{"Executing complex query"},
-			expectedSkipped:   []string{
+			expectedSkipped: []string{
 				"SELECT u.id, u.name, u.email, ",
 				"p.title, p.content, p.created_at ",
 				"FROM users u ",
@@ -343,8 +343,8 @@ func test() {
 
 func TestI18nSkipMultilineInFunctionCall(t *testing.T) {
 	tests := []struct {
-		name             string
-		code             string
+		name              string
+		code              string
 		expectedExtracted []string
 		expectedSkipped   []string
 	}{

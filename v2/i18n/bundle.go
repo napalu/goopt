@@ -41,6 +41,7 @@ var (
 	ErrDefaultLanguageNotFound            = errors.New("default " + ErrLanguageNotFound.Error())
 	ErrExtraKey                           = errors.New("extra key")
 	ErrMissingKey                         = errors.New("missing key")
+	ErrBundleImmutable                    = errors.New("bundle is immutable and cannot be modified")
 )
 
 type Bundle struct {
@@ -51,6 +52,19 @@ type Bundle struct {
 	printers           map[language.Tag]*message.Printer
 	validatedLanguages map[language.Tag]struct{}
 	matcher            language.Matcher
+	isImmutable        bool // Prevents modification when true
+}
+
+// Translator is an interface for handling internationalization and localization of strings in an application.
+// T retrieves a localized string based on a key and optional arguments for formatting.
+// TL retrieves a localized string based on language, key and optional arguments for formatting.
+// SetDefaultLanguage sets the default language for translation operations.
+// GetDefaultLanguage retrieves the default language currently set for translation.
+type Translator interface {
+	T(key string, args ...interface{}) string
+	TL(lang language.Tag, key string, args ...interface{}) string
+	SetDefaultLanguage(lang language.Tag)
+	GetDefaultLanguage() language.Tag
 }
 
 var (
@@ -74,6 +88,9 @@ func Default() *Bundle {
 		if err != nil {
 			panic("failed to load embedded locales: " + err.Error())
 		}
+
+		// Don't mark as immutable - allow tests to add languages
+		// The mutex protection is sufficient for thread safety
 
 		defaultBundleMu.Lock()
 		defaultBundle = bundle
@@ -165,6 +182,10 @@ func (b *Bundle) TL(lang language.Tag, key string, args ...interface{}) string {
 
 // AddLanguage adds a new language to the bundle or updates existing language if it exists
 func (b *Bundle) AddLanguage(lang language.Tag, translations map[string]string) error {
+	if b.isImmutable {
+		return ErrBundleImmutable
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -277,14 +298,47 @@ func (b *Bundle) HasKey(lang language.Tag, key string) bool {
 }
 
 // SetDefaultLanguage sets the default language
-func (b *Bundle) SetDefaultLanguage(lang language.Tag) {
+func (b *Bundle) SetDefaultLanguage(lang language.Tag) error {
+	if b.isImmutable {
+		return ErrBundleImmutable
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.defaultLang = lang
+	return nil
 }
 
 func (b *Bundle) GetDefaultLanguage() language.Tag {
 	return b.defaultLang
+}
+
+// GetSupportedLanguages returns all languages in the bundle
+func (b *Bundle) GetSupportedLanguages() []language.Tag {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	langs := make([]language.Tag, 0, len(b.translations))
+	for lang := range b.translations {
+		langs = append(langs, lang)
+	}
+	return langs
+}
+
+// GetTranslations returns all translations for a specific language
+func (b *Bundle) GetTranslations(lang language.Tag) map[string]string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if translations, ok := b.translations[lang]; ok {
+		// Return a copy to prevent external modification
+		result := make(map[string]string, len(translations))
+		for k, v := range translations {
+			result[k] = v
+		}
+		return result
+	}
+	return nil
 }
 
 func (b *Bundle) LoadFromFS(fs embed.FS, dirPrefix string) error {

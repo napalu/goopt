@@ -24,6 +24,10 @@ func (m *MockTerminal) IsTerminal(fd int) bool {
 	return m.IsATerminal
 }
 
+// DefaultTerminal methods are not tested because they are simple pass-through
+// wrappers around golang.org/x/term functions. Testing them would provide no
+// value and would be environment-dependent.
+
 func TestGetSecureString(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -89,5 +93,17 @@ func TestGetSecureString(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetSecureString_NilTerminal(t *testing.T) {
+	// When terminal is nil, it should default to DefaultTerminal
+	// Since we're not in a real terminal during tests, this should fail
+	var buf bytes.Buffer
+	_, err := GetSecureString("Password: ", &buf, nil)
+
+	// Should get the "not attached to terminal" error
+	if !errors.Is(err, errs.ErrNotAttachedToTerminal.WithArgs("stdin")) {
+		t.Errorf("Expected ErrNotAttachedToTerminal, got %v", err)
 	}
 }

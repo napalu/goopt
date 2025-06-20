@@ -19,6 +19,7 @@ type State interface {
 	Peek() string                            // Peek at the next argument
 	Advance() bool                           // New method for advancing to the next argument
 	Len() int                                // Gets the length of the argument list
+	HasNext() bool                           // Check if there's a next argument
 }
 
 // ErrInvalidPosition is an error that occurs when an invalid position is accessed
@@ -31,7 +32,8 @@ type DefaultState struct {
 }
 
 // NewState creates a new State instance with the given argument list
-func NewState(args []string) State {
+func NewState(args []string, defaults ...string) State {
+	args = append(args, defaults...)
 	return &DefaultState{
 		pos:  -1,
 		args: args,
@@ -106,4 +108,9 @@ func (s *DefaultState) ArgAt(pos int) (string, error) {
 // Len returns the length of the argument list
 func (s *DefaultState) Len() int {
 	return len(s.args)
+}
+
+// HasNext returns true if there's a next argument available
+func (s *DefaultState) HasNext() bool {
+	return s.pos+1 < len(s.args)
 }

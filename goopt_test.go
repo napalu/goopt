@@ -1286,7 +1286,7 @@ func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	// Define custom print config
 	printConfig := &PrettyPrintConfig{
 		NewCommandPrefix:     " + ",
-		DefaultPrefix:        " │ ",
+		DefaultPrefix:        " | ",
 		TerminalPrefix:       " └ ",
 		OuterLevelBindPrefix: " └ ",
 		InnerLevelBindPrefix: " * ",
@@ -1297,7 +1297,7 @@ func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	opts.PrintCommandsWithFlags(writer, printConfig)
 
 	expectedOutput := ` + create "Create resources"
- │  * create user "Manage users"
+ |  * create user "Manage users"
  └  └ --email "Email for user creation" (optional)
  └  *  * create user type "Specify user type"
  └  └  └ --username "Username for user creation" (required)

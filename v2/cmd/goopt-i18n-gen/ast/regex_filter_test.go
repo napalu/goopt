@@ -108,9 +108,9 @@ func api() {
 	log.Error("Failed to bind", "error", err)
 	fmt.Println("OK")
 }`,
-			matchOnly: `.*\s+.*`,      // must have spaces
-			skipMatch: `^[A-Z]+$`,     // skip all caps
-			minLength: 10,             // at least 10 chars
+			matchOnly: `.*\s+.*`,  // must have spaces
+			skipMatch: `^[A-Z]+$`, // skip all caps
+			minLength: 10,         // at least 10 chars
 			expected:  []string{"Starting API server", "Failed to bind"},
 			excluded:  []string{"version", "v1.0", "error", "OK"},
 		},
@@ -164,18 +164,18 @@ func api() {
 func TestTransformMode(t *testing.T) {
 	// String map for testing
 	stringMap := map[string]string{
-		`"Processing data"`:     "messages.Keys.ProcessingData",
-		`"Error occurred"`:      "messages.Keys.ErrorOccurred",
-		`"Debug info"`:          "messages.Keys.DebugInfo",
-		`"Internal state"`:      "messages.Keys.InternalState",
-		`"User logged in"`:      "messages.Keys.UserLoggedIn",
-		`"Calculate result"`:    "messages.Keys.CalculateResult",
+		`"Processing data"`:  "messages.Keys.ProcessingData",
+		`"Error occurred"`:   "messages.Keys.ErrorOccurred",
+		`"Debug info"`:       "messages.Keys.DebugInfo",
+		`"Internal state"`:   "messages.Keys.InternalState",
+		`"User logged in"`:   "messages.Keys.UserLoggedIn",
+		`"Calculate result"`: "messages.Keys.CalculateResult",
 	}
 
 	tests := []struct {
-		name           string
-		code           string
-		transformMode  string
+		name            string
+		code            string
+		transformMode   string
 		shouldTransform map[string]bool // function -> should transform
 	}{
 		{
@@ -295,9 +295,9 @@ func main() {
 	bundle := i18n.NewEmptyBundle()
 	extractor, err := NewStringExtractor(
 		bundle,
-		"",        // no match-only filter
+		"",         // no match-only filter
 		`^[a-z]+$`, // skip single lowercase words
-		5,         // minimum length 5
+		5,          // minimum length 5
 	)
 	if err != nil {
 		t.Fatalf("Failed to create extractor: %v", err)

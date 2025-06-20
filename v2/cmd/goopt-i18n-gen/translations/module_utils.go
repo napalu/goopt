@@ -16,7 +16,7 @@ func findGoModPath(startDir string) (string, error) {
 		if _, err := os.Stat(goModPath); err == nil {
 			return goModPath, nil
 		}
-		
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached the root directory
@@ -33,7 +33,7 @@ func getModuleName(goModPath string) (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -48,7 +48,7 @@ func getModuleName(goModPath string) (string, error) {
 			return moduleName, nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("module directive not found in go.mod")
 }
 
@@ -58,38 +58,38 @@ func resolvePackagePath(packageName string, workingDir string) (string, error) {
 	if strings.Contains(packageName, ".") || strings.Contains(packageName, "/") {
 		return packageName, nil
 	}
-	
+
 	// Find go.mod
 	goModPath, err := findGoModPath(workingDir)
 	if err != nil {
 		// No go.mod found, can't resolve
 		return packageName, nil
 	}
-	
+
 	// Get module name
 	moduleName, err := getModuleName(goModPath)
 	if err != nil {
 		return packageName, err
 	}
-	
+
 	// Calculate relative path from go.mod to working directory
 	goModDir := filepath.Dir(goModPath)
 	relPath, err := filepath.Rel(goModDir, workingDir)
 	if err != nil {
 		return packageName, err
 	}
-	
+
 	// Build the full import path
 	var parts []string
 	parts = append(parts, moduleName)
-	
+
 	if relPath != "." && relPath != "" {
 		// Convert file path separators to forward slashes for import paths
 		relPath = filepath.ToSlash(relPath)
 		parts = append(parts, relPath)
 	}
-	
+
 	parts = append(parts, packageName)
-	
+
 	return strings.Join(parts, "/"), nil
 }

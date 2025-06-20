@@ -31,6 +31,7 @@ const (
 	ErrEmptyArgumentPrefixListKey      = ErrorPrefixKey + ".empty_argument_prefix_list"
 	ErrEmptyFlagKey                    = ErrorPrefixKey + ".empty_flag"
 	ErrFlagAlreadyExistsKey            = ErrorPrefixKey + ".flag_already_exists"
+	ErrFlagDoesNotExistKey             = ErrorPrefixKey + ".flag_does_not_exist"
 	ErrPosixShortFormKey               = ErrorPrefixKey + ".posix__short_form_incompatible"
 	ErrShortFlagConflictKey            = ErrorPrefixKey + ".short_flag_conflict"
 	ErrShortFlagConflictKeyContext     = ErrorPrefixKey + ".short_flag_conflict_context"
@@ -72,6 +73,7 @@ const (
 	ErrFlagExpectsValueKey             = ErrorPrefixKey + ".flag_expects_value"
 	ErrCommandExpectsSubcommandKey     = ErrorPrefixKey + ".command_expects_subcommand"
 	ErrInvalidArgumentKey              = ErrorPrefixKey + ".invalid_argument"
+	ErrNoValuesKey                     = ErrorPrefixKey + ".no_values"
 	ErrSecureFlagExpectsValueKey       = ErrorPrefixKey + ".secure_flag_expects_value"
 	ErrCircularDependencyKey           = ErrorPrefixKey + ".circular_dependency"
 	ErrDependencyNotFoundKey           = ErrorPrefixKey + ".dependency_not_specified"
@@ -80,6 +82,7 @@ const (
 	ErrIndexOutOfBoundsKey             = ErrorPrefixKey + ".index_out_of_bounds"
 	ErrUnknownFlagKey                  = ErrorPrefixKey + ".unknown_flag"
 	ErrPositionMustBeNonNegativeKey    = ErrorPrefixKey + ".position_must_be_non_negative"
+	ErrPositionalArgumentNotFoundKey   = ErrorPrefixKey + ".positional_argument_not_found"
 	ErrUnknownFlagInCommandPathKey     = ErrorPrefixKey + ".unknown_flag_in_command_path"
 	ErrInvalidTagFormatKey             = ErrorPrefixKey + ".invalid_tag_format"
 	ErrInvalidKindKey                  = ErrorPrefixKey + ".invalid_kind"
@@ -120,4 +123,68 @@ const (
 	ErrParseEmptyKeyKey          = ParseErrorPathKey + ".empty_key"
 	ErrParseMissingValueKey      = ParseErrorPathKey + ".missing_value"
 	ErrParseNegativeIndexKey     = ParseErrorPathKey + ".negative_index"
+
+	// Validation error keys
+	ValidationErrorPathKey = ErrorPrefixKey + ".validation"
+
+	// General validation errors
+	ErrValidationCombinedFailedKey = ValidationErrorPathKey + ".combined_failed"
+	ErrValueMustBeNumberKey        = ValidationErrorPathKey + ".must_be_number"
+
+	// Email validation
+	ErrInvalidEmailFormatKey = ValidationErrorPathKey + ".invalid_email_format"
+
+	// URL validation
+	ErrInvalidURLKey           = ValidationErrorPathKey + ".invalid_url"
+	ErrURLSchemeMustBeOneOfKey = ValidationErrorPathKey + ".url_scheme_must_be_one_of"
+	ErrURLMustHaveHostKey      = ValidationErrorPathKey + ".url_must_have_host"
+
+	// Length validation (Unicode characters)
+	ErrMinLengthKey   = ValidationErrorPathKey + ".min_length"
+	ErrMaxLengthKey   = ValidationErrorPathKey + ".max_length"
+	ErrExactLengthKey = ValidationErrorPathKey + ".exact_length"
+
+	// Byte length validation
+	ErrMinByteLengthKey   = ValidationErrorPathKey + ".min_byte_length"
+	ErrMaxByteLengthKey   = ValidationErrorPathKey + ".max_byte_length"
+	ErrExactByteLengthKey = ValidationErrorPathKey + ".exact_byte_length"
+
+	// Numeric validation
+	ErrValueBetweenKey = ValidationErrorPathKey + ".value_between"
+	ErrValueAtLeastKey = ValidationErrorPathKey + ".value_at_least"
+	ErrValueAtMostKey  = ValidationErrorPathKey + ".value_at_most"
+
+	// Pattern validation
+	ErrPatternMatchKey = ValidationErrorPathKey + ".pattern_match"
+
+	// Set validation
+	ErrValueMustBeOneOfKey = ValidationErrorPathKey + ".value_must_be_one_of"
+	ErrValueCannotBeKey    = ValidationErrorPathKey + ".value_cannot_be"
+
+	// Type validation
+	ErrValueMustBeIntegerKey            = ValidationErrorPathKey + ".must_be_integer"
+	ErrValueMustBeBooleanKey            = ValidationErrorPathKey + ".must_be_boolean"
+	ErrValueMustBeAlphanumericKey       = ValidationErrorPathKey + ".must_be_alphanumeric"
+	ErrValueMustBeIdentifierKey         = ValidationErrorPathKey + ".must_be_identifier"
+	ErrValueMustNotContainWhitespaceKey = ValidationErrorPathKey + ".must_not_contain_whitespace"
+
+	// File validation
+	ErrFileMustHaveExtensionKey = ValidationErrorPathKey + ".file_must_have_extension"
+
+	// Network validation
+	ErrHostnameTooLongKey       = ValidationErrorPathKey + ".hostname_too_long"
+	ErrInvalidHostnameFormatKey = ValidationErrorPathKey + ".invalid_hostname_format"
+	ErrInvalidIPv4AddressKey    = ValidationErrorPathKey + ".invalid_ipv4_address"
+	ErrValueMustBeValidIPKey    = ValidationErrorPathKey + ".must_be_valid_ip"
+
+	// Validator parsing errors
+	ErrInvalidValidatorKey                    = ValidationErrorPathKey + ".invalid_validator"
+	ErrValidatorRequiresArgumentKey           = ValidationErrorPathKey + ".validator_requires_argument"
+	ErrValidatorArgumentMustBeIntegerKey      = ValidationErrorPathKey + ".validator_argument_must_be_integer"
+	ErrValidatorArgumentMustBeNumberKey       = ValidationErrorPathKey + ".validator_argument_must_be_number"
+	ErrValidatorRequiresAtLeastOneArgumentKey = ValidationErrorPathKey + ".validator_requires_at_least_one_argument"
+	ErrUnknownValidatorKey                    = ValidationErrorPathKey + ".unknown_validator"
+	ErrValidatorArgumentCannotBeNegativeKey   = ValidationErrorPathKey + ".validator_argument_cannot_be_negative"
+	ErrValidatorRecursionDepthExceededKey     = ValidationErrorPathKey + ".recursion_depth_exceeded"
+	ErrValidatorMustUseParenthesesKey         = ValidationErrorPathKey + ".must_use_parentheses"
 )

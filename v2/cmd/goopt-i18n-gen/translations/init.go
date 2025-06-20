@@ -3,12 +3,13 @@ package translations
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/napalu/goopt/v2"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 )
 
 func Init(parser *goopt.Parser, _ *goopt.Command) error {

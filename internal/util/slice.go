@@ -2,6 +2,13 @@ package util
 
 // InsertSlice inserts item(s) T at position pos and returns a slice
 func InsertSlice[T any](arr []T, pos int, element ...T) []T {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(arr) {
+		pos = len(arr)
+	}
+
 	return append(arr[:pos], append(element, arr[pos:]...)...)
 }
 

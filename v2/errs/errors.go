@@ -1,8 +1,10 @@
+// Package errs provides translatable error definitions for goopt.
+// All errors use the global default bundle for translations, which allows
+// adding new languages but ensures consistency across all parser instances.
 package errs
 
 import (
 	"github.com/napalu/goopt/v2/i18n"
-	"sync"
 )
 
 // Core parser errors
@@ -22,6 +24,7 @@ var (
 	ErrEmptyArgumentPrefixList      = i18n.NewError(ErrEmptyArgumentPrefixListKey)
 	ErrEmptyFlag                    = i18n.NewError(ErrEmptyFlagKey)
 	ErrFlagAlreadyExists            = i18n.NewError(ErrFlagAlreadyExistsKey)
+	ErrFlagDoesNotExist             = i18n.NewError(ErrFlagDoesNotExistKey)
 	ErrPosixShortForm               = i18n.NewError(ErrPosixShortFormKey)
 	ErrShortFlagConflict            = i18n.NewError(ErrShortFlagConflictKey)
 	ErrShortFlagConflictContext     = i18n.NewError(ErrShortFlagConflictKeyContext)
@@ -63,6 +66,7 @@ var (
 	ErrCommandExpectsSubcommand     = i18n.NewError(ErrCommandExpectsSubcommandKey)
 	ErrSecureFlagExpectsValue       = i18n.NewError(ErrSecureFlagExpectsValueKey)
 	ErrInvalidArgument              = i18n.NewError(ErrInvalidArgumentKey)
+	ErrNoValues                     = i18n.NewError(ErrNoValuesKey)
 	ErrCircularDependency           = i18n.NewError(ErrCircularDependencyKey)
 	ErrDependencyNotFound           = i18n.NewError(ErrDependencyNotFoundKey)
 	ErrDependencyValueNotSpecified  = i18n.NewError(ErrDependencyValueNotSpecifiedKey)
@@ -70,6 +74,7 @@ var (
 	ErrIndexOutOfBounds             = i18n.NewError(ErrIndexOutOfBoundsKey)
 	ErrUnknownFlag                  = i18n.NewError(ErrUnknownFlagKey)
 	ErrPositionMustBeNonNegative    = i18n.NewError(ErrPositionMustBeNonNegativeKey)
+	ErrPositionalArgumentNotFound   = i18n.NewError(ErrPositionalArgumentNotFoundKey)
 	ErrUnknownFlagInCommandPath     = i18n.NewError(ErrUnknownFlagInCommandPathKey)
 	ErrInvalidTagFormat             = i18n.NewError(ErrInvalidTagFormatKey)
 	ErrInvalidKind                  = i18n.NewError(ErrInvalidKindKey)
@@ -110,129 +115,45 @@ var (
 	ErrParseEmptyKey          = i18n.NewError(ErrParseEmptyKeyKey)
 	ErrParseMissingValue      = i18n.NewError(ErrParseMissingValueKey)
 	ErrParseNegativeIndex     = i18n.NewError(ErrParseNegativeIndexKey)
+
+	// Validation errors
+	ErrValidationCombinedFailed      = i18n.NewError(ErrValidationCombinedFailedKey)
+	ErrValueMustBeNumber             = i18n.NewError(ErrValueMustBeNumberKey)
+	ErrInvalidEmailFormat            = i18n.NewError(ErrInvalidEmailFormatKey)
+	ErrInvalidURL                    = i18n.NewError(ErrInvalidURLKey)
+	ErrURLSchemeMustBeOneOf          = i18n.NewError(ErrURLSchemeMustBeOneOfKey)
+	ErrURLMustHaveHost               = i18n.NewError(ErrURLMustHaveHostKey)
+	ErrMinLength                     = i18n.NewError(ErrMinLengthKey)
+	ErrMaxLength                     = i18n.NewError(ErrMaxLengthKey)
+	ErrExactLength                   = i18n.NewError(ErrExactLengthKey)
+	ErrMinByteLength                 = i18n.NewError(ErrMinByteLengthKey)
+	ErrMaxByteLength                 = i18n.NewError(ErrMaxByteLengthKey)
+	ErrExactByteLength               = i18n.NewError(ErrExactByteLengthKey)
+	ErrValueBetween                  = i18n.NewError(ErrValueBetweenKey)
+	ErrValueAtLeast                  = i18n.NewError(ErrValueAtLeastKey)
+	ErrValueAtMost                   = i18n.NewError(ErrValueAtMostKey)
+	ErrPatternMatch                  = i18n.NewError(ErrPatternMatchKey)
+	ErrValueMustBeOneOf              = i18n.NewError(ErrValueMustBeOneOfKey)
+	ErrValueCannotBe                 = i18n.NewError(ErrValueCannotBeKey)
+	ErrValueMustBeInteger            = i18n.NewError(ErrValueMustBeIntegerKey)
+	ErrValueMustBeBoolean            = i18n.NewError(ErrValueMustBeBooleanKey)
+	ErrValueMustBeAlphanumeric       = i18n.NewError(ErrValueMustBeAlphanumericKey)
+	ErrValueMustBeIdentifier         = i18n.NewError(ErrValueMustBeIdentifierKey)
+	ErrValueMustNotContainWhitespace = i18n.NewError(ErrValueMustNotContainWhitespaceKey)
+	ErrFileMustHaveExtension         = i18n.NewError(ErrFileMustHaveExtensionKey)
+	ErrHostnameTooLong               = i18n.NewError(ErrHostnameTooLongKey)
+	ErrInvalidHostnameFormat         = i18n.NewError(ErrInvalidHostnameFormatKey)
+	ErrInvalidIPv4Address            = i18n.NewError(ErrInvalidIPv4AddressKey)
+	ErrValueMustBeValidIP            = i18n.NewError(ErrValueMustBeValidIPKey)
+
+	// Validator parsing errors
+	ErrInvalidValidator                    = i18n.NewError(ErrInvalidValidatorKey)
+	ErrValidatorRequiresArgument           = i18n.NewError(ErrValidatorRequiresArgumentKey)
+	ErrValidatorArgumentMustBeInteger      = i18n.NewError(ErrValidatorArgumentMustBeIntegerKey)
+	ErrValidatorArgumentMustBeNumber       = i18n.NewError(ErrValidatorArgumentMustBeNumberKey)
+	ErrValidatorRequiresAtLeastOneArgument = i18n.NewError(ErrValidatorRequiresAtLeastOneArgumentKey)
+	ErrUnknownValidator                    = i18n.NewError(ErrUnknownValidatorKey)
+	ErrValidatorArgumentCannotBeNegative   = i18n.NewError(ErrValidatorArgumentCannotBeNegativeKey)
+	ErrValidatorRecursionDepthExceeded     = i18n.NewError(ErrValidatorRecursionDepthExceededKey)
+	ErrValidatorMustUseParentheses         = i18n.NewError(ErrValidatorMustUseParenthesesKey)
 )
-
-type builtInErrors struct {
-	mu  sync.Mutex
-	All []i18n.TranslatableError
-}
-
-var sysErrors = &builtInErrors{
-	All: []i18n.TranslatableError{
-		ErrUnsupportedType,
-		ErrCommandNotFound,
-		ErrCommandNoCallback,
-		ErrFlagNotFound,
-		ErrPosixIncompatible,
-		ErrValidationFailed,
-		ErrBindNil,
-		ErrNonPointerVar,
-		ErrRequiredFlag,
-		ErrRequiredPositionalFlag,
-		ErrInvalidArgumentType,
-		ErrFlagValueNotRetrieved,
-		ErrEmptyArgumentPrefixList,
-		ErrEmptyFlag,
-		ErrFlagAlreadyExists,
-		ErrPosixShortForm,
-		ErrShortFlagConflict,
-		ErrInvalidListDelimiterFunc,
-		ErrBindInvalidValue,
-		ErrPointerExpected,
-		ErrOptionNotSet,
-		ErrLanguageUnavailable,
-		ErrShortFlagUndefined,
-		ErrDependencyOnEmptyFlag,
-		ErrRemoveDependencyFromEmpty,
-		ErrSettingBoundValue,
-		ErrCommandCallbackError,
-		ErrNegativeCapacity,
-		ErrUnsupportedTypeConversion,
-		ErrNoPreValidationFilters,
-		ErrNoPostValidationFilters,
-		ErrEmptyCommandPath,
-		ErrRecursionDepthExceeded,
-		ErrConfiguringParser,
-		ErrFieldBinding,
-		ErrUnwrappingValue,
-		ErrOnlyStructsCanBeTagged,
-		ErrProcessingFieldWithPrefix,
-		ErrProcessingField,
-		ErrProcessingFlag,
-		ErrProcessingSliceField,
-		ErrProcessingNestedStruct,
-		ErrProcessingCommand,
-		ErrUnmarshallingTag,
-		ErrMissingPropertyOnLevel,
-		ErrNilPointer,
-		ErrNoValidTags,
-		ErrInvalidAttributeForType,
-		ErrNotFoundPathForFlag,
-		ErrNotFilePathForFlag,
-		ErrFlagFileOperation,
-		ErrFlagExpectsValue,
-		ErrCommandExpectsSubcommand,
-		ErrSecureFlagExpectsValue,
-		ErrInvalidArgument,
-		ErrCircularDependency,
-		ErrDependencyNotFound,
-		ErrDependencyValueNotSpecified,
-		ErrMissingArgumentInfo,
-		ErrIndexOutOfBounds,
-		ErrUnknownFlag,
-		ErrPositionMustBeNonNegative,
-		ErrUnknownFlagInCommandPath,
-		ErrInvalidTagFormat,
-		ErrInvalidKind,
-		ErrNotAttachedToTerminal,
-		ErrParseBool,
-		ErrParseInt,
-		ErrParseFloat,
-		ErrRegexCompile,
-		ErrFileOperation,
-		ErrParseDuration,
-		ErrParseTime,
-		ErrParseComplex,
-		ErrParseList,
-		ErrParseInt64,
-		ErrParseInt32,
-		ErrParseInt16,
-		ErrParseInt8,
-		ErrParseOverflow,
-		ErrParseFloat64,
-		ErrParseFloat32,
-		ErrParseUint,
-		ErrParseUint64,
-		ErrParseUint32,
-		ErrParseUint16,
-		ErrParseUint8,
-		ErrParseUintptr,
-		ErrWrapped,
-		ErrParseDuplicateFlag,
-		ErrParseEmptyInput,
-		ErrParseMalformedBraces,
-		ErrParseUnmatchedBrackets,
-		ErrParseInvalidFormat,
-		ErrParseEmptyKey,
-		ErrParseMissingValue,
-		ErrParseNegativeIndex,
-	},
-}
-
-// UpdateMessageProvider updates the default message provider for all built-in errors.
-// This is useful for setting a custom message provider for all built-in errors.
-//
-// Example:
-//
-//	provider := i18n.NewBundleMessageProvider(bundle)
-//	errs.UpdateMessageProvider(provider)
-//
-//	// Now all built-in errors will use the custom message provider.
-func UpdateMessageProvider(provider i18n.MessageProvider) {
-	i18n.SetDefaultMessageProvider(provider)
-	sysErrors.mu.Lock()
-	for _, e := range sysErrors.All {
-		e.SetProvider(provider)
-	}
-	sysErrors.mu.Unlock()
-}
