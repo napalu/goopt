@@ -10060,6 +10060,43 @@ func TestParser_ValidationHook(t *testing.T) {
 	})
 }
 
+type CustomRenderer struct {
+	*DefaultRenderer // Embed the default renderer to reuse its logic
+}
+
+type CustomHelp struct {
+	Cmd struct {
+		Flag1 string `goopt:"short:f;desc:Flag 1"`
+		Flag2 string `goopt:"short:s;desc:Flag 2"`
+	} `goopt:"desc:Command description;kind:command"`
+}
+
+func (r *CustomRenderer) FlagUsage(arg *Argument) string {
+	// Custom flag formatting, e.g., a table-like layout
+	name := r.FlagName(arg)
+	if arg.Short != "" {
+		name = fmt.Sprintf("-%s, --%s", arg.Short, name)
+	} else {
+		name = fmt.Sprintf("    --%s", name)
+	}
+	return fmt.Sprintf("  %-25s %s", name, r.FlagDescription(arg))
+}
+
+func TestParser_SetRenderer(t *testing.T) {
+	output := &bytes.Buffer{}
+	p, err := NewParserFromStruct(&CustomHelp{})
+	p.SetRenderer(&CustomRenderer{
+		DefaultRenderer: NewRenderer(p),
+	})
+	assert.NoError(t, err)
+
+	p.PrintHelp(output)
+	// ensure table-like output from CustomRenderer
+	assert.Contains(t, output.String(), `   -f, --flag1               Flag 1
+   -s, --flag2               Flag 2`)
+
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }

@@ -156,10 +156,13 @@ func (p *Parser) SetExecOnParse(value bool) {
 	p.callbackOnParse = value
 }
 
+// SetExecOnParseComplete sets whether command callbacks should execute upon successful parsing completion.
 func (p *Parser) SetExecOnParseComplete(value bool) {
 	p.callbackOnParseComplete = value
 }
 
+// SetSystemLanguage sets the system language to the specified language tag. It updates the system bundle's default language.
+// Returns an error if the language cannot be set.
 func (p *Parser) SetSystemLanguage(lang language.Tag) error {
 	// Set language on the system bundle (not the immutable default)
 	err := p.systemBundle.SetDefaultLanguage(lang)
@@ -168,6 +171,14 @@ func (p *Parser) SetSystemLanguage(lang language.Tag) error {
 	}
 
 	return nil
+}
+
+// SetEndHelpFunc sets a custom function to be executed at the end of the help output. By default, os.exit(0) is called
+// after help is shown, with the assumption that no further processing is expected after help is shown. This
+// behaviour can be overridden by setting a custom endFunc. You can then check WasHelpShown do determine if help
+// was displayed.
+func (p *Parser) SetEndHelpFunc(endFunc func() error) {
+	p.helpEndFunc = endFunc
 }
 
 // SetCommandNameConverter allows setting a custom name converter for command names
@@ -193,6 +204,11 @@ func (p *Parser) SetEnvNameConverter(converter NameConversionFunc) NameConversio
 	p.envNameConverter = converter
 
 	return oldConverter
+}
+
+// SetRenderer allows overriding the built-in flag and command renderer used for formatting flags and commands
+func (p *Parser) SetRenderer(customRenderer Renderer) {
+	p.renderer = customRenderer
 }
 
 // GetStructCtx returns the current struct context stored within the Parser instance.
@@ -318,7 +334,7 @@ func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
 }
 
 // AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
-// *before* AcceptedValues are checked
+// *before* AcceptedValues and Validators are checked
 func (p *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, commandPath ...string) error {
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := p.acceptedFlags.Get(mainKey); found {
@@ -331,7 +347,7 @@ func (p *Parser) AddFlagPreValidationFilter(flag string, proc FilterFunc, comman
 }
 
 // AddFlagPostValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
-// *after* AcceptedValues are checked
+// *after* AcceptedValues and Validators are checked
 func (p *Parser) AddFlagPostValidationFilter(flag string, proc FilterFunc, commandPath ...string) error {
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	if flagInfo, found := p.acceptedFlags.Get(mainKey); found {
@@ -392,10 +408,23 @@ func (p *Parser) GetPostValidationFilter(flag string, commandPath ...string) (Fi
 }
 
 // HasAcceptedValues returns true when a Flag defines a set of valid values it will accept
+//
+// Deprecated. AcceptedValues is deprecated in favor of the more powerful and composable
+// validation system. See HasValidators instead.
 func (p *Parser) HasAcceptedValues(flag string, commandPath ...string) bool {
 	flagInfo, found := p.acceptedFlags.Get(p.flagOrShortFlag(flag, commandPath...))
 	if found {
 		return len(flagInfo.Argument.AcceptedValues) > 0
+	}
+
+	return false
+}
+
+// HasValidators checks if the specified flag has any associated validators for the given command path.
+func (p *Parser) HasValidators(flag string, commandPath ...string) bool {
+	flagInfo, found := p.acceptedFlags.Get(p.flagOrShortFlag(flag, commandPath...))
+	if found {
+		return len(flagInfo.Argument.Validators) > 0
 	}
 
 	return false
@@ -1123,6 +1152,9 @@ func (p *Parser) CustomBindFlag(data any, proc ValueSetFunc, flag string, argume
 //
 //		a Flag which accepts only whole numbers could be defined as:
 //	 	AcceptPattern("times", PatternValue{Pattern: `^[\d]+`, Description: "Please supply a whole number"}).
+//
+// Deprecated. AcceptPattern is deprecated in favor of the more powerful and composable validation system.
+// See the validation guide for more details.
 func (p *Parser) AcceptPattern(flag string, val types.PatternValue, commandPath ...string) error {
 	return p.AcceptPatterns(flag, []types.PatternValue{val}, commandPath...)
 }
@@ -1130,6 +1162,9 @@ func (p *Parser) AcceptPattern(flag string, val types.PatternValue, commandPath 
 // AcceptPatterns same as AcceptPattern but acts on a list of patterns and descriptions. When specified, the patterns defined
 // in AcceptPatterns represent a set of values, of which one must be supplied on the command-line. The patterns are evaluated
 // on Parse, if no command-line options match one of the PatternValue, Parse returns false.
+//
+// Deprecated. AcceptPatterns is deprecated in favor of the more powerful and composable validation system.
+// See the validation guide for more details.
 func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, commandPath ...string) error {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err != nil {
@@ -1151,6 +1186,9 @@ func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, com
 }
 
 // GetAcceptPatterns takes a flag string and returns an error if the flag does not exist, a slice of LiterateRegex otherwise
+//
+// Deprecated. GetAcceptPatterns is deprecated in favor of the more powerful and composable validation system.
+// See the validation guide for more details.
 func (p *Parser) GetAcceptPatterns(flag string, commandPath ...string) ([]types.PatternValue, error) {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err != nil {

@@ -3,11 +3,13 @@ layout: default
 title: Execution Hooks
 parent: Advanced Features
 nav_order: 2
+version: v2
 ---
 
 # Execution Hooks Guide
 
-The goopt v2 execution hooks feature provides pre and post-execution hooks for command lifecycle management, enabling cross-cutting concerns like logging, authentication, and cleanup.
+The goopt v2 execution hooks feature provides pre- and post-execution hooks for command lifecycle management, enabling 
+cross-cutting concerns such as logging, authentication, and cleanup.
 
 ## Overview
 

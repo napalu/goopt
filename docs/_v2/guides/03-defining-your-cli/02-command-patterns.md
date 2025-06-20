@@ -3,6 +3,7 @@ layout: default
 title: Command Patterns
 parent: Defining Your CLI
 nav_order: 2
+version: v2
 ---
 
 # Command Patterns

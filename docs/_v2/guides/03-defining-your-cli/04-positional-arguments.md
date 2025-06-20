@@ -3,6 +3,7 @@ layout: default
 title: Positional Arguments
 parent: Defining Your CLI
 nav_order: 4
+version: v2
 ---
 
 # Positional Arguments
@@ -77,7 +78,7 @@ type Config struct {
 
 ## Mixing Positional Arguments and Named Flags
 
-Goopt seamlessly handles command lines that contain both positional arguments (defined with `pos:N`) and named flags (e.g., `--verbose`, `--output file`).
+goopt seamlessly handles command lines that contain both positional arguments (defined with `pos:N`) and named flags (e.g., `--verbose`, `--output file`).
 
 **Parsing Order and Precedence:**
 
@@ -153,7 +154,7 @@ type PositionalArgument struct {
 ```
 ## Error Handling
 
-Goopt provides clear error messages for position violations:
+goopt provides clear error messages for position violations:
 
 ```go
 if !parser.Parse(os.Args[1:]) {

@@ -3,6 +3,7 @@ layout: default
 title: Tooling (goopt-i18n-gen)
 parent: Internationalization
 nav_order: 2
+version: v2
 ---
 
 # Tooling: `goopt-i18n-gen`
@@ -125,22 +126,32 @@ This pattern is highly recommended for any project using structured logging.
 Initializes empty translation files.
 `goopt-i18n-gen -i locales/en.json init`
 
-### `audit`
-Finds `goopt` fields missing `descKey` tags.
+### `audit` 
+Scans Go source files for `goopt` fields and helps generate `descKey` tags and translations.
 *   `--files`: Go source files to scan (default: `*.go`).
 *   `-d, --generate-desc-keys`: Generate suggestions for `descKey` tags.
 *   `-g, --generate-missing`: Generate stub entries for missing keys in JSON files.
 *   `-u, --auto-update`: **Modifies source files** to automatically add `descKey` tags.
+*   `-n, --dry-run`: Preview changes without modifying files.
+*   `--key-prefix`: Prefix for generated keys (e.g., `app`).
+*   `--backup-dir`: Directory for backup files (default: `.goopt-i18n-backup`).
 
-### `extract`
+### `extract` Command
 Extracts string literals from Go source files.
 *   `-s, --files`: Go files to scan (default: `**/*.go`).
 *   `-m, --match-only`: Regex to include only matching strings.
-*   `-S, --skip-match`: Regex to exclude matching strings (e.g., `-S "^[^\s]+$"` for slog).
+*   `-S, --skip-match`: Regex to exclude matching strings.
 *   `-P, --key-prefix`: Prefix for generated keys (default: `app.extracted`).
+*   `-l, --min-length`: Minimum string length (default: `2`).
 *   `-u, --auto-update`: Update source files (adds comments or replaces strings).
+*   `-n, --dry-run`: Preview changes without modifying files.
 *   `--tr-pattern`: The translator call pattern to use for replacement (e.g., `tr.T`).
-*   `--transform-mode`: `user-facing` (default), `with-comments`, `all-marked`, or `all`.
+*   `--transform-mode`: What to transform: `user-facing` (default), `with-comments`, `all-marked`, `all`.
+*   `--keep-comments`: Keep `i18n-*` comments after replacement.
+*   `--clean-comments`: Remove all `i18n-*` comments from source files.
+*   `--backup-dir`: Directory for backup files.
+*   `--user-facing-regex`: Regex to identify custom user-facing functions.
+*   `--format-function-regex`: Regex and argument index for custom format functions (e.g., `"MyLogf:1"`)
 
 ### `generate`
 Generates a type-safe Go constants file.

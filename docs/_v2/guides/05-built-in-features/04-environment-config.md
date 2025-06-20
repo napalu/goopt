@@ -3,6 +3,7 @@ layout: default
 title: Environment & External Configuration
 parent: Built-in Features
 nav_order: 4
+version: v2
 ---
 
 # Environment & External Configuration

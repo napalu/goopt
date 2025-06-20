@@ -2,97 +2,58 @@
 layout: default
 title: Home
 nav_order: 1
+version: v2
 ---
 
 {% include version-selector.html %}
 
-# goopt Documentation
+# goopt: A Flexible, Feature-Rich CLI Parser for Go
 
-`goopt` is a flexible and powerful command-line option parser for Go applications that supports multiple approaches to defining your CLI interface.
+`goopt` is a powerful command-line option parser for Go, designed to be intuitive for simple tools and scalable for complex, enterprise-grade applications. It provides a uniquely flexible, struct-first approach to building CLIs that are robust, maintainable, and user-friendly.
 
-## Version 2.1
+[Get started in 5 minutes]({{ site.baseurl }}/v2/guides/01-getting-started/) or see the [API Reference](https://pkg.go.dev/github.com/napalu/goopt/v2).
 
-This is the documentation for goopt v2, which includes significant enhancements:
+---
 
-- **First-class internationalization (i18n)**
-- **Enhanced error handling with structured errors**
-- **Improved flag inheritance in command hierarchies**
-- **Cleaner API with deprecated functionality removed**
+## Why goopt? More Than Just Parsing
 
-[Get started]({{ site.baseurl }}/v2/guides/getting-started/) or [see what's new in v2]({{ site.baseurl }}/v2/whats-new/) or [read the migration guide]({{ site.baseurl }}/v2/migration/) if upgrading from v1.
+`goopt` stands out by providing built-in solutions for the complex challenges of modern CLI development.
 
-## Design
+### 🌐 Low-Config Internationalization (i18n)
+Ship a single binary that speaks your users' language. `goopt` provides out-of-the-box i18n for all system messages and a powerful code generation tool (`goopt-i18n-gen`) to automate the entire translation workflow for your application.
+<br/>*[Read the Internationalization Guide]({{ site.baseurl }}/v2/guides/06-internationalization/)*
 
-goopt follows these key principles:
-- **Flexibility First**: Support multiple ways to define your CLI (struct-based, builder pattern, or imperative)
-- **Type Safety**: Provide compile-time guarantees about command structure
-- **Clear Precedence**: Explicit ordering for configuration sources (CLI flags → config files via `ParseWithDefaults` → ENV vars → Default values) where CLI flags have the highest precedence and Default values the lowest
-- **Ordered Execution**: Commands execute in the order they're provided
-- **Command Context**: Command-specific flags are evaluated within their command context
-- **Global, shared, and command-specific flags**: goopt supports all three types of flags
+### 🚀 An Advanced, Interactive Help System
+Stop writing boilerplate help text. `goopt` features an **adaptive help system** that automatically chooses the best display style for your CLI's complexity. Its interactive parser lets users search and filter help (`--help --search "db"`), providing a superior experience.
+<br/>*[Learn more about the Help System]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/)*
 
-## Key Features
+### ✅ Powerful, Composable Validation
+Define complex validation rules directly in your struct tags. Chain built-in validators like `email`, `port`, and `range`, or compose them with logical operators (`oneof`, `all`, `not`) to ensure your application receives correct data.
+<br/>*[See the Validation Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/01-validation/)*
 
-- **Multiple Definition Styles**:
-  - Struct-based using tags
-  - Builder pattern
-  - Imperative
-  - Mixed approaches
-- **Flexible Command Organization**:
-  - Flag-centric with base paths
-  - Command-centric with struct grouping
-  - Hybrid approaches
-- **Rich Feature Set**:
-  - Type-safe configuration
-  - Ordered command execution
-  - Positional arguments with flexible position and index constraints
-  - Flag dependencies and validation
-  - Shell completion (Bash, Zsh, Fish, PowerShell)
-  - Environment variable support
-  - External configuration support through `goopt.ParseWithDefaults`
-  - Optional POSIX-compliant flag parsing
-  - Customizable flag name and command name converters
-  - Positional arguments with flexible position and index constraints
-  - Flag name converters to ensure consistent flag and command names (default to lowerCamelCase)
-- **i18n Support**:
-  - Goopt has built-in support for internalization in English, French, and German
-  - Built-in translations can be easily extended to support additional languages
-  - Support for user-defined internalization support for flag and command usage
-  - Allows overriding built-in messages if necessary
-  - Powerful `extract` command in goopt-i18n-gen for migrating hardcoded strings to i18n
-- **Enhanced Error Handling**:
-  - Structured, translatable errors with context
-  - Improved error testing utilities
-  - Consistent error wrapping and chaining
-- **Shared flag command support**:
-  - Hierachical flags 
-  - flags set on parent commands are accessible to sub-commands
-  - Full hierarchical support for long and short flags
+### 훅 Command Lifecycle Hooks
+Implement cross-cutting concerns cleanly with a powerful pre- and post-execution hook system. Manage authentication, database connections, logging, and resource cleanup with ease by attaching logic to the command lifecycle.
+<br/>*[Explore Execution Hooks]({{ site.baseurl }}/v2/guides/04-advanced-features/02-execution-hooks/)*
 
-## Documentation Contents
+---
 
-### Guides
-- [Getting Started]({{ site.baseurl }}/v2/guides/getting-started/) - Installation and basic usage
-- [Command structure patterns]({{ site.baseurl }}/v2/guides/command-organization/) - Different ways to structure your CLI
-- [Flag structure patterns]({{ site.baseurl }}/v2/guides/flag-organization/) - Different ways to structure your flags
-- [Struct-First Approach]({{ site.baseurl }}/v2/guides/struct-tags/) - Struct-first approach
-- [Advanced Features]({{ site.baseurl }}/v2/guides/advanced-features/) - Nested access, dependencies, validation, and more
-- [Positional Arguments]({{ site.baseurl }}/v2/guides/positional-arguments/) - Flexible positional argument handling
-- [Internationalization]({{ site.baseurl }}/v2/guides/internationalization/) - Internationalization support for your CLI
+## Key Features at a Glance
 
-### Configuration
-- [Environment Variables]({{ site.baseurl }}/v2/configuration/environment/) - ENV var support
-- [External Configuration]({{ site.baseurl }}/v2/configuration/external-config/) - Config files and defaults
+*   **Flexible Definition:** Build your CLI with a **declarative struct-first approach**, a programmatic builder, or a hybrid of both.
+*   **Hierarchical Structure:** Natively supports nested commands, command-specific flags, and intelligent flag inheritance.
+*   **Advanced Flag Handling:** Includes support for positional arguments, repeated flags (`-v -v -v`), and flag dependencies.
+*   **Automatic Conveniences:** Zero-config support for `--help` and `--version` flags.
+*   **Broad Shell Support:** Generate completion scripts for Bash, Zsh, Fish, and PowerShell.
+*   **Extensive Configuration:** Load options from environment variables and external config files with a clear precedence order.
 
-### Integration
-- [Shell Completion]({{ site.baseurl }}/v2/shell/completion/) - Setup completion for various shells
+## Where to Next?
 
-### Migration
-- [What's New in v2]({{ site.baseurl }}/v2/whats-new/) - Overview of v2 features
-- [Migration Guide]({{ site.baseurl }}/v2/migration/) - Guide for upgrading from v1 to v2
+*   **New to `goopt`?** Follow our [**Getting Started**]({{ site.baseurl }}/v2/guides/01-getting-started/) guide.
+*   **Want to see the patterns?** Check out how to [**Define Your CLI**]({{ site.baseurl }}/v2/guides/03-defining-your-cli/).
+*   **Upgrading from v1?** Read the [**Migration Guide**]({{ site.baseurl }}/v2/migration/).
 
 ## Need Help?
 
 - Check [Guides]({{ site.baseurl }}/v2/guides/index/) section for detailed documentation
-- Visit [GitHub repository](https://github.com/napalu/goopt) for issues and updates
+- Visit [GitHub repository](https://github.com/napalu/goopt/v2) for issues and updates
 - See the [API Reference](https://pkg.go.dev/github.com/napalu/goopt/v2) for detailed API documentation

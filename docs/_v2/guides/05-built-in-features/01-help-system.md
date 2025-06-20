@@ -3,6 +3,7 @@ layout: default
 title: The Help System
 parent: Built-in Features
 nav_order: 1
+version: v2
 ---
 
 # The Help System
@@ -28,13 +29,13 @@ parser, _ := goopt.NewParserFromStruct(&Config{})
 
 // Parse arguments
 if !parser.Parse(os.Args) {
-    // Handle parsing errors...
-    os.Exit(1)
+// Handle parsing errors...
+os.Exit(1)
 }
 
 // Check if help was shown and exit cleanly.
 if parser.WasHelpShown() {
-    os.Exit(0)
+os.Exit(0)
 }
 
 // ... your application logic continues here ...
@@ -46,10 +47,12 @@ If you need complete control over the `--help` flag, you can disable the automat
 
 ```go
 parser, _ := goopt.NewParserWith(
-    goopt.WithAutoHelp(false),
+goopt.WithAutoHelp(false),
 )
 // Now, --help and -h are not registered automatically.
 ```
+
+---
 
 ## Configuring Help Output
 
@@ -61,6 +64,12 @@ You can customize every aspect of the help system's appearance and behavior.
 
 #### `HelpStyleSmart` (Default)
 `goopt` analyzes your CLI's complexity (number of flags and commands) and automatically selects the most appropriate style. This is the recommended default for most applications.
+
+*Detection Logic:*
+- **Flat:** For CLIs with fewer than 20 flags and 3 commands.
+- **Grouped:** For CLIs with a few commands that have multiple flags each.
+- **Compact:** For CLIs with over 20 flags.
+- **Hierarchical:** For very large CLIs with many flags and commands.
 
 #### `HelpStyleFlat`
 The traditional, simple list of all flags and commands. Best for small tools.
@@ -98,8 +107,7 @@ Shared Flags:
 
 Commands:
   auth            Authenticate users              [15 flags]
-  user            Manage users                    [12 flags]
-```
+  user            Manage users                    [12 flags]```
 
 #### `HelpStyleHierarchical`
 A command-focused view for deeply nested CLIs (like `git` or `kubectl`). It shows the command structure and encourages users to explore subcommands.
@@ -108,23 +116,39 @@ Usage: myapp [global-flags] <command> [command-flags]
 
 Command Structure:
 service
-  ├─ start       Start the service
-  └─ stop        Stop the service
+├─ start       Start the service
+└─ stop        Stop the service
 database
-  ├─ backup      Backup database
-  └─ restore     Restore database
+├─ backup      Backup database
+└─ restore     Restore database
 
 Examples:
-  myapp --help                    # Show this help
-  myapp service --help            # Show service command help
+myapp --help                    # Show this help
+myapp service --help            # Show service command help
 ```
 
-### Advanced Help Configuration
+---
 
-For fine-grained control, you can use the `HelpConfig` struct.
+## Advanced Configuration & Features
+
+### The `HelpConfig` Struct
+For fine-grained control over what is displayed, you can modify the `HelpConfig` struct.
 
 ```go
-// For expert users who might not need detailed descriptions
+// The HelpConfig struct definition
+type HelpConfig struct {
+    Style            HelpStyle
+    ShowDefaults     bool // default: true
+    ShowShortFlags   bool // default: true
+    ShowRequired     bool // default: true
+    ShowDescription  bool // default: true
+    MaxGlobals       int  // default: 15
+    MaxWidth         int  // default: 80
+    GroupSharedFlags bool // default: true
+    CompactThreshold int  // default: 20
+}
+
+// Example: Customize for expert users who need less detail
 parser.SetHelpConfig(goopt.HelpConfig{
     Style:           goopt.HelpStyleCompact,
     ShowDefaults:    false, // Don't show "(defaults to: ...)"
@@ -132,8 +156,15 @@ parser.SetHelpConfig(goopt.HelpConfig{
 })
 ```
 
-### Interactive Help Parser
+### Context-Aware Help Output
+By default, help requested via `--help` goes to `stdout`, while help shown due to a parsing error goes to `stderr`. You can control this with `SetHelpBehavior`.
 
+```go
+// Help always goes to stderr
+parser.SetHelpBehavior(goopt.HelpBehaviorStderr)
+```
+
+### Interactive Help Parser
 `goopt` includes an advanced help parser that allows users to query the help system itself. This is enabled automatically.
 
 ```bash
@@ -151,11 +182,94 @@ myapp --help --filter "*.port"
 
 # Override the configured style at runtime
 myapp --help --style compact
+
+# Get help on the help system itself
+myapp --help --help
 ```
 
-## Best Practices
+### Version Integration
+If you use the [Version Support](./02-version-support.md) feature, you can configure it to display the version in the help header.
+```go
+parser.SetShowVersionInHelp(true)
+```
 
-1.  **Stick with `HelpStyleSmart`:** Let `goopt` choose the best style for you unless you have a specific reason to override it.
-2.  **Check `WasHelpShown()`:** Always check this after parsing to ensure your application exits cleanly after displaying help.
-3.  **Provide Good Descriptions:** Your `desc` tags are the most important part of creating useful help text. Be concise but clear.
-4.  **Leverage Namespacing:** Use nested structs to group flags logically (e.g., `database.host`, `database.port`). The `Compact` and `Hierarchical` help styles will use these namespaces to create structured output.
+---
+
+## Advanced Customization with a Custom Renderer
+
+While `goopt`'s built-in help styles and configuration options cover most use cases, you can further customize the help output by implementing the `Renderer` interface.
+
+Unlike template-based systems where you might need to rewrite the entire help logic, `goopt`'s `Renderer` interface allows you to surgically override specific parts of the help output, such as how a single flag or command is formatted, while keeping the rest of the system's logic intact.
+
+#### Example: Overriding Flag Formatting
+
+```go
+import "github.com/napalu/goopt/v2"
+
+type CustomRenderer struct {
+    *goopt.DefaultRenderer // Embed the default renderer to reuse its logic
+}
+
+// Override only the FlagUsage method.
+func (r *CustomRenderer) FlagUsage(arg *goopt.Argument) string {
+    // Custom flag formatting, e.g., a table-like layout
+    name := r.FlagName(arg)
+    if arg.Short != "" {
+        name = fmt.Sprintf("-%s, --%s", arg.Short, name)
+    } else {
+        name = fmt.Sprintf("    --%s", name)
+    }
+    return fmt.Sprintf("  %-25s %s", name, r.FlagDescription(arg))
+}
+
+// Use the custom renderer in your parser
+parser.SetRenderer(&CustomRenderer{
+    DefaultRenderer: goopt.NewDefaultRenderer(parser),
+})
+
+parser.PrintHelp(os.StdErr)
+```
+This approach provides a structured way to customize the output without losing the benefits of the adaptive styling and interactive help parser.
+      
+---
+## Testing and Advanced Control
+
+### Overriding the Exit-on-Help Behavior
+
+By default, when `goopt`'s auto-help system is triggered (e.g., by a user passing the `--help` flag), it will display the help text and then immediately exit the program by calling `os.Exit(0)`. This is the expected behavior for most command-line applications.
+
+However, in some cases, particularly during **unit testing** or when embedding a `goopt`-based tool within a larger application, you may want to prevent this automatic exit.
+
+You can override this behavior using the `SetEndHelpFunc` method on your parser.
+
+#### How It Works
+The `SetEndHelpFunc` method allows you to replace the default `os.Exit(0)` call with a custom function.
+
+```go
+// In your main function:
+parser, _ := goopt.NewParserFromStruct(&Config{})
+
+// Set a custom function that does *not* exit.
+// This is perfect for testing.
+parser.SetEndHelpFunc(func() error {
+// We can log that help was shown and then return nil
+// to allow the application to continue running.
+fmt.Println("[test harness] Help was displayed, not exiting.")
+return nil
+})
+
+// Now, when you parse with a help flag...
+parser.Parse([]string{"--help"})
+
+// ...the application will NOT exit. You can then make assertions.
+if !parser.WasHelpShown() {
+t.Errorf("Expected help to have been shown")
+}
+```
+
+#### Primary Use Cases:
+
+1.  **Unit & Integration Testing:** This is the most common reason to use `SetEndHelpFunc`. Your tests can verify that help is displayed correctly without causing the test runner to terminate prematurely.
+2.  **Embedded CLIs:** If you are using `goopt` to parse arguments within a larger, long-running application (like a GUI or a server that exposes a command-line interface), you can use this function to handle the help request gracefully and return to your main application loop.
+
+In your application's `main` function, you typically don't need to override this. But when writing tests, it becomes an indispensable tool.

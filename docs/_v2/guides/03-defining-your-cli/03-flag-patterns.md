@@ -3,6 +3,7 @@ layout: default
 title: Flag Patterns
 parent: Defining Your CLI
 nav_order: 3
+version: v2
 ---
 
 # Flag Patterns

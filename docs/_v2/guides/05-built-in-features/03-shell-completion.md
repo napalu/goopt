@@ -3,6 +3,7 @@ layout: default
 title: Shell Completion
 parent: Built-in Features
 nav_order: 3
+version: v2
 ---
 
 # Shell Completion
@@ -28,34 +29,41 @@ import (
 )
 
 func main() {
-    // ... parser setup  ...
-    
-    // Add completion support
-    exec, err := os.Executable()
-    if err != nil {
-        log.Fatal(err)
-    }
+    parser := goopt.NewParser()
+	// ... parser setup  ...
 
-    completionData := parser.GetCompletionData()
-    // Generate completion scripts for all supported shells or a specific shell
-    wantedShells := []string{"bash", "zsh", "fish", "powershell"}
-    for _, shell := range wantedShells {
-        manager, err := c.NewManager(shell, exec)
-        if err != nil {
-            log.Fatal(err)
-        }
+	// In your CLI definition, add a 'completion' command.
+	parser.AddCommand(goopt.NewCommand(
+		goopt.WithName("completion"),
+		goopt.WithCommandDescription("Generate shell completion script"),
+		goopt.WithCallback(func(p *goopt.Parser, c *goopt.Command) error {
+			// In a real app, you'd let the user specify the shell
+			// as an argument to this command (e.g., 'completion bash').
+			shell := "bash"
 
-        err = manager.Accept(completionData)
-        if err != nil {
-            log.Fatal(err)
-        }
-    
-        path, err := manager.Save()
-        if err != nil {
-            log.Fatal(err)
-        }
+			exec, err := os.Executable()
+			if err != nil {
+				return err
+			}
 
-        fmt.Printf("%s completion script saved. Depending on your shell, you may need to `source %s` the completion script.\n", shell, path)
-    }
+			manager, err := c.NewManager(shell, exec)
+			if err != nil {
+				return err
+			}
+
+			// Provide the completion data from your main parser.
+			manager.Accept(p.GetCompletionData())
+
+			// Print the script to stdout. The user can then pipe it to a file.
+			// e.g., ./myapp completion > /etc/bash_completion.d/myapp
+			path, err := manager.Save()
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%s completion script saved. Depending on your shell, you may need to `source %s` the completion script.\n", shell, path)
+			return nil
+		}),
+	))
 }
 ```

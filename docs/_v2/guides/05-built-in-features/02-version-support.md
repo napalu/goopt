@@ -1,4 +1,12 @@
-# Version Support Guide
+---
+layout: default
+title: Version Support
+parent: Built-in Features
+nav_order: 2
+version: v2
+---
+
+# Version Support
 
 The goopt v2 version support feature provides automatic version flag registration and display, eliminating boilerplate version handling code in CLI applications.
 

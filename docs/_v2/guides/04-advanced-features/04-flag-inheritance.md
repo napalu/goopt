@@ -3,6 +3,7 @@ layout: default
 title: Flag Inheritance
 parent: Advanced Features
 nav_order: 4
+version: v2
 ---
 
 # Flag Inheritance
@@ -63,4 +64,5 @@ Let's see how `goopt` resolves the values:
     *   `LogLevel`: "DEBUG" (the `start` command has its own `log-level` definition, so the global `-l` flag is ignored for this command path)
     *   `Port`: 8080
 
-This inheritance model provides a flexible way to manage common and specific options across a complex CLI.
+This inheritance model provides a flexible way to manage common and specific options across a complex CLI. 
+See [Simple-Service example](https://github.com/napalu/goopt/blob/main/v2/examples/simple-service/simpleservice.go). 

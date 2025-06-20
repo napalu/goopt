@@ -3,21 +3,20 @@ layout: default
 title: Validation
 parent: Advanced Features
 nav_order: 1
+version: v2
 ---
 
 # Validation Guide
 
 `goopt` provides a powerful and flexible validation system that allows you to ensure the correctness of user input. It's built on a foundation of composable validator functions that can be used both programmatically and directly within struct tags.
 
-### Validator Syntax: Parentheses are Required
+### Validator Syntax: Parentheses are required for validators with arguments
 
-A key change in the validation system is the move to a consistent, parenthesis-based syntax for validators with arguments. The old colon-based syntax is no longer supported.
+The validation system uses a consistent, parenthesis-based syntax for validators with arguments. 
 
 ```go
-// Old, unsupported syntax
-`goopt:"validators:minlength:5,maxlength:20"`
 
-// New, required syntax
+// required syntax
 `goopt:"validators:minlength(5),maxlength(20)"`
 ```
 
@@ -65,6 +64,7 @@ parser.AddFlagValidators("port", validation.Port())
 Here is a reference of the most common built-in validators.
 
 ### Type Validators
+
 | Validator | Struct Tag | Description |
 |---|---|---|
 | `Integer()` | `integer` or `int` | Validates integer values. |
@@ -72,6 +72,7 @@ Here is a reference of the most common built-in validators.
 | `Boolean()` | `boolean` or `bool` | Validates boolean values. |
 
 ### String Validators
+
 | Validator | Struct Tag | Description |
 |---|---|---|
 | `MinLength(n)` | `minlength(n)` | Minimum number of Unicode characters. |
@@ -82,29 +83,34 @@ Here is a reference of the most common built-in validators.
 | `NoWhitespace()`| `nowhitespace`| Contains no whitespace characters. |
 
 ### Pattern & Network Validators
-| Validator | Struct Tag | Description |
-|---|---|---|
-| `Regex(pattern, desc)`| `regex(pattern:...,desc:...)` | Matches a regular expression. |
-| `Email()` | `email` | A valid email address format. |
-| `URL(schemes...)` | `url(http,https)` | A valid URL, optionally restricted to schemes. |
-| `Hostname()` | `hostname` | A valid DNS hostname. |
-| `IP()` | `ip` | An IPv4 or IPv6 address. |
-| `Port()` | `port` | A valid port number (1-65535). |
+
+| Validator | Struct Tag | Description                                                                                                      |
+|---|---|------------------------------------------------------------------------------------------------------------------|
+| `Regex(pattern, desc)`| `regex(pattern:...,desc:...)` | Matches a regular expression. `desc` when supplied can be a message key (for translato^tion) or a literal string |
+| `Email()` | `email` | A valid email address format.                                                                                    |
+| `URL(schemes...)` | `url(http,https)` | A valid URL, optionally restricted to schemes.                                                                   |
+| `Hostname()` | `hostname` | A valid DNS hostname.                                                                                            |
+| `IP()` | `ip` | An IPv4 or IPv6 address.                                                                                         |
+| `Port()` | `port` | A valid port number (1-65535).                                                                                   |
 
 ### Numeric Validators
-| Validator | Struct Tag | Description |
-|---|---|---|
-| `Range(min, max)`| `range(min,max)` | An inclusive numeric range. |
-| `Min(n)` | `min(n)` | A minimum numeric value. |
-| `Max(n)` | `max(n)` | A maximum numeric value. |
+
+| Validator            | Struct Tag          | Description                         |
+|----------------------|---------------------|-------------------------------------|
+| `Range(min, max)`    | `range(min,max)`    | An inclusive float numeric range.   |
+| `IntRange(min, max)` | `intrange(min,max)` | An inclusive integer numeric range. |
+| `Min(n)`             | `min(n)`            | A minimum numeric value.            |
+| `Max(n)`             | `max(n)`            | A maximum numeric value.            |
 
 ### Collection Validators
+
 | Validator | Struct Tag | Description |
 |---|---|---|
 | `IsOneOf(values...)`| `isoneof(val1,val2)` | Value must be one of the given strings. |
 | `FileExtension(exts...)`| `fileext(.txt,.md)` | File path must have one of the extensions. |
 
 ### Compositional Validators
+
 | Validator | Struct Tag | Description |
 |---|---|---|
 | `All(validators...)`| `all(...)` | All nested validators must pass (AND logic). |
@@ -170,7 +176,7 @@ To support internationalization, your custom validators can return translatable 
 import "github.com/napalu/goopt/v2/errs"
 
 // Define your translatable error key.
-var ErrInvalidHexColor = errs.New("validation.invalid_hex_color")
+var ErrInvalidHexColor = i18n.NewError("validation.invalid_hex_color")
 
 func HexColorI18n() validation.ValidatorFunc {
     return func(value string) error {
@@ -182,4 +188,5 @@ func HexColorI18n() validation.ValidatorFunc {
     }
 }
 ```
-Now, you can provide a translation for `validation.invalid_hex_color` in your i18n JSON files.
+Now, you can provide a translation for `validation.invalid_hex_color` in your i18n JSON files, 
+see [Internationalization]({{ site.baseurl }}/v2/guides/06-internationalization/index/) for details.

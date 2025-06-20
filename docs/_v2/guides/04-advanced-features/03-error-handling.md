@@ -3,6 +3,7 @@ layout: default
 title: Error Handling
 parent: Advanced Features
 nav_order: 3
+version: v2
 ---
 
 # Error Handling in goopt v2

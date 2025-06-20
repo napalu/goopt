@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Getting Started
+parent: Guides
 nav_order: 1
+version: v2
 ---
 
 # Getting Started with goopt
@@ -143,11 +145,9 @@ Examples:
 
 ## Next Steps
 
-Congratulations, you've built your first application with `goopt`!
+You've built your first application with `goopt`. Now that you have the basics, you're ready to explore more powerful features:
 
-Now that you have the basics, you're ready to explore more powerful features:
-
-*   **Learn the Fundamentals**: Dive into the [Core Concepts](./core-concepts/index.md) to understand how `goopt` works under the hood.
-*   **Structure Your CLI**: See different ways to organize your application in [Defining Your CLI](./defining-your-cli/index.md).
-*   **Add Powerful Features**: Explore [Advanced Features](./advanced-features/index.md) like input validation, execution hooks, and error handling.
-*   **See More Examples**: Check out the [Cookbook](./cookbook/index.md) for complete, real-world application examples.
+*   **Learn the Fundamentals**: Dive into the [Core Concepts]({{ site.baseurl }}/v2/guides/02-core-concepts/) to understand how `goopt` works under the hood.
+*   **Structure Your CLI**: See different ways to organize your application in [Defining Your CLI]({{ site.baseurl }}/v2/guides/03-defining-your-cli/).
+*   **Add Powerful Features**: Explore [Advanced Features]({{ site.baseurl }}/v2/guides/04-advanced-features/) like input validation, execution hooks, and error handling.
+*   **See More Examples**: Check out the [Examples](./cookbook/index.md) for complete, real-world application examples.
