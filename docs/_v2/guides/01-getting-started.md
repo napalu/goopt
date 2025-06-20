@@ -150,4 +150,4 @@ You've built your first application with `goopt`. Now that you have the basics, 
 *   **Learn the Fundamentals**: Dive into the [Core Concepts]({{ site.baseurl }}/v2/guides/02-core-concepts/) to understand how `goopt` works under the hood.
 *   **Structure Your CLI**: See different ways to organize your application in [Defining Your CLI]({{ site.baseurl }}/v2/guides/03-defining-your-cli/).
 *   **Add Powerful Features**: Explore [Advanced Features]({{ site.baseurl }}/v2/guides/04-advanced-features/) like input validation, execution hooks, and error handling.
-*   **See More Examples**: Check out the [Examples](./cookbook/index.md) for complete, real-world application examples.
+*   **See More Examples**: Check out the [Examples](https://github.com/napalu/goopt/tree/main/v2/examples/) for complete application examples.

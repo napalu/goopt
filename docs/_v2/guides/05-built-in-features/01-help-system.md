@@ -188,7 +188,7 @@ myapp --help --help
 ```
 
 ### Version Integration
-If you use the [Version Support](./02-version-support.md) feature, you can configure it to display the version in the help header.
+If you use the [Version Support]({{ site.baseurl }}/v2/05-built-in-features/02-version-support/) feature, you can configure it to display the version in the help header.
 ```go
 parser.SetShowVersionInHelp(true)
 ```

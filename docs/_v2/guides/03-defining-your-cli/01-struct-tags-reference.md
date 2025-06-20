@@ -92,4 +92,5 @@ The `accepted` tag is deprecated in favor of the more powerful `validators` syst
 
 ---
 
-For more detailed examples of how to use these tags to structure your application, see the [Command Patterns](./02-command-patterns.md) and [Flag Patterns](./03-flag-patterns.md) guides.
+For more detailed examples of how to use these tags to structure your application, see the [Command Patterns]({{ site.baseurl }}/v2/03-defining-your-cli/02-command-patterns/) and 
+[Flag Patterns]({{ site.baseurl }}/v2/03-defining-your-cli/03-flag-patterns/) guides.

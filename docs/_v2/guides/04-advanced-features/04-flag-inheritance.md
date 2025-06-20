@@ -65,4 +65,4 @@ Let's see how `goopt` resolves the values:
     *   `Port`: 8080
 
 This inheritance model provides a flexible way to manage common and specific options across a complex CLI. 
-See [Simple-Service example](https://github.com/napalu/goopt/blob/main/v2/examples/simple-service/simpleservice.go). 
+See [Simple-Service example](https://github.com/napalu/goopt/tree/main/v2/examples/simple-service/simpleservice.go). 

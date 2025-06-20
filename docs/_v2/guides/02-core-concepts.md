@@ -8,7 +8,7 @@ version: v2
 
 # Core Concepts of goopt
 
-Welcome to the core concepts guide! After completing the [Getting Started](./01-getting-started.md) tutorial, this page will give you a deeper understanding of the fundamental building blocks and design philosophy behind `goopt`.
+Welcome to the core concepts guide! After completing the [Getting Started]({{ site.baseurl }}/v2/01-getting-started/) tutorial, this page will give you a deeper understanding of the fundamental building blocks and design philosophy behind `goopt`.
 
 ## The Building Blocks
 
