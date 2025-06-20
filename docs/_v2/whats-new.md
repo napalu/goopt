@@ -41,7 +41,7 @@ The help and version systems are now fully automatic and highly configurable.
 The i18n system is now more robust and easier to use.
 - **Layered Bundles:** A clearer separation between the default system bundle and your application's user bundle.
 - **Improved Tooling:** The `goopt-i18n-gen` tool is more powerful than ever, with a "360° workflow" to automate adding i18n to existing projects.
-- **➡️ [Read the i18n Guide]({{ site.baseurl }}/v2/guides/06-internationalization/)**
+- **➡️ [Read the i18n Guide]({{ site.baseurl }}/v2/guides/06-internationalization/index/)**
 
 ### Hierarchical Flag Inheritance
 Flag handling is now fully hierarchical and more predictable.
