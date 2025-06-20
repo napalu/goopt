@@ -172,5 +172,4 @@ For more examples and detailed documentation, visit the [documentation site](htt
 
 ## Contributing
 
-Contributions are welcome! Contributions should be based on open issues (feel free to open one).
-
+Contributions are welcome! Please feel free to open an issue to discuss a bug or new feature.
