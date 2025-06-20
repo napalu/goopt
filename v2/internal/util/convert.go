@@ -12,49 +12,77 @@ import (
 	"github.com/napalu/goopt/v2/types"
 )
 
-func ConvertString(value string, data any, arg string, delimiterFunc types.ListDelimiterFunc) error {
-
+func ConvertString(value string, data any, arg string, delimiterFunc types.ListDelimiterFunc, useAppend ...bool) error {
+	doAppend := false
+	if len(useAppend) > 0 {
+		doAppend = useAppend[0]
+	}
 	switch t := data.(type) {
 	case *string:
 		*(t) = value
 	case *[]string:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		*(t) = values
-	case *complex64:
-		if val, err := strconv.ParseComplex(value, 64); err == nil {
-			*(t) = complex64(val)
+		if !doAppend {
+			*(t) = values
 		} else {
-			return errs.ErrParseComplex.WithArgs(value)
+			for _, v := range values {
+				*t = append(*t, v)
+			}
 		}
+	case *complex64:
+		val, err := strconv.ParseComplex(value, 64)
+		if err != nil {
+			return errs.ErrParseComplex.WithArgs(value).Wrap(err)
+		}
+		*(t) = complex64(val)
 	case *[]complex64:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]complex64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseComplex(v, 64); err == nil {
+		if !doAppend {
+			temp := make([]complex64, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseComplex(v, 64)
+				if err != nil {
+					return errs.ErrParseComplex.WithArgs(v).Wrap(err)
+				}
 				temp[i] = complex64(val)
-			} else {
-				return errs.ErrParseComplex.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseComplex(v, 64)
+				if err != nil {
+					return errs.ErrParseComplex.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, complex64(val))
 			}
 		}
-		*(t) = temp
-
 	case *complex128:
-		if val, err := strconv.ParseComplex(value, 128); err == nil {
-			*(t) = val
-		} else {
-			return errs.ErrParseComplex.WithArgs(value)
+		val, err := strconv.ParseComplex(value, 128)
+		if err != nil {
+			return errs.ErrParseComplex.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]complex128:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]complex128, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseComplex(v, 128); err == nil {
+		if !doAppend {
+			temp := make([]complex128, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseComplex(v, 128)
+				if err != nil {
+					return errs.ErrParseComplex.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseComplex.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseComplex(v, 128)
+				if err != nil {
+					return errs.ErrParseComplex.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	case *int:
 		val, err := strconv.ParseInt(value, 0, strconv.IntSize)
 		if err != nil {
@@ -67,253 +95,412 @@ func ConvertString(value string, data any, arg string, delimiterFunc types.ListD
 		*(t) = int(val)
 	case *[]int:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int, len(values))
-		for i, v := range values {
-			val, err := strconv.ParseInt(v, 0, strconv.IntSize) // Directly use native size
-			if err != nil {
-				var numErr *strconv.NumError
-				if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
-					return errs.ErrParseOverflow.WithArgs(value).Wrap(err)
+		if !doAppend {
+			temp := make([]int, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseInt(v, 0, strconv.IntSize) // Directly use native size
+				if err != nil {
+					var numErr *strconv.NumError
+					if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+						return errs.ErrParseOverflow.WithArgs(value).Wrap(err)
+					}
+					return errs.ErrParseInt.WithArgs(value).Wrap(err)
 				}
-				return errs.ErrParseInt.WithArgs(value).Wrap(err)
+				temp[i] = int(val)
 			}
-			temp[i] = int(val)
-		}
-		*(t) = temp
-	case *int64:
-		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
-			*(t) = val
+			*(t) = temp
 		} else {
-			return errs.ErrParseInt64.WithArgs(value)
+			for _, v := range values {
+				val, err := strconv.ParseInt(v, 0, strconv.IntSize) // Directly use native size
+				if err != nil {
+					var numErr *strconv.NumError
+					if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+						return errs.ErrParseOverflow.WithArgs(value).Wrap(err)
+					}
+					return errs.ErrParseInt.WithArgs(value).Wrap(err)
+				}
+				*t = append(*t, int(val))
+			}
 		}
+	case *int64:
+		val, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return errs.ErrParseInt64.WithArgs(value).Wrap(err)
+		}
+		*(t) = val
 	case *[]int64:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if !doAppend {
+			temp := make([]int64, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return errs.ErrParseInt64.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseInt64.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return errs.ErrParseInt64.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	case *int32:
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
-			*(t) = int32(val)
-		} else {
-			return errs.ErrParseInt32.WithArgs(value)
+		val, err := strconv.ParseInt(value, 10, 32)
+		if err != nil {
+			return errs.ErrParseInt32.WithArgs(value).Wrap(err)
 		}
+		*(t) = int32(val)
 	case *[]int32:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 32); err == nil {
+		if !doAppend {
+			temp := make([]int32, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseInt(v, 10, 32)
+				if err != nil {
+					return errs.ErrParseInt32.WithArgs(v).Wrap(err)
+				}
 				temp[i] = int32(val)
-			} else {
-				return errs.ErrParseInt.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseInt(v, 10, 32)
+				if err != nil {
+					return errs.ErrParseInt32.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, int32(val))
 			}
 		}
-		*(t) = temp
 	case *int16:
-		if val, err := strconv.ParseInt(value, 10, 16); err == nil {
-			*(t) = int16(val)
-		} else {
-			return errs.ErrParseInt.WithArgs(value)
+		val, err := strconv.ParseInt(value, 10, 16)
+		if err != nil {
+			return errs.ErrParseInt16.WithArgs(value).Wrap(err)
 		}
+		*(t) = int16(val)
 	case *[]int16:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int16, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 16); err == nil {
+		if !doAppend {
+			temp := make([]int16, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseInt(v, 10, 16)
+				if err != nil {
+					return errs.ErrParseInt16.WithArgs(v).Wrap(err)
+				}
 				temp[i] = int16(val)
-			} else {
-				return errs.ErrParseInt.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseInt(v, 10, 16)
+				if err != nil {
+					return errs.ErrParseInt16.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, int16(val))
 			}
 		}
-		*(t) = temp
 	case *int8:
-		if val, err := strconv.ParseInt(value, 10, 8); err == nil {
-			*(t) = int8(val)
-		} else {
-			return errs.ErrParseInt.WithArgs(value)
+		val, err := strconv.ParseInt(value, 10, 8)
+		if err != nil {
+			return errs.ErrParseInt8.WithArgs(value).Wrap(err)
 		}
+		*(t) = int8(val)
 	case *[]int8:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]int8, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseInt(v, 10, 8); err == nil {
+		if !doAppend {
+			temp := make([]int8, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseInt(v, 10, 8)
+				if err != nil {
+					return errs.ErrParseInt8.WithArgs(v).Wrap(err)
+				}
 				temp[i] = int8(val)
-			} else {
-				return errs.ErrParseInt.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseInt(v, 10, 8)
+				if err != nil {
+					return errs.ErrParseInt8.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, int8(val))
 			}
 		}
-		*(t) = temp
 	case *uint:
-		if val, err := strconv.ParseUint(value, 10, strconv.IntSize); err == nil {
-			*(t) = uint(val)
-		} else {
-			return errs.ErrParseUint.WithArgs(value)
+		val, err := strconv.ParseUint(value, 10, strconv.IntSize)
+		if err != nil {
+			return errs.ErrParseUint.WithArgs(value).Wrap(err)
 		}
+		*(t) = uint(val)
 	case *[]uint:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, strconv.IntSize); err == nil {
+		if !doAppend {
+			temp := make([]uint, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseUint(v, 10, strconv.IntSize)
+				if err != nil {
+					return errs.ErrParseUint.WithArgs(v).Wrap(err)
+				}
 				temp[i] = uint(val)
-			} else {
-				return errs.ErrParseUint.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseUint(v, 10, strconv.IntSize)
+				if err != nil {
+					return errs.ErrParseUint.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, uint(val))
 			}
 		}
-		*(t) = temp
 	case *uint64:
-		if val, err := strconv.ParseUint(value, 10, 64); err == nil {
-			*(t) = val
-		} else {
-			return errs.ErrParseUint.WithArgs(value)
+		val, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			return errs.ErrParseUint64.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]uint64:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 64); err == nil {
+		if !doAppend {
+			temp := make([]uint64, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return errs.ErrParseUint64.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseUint.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return errs.ErrParseUint64.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	case *uint32:
-		if val, err := strconv.ParseUint(value, 10, 32); err == nil {
-			*(t) = uint32(val)
-		} else {
-			return errs.ErrParseUint.WithArgs(value)
+		val, err := strconv.ParseUint(value, 10, 32)
+		if err != nil {
+			return errs.ErrParseUint32.WithArgs(value).Wrap(err)
 		}
+		*(t) = uint32(val)
 	case *[]uint32:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 32); err == nil {
+		if !doAppend {
+			temp := make([]uint32, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return errs.ErrParseUint32.WithArgs(v).Wrap(err)
+				}
 				temp[i] = uint32(val)
-			} else {
-				return errs.ErrParseUint.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return errs.ErrParseUint32.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, uint32(val))
 			}
 		}
-		*(t) = temp
 	case *uint16:
-		if val, err := strconv.ParseUint(value, 10, 16); err == nil {
-			*(t) = uint16(val)
+		val, err := strconv.ParseUint(value, 10, 16)
+		if err != nil {
+			return errs.ErrParseUint16.WithArgs(value).Wrap(err)
 		}
+		*(t) = uint16(val)
 	case *[]uint16:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint16, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 16); err == nil {
+		if !doAppend {
+			temp := make([]uint16, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseUint(v, 10, 16)
+				if err != nil {
+					return errs.ErrParseUint16.WithArgs(v).Wrap(err)
+				}
 				temp[i] = uint16(val)
-			} else {
-				return errs.ErrParseUint.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseUint(v, 10, 16)
+				if err != nil {
+					return errs.ErrParseUint16.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, uint16(val))
 			}
 		}
-		*(t) = temp
 	case *uint8:
-		if val, err := strconv.ParseUint(value, 10, 8); err == nil {
-			*(t) = uint8(val)
-		} else {
-			return errs.ErrParseUint.WithArgs(value)
+		val, err := strconv.ParseUint(value, 10, 8)
+		if err != nil {
+			return errs.ErrParseUint8.WithArgs(value).Wrap(err)
 		}
+		*(t) = uint8(val)
 	case *[]uint8:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]uint8, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseUint(v, 10, 8); err == nil {
+		if !doAppend {
+			temp := make([]uint8, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseUint(v, 10, 8)
+				if err != nil {
+					return errs.ErrParseUint8.WithArgs(v).Wrap(err)
+				}
 				temp[i] = uint8(val)
-			} else {
-				return errs.ErrParseUint.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseUint(v, 10, 8)
+				if err != nil {
+					return errs.ErrParseUint8.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, uint8(val))
 			}
 		}
-		*(t) = temp
 	case *float64:
-		if val, err := strconv.ParseFloat(value, 64); err == nil {
-			*(t) = val
-		} else {
-			return errs.ErrParseFloat64.WithArgs(value)
+		val, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return errs.ErrParseFloat64.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]float64:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]float64, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseFloat(v, 64); err == nil {
+		if !doAppend {
+			temp := make([]float64, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return errs.ErrParseFloat64.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseFloat64.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return errs.ErrParseFloat64.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	case *float32:
-		if val, err := strconv.ParseFloat(value, 32); err == nil {
-			*(t) = float32(val)
-		} else {
-			return errs.ErrParseFloat32.WithArgs(value)
+		val, err := strconv.ParseFloat(value, 32)
+		if err != nil {
+			return errs.ErrParseFloat32.WithArgs(value).Wrap(err)
 		}
+		*(t) = float32(val)
 	case *[]float32:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]float32, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseFloat(v, 32); err == nil {
+		if !doAppend {
+			temp := make([]float32, len(values))
+			for i, v := range values {
+				val, err := strconv.ParseFloat(v, 32)
+				if err != nil {
+					return errs.ErrParseFloat32.WithArgs(v).Wrap(err)
+				}
 				temp[i] = float32(val)
-			} else {
-				return errs.ErrParseFloat32.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := strconv.ParseFloat(v, 32)
+				if err != nil {
+					return errs.ErrParseFloat32.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, float32(val))
 			}
 		}
-		*(t) = temp
 	case *bool:
-		if val, err := strconv.ParseBool(value); err == nil {
-			*(t) = val
+		val, err := strconv.ParseBool(value)
+		if err != nil {
+			return errs.ErrParseBool.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]bool:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]bool, len(values))
-		for i, v := range values {
-			if val, err := strconv.ParseBool(v); err == nil {
-				temp[i] = val
-			} else {
-				return errs.ErrParseBool.WithArgs(v)
+		if !doAppend {
+			temp := make([]bool, len(values))
+			for i, v := range values {
+				if val, err := strconv.ParseBool(v); err == nil {
+					temp[i] = val
+				} else {
+					return errs.ErrParseBool.WithArgs(v)
+				}
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				if val, err := strconv.ParseBool(v); err == nil {
+					*t = append(*t, val)
+
+				} else {
+					return errs.ErrParseBool.WithArgs(v)
+				}
 			}
 		}
-		*(t) = temp
 	case *time.Time:
-		if val, err := dateparse.ParseLocal(value); err == nil {
-			*(t) = val
-		} else {
-			return errs.ErrParseTime.WithArgs(value)
+		val, err := dateparse.ParseLocal(value)
+		if err != nil {
+			return errs.ErrParseTime.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]time.Time:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]time.Time, len(values))
-		for i, v := range values {
-			if val, err := dateparse.ParseLocal(v); err == nil {
+		if !doAppend {
+			temp := make([]time.Time, len(values))
+			for i, v := range values {
+				val, err := dateparse.ParseLocal(v)
+				if err != nil {
+					return errs.ErrParseTime.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseTime.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := dateparse.ParseLocal(v)
+				if err != nil {
+					return errs.ErrParseTime.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	case *time.Duration:
-		if val, err := time.ParseDuration(value); err == nil {
-			*(t) = val
-		} else {
-			return errs.ErrParseDuration.WithArgs(value)
+		val, err := time.ParseDuration(value)
+		if err != nil {
+			return errs.ErrParseDuration.WithArgs(value).Wrap(err)
 		}
+		*(t) = val
 	case *[]time.Duration:
 		values := strings.FieldsFunc(value, delimiterFunc)
-		temp := make([]time.Duration, len(values))
-		for i, v := range values {
-			if val, err := time.ParseDuration(v); err == nil {
+		if !doAppend {
+			temp := make([]time.Duration, len(values))
+			for i, v := range values {
+				val, err := time.ParseDuration(v)
+				if err != nil {
+					return errs.ErrParseDuration.WithArgs(v).Wrap(err)
+				}
 				temp[i] = val
-			} else {
-				return errs.ErrParseDuration.WithArgs(v)
+			}
+			*(t) = temp
+		} else {
+			for _, v := range values {
+				val, err := time.ParseDuration(v)
+				if err != nil {
+					return errs.ErrParseDuration.WithArgs(v).Wrap(err)
+				}
+				*t = append(*t, val)
 			}
 		}
-		*(t) = temp
 	default:
 		return errs.ErrUnsupportedTypeConversion.WithArgs(t, arg)
 	}
@@ -341,6 +528,9 @@ func CanConvert(data interface{}, optionType types.OptionType) (bool, error) {
 	case *string:
 	case *[]string:
 	case *complex64:
+	case *[]complex64:
+	case *complex128:
+	case *[]complex128:
 	case *int:
 	case *[]int:
 	case *int64:
