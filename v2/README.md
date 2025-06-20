@@ -111,14 +111,14 @@ Hello, World!
 
 For detailed guides, tutorials, and a full API reference, visit the official documentation site.
 
-**[📚 Explore documentation](https://napalu.github.io/goopt/)**
+**[📚 Explore the documentation](https://napalu.github.io/goopt/)**
 
 Start with these key topics:
-- **[Core Concepts](https://napalu.github.io/goopt/v2/02-core-concepts/)**
-- **[Defining Your CLI](https://napalu.github.io/goopt/v2/03-defining-your-cli/index/)**
-- **[Validation Guide](https://napalu.github.io/goopt/v2/04-advanced-features/01-validation/)**
-- **[Execution Hooks](https://napalu.github.io/goopt/v2/05-advanced-features/02-execution-hooks/)**
-- **[Internationalization](https://napalu.github.io/goopt/v2/i06-nternationalization/index/)**
+- **[Core Concepts](https://napalu.github.io/goopt/v2/guides/02-core-concepts/)**
+- **[Defining Your CLI](https://napalu.github.io/goopt/v2/guides/03-defining-your-cli/index/)**
+- **[Validation Guide](https://napalu.github.io/goopt/v2/guides/04-advanced-features/01-validation/)**
+- **[Execution Hooks](https://napalu.github.io/goopt/v2/guides/05-advanced-features/02-execution-hooks/)**
+- **[Internationalization](https://napalu.github.io/goopt/v2/guides/06-nternationalization/index/)**
 
 ---
 
