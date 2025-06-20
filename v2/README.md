@@ -117,8 +117,8 @@ Start with these key topics:
 - **[Core Concepts](https://napalu.github.io/goopt/v2/guides/02-core-concepts/)**
 - **[Defining Your CLI](https://napalu.github.io/goopt/v2/guides/03-defining-your-cli/index/)**
 - **[Validation Guide](https://napalu.github.io/goopt/v2/guides/04-advanced-features/01-validation/)**
-- **[Execution Hooks](https://napalu.github.io/goopt/v2/guides/05-advanced-features/02-execution-hooks/)**
-- **[Internationalization](https://napalu.github.io/goopt/v2/guides/06-nternationalization/index/)**
+- **[Execution Hooks](https://napalu.github.io/goopt/v2/guides/04-advanced-features/02-execution-hooks/)**
+- **[Internationalization](https://napalu.github.io/goopt/v2/guides/06-internationalization/index/)**
 
 ---
 
