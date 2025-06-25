@@ -32,7 +32,7 @@ Manage the entire lifecycle of your commands with pre- and post-execution hooks.
 The help and version systems are now fully automatic and highly configurable.
 - **Auto-Help:** `--help` and `-h` flags are now provided by default, with an adaptive display style that suits your CLI's complexity.
 - **Interactive Help:** Users can now query the help system with commands like `myapp --help --search "database"`.
-- **Intelligent Suggestions:** Automatic "did you mean?" suggestions for mistyped commands and flags.
+- **Intelligent Suggestions:** Automatic "did you mean?" suggestions for mistyped commands and flags with customizable distance thresholds.
 - **Auto-Version:** Enable a `--version` flag with a single line of configuration, with support for dynamic build-time variables.
 - **➡️ [See the Help System Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/) and [Version Support Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/02-version-support/)**
 
@@ -41,11 +41,16 @@ The help and version systems are now fully automatic and highly configurable.
 ### Enhanced Internationalization (i18n)
 The i18n system has been significantly enhanced with new features for true global application support.
 - **Layered Bundles:** A clearer separation between the default system bundle and your application's user bundle.
-- **Translatable Names:** New `nameKey` tag allows translating flag and command names, not just descriptions.
+- **Runtime-Switchable Names:** New `nameKey` tag allows translating flag and command names, not just descriptions. Users can interact with your CLI using commands and flags in their native language.
+- **Context-Aware Suggestions:** The "did you mean?" system intelligently detects whether users are typing in the canonical or translated language and shows suggestions accordingly.
+- **JIT Translation Registry:** Just-In-Time building of translation mappings optimizes startup time by constructing name-to-flag/command mappings only when needed.
+- **Auto-Language Detection:** Sophisticated language detection from command-line flags, environment variables, and (optionally) system locale settings.
 - **RTL Language Support:** Automatic right-to-left layout detection and formatting for languages like Arabic and Hebrew.
 - **Locale-Aware Formatting:** Numbers and dates are automatically formatted according to the user's locale (e.g., 1,000 vs 1.000 vs 1'000).
 - **Regional Variants:** Full support for regional language variants like Swiss German (de-CH) or Canadian French (fr-CA).
 - **Smart Error Formatting:** Validation errors intelligently format numbers based on format specifiers (%d vs %s).
+- **Naming Consistency Warnings:** New warning system helps maintain consistent naming conventions across translations and canonical names.
+- **Extended Language Support:** Easy addition of new languages through locale packages or runtime loading.
 - **Improved Tooling:** The `goopt-i18n-gen` tool is more powerful than ever, with a "360° workflow" to automate adding i18n to existing projects.
 - **➡️ [Read the i18n Guide]({{ site.baseurl }}/v2/guides/06-internationalization/index/)**
 

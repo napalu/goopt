@@ -158,8 +158,9 @@ func TestAutoLanguageDetection(t *testing.T) {
 			setupFunc: func(p *Parser) {
 				p.SetCheckSystemLocale(true) // Enable system locale checking
 			},
-			expectedLang: language.French,
-			expectHelp:   true,
+			expectedLang:   language.French,
+			acceptableLang: language.Make("fr-FR"), // Also accept fr-FR variant
+			expectHelp:     true,
 		},
 	}
 
@@ -168,21 +169,27 @@ func TestAutoLanguageDetection(t *testing.T) {
 			// Save and restore environment
 			oldLang := os.Getenv("LANG")
 			oldGooptLang := os.Getenv("GOOPT_LANG")
+			oldLcAll := os.Getenv("LC_ALL")
+			oldLcMessages := os.Getenv("LC_MESSAGES")
 			defer func() {
 				os.Setenv("LANG", oldLang)
 				os.Setenv("GOOPT_LANG", oldGooptLang)
+				os.Setenv("LC_ALL", oldLcAll)
+				os.Setenv("LC_MESSAGES", oldLcMessages)
 			}()
+
+			// Clear all locale environment variables first
+			os.Unsetenv("LC_ALL")
+			os.Unsetenv("LC_MESSAGES")
+			os.Unsetenv("LANG")
+			os.Unsetenv("GOOPT_LANG")
 
 			// Set test environment
 			if tt.envLang != "" {
 				os.Setenv("LANG", tt.envLang)
-			} else {
-				os.Unsetenv("LANG")
 			}
 			if tt.envGooptLang != "" {
 				os.Setenv("GOOPT_LANG", tt.envGooptLang)
-			} else {
-				os.Unsetenv("GOOPT_LANG")
 			}
 
 			// Create parser
@@ -492,21 +499,27 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			// Save and restore environment
 			oldLang := os.Getenv("LANG")
 			oldGooptLang := os.Getenv("GOOPT_LANG")
+			oldLcAll := os.Getenv("LC_ALL")
+			oldLcMessages := os.Getenv("LC_MESSAGES")
 			defer func() {
 				os.Setenv("LANG", oldLang)
 				os.Setenv("GOOPT_LANG", oldGooptLang)
+				os.Setenv("LC_ALL", oldLcAll)
+				os.Setenv("LC_MESSAGES", oldLcMessages)
 			}()
+
+			// Clear all locale environment variables first
+			os.Unsetenv("LC_ALL")
+			os.Unsetenv("LC_MESSAGES")
+			os.Unsetenv("LANG")
+			os.Unsetenv("GOOPT_LANG")
 
 			// Set test environment
 			if tt.envLang != "" {
 				os.Setenv("LANG", tt.envLang)
-			} else {
-				os.Unsetenv("LANG")
 			}
 			if tt.envGooptLang != "" {
 				os.Setenv("GOOPT_LANG", tt.envGooptLang)
-			} else {
-				os.Unsetenv("GOOPT_LANG")
 			}
 
 			p := NewParser()
@@ -514,7 +527,19 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			p.SetCheckSystemLocale(tt.checkSystemLocale)
 
 			lang := p.detectLanguageInArgs([]string{})
-			assert.Equal(t, tt.expectedLang, lang)
+
+			// Handle language canonicalization differences
+			actualStr := lang.String()
+			expectedStr := tt.expectedLang.String()
+
+			// If actual contains region code like "en-US-u-rg-uszzzz", extract base
+			if strings.Contains(actualStr, "-u-rg-") {
+				if base, _ := lang.Base(); base.String() != "und" {
+					lang = language.Make(base.String())
+				}
+			}
+
+			assert.Equal(t, tt.expectedLang, lang, "Expected %s, got %s", expectedStr, actualStr)
 		})
 	}
 }

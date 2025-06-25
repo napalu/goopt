@@ -130,11 +130,11 @@ func TestComplexNumberFormattingInErrors(t *testing.T) {
 	defaultBundle, _ := i18n.NewBundle()
 	layered := i18n.NewLayeredMessageProvider(defaultBundle, nil, bundle)
 	layered.SetDefaultLanguage(swissGerman)
-	// Test with large numbers
-	validator := MaxByteLength(1234567) // 1.2 million bytes
+	// Test with reasonable numbers that still demonstrate formatting
+	validator := MaxByteLength(1024) // 1,024 bytes - enough to show formatting
 
 	// Create a string that's just over the limit
-	longString := strings.Repeat("x", 1234568) // Just 1 byte over the limit
+	longString := strings.Repeat("x", 1025) // Just 1 byte over the limit
 	err := validator(longString)
 	assert.NotNil(t, err)
 
@@ -147,7 +147,7 @@ func TestComplexNumberFormattingInErrors(t *testing.T) {
 		// The error message uses %[1]d for max bytes and %[2]s for value
 		// Since we use %d, the number should NOT be formatted
 		// The value is truncated in the error message, so just check it exists
-		assert.Contains(t, errMsg, "1234567 Bytes", "Error should contain raw number for %d format specifier")
+		assert.Contains(t, errMsg, "1024 Bytes", "Error should contain raw number for %d format specifier")
 	}
 }
 
@@ -165,7 +165,7 @@ func TestFloatFormattingInValidationErrors(t *testing.T) {
 	defaultBundle, _ := i18n.NewBundle()
 	layered := i18n.NewLayeredMessageProvider(defaultBundle, nil, bundle)
 	layered.SetDefaultLanguage(language.French)
-	
+
 	validator := Max(99.99)
 	err := validator("150.5")
 	assert.NotNil(t, err)

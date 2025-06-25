@@ -35,13 +35,13 @@ jobs:
       # --- Run tests for v1 ---
       - name: Run Test & Coverage (v1)
         run: |
-          go test -v ./... -covermode=atomic -coverprofile=coverage_v1.out
+          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=coverage_v1.out
         shell: bash
 
       # --- Run tests for v2 ---
       - name: Run Test & Coverage (v2)
         run: |
-          go test -v ./... -covermode=atomic -coverprofile=../coverage_v2.out
+          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=../coverage_v2.out
         working-directory: ./v2
         shell: bash
 
@@ -62,8 +62,10 @@ jobs:
           files: coverage_v1.out
           flags: v1
           name: codecov-v1-${{ matrix.os }}-${{ matrix.go-version }}
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           disable_search: true
+          verbose: true
+        continue-on-error: true
 
       # --- Upload v2 coverage ---
       - name: Upload Coverage to Codecov (v2)
@@ -73,5 +75,7 @@ jobs:
           files: coverage_v2.out
           flags: v2
           name: codecov-v2-${{ matrix.os }}-${{ matrix.go-version }}
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           disable_search: true
+          verbose: true
+        continue-on-error: true

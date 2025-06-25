@@ -101,3 +101,73 @@ type Config struct {
     ```
 
 `goopt` handles both styles seamlessly for any slice-based flag.
+
+## 5. Naming Conventions and Converters
+
+`goopt` provides name converters to enforce consistent naming conventions across your CLI. These converters automatically transform struct field names to match your preferred style.
+
+### Setting Name Converters
+
+```go
+parser, _ := goopt.NewParserWith(
+    // Convert struct fields to flag names
+    goopt.WithFlagNameConverter(goopt.ToKebabCase),      // MaxConnections → max-connections
+    goopt.WithCommandNameConverter(goopt.ToLowerCamel),   // ServerStart → serverStart
+    goopt.WithEnvNameConverter(goopt.ToUpperSnake),      // MAX_CONNECTIONS → max_connections
+)
+```
+
+### Available Converters
+
+- `goopt.ToLowerCamel`: `MaxConnections` → `maxConnections`
+- `goopt.ToKebabCase`: `MaxConnections` → `max-connections`
+- `goopt.ToSnakeCase`: `MaxConnections` → `max_connections`
+- `goopt.ToUpperSnake`: `MaxConnections` → `MAX_CONNECTIONS`
+- Custom function: `func(string) string`
+
+### How Converters Work
+
+Converters apply to struct fields that don't have an explicit `name` tag:
+
+```go
+type Config struct {
+    // Uses converter: MaxConnections → max-connections (with ToKebabCase)
+    MaxConnections int `goopt:"short:m"`
+    
+    // Explicit name always wins, converter not applied
+    ServerPort int `goopt:"name:port;short:p"`
+    
+    // Nested struct field also uses converter
+    Database struct {
+        ConnectionLimit int  // → database.connection-limit
+    }
+}
+```
+
+### Naming Consistency Warnings
+
+`goopt` can warn you about naming inconsistencies in your CLI. This helps maintain a consistent style across your entire application:
+
+```go
+// After parsing, check for warnings
+warnings := parser.GetWarnings()
+for _, warning := range warnings {
+    fmt.Println("Warning:", warning)
+}
+
+// Example warnings:
+// "Flag '--my_flag' doesn't follow naming convention (converter would produce '--my-flag')"
+// "Translation '--max-verbindungen' for flag '--maxConnections' doesn't follow naming convention"
+```
+
+This is particularly useful when:
+- Migrating an existing CLI to use consistent naming
+- Working with translations that should follow the same convention
+- Ensuring environment variable mappings work correctly
+
+### Best Practices
+
+1. **Set converters early**: Define your naming convention when creating the parser
+2. **Be consistent**: Use the same convention for flags, commands, and environment variables
+3. **Document your choice**: Make it clear to users what naming style your CLI uses
+4. **Check warnings**: Especially when adding new flags or translations
