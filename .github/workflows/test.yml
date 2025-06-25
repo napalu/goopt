@@ -16,6 +16,7 @@ on:
 
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
       matrix:
         go-version: [1.18.x, stable]
@@ -31,24 +32,29 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      # --- Run tests for v1 ---
       - name: Run Test & Coverage (v1)
         run: |
           go test -v ./... -covermode=atomic -coverprofile=coverage_v1.out
         shell: bash
 
+      # --- Run tests for v2 ---
       - name: Run Test & Coverage (v2)
         run: |
           go test -v ./... -covermode=atomic -coverprofile=../coverage_v2.out
         working-directory: ./v2
         shell: bash
 
-      - name: List Coverage Files
+      # --- Confirm coverage files exist ---
+      - name: Validate Coverage Files
         run: |
           echo "Working dir: $(pwd)"
-          ls -l
-          ls -l ./v2 || true
+          ls -l || true
+          test -f coverage_v1.out && echo "✅ coverage_v1.out exists" || (echo "❌ coverage_v1.out missing" && exit 1)
+          test -f coverage_v2.out && echo "✅ coverage_v2.out exists" || (echo "❌ coverage_v2.out missing" && exit 1)
         shell: bash
 
+      # --- Upload v1 coverage ---
       - name: Upload Coverage to Codecov (v1)
         uses: codecov/codecov-action@v4
         with:
@@ -57,9 +63,9 @@ jobs:
           flags: v1
           name: codecov-v1-${{ matrix.os }}-${{ matrix.go-version }}
           fail_ci_if_error: true
-          verbose: false
           disable_search: true
 
+      # --- Upload v2 coverage ---
       - name: Upload Coverage to Codecov (v2)
         uses: codecov/codecov-action@v4
         with:
@@ -68,5 +74,4 @@ jobs:
           flags: v2
           name: codecov-v2-${{ matrix.os }}-${{ matrix.go-version }}
           fail_ci_if_error: true
-          verbose: false
           disable_search: true
