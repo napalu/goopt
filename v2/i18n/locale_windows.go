@@ -6,8 +6,7 @@ package i18n
 import (
 	"errors"
 	"os"
-	"st
-	"syscall"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -32,8 +31,8 @@ func GetSystemLocale() (language.Tag, error) {
 		return *cachedWindowsLocale, nil
 	}
 
+	// Try multiple methods in order of preference
 
-	
 	// Method 1: Windows API - GetUserDefaultLocaleName (most reliable)
 	if tag, err := getLocaleFromWindowsAPI(); err == nil {
 		cachedWindowsLocale = &tag
@@ -57,24 +56,24 @@ func GetSystemLocale() (language.Tag, error) {
 
 // getLocaleFromWindowsAPI uses Windows API to get the user's default locale
 func getLocaleFromWindowsAPI() (language.Tag, error) {
+	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 
-	
 	// Try GetUserDefaultLocaleName first (Vista+, returns BCP-47 format)
 	if getUserDefaultLocaleName := kernel32.NewProc("GetUserDefaultLocaleName"); getUserDefaultLocaleName.Find() == nil {
 		buf := make([]uint16, localeNameMaxLength)
 		ret, _, _ := getUserDefaultLocaleName.Call(
 			uintptr(unsafe.Pointer(&buf[0])),
 			uintptr(len(buf)),
+		)
 
-		
 		if ret > 0 {
 			localeName := windows.UTF16ToString(buf)
 			if tag, err := language.Parse(localeName); err == nil {
 				return tag, nil
 			}
 		}
+	}
 
-	
 	// Fallback to GetUserDefaultUILanguage (returns LANGID)
 	if getUserDefaultUILanguage := kernel32.NewProc("GetUserDefaultUILanguage"); getUserDefaultUILanguage.Find() == nil {
 		ret, _, _ := getUserDefaultUILanguage.Call()
@@ -87,27 +86,27 @@ func getLocaleFromWindowsAPI() (language.Tag, error) {
 				}
 			}
 		}
+	}
 
-	
 	return language.Und, errors.New("Windows API locale detection failed")
 }
 
 // getLocaleFromRegistry reads locale information from Windows registry
+func getLocaleFromRegistry() (language.Tag, error) {
 	k, err := registry.OpenKey(registry.CURRENT_USER,
-	k, err := registry.OpenKey(registry.CURRENT_USER, 
 		`Control Panel\International`, registry.QUERY_VALUE)
 	if err != nil {
 		return language.Und, err
 	}
+	defer k.Close()
 
-	
 	// Try LocaleName first (Windows Vista+)
 	if localeName, _, err := k.GetStringValue("LocaleName"); err == nil && localeName != "" {
 		if tag, err := language.Parse(localeName); err == nil {
 			return tag, nil
 		}
+	}
 
-	
 	// Fallback to building locale from sLanguage and sCountry
 	if lang, _, err := k.GetStringValue("sLanguage"); err == nil && lang != "" {
 		// sLanguage contains full language name like "English" or "German"
@@ -115,60 +114,60 @@ func getLocaleFromWindowsAPI() (language.Tag, error) {
 		if tag := mapLanguageNameToTag(lang); tag != language.Und {
 			return tag, nil
 		}
+	}
 
-	
 	return language.Und, errors.New("registry locale detection failed")
 }
 
 // getLocaleFromEnvironment checks environment variables as a last resort
 func getLocaleFromEnvironment() (language.Tag, error) {
+	// Check Windows-specific LANGUAGE variable
 	if lang := os.Getenv("LANGUAGE"); lang != "" {
-	if lang := syscall.Getenv("LANGUAGE"); lang != "" {
 		lang = NormalizeLocaleString(lang)
 		if tag, err := language.Parse(lang); err == nil {
 			return tag, nil
 		}
+	}
 
-	
 	// Check standard Unix-style variables (some Windows apps set these)
+	for _, envVar := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
 		if lang := os.Getenv(envVar); lang != "" {
-		if lang := syscall.Getenv(envVar); lang != "" {
 			lang = NormalizeLocaleString(lang)
 			if tag, err := language.Parse(lang); err == nil {
 				return tag, nil
 			}
 		}
+	}
 
-	
 	return language.Und, errors.New("no locale found in environment")
 }
 
 // NormalizeLocaleString converts various locale formats to BCP-47
 func NormalizeLocaleString(locale string) string {
 	// Handle Windows format (already BCP-47 compatible)
+	// "en-US" -> "en-US"
 
-	
 	// Handle Unix format
 	// "en_US.UTF-8" -> "en-US"
 	if idx := strings.Index(locale, "."); idx > 0 {
 		locale = locale[:idx]
+	}
 
-	
 	// Handle encoding suffix
 	// "en_US@euro" -> "en-US"
 	if idx := strings.Index(locale, "@"); idx > 0 {
 		locale = locale[:idx]
+	}
 
-	
 	// Convert underscore to dash
+	locale = strings.Replace(locale, "_", "-", -1)
 
-	
 	// Handle special cases
 	switch locale {
 	case "C", "POSIX":
 		return "en-US" // Default to English
+	}
 
-	
 	return locale
 }
 
@@ -178,8 +177,8 @@ func langIDToLocaleName(langID uint16) string {
 	// Extract primary language ID (lower 10 bits)
 	primaryLangID := langID & 0x3FF
 	// Extract sublanguage ID (upper 6 bits)
+	subLangID := langID >> 10
 
-	
 	// Common language mappings
 	langMap := map[uint16]string{
 		0x09: "en", // English
@@ -196,13 +195,13 @@ func langIDToLocaleName(langID uint16) string {
 		0x01: "ar", // Arabic
 		0x0D: "he", // Hebrew
 		0x39: "hi", // Hindi
+	}
 
-	
 	base, ok := langMap[primaryLangID]
 	if !ok {
 		return ""
+	}
 
-	
 	// Handle sublanguages for common cases
 	if primaryLangID == 0x09 { // English
 		switch subLangID {
@@ -217,8 +216,8 @@ func langIDToLocaleName(langID uint16) string {
 		default:
 			return "en"
 		}
+	}
 
-	
 	if primaryLangID == 0x04 { // Chinese
 		switch subLangID {
 		case 0x01:
@@ -228,8 +227,8 @@ func langIDToLocaleName(langID uint16) string {
 		default:
 			return "zh"
 		}
+	}
 
-	
 	// For other languages, just return the base
 	return base
 }
@@ -237,8 +236,8 @@ func langIDToLocaleName(langID uint16) string {
 // mapLanguageNameToTag maps Windows language display names to language tags
 func mapLanguageNameToTag(langName string) language.Tag {
 	// Normalize the language name
+	langName = strings.ToLower(strings.TrimSpace(langName))
 
-	
 	// Common language name mappings
 	langMap := map[string]language.Tag{
 		"english":    language.English,
@@ -250,10 +249,10 @@ func mapLanguageNameToTag(langName string) language.Tag {
 		"français":   language.French,
 		"italian":    language.Italian,
 		"italiano":   language.Italian,
-		"日本語":        language.Japanese,
-		"日本語":       language.Japanese,
-		"中文":         language.Chinese,
-		"中文":        language.Chinese,
+		"japanese":   language.Japanese,
+		"日本語":     language.Japanese,
+		"chinese":    language.Chinese,
+		"中文":       language.Chinese,
 		"portuguese": language.Portuguese,
 		"português":  language.Portuguese,
 		"russian":    language.Russian,
@@ -262,14 +261,14 @@ func mapLanguageNameToTag(langName string) language.Tag {
 		"العربية":    language.Arabic,
 		"hebrew":     language.Hebrew,
 		"עברית":      language.Hebrew,
+		"hindi":      language.Hindi,
 		"हिन्दी":     language.Hindi,
-		"हिन्दी":      language.Hindi,
+	}
 
-	
 	if tag, ok := langMap[langName]; ok {
 		return tag
+	}
 
-	
 	return language.Und
 }
 
@@ -277,5 +276,4 @@ func mapLanguageNameToTag(langName string) language.Tag {
 // This can be useful if the system locale changes during runtime
 func ClearWindowsLocaleCache() {
 	cachedWindowsLocale = nil
-g
 }
