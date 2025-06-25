@@ -31,10 +31,23 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      # v1 tests
       - name: Run Test & Coverage (v1)
         run: |
           go test -v ./... -covermode=atomic -coverprofile=coverage_v1.out
+        shell: bash
+
+      - name: Run Test & Coverage (v2)
+        run: |
+          go test -v ./... -covermode=atomic -coverprofile=../coverage_v2.out
+        working-directory: ./v2
+        shell: bash
+
+      - name: List Coverage Files
+        run: |
+          echo "Working dir: $(pwd)"
+          ls -l
+          ls -l ./v2 || true
+        shell: bash
 
       - name: Upload Coverage to Codecov (v1)
         uses: codecov/codecov-action@v4
@@ -47,17 +60,11 @@ jobs:
           verbose: false
           disable_search: true
 
-      # v2 tests
-      - name: Run Test & Coverage (v2)
-        working-directory: ./v2
-        run: |
-          go test -v ./... -covermode=atomic -coverprofile=coverage_v2.out
-
       - name: Upload Coverage to Codecov (v2)
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: v2/coverage_v2.out
+          files: coverage_v2.out
           flags: v2
           name: codecov-v2-${{ matrix.os }}-${{ matrix.go-version }}
           fail_ci_if_error: true
