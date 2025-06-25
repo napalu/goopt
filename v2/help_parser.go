@@ -111,8 +111,6 @@ func (h *HelpParser) Parse(args []string) error {
 
 	// Parse the arguments
 	newArgs, _ := h.normalize(args)
-	// Temporary debug
-	// fmt.Printf("DEBUG: args=%v, newArgs=%v\n", args, newArgs)
 	h.hp.Parse(newArgs)
 
 	// Handle negative flags

@@ -556,7 +556,6 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 	// Auto-detect language before showing help
 	if p.autoLanguage {
 		if lang := p.detectLanguageInArgs(args); lang != language.Und {
-			// fmt.Printf("DEBUG: Detected language: %v\n", lang)
 			p.SetLanguage(lang)
 		}
 	}
@@ -728,7 +727,6 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		}
 	}
 
-	// fmt.Printf("DEBUG Parse: returning success=%v, errors=%d\n", success, len(p.errors))
 	return success
 }
 
@@ -2259,18 +2257,16 @@ func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) la
 
 	// Only check system locale if explicitly enabled
 	if p.checkSystemLocale {
-		// Try LC_ALL, LC_MESSAGES, then LANG in order of precedence
+		// Use platform-specific locale detection
+		if tag, err := i18n.GetSystemLocale(); err == nil && tag != language.Und {
+			return tag
+		}
+
+		// Fallback to environment variables (for compatibility)
 		for _, envVar := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
 			if lang := getenv(envVar); lang != "" {
-				// Extract language part from locale (e.g., "en_US.UTF-8" -> "en-US")
-				if idx := strings.Index(lang, "."); idx > 0 {
-					lang = lang[:idx]
-				}
-				// Handle C and POSIX locales
-				if lang == "C" || lang == "POSIX" {
-					continue
-				}
-				lang = strings.Replace(lang, "_", "-", -1)
+				// Use the normalization function from i18n package
+				lang = i18n.NormalizeLocaleString(lang)
 				if tag, err := language.Parse(lang); err == nil {
 					return tag
 				}

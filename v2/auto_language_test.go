@@ -2,6 +2,7 @@ package goopt
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -158,9 +159,14 @@ func TestAutoLanguageDetection(t *testing.T) {
 			setupFunc: func(p *Parser) {
 				p.SetCheckSystemLocale(true) // Enable system locale checking
 			},
-			expectedLang:   language.French,
-			acceptableLang: language.Make("fr-FR"), // Also accept fr-FR variant
-			expectHelp:     true,
+			expectedLang: language.French,
+			acceptableLang: func() language.Tag {
+				if runtime.GOOS == "windows" {
+					return language.English // Windows defaults to English when locale not found
+				}
+				return language.Make("fr-FR") // Unix variants accept fr-FR
+			}(),
+			expectHelp: true,
 		},
 	}
 
@@ -172,10 +178,27 @@ func TestAutoLanguageDetection(t *testing.T) {
 			oldLcAll := os.Getenv("LC_ALL")
 			oldLcMessages := os.Getenv("LC_MESSAGES")
 			defer func() {
-				os.Setenv("LANG", oldLang)
-				os.Setenv("GOOPT_LANG", oldGooptLang)
-				os.Setenv("LC_ALL", oldLcAll)
-				os.Setenv("LC_MESSAGES", oldLcMessages)
+				// Restore environment variables properly
+				if oldLang == "" {
+					os.Unsetenv("LANG")
+				} else {
+					os.Setenv("LANG", oldLang)
+				}
+				if oldGooptLang == "" {
+					os.Unsetenv("GOOPT_LANG")
+				} else {
+					os.Setenv("GOOPT_LANG", oldGooptLang)
+				}
+				if oldLcAll == "" {
+					os.Unsetenv("LC_ALL")
+				} else {
+					os.Setenv("LC_ALL", oldLcAll)
+				}
+				if oldLcMessages == "" {
+					os.Unsetenv("LC_MESSAGES")
+				} else {
+					os.Setenv("LC_MESSAGES", oldLcMessages)
+				}
 			}()
 
 			// Clear all locale environment variables first
@@ -440,26 +463,31 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 		name              string
 		envLang           string
 		envGooptLang      string
+		envLanguage       string // For Windows LANGUAGE variable
 		checkSystemLocale bool
 		expectedLang      language.Tag
+		skipOnWindows     bool
 	}{
 		{
 			name:              "LANG not checked without system locale enabled",
 			envLang:           "fr_FR.UTF-8",
 			checkSystemLocale: false,
 			expectedLang:      language.Und,
+			skipOnWindows:     true,
 		},
 		{
 			name:              "LANG with full locale when system locale enabled",
 			envLang:           "en_US.UTF-8",
 			checkSystemLocale: true,
 			expectedLang:      language.MustParse("en-US"),
+			skipOnWindows:     true,
 		},
 		{
 			name:              "LANG with language only when system locale enabled",
 			envLang:           "fr",
 			checkSystemLocale: true,
 			expectedLang:      language.French,
+			skipOnWindows:     true,
 		},
 		{
 			name:              "GOOPT_LANG works without system locale",
@@ -473,24 +501,50 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			envGooptLang:      "de",
 			checkSystemLocale: true,
 			expectedLang:      language.German,
+			skipOnWindows:     true,
 		},
 		{
 			name:              "invalid LANG falls back",
 			envLang:           "invalid",
 			checkSystemLocale: true,
 			expectedLang:      language.Und,
+			skipOnWindows:     true,
 		},
 		{
 			name:              "LANG with underscore when system locale enabled",
 			envLang:           "fr_CA",
 			checkSystemLocale: true,
 			expectedLang:      language.MustParse("fr-CA"),
+			skipOnWindows:     true,
 		},
 		{
 			name:              "GOOPT_LANG with underscore normalization",
 			envGooptLang:      "es_MX",
 			checkSystemLocale: false,
 			expectedLang:      language.MustParse("es-MX"),
+		},
+		{
+			name:              "Windows LANGUAGE variable",
+			envLanguage:       "de-DE",
+			checkSystemLocale: true,
+			expectedLang: func() language.Tag {
+				if runtime.GOOS == "windows" {
+					// On Windows, LANGUAGE env var is checked
+					return language.German
+				}
+				return language.Und // Unix doesn't check LANGUAGE
+			}(),
+			skipOnWindows: false,
+		},
+		{
+			name:              "LANG behavior differs by platform",
+			envLang:           "fr_FR.UTF-8",
+			checkSystemLocale: true,
+			expectedLang: func() language.Tag {
+				// On Unix, LANG is checked and returns French (France)
+				return language.MustParse("fr-FR")
+			}(),
+			skipOnWindows: true, // Skip on Windows because it uses different detection methods
 		},
 	}
 
@@ -502,10 +556,27 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			oldLcAll := os.Getenv("LC_ALL")
 			oldLcMessages := os.Getenv("LC_MESSAGES")
 			defer func() {
-				os.Setenv("LANG", oldLang)
-				os.Setenv("GOOPT_LANG", oldGooptLang)
-				os.Setenv("LC_ALL", oldLcAll)
-				os.Setenv("LC_MESSAGES", oldLcMessages)
+				// Restore environment variables properly
+				if oldLang == "" {
+					os.Unsetenv("LANG")
+				} else {
+					os.Setenv("LANG", oldLang)
+				}
+				if oldGooptLang == "" {
+					os.Unsetenv("GOOPT_LANG")
+				} else {
+					os.Setenv("GOOPT_LANG", oldGooptLang)
+				}
+				if oldLcAll == "" {
+					os.Unsetenv("LC_ALL")
+				} else {
+					os.Setenv("LC_ALL", oldLcAll)
+				}
+				if oldLcMessages == "" {
+					os.Unsetenv("LC_MESSAGES")
+				} else {
+					os.Setenv("LC_MESSAGES", oldLcMessages)
+				}
 			}()
 
 			// Clear all locale environment variables first
@@ -520,6 +591,11 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			}
 			if tt.envGooptLang != "" {
 				os.Setenv("GOOPT_LANG", tt.envGooptLang)
+			}
+
+			// Set LANGUAGE env var if provided (for Windows test)
+			if tt.envLanguage != "" {
+				os.Setenv("LANGUAGE", tt.envLanguage)
 			}
 
 			p := NewParser()

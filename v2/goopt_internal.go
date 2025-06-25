@@ -41,30 +41,22 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 
 	// If not found, try translation lookup
 	if !found {
-		// fmt.Printf("DEBUG parseFlag: Looking for translation of '%s' in language %v\n", stripped, p.GetLanguage())
 		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
-			// fmt.Printf("DEBUG parseFlag: Found canonical name: %s\n", canonical)
 			// The canonical name might already include command context (e.g., "flag@command")
 			// Try it as-is first
 			flag = canonical
-			// fmt.Printf("DEBUG parseFlag: Looking up flag with key: %s\n", flag)
 			flagInfo, found = p.acceptedFlags.Get(flag)
-			// fmt.Printf("DEBUG parseFlag: Found in acceptedFlags: %v\n", found)
 
 			// If not found and we have a command path, try building the full path
 			if !found && currentCommandPath != "" {
-				// fmt.Printf("DEBUG parseFlag: currentCommandPath = '%s'\n", currentCommandPath)
 				commandParts := strings.Split(currentCommandPath, " ")
 				flag = buildPathFlag(canonical, commandParts...)
-				// fmt.Printf("DEBUG parseFlag: Looking up flag with built key: %s\n", flag)
 				flagInfo, found = p.acceptedFlags.Get(flag)
-				// fmt.Printf("DEBUG parseFlag: Found with built key: %v\n", found)
 			}
 		}
 	}
 
 	if found {
-		// fmt.Printf("DEBUG parseFlag: Processing flag %s\n", flag)
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 		return true
 	} else {
@@ -682,7 +674,6 @@ func (p *Parser) isGlobalFlag(arg string) bool {
 }
 
 func (p *Parser) addError(err error) {
-	// fmt.Printf("DEBUG addError: %v\n", err)
 	p.errors = append(p.errors, err)
 }
 
@@ -705,23 +696,11 @@ func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
 func (p *Parser) getCommand(name string) (*Command, bool) {
 	// First try canonical lookup
 	cmd, found := p.registeredCommands.Get(name)
-	// fmt.Printf("DEBUG getCommand: Looking for '%s', found: %v\n", name, found)
-
-	// Debug: show all registered commands
-	// Debug: show all registered commands
-	// fmt.Printf("DEBUG getCommand: Registered commands: ")
-	// for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-	//	fmt.Printf("%s ", *kv.Key)
-	// }
-	// fmt.Println()
 
 	// If not found, try translation lookup
 	if !found {
-		// fmt.Printf("DEBUG getCommand: Checking translation for '%s' in language %v\n", name, p.GetLanguage())
 		if canonical, ok := p.translationRegistry.GetCanonicalCommandPath(name, p.GetLanguage()); ok {
-			// fmt.Printf("DEBUG getCommand: Found translation '%s' -> '%s'\n", name, canonical)
 			cmd, found = p.registeredCommands.Get(canonical)
-			// fmt.Printf("DEBUG getCommand: After translation lookup, found: %v\n", found)
 		}
 	}
 
@@ -1479,10 +1458,6 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 								// Compare distances to determine which form to show
 								canonicalDist := util.LevenshteinDistance(currentArg, suggestion)
 								translatedDist := util.LevenshteinDistance(currentArg, translated)
-
-								// Debug logging
-								// fmt.Printf("DEBUG subcommand: currentArg=%s, suggestion=%s, translated=%s, canonicalDist=%d, translatedDist=%d, fullPath=%s\n",
-								//     currentArg, suggestion, translated, canonicalDist, translatedDist, fullPath)
 
 								// Show the form that's closer to what user typed
 								if translatedDist < canonicalDist {
