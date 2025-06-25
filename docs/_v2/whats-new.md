@@ -32,14 +32,20 @@ Manage the entire lifecycle of your commands with pre- and post-execution hooks.
 The help and version systems are now fully automatic and highly configurable.
 - **Auto-Help:** `--help` and `-h` flags are now provided by default, with an adaptive display style that suits your CLI's complexity.
 - **Interactive Help:** Users can now query the help system with commands like `myapp --help --search "database"`.
+- **Intelligent Suggestions:** Automatic "did you mean?" suggestions for mistyped commands and flags.
 - **Auto-Version:** Enable a `--version` flag with a single line of configuration, with support for dynamic build-time variables.
 - **➡️ [See the Help System Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/) and [Version Support Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/02-version-support/)**
 
 ## Architectural Improvements
 
 ### Enhanced Internationalization (i18n)
-The i18n system is now more robust and easier to use.
+The i18n system has been significantly enhanced with new features for true global application support.
 - **Layered Bundles:** A clearer separation between the default system bundle and your application's user bundle.
+- **Translatable Names:** New `nameKey` tag allows translating flag and command names, not just descriptions.
+- **RTL Language Support:** Automatic right-to-left layout detection and formatting for languages like Arabic and Hebrew.
+- **Locale-Aware Formatting:** Numbers and dates are automatically formatted according to the user's locale (e.g., 1,000 vs 1.000 vs 1'000).
+- **Regional Variants:** Full support for regional language variants like Swiss German (de-CH) or Canadian French (fr-CA).
+- **Smart Error Formatting:** Validation errors intelligently format numbers based on format specifiers (%d vs %s).
 - **Improved Tooling:** The `goopt-i18n-gen` tool is more powerful than ever, with a "360° workflow" to automate adding i18n to existing projects.
 - **➡️ [Read the i18n Guide]({{ site.baseurl }}/v2/guides/06-internationalization/index/)**
 

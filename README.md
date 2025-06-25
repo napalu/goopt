@@ -1,5 +1,5 @@
 # goopt: a flexible and powerful command-line parser
-![Coverage](https://img.shields.io/badge/Coverage-79.1%25-brightgreen)
+[![v1 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v1)](https://codecov.io/gh/napalu/goopt?flag=v1)
 [![Go Reference v1](https://pkg.go.dev/badge/github.com/napalu/goopt.svg)](https://pkg.go.dev/github.com/napalu/goopt)
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 

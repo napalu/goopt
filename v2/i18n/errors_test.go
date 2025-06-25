@@ -35,9 +35,9 @@ func TestTranslatableErrors(t *testing.T) {
 
 func TestNewErrorWithProvider(t *testing.T) {
 	bundle := NewEmptyBundle()
-	bundle.translations[bundle.defaultLang] = map[string]string{
+	bundle.translations.Set(bundle.defaultLang.String(), map[string]string{
 		"test_error_key": "Test error message",
-	}
+	})
 	provider := NewLayeredMessageProvider(bundle, nil, nil)
 
 	// Create an error with provider

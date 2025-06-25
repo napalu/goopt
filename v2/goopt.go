@@ -85,19 +85,27 @@ func NewParser() *Parser {
 			os.Exit(0)
 			return nil
 		},
-		autoRegisteredHelp:    make(map[string]bool),
-		autoVersion:           true,
-		versionFlags:          []string{"version", "v"},
-		showVersionInHelp:     false,
-		versionExecuted:       false,
-		autoRegisteredVersion: make(map[string]bool),
-		globalPreHooks:        []PreHookFunc{},
-		globalPostHooks:       []PostHookFunc{},
-		commandPreHooks:       make(map[string][]PreHookFunc),
-		commandPostHooks:      make(map[string][]PostHookFunc),
-		hookOrder:             OrderGlobalFirst,
-		mu:                    sync.Mutex{},
+		autoRegisteredHelp:      make(map[string]bool),
+		autoVersion:             true,
+		versionFlags:            []string{"version", "v"},
+		showVersionInHelp:       false,
+		versionExecuted:         false,
+		autoRegisteredVersion:   make(map[string]bool),
+		autoLanguage:            true,
+		languageEnvVar:          "GOOPT_LANG",
+		languageFlags:           []string{"language", "lang", "l"},
+		autoRegisteredLanguage:  make(map[string]bool),
+		globalPreHooks:          []PreHookFunc{},
+		globalPostHooks:         []PostHookFunc{},
+		commandPreHooks:         make(map[string][]PreHookFunc),
+		commandPostHooks:        make(map[string][]PostHookFunc),
+		hookOrder:               OrderGlobalFirst,
+		translationRegistry:     nil, // Will be initialized after parser is created
+		flagSuggestionThreshold: 2,   // Default threshold for flag suggestions
+		cmdSuggestionThreshold:  2,   // Default threshold for command suggestions
+		mu:                      sync.Mutex{},
 	}
+	p.translationRegistry = NewJITTranslationRegistry(p)
 	p.renderer = NewRenderer(p)
 
 	return p
@@ -161,16 +169,48 @@ func (p *Parser) SetExecOnParseComplete(value bool) {
 	p.callbackOnParseComplete = value
 }
 
-// SetSystemLanguage sets the system language to the specified language tag. It updates the system bundle's default language.
-// Returns an error if the language cannot be set.
-func (p *Parser) SetSystemLanguage(lang language.Tag) error {
-	// Set language on the system bundle (not the immutable default)
-	err := p.systemBundle.SetDefaultLanguage(lang)
-	if err != nil {
-		return err
+// SetLanguage sets the parser language to the specified language tag.
+// This sets the language at the layered provider level, affecting all translations.
+func (p *Parser) SetLanguage(lang language.Tag) error {
+	// Set language at the provider level - this is now the single source of truth
+	p.layeredProvider.SetDefaultLanguage(lang)
+	return nil
+}
+
+// GetLanguage returns the current language configured for the Parser, sourced from the layered message provider.
+// This returns the actual matched language, which may differ from what was requested if language matching was used.
+func (p *Parser) GetLanguage() language.Tag {
+	return p.layeredProvider.GetDefaultLanguage()
+}
+
+// GetSupportedLanguages returns all languages supported across all bundles (default, system, and user)
+func (p *Parser) GetSupportedLanguages() []language.Tag {
+	langs := make(map[language.Tag]bool)
+
+	// Collect from all bundles
+	if p.defaultBundle != nil {
+		for _, lang := range p.defaultBundle.Languages() {
+			langs[lang] = true
+		}
+	}
+	if p.systemBundle != nil {
+		for _, lang := range p.systemBundle.Languages() {
+			langs[lang] = true
+		}
+	}
+	if p.userI18n != nil {
+		for _, lang := range p.userI18n.Languages() {
+			langs[lang] = true
+		}
 	}
 
-	return nil
+	// Convert to slice
+	result := make([]language.Tag, 0, len(langs))
+	for lang := range langs {
+		result = append(result, lang)
+	}
+
+	return result
 }
 
 // SetEndHelpFunc sets a custom function to be executed at the end of the help output. By default, os.exit(0) is called
@@ -187,6 +227,17 @@ func (p *Parser) SetCommandNameConverter(converter NameConversionFunc) NameConve
 	p.commandNameConverter = converter
 
 	return oldConverter
+}
+
+// SetSystemLocales loads and sets system locales and their translations into the parser's system bundle. Returns an error on failure.
+func (p *Parser) SetSystemLocales(locales ...i18n.Locale) error {
+	for _, locale := range locales {
+		if errLoad := p.systemBundle.LoadFromString(locale.Tag, locale.Translations); errLoad != nil {
+			return errLoad
+		}
+	}
+
+	return nil
 }
 
 // SetFlagNameConverter allows setting a custom name converter for flag names
@@ -209,6 +260,12 @@ func (p *Parser) SetEnvNameConverter(converter NameConversionFunc) NameConversio
 // SetRenderer allows overriding the built-in flag and command renderer used for formatting flags and commands
 func (p *Parser) SetRenderer(customRenderer Renderer) {
 	p.renderer = customRenderer
+}
+
+// GetTranslator returns the translator interface for i18n operations.
+// Use this to access both translation methods (T, TL) and locale-aware formatting (GetPrinter).
+func (p *Parser) GetTranslator() i18n.Translator {
+	return p.layeredProvider
 }
 
 // GetStructCtx returns the current struct context stored within the Parser instance.
@@ -430,6 +487,33 @@ func (p *Parser) HasValidators(flag string, commandPath ...string) bool {
 	return false
 }
 
+// registerFlagTranslations registers flag metadata for JIT translation
+func (p *Parser) registerFlagTranslations(flagName string, argument *Argument, commandPath ...string) {
+	// With JIT, we always register metadata, even for flags without translation keys
+	// This allows direct matching to work for all flags
+	p.translationRegistry.RegisterFlagMetadata(flagName, argument, strings.Join(commandPath, " "))
+}
+
+// registerCommandTranslations registers command metadata for JIT translation
+func (p *Parser) registerCommandTranslations(cmd *Command) {
+	if cmd.NameKey == "" {
+		return
+	}
+
+	// With JIT, we only register metadata
+	p.translationRegistry.RegisterCommandMetadata(cmd.path, cmd)
+}
+
+// GetCanonicalFlagName returns the canonical name for a potentially translated flag name
+func (p *Parser) GetCanonicalFlagName(name string) (string, bool) {
+	return p.translationRegistry.GetCanonicalFlagName(name, p.GetLanguage())
+}
+
+// GetCanonicalCommandPath returns the canonical path for a potentially translated command name
+func (p *Parser) GetCanonicalCommandPath(name string) (string, bool) {
+	return p.translationRegistry.GetCanonicalCommandPath(name, p.GetLanguage())
+}
+
 // AddCommand used to define a Command/sub-command chain
 // Unlike a flag which starts with a '-' or '/' a Command represents a verb or action
 func (p *Parser) AddCommand(cmd *Command) error {
@@ -463,12 +547,29 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		return false
 	}
 
+	// Auto-register language flags if enabled
+	if err := p.ensureLanguageFlags(); err != nil {
+		p.addError(err)
+		return false
+	}
+
+	// Auto-detect language before showing help
+	if p.autoLanguage {
+		if lang := p.detectLanguageInArgs(args); lang != language.Und {
+			// fmt.Printf("DEBUG: Detected language: %v\n", lang)
+			p.SetLanguage(lang)
+		}
+	}
+
 	// Early check for help request
 	if p.autoHelp && p.hasHelpInArgs(args) {
 		improvedParser := NewHelpParser(p, p.helpConfig)
 
+		// Filter out language flags before passing to help parser
+		helpArgs := p.filterLanguageFlags(args)
+
 		// The improved parser will handle all parsing and error detection
-		err := improvedParser.Parse(args)
+		err := improvedParser.Parse(helpArgs)
 		p.helpExecuted = true
 		if p.helpEndFunc != nil {
 			return p.helpEndFunc() == nil
@@ -527,7 +628,10 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 					}
 				}
 
-				if !flagProcessed && ctxStack.Len() > 0 {
+				// Check if we should try the fallback
+				shouldTryFallback := !flagProcessed && ctxStack.Len() == 0
+
+				if flagProcessed {
 					processedStack = true
 				}
 
@@ -535,12 +639,19 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 					state.Skip()
 				}
 
-				if !processedStack {
-					// fallback - possibly POSIX style
-					if !p.evalFlagWithPath(state, "") {
-						// Flag not found in any context
+				// Try fallback for global/POSIX flags, or generate error
+				if !flagProcessed {
+					if shouldTryFallback {
+						// No command context, try as global/POSIX flag
+						if !p.evalFlagWithPath(state, "") {
+							// Still not found, generate error
+							flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
+							p.generateFlagError(flagName, currentCommandPath)
+						}
+					} else {
+						// In command context and flag not found anywhere
 						flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
-						p.addError(errs.ErrUnknownFlag.WithArgs(flagName))
+						p.generateFlagError(flagName, currentCommandPath)
 					}
 				}
 			}
@@ -617,6 +728,7 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		}
 	}
 
+	// fmt.Printf("DEBUG Parse: returning success=%v, errors=%d\n", success, len(p.errors))
 	return success
 }
 
@@ -905,7 +1017,7 @@ func (p *Parser) ExtendSystemBundle(bundle *i18n.Bundle) error {
 	defer p.mu.Unlock()
 
 	// Copy all translations from the provided bundle to the system bundle
-	for _, lang := range bundle.GetSupportedLanguages() {
+	for _, lang := range bundle.Languages() {
 		if translations := bundle.GetTranslations(lang); len(translations) > 0 {
 			if err := p.systemBundle.AddLanguage(lang, translations); err != nil {
 				return err
@@ -959,6 +1071,9 @@ func (p *Parser) GetWarnings() []string {
 			}
 		}
 	}
+
+	// Add naming consistency warnings
+	warnings = append(warnings, p.checkNamingConsistency()...)
 
 	return warnings
 }
@@ -1032,6 +1147,9 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 		Argument:    argument,
 		CommandPath: strings.Join(commandPath, " "), // Keep track of the command path
 	})
+
+	// Always register flag metadata for translation lookup
+	p.registerFlagTranslations(flag, argument, commandPath...)
 
 	if argument.Capacity < 0 {
 		return errs.ErrNegativeCapacity.WithArgs(flag, argument.Capacity)
@@ -1273,6 +1391,7 @@ func (p *Parser) GetShortFlag(flag string, commandPath ...string) (string, error
 
 // HasFlag returns true when the Flag has been seen on the command line.
 func (p *Parser) HasFlag(flag string, commandPath ...string) bool {
+	// First try canonical lookup
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
 	_, found := p.options[mainKey]
 	if !found && p.secureArguments != nil {
@@ -1282,6 +1401,24 @@ func (p *Parser) HasFlag(flag string, commandPath ...string) bool {
 		flagParts := splitPathFlag(mainKey)
 		if _, found = p.rawArgs[flagParts[0]]; found {
 			_, found = p.secureArguments.Get(mainKey)
+		}
+	}
+
+	// If not found, try translation lookup
+	if !found {
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flag, p.GetLanguage()); ok {
+			// Try again with the canonical name
+			mainKey = p.flagOrShortFlag(canonical, commandPath...)
+			_, found = p.options[mainKey]
+			if !found && p.secureArguments != nil {
+				// secure arguments are evaluated after all others - if a callback (ex. RequiredIf) relies
+				// on HasFlag during Parse then we need to check secureArguments - we only do this
+				// if the argument has been passed on the command line
+				flagParts := splitPathFlag(mainKey)
+				if _, found = p.rawArgs[flagParts[0]]; found {
+					_, found = p.secureArguments.Get(mainKey)
+				}
+			}
 		}
 	}
 
@@ -1302,7 +1439,16 @@ func (p *Parser) HasRawFlag(flag string) bool {
 
 // HasCommand return true when the name has been seen on the command line.
 func (p *Parser) HasCommand(path string) bool {
+	// First try canonical lookup
 	_, found := p.commandOptions.Get(path)
+
+	// If not found, try translation lookup
+	if !found {
+		if canonical, ok := p.translationRegistry.GetCanonicalCommandPath(path, p.GetLanguage()); ok {
+			// Try again with the canonical path
+			_, found = p.commandOptions.Get(canonical)
+		}
+	}
 
 	return found
 }
@@ -1910,6 +2056,39 @@ func (p *Parser) SetMaxDependencyDepth(depth int) {
 	p.maxDependencyDepth = depth
 }
 
+// SetSuggestionsFormatter sets a custom formatter for displaying suggestions in error messages.
+// The formatter receives a slice of suggestions and should return a formatted string.
+// If not set, suggestions are displayed as a comma-separated list.
+//
+// Example:
+//
+//	parser.SetSuggestionsFormatter(func(suggestions []string) string {
+//	    return "\n  • " + strings.Join(suggestions, "\n  • ")
+//	})
+func (p *Parser) SetSuggestionsFormatter(formatter SuggestionsFormatter) {
+	p.suggestionsFormatter = formatter
+}
+
+// SetSuggestionThreshold sets the maximum Levenshtein distance for suggestions.
+// You can set different thresholds for flags and commands.
+// A threshold of 0 disables suggestions for that type.
+// Default is 2 for both flags and commands.
+//
+// Example:
+//
+//	parser.SetSuggestionThreshold(3, 2) // More lenient for flags, standard for commands
+func (p *Parser) SetSuggestionThreshold(flagThreshold, commandThreshold int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if flagThreshold >= 0 {
+		p.flagSuggestionThreshold = flagThreshold
+	}
+	if commandThreshold >= 0 {
+		p.cmdSuggestionThreshold = commandThreshold
+	}
+}
+
 // GetMaxDependencyDepth returns the current maximum allowed depth for flag dependencies.
 // If not explicitly set, returns DefaultMaxDependencyDepth.
 func (p *Parser) GetMaxDependencyDepth() int {
@@ -1949,6 +2128,48 @@ func (p *Parser) GetHelpFlags() []string {
 	return p.helpFlags
 }
 
+// SetAutoLanguage enables or disables automatic language detection
+func (p *Parser) SetAutoLanguage(enabled bool) {
+	p.autoLanguage = enabled
+}
+
+// GetAutoLanguage returns whether automatic language detection is enabled
+func (p *Parser) GetAutoLanguage() bool {
+	return p.autoLanguage
+}
+
+// SetLanguageFlags sets custom language flag names (default: "language", "lang", and "l")
+func (p *Parser) SetLanguageFlags(flags []string) {
+	p.languageFlags = flags
+}
+
+// GetLanguageFlags returns the current language flag names
+func (p *Parser) GetLanguageFlags() []string {
+	return p.languageFlags
+}
+
+// SetCheckSystemLocale enables or disables checking system locale environment variables (LC_ALL, LC_MESSAGES, LANG).
+// By default, only GOOPT_LANG is checked.
+func (p *Parser) SetCheckSystemLocale(check bool) {
+	p.checkSystemLocale = check
+}
+
+// GetCheckSystemLocale returns whether system locale environment variables are checked
+func (p *Parser) GetCheckSystemLocale() bool {
+	return p.checkSystemLocale
+}
+
+// SetLanguageEnvVar sets the environment variable name to check for language preference.
+// Default is "GOOPT_LANG". Set to empty string to disable environment variable checking.
+func (p *Parser) SetLanguageEnvVar(envVar string) {
+	p.languageEnvVar = envVar
+}
+
+// GetLanguageEnvVar returns the configured language environment variable name
+func (p *Parser) GetLanguageEnvVar() string {
+	return p.languageEnvVar
+}
+
 // hasHelpInArgs quickly scans args to check if help is requested without full parsing
 func (p *Parser) hasHelpInArgs(args []string) bool {
 	if !p.autoHelp || len(p.helpFlags) == 0 {
@@ -1967,6 +2188,149 @@ func (p *Parser) hasHelpInArgs(args []string) bool {
 		}
 	}
 	return false
+}
+
+// envGetter is a function type for getting environment variables (mockable for testing)
+type envGetter func(string) string
+
+// detectLanguageInArgs quickly scans args to detect language preference without full parsing
+func (p *Parser) detectLanguageInArgs(args []string) language.Tag {
+	return p.detectLanguageInArgsWithEnv(args, os.Getenv)
+}
+
+// detectLanguageInArgsWithEnv is the testable version that accepts an environment getter
+func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) language.Tag {
+	if !p.autoLanguage || len(p.languageFlags) == 0 {
+		return language.Und
+	}
+
+	// Collect all language flags, last one wins
+	var lastLang language.Tag = language.Und
+
+	// Quick scan for language flag
+	for i, arg := range args {
+		if p.isFlag(arg) {
+			stripped := strings.TrimLeftFunc(arg, p.prefixFunc)
+
+			// Check for --language=value format
+			if idx := strings.Index(stripped, "="); idx > 0 {
+				flagName := stripped[:idx]
+				value := stripped[idx+1:]
+				for _, langFlag := range p.languageFlags {
+					if langFlag == flagName {
+						// Normalize underscore to dash for BCP 47 compatibility
+						normalizedValue := strings.Replace(value, "_", "-", -1)
+						if tag, err := language.Parse(normalizedValue); err == nil {
+							lastLang = tag
+						}
+					}
+				}
+			} else {
+				// Check for --language value format
+				for _, langFlag := range p.languageFlags {
+					if stripped == langFlag && i+1 < len(args) && !p.isFlag(args[i+1]) {
+						// Normalize underscore to dash for BCP 47 compatibility
+						normalizedValue := strings.Replace(args[i+1], "_", "-", -1)
+						if tag, err := language.Parse(normalizedValue); err == nil {
+							lastLang = tag
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// If we found a language flag, use it
+	if lastLang != language.Und {
+		return lastLang
+	}
+
+	// Otherwise, fallback to environment variables
+	// Always check the configured language environment variable first
+	if p.languageEnvVar != "" {
+		if lang := getenv(p.languageEnvVar); lang != "" {
+			// Normalize underscore to dash for BCP 47 compatibility
+			lang = strings.Replace(lang, "_", "-", -1)
+			if tag, err := language.Parse(lang); err == nil {
+				return tag
+			}
+		}
+	}
+
+	// Only check system locale if explicitly enabled
+	if p.checkSystemLocale {
+		// Try LC_ALL, LC_MESSAGES, then LANG in order of precedence
+		for _, envVar := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
+			if lang := getenv(envVar); lang != "" {
+				// Extract language part from locale (e.g., "en_US.UTF-8" -> "en-US")
+				if idx := strings.Index(lang, "."); idx > 0 {
+					lang = lang[:idx]
+				}
+				// Handle C and POSIX locales
+				if lang == "C" || lang == "POSIX" {
+					continue
+				}
+				lang = strings.Replace(lang, "_", "-", -1)
+				if tag, err := language.Parse(lang); err == nil {
+					return tag
+				}
+			}
+		}
+	}
+
+	return language.Und
+}
+
+// filterLanguageFlags removes language flags and their values from args
+func (p *Parser) filterLanguageFlags(args []string) []string {
+	if !p.autoLanguage || len(p.languageFlags) == 0 {
+		return args
+	}
+
+	filtered := make([]string, 0, len(args))
+	skip := false
+
+	for i, arg := range args {
+		if skip {
+			skip = false
+			continue
+		}
+
+		shouldFilter := false
+
+		if p.isFlag(arg) {
+			stripped := strings.TrimLeftFunc(arg, p.prefixFunc)
+
+			// Check for --language=value format
+			if idx := strings.Index(stripped, "="); idx > 0 {
+				flagName := stripped[:idx]
+				for _, langFlag := range p.languageFlags {
+					if langFlag == flagName {
+						shouldFilter = true
+						break
+					}
+				}
+			} else {
+				// Check for --language value format
+				for _, langFlag := range p.languageFlags {
+					if stripped == langFlag {
+						shouldFilter = true
+						// Also skip the next arg if it's not a flag
+						if i+1 < len(args) && !p.isFlag(args[i+1]) {
+							skip = true
+						}
+						break
+					}
+				}
+			}
+		}
+
+		if !shouldFilter {
+			filtered = append(filtered, arg)
+		}
+	}
+
+	return filtered
 }
 
 // IsHelpRequested returns true if any help flag was provided on the command line
@@ -2030,9 +2394,9 @@ func (p *Parser) ensureHelpFlags() error {
 
 	// Auto-register help flag with available flags
 	helpArg := &Argument{
-		Description:  p.layeredProvider.GetMessage(messages.MsgHelpDescriptionKey),
-		TypeOf:       types.Standalone,
-		DefaultValue: "false",
+		DescriptionKey: messages.MsgHelpDescriptionKey,
+		TypeOf:         types.Standalone,
+		DefaultValue:   "false",
 	}
 
 	// Use the first available flag as primary
@@ -2186,9 +2550,9 @@ func (p *Parser) ensureVersionFlags() error {
 
 	// Auto-register version flag with available flags
 	versionArg := &Argument{
-		Description:  p.layeredProvider.GetMessage(messages.MsgVersionDescriptionKey),
-		TypeOf:       types.Standalone,
-		DefaultValue: "false",
+		DescriptionKey: messages.MsgVersionDescriptionKey,
+		TypeOf:         types.Standalone,
+		DefaultValue:   "false",
 	}
 
 	// Use the first available flag as primary
@@ -2211,6 +2575,79 @@ func (p *Parser) ensureVersionFlags() error {
 			p.autoRegisteredVersion[primaryFlag] = true
 			if shortFlag != "" {
 				p.autoRegisteredVersion[shortFlag] = true
+			}
+		}
+	}
+
+	return err
+}
+
+// ensureLanguageFlags automatically registers language flags if not already defined by the user
+func (p *Parser) ensureLanguageFlags() error {
+	if !p.autoLanguage || len(p.languageFlags) == 0 {
+		return nil
+	}
+
+	// Check which language flags are available
+	var availableFlags []string
+
+	for _, flag := range p.languageFlags {
+		// Check if flag already exists
+		if _, err := p.GetArgument(flag); err != nil {
+			// For short flags, check for conflicts
+			if len(flag) == 1 {
+				if _, conflict := p.checkShortFlagConflict(flag, ""); !conflict {
+					availableFlags = append(availableFlags, flag)
+				}
+			} else {
+				availableFlags = append(availableFlags, flag)
+			}
+		}
+	}
+
+	// If no flags are available, user has defined all language flags
+	if len(availableFlags) == 0 {
+		return nil
+	}
+
+	// Auto-register language flag with available flags
+	langArg := &Argument{
+		DescriptionKey: messages.MsgLanguageDescriptionKey,
+		TypeOf:         types.Single,
+		DefaultValue:   p.GetLanguage().String(),
+	}
+
+	// Use the first available long flag as primary
+	primaryFlag := ""
+	shortFlag := ""
+
+	for _, flag := range availableFlags {
+		if len(flag) > 1 && primaryFlag == "" {
+			primaryFlag = flag
+		} else if len(flag) == 1 && shortFlag == "" {
+			shortFlag = flag
+		}
+	}
+
+	// If no long flag available, use short as primary
+	if primaryFlag == "" && shortFlag != "" {
+		primaryFlag = shortFlag
+		shortFlag = ""
+	}
+
+	// Set short flag if available
+	if shortFlag != "" {
+		langArg.Short = shortFlag
+	}
+
+	var err error
+	if primaryFlag != "" && !p.autoRegisteredLanguage[primaryFlag] {
+		err = p.AddFlag(primaryFlag, langArg)
+		if err == nil {
+			// Track that we auto-registered these flags
+			p.autoRegisteredLanguage[primaryFlag] = true
+			if shortFlag != "" {
+				p.autoRegisteredLanguage[shortFlag] = true
 			}
 		}
 	}

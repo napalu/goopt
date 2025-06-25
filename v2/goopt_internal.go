@@ -24,6 +24,7 @@ import (
 	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/napalu/goopt/v2/types/queue"
 	"github.com/napalu/goopt/v2/validation"
+	"golang.org/x/text/language"
 )
 
 func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
@@ -38,7 +39,32 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 		}
 	}
 
+	// If not found, try translation lookup
+	if !found {
+		// fmt.Printf("DEBUG parseFlag: Looking for translation of '%s' in language %v\n", stripped, p.GetLanguage())
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+			// fmt.Printf("DEBUG parseFlag: Found canonical name: %s\n", canonical)
+			// The canonical name might already include command context (e.g., "flag@command")
+			// Try it as-is first
+			flag = canonical
+			// fmt.Printf("DEBUG parseFlag: Looking up flag with key: %s\n", flag)
+			flagInfo, found = p.acceptedFlags.Get(flag)
+			// fmt.Printf("DEBUG parseFlag: Found in acceptedFlags: %v\n", found)
+
+			// If not found and we have a command path, try building the full path
+			if !found && currentCommandPath != "" {
+				// fmt.Printf("DEBUG parseFlag: currentCommandPath = '%s'\n", currentCommandPath)
+				commandParts := strings.Split(currentCommandPath, " ")
+				flag = buildPathFlag(canonical, commandParts...)
+				// fmt.Printf("DEBUG parseFlag: Looking up flag with built key: %s\n", flag)
+				flagInfo, found = p.acceptedFlags.Get(flag)
+				// fmt.Printf("DEBUG parseFlag: Found with built key: %v\n", found)
+			}
+		}
+	}
+
 	if found {
+		// fmt.Printf("DEBUG parseFlag: Processing flag %s\n", flag)
 		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
 		return true
 	} else {
@@ -55,6 +81,14 @@ func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) bo
 		p.normalizePosixArgs(state, flag, currentCommandPath)
 		flag = p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
 		flagInfo, found = p.getFlagInCommandPath(flag, currentCommandPath)
+	}
+
+	// If not found, try translation lookup
+	if !found {
+		stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+			flagInfo, found = p.getFlagInCommandPath(canonical, currentCommandPath)
+		}
 	}
 
 	if found {
@@ -151,6 +185,11 @@ func (p *Parser) registerCommandRecursive(cmd *Command) {
 	// Add the current command to the map
 	cmd.topLevel = strings.Count(cmd.path, " ") == 0
 	p.registeredCommands.Set(cmd.path, cmd)
+
+	// Register command translations if NameKey is provided
+	if cmd.NameKey != "" {
+		p.registerCommandTranslations(cmd)
+	}
 
 	// Recursively register all subcommands
 	for i := range cmd.Subcommands {
@@ -384,19 +423,25 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		// Check command path
 		isCmd := false
+		canonicalArg := arg
+		// Get canonical command name if it's a translated command
+		if canonical, ok := p.translationRegistry.GetCanonicalCommandPath(arg, p.GetLanguage()); ok {
+			canonicalArg = canonical
+		}
+
 		if len(currentCmdPath) == 0 {
 			if p.isCommand(arg) {
-				currentCmdPath = append(currentCmdPath, arg)
+				currentCmdPath = append(currentCmdPath, canonicalArg)
 				isCmd = true
 				argPos = 0 // Reset position counter for new command
 			}
 		} else {
 			switch {
 			case p.isCommand(strings.Join(append(currentCmdPath, arg), " ")):
-				currentCmdPath = append(currentCmdPath, arg)
+				currentCmdPath = append(currentCmdPath, canonicalArg)
 				isCmd = true
 			case p.isCommand(arg):
-				currentCmdPath = []string{arg}
+				currentCmdPath = []string{canonicalArg}
 				isCmd = true
 				argPos = 0
 			default:
@@ -607,19 +652,37 @@ func (p *Parser) isCommand(arg string) bool {
 	if _, ok := p.registeredCommands.Get(arg); ok {
 		return true
 	}
+
+	// Check if it's a translated command name
+	if canonical, ok := p.translationRegistry.GetCanonicalCommandPath(arg, p.GetLanguage()); ok {
+		if _, ok := p.registeredCommands.Get(canonical); ok {
+			return true
+		}
+	}
+
 	return false
 }
 
 func (p *Parser) isGlobalFlag(arg string) bool {
-	flag, ok := p.acceptedFlags.Get(p.flagOrShortFlag(strings.TrimLeftFunc(arg, p.prefixFunc)))
+	stripped := strings.TrimLeftFunc(arg, p.prefixFunc)
+	flag, ok := p.acceptedFlags.Get(p.flagOrShortFlag(stripped))
 	if ok {
 		return flag.CommandPath == ""
+	}
+
+	// Check if it's a translated global flag
+	if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+		flag, ok := p.acceptedFlags.Get(canonical)
+		if ok {
+			return flag.CommandPath == ""
+		}
 	}
 
 	return false
 }
 
 func (p *Parser) addError(err error) {
+	// fmt.Printf("DEBUG addError: %v\n", err)
 	p.errors = append(p.errors, err)
 }
 
@@ -640,7 +703,27 @@ func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
 }
 
 func (p *Parser) getCommand(name string) (*Command, bool) {
+	// First try canonical lookup
 	cmd, found := p.registeredCommands.Get(name)
+	// fmt.Printf("DEBUG getCommand: Looking for '%s', found: %v\n", name, found)
+
+	// Debug: show all registered commands
+	// Debug: show all registered commands
+	// fmt.Printf("DEBUG getCommand: Registered commands: ")
+	// for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+	//	fmt.Printf("%s ", *kv.Key)
+	// }
+	// fmt.Println()
+
+	// If not found, try translation lookup
+	if !found {
+		// fmt.Printf("DEBUG getCommand: Checking translation for '%s' in language %v\n", name, p.GetLanguage())
+		if canonical, ok := p.translationRegistry.GetCanonicalCommandPath(name, p.GetLanguage()); ok {
+			// fmt.Printf("DEBUG getCommand: Found translation '%s' -> '%s'\n", name, canonical)
+			cmd, found = p.registeredCommands.Get(canonical)
+			// fmt.Printf("DEBUG getCommand: After translation lookup, found: %v\n", found)
+		}
+	}
 
 	return cmd, found
 }
@@ -725,7 +808,8 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 	}
 
 	if cmd != nil {
-		*commandPathSlice = append(*commandPathSlice, currentArg)
+		// Use the canonical command name for the path
+		*commandPathSlice = append(*commandPathSlice, cmd.Name)
 		if len(cmd.Subcommands) == 0 {
 			cmdQueue.Clear()
 			terminating = true
@@ -742,6 +826,65 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 			p.queueCommandCallback(cmd)
 		}
 
+	} else {
+		// Command not found - check if it might be a typo
+		// Only generate suggestions if we have registered commands and this looks like a command attempt
+		if p.registeredCommands.Len() > 0 {
+			suggestions, _ := p.findSimilarRootCommandsWithContext(currentArg)
+			if len(suggestions) > 0 {
+				// Check if any suggestion is very close (likely a typo)
+				for _, suggestion := range suggestions {
+					distance := util.LevenshteinDistance(currentArg, suggestion)
+					if distance <= 2 {
+						// Very likely a typo - generate error with suggestions
+						p.addError(errs.ErrCommandNotFound.WithArgs(currentArg))
+
+						// Display each suggestion in the form that was closest to user input
+						displaySuggestions := make([]string, len(suggestions))
+						for i, suggestion := range suggestions {
+							// By default show canonical
+							displaySuggestions[i] = suggestion
+
+							// Check if we should show translated form
+							if p.translationRegistry != nil {
+								if cmd, found := p.registeredCommands.Get(suggestion); found && cmd.NameKey != "" {
+									if translated, found := p.translationRegistry.GetCommandTranslation(suggestion, p.GetLanguage()); found {
+										// Compare distances to determine which form to show
+										canonicalDist := util.LevenshteinDistance(currentArg, suggestion)
+										translatedDist := util.LevenshteinDistance(currentArg, translated)
+
+										// Show the form that's closer to what user typed
+										if translatedDist < canonicalDist {
+											displaySuggestions[i] = translated
+										} else if translatedDist == canonicalDist && translated != suggestion {
+											// If equal distance and different words, show both forms
+											displaySuggestions[i] = fmt.Sprintf("%s / %s", suggestion, translated)
+										}
+									}
+								}
+							}
+						}
+
+						// Format suggestions
+						var formatted string
+						if p.suggestionsFormatter != nil {
+							formatted = p.suggestionsFormatter(displaySuggestions)
+						} else {
+							// Use i18n for "did you mean"
+							didYouMean := p.layeredProvider.GetMessage(messages.MsgDidYouMeanKey)
+							if len(displaySuggestions) == 1 {
+								formatted = fmt.Sprintf("%s %s", didYouMean, displaySuggestions[0])
+							} else {
+								formatted = fmt.Sprintf("%s\n  %s", didYouMean, strings.Join(displaySuggestions, "\n  "))
+							}
+						}
+						p.addError(fmt.Errorf("%s", formatted))
+						return false
+					}
+				}
+			}
+		}
+		// Otherwise, treat as potential positional argument
 	}
 
 	return terminating
@@ -820,30 +963,458 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 	return arg, err
 }
 
-// findSimilarSubcommands finds subcommands similar to the input
-func (p *Parser) findSimilarSubcommands(subcommands []Command, input string) []string {
-	var suggestions []string
-	threshold := 2 // Levenshtein distance threshold
+// findSimilarSubcommandsWithContext finds subcommands similar to the input and detects if input is likely translated
+func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input string, parentPath string) ([]string, bool) {
+	type subcommandSuggestion struct {
+		canonicalName string
+		distance      int
+		isTranslated  bool
+	}
 
+	var allSuggestions []subcommandSuggestion
+	threshold := p.cmdSuggestionThreshold
+	if threshold == 0 {
+		return nil, false // Suggestions disabled for commands
+	}
+	currentLang := p.GetLanguage()
+
+	// Check all subcommands - both canonical and translated names
 	for _, cmd := range subcommands {
+		// Check canonical name
 		distance := util.LevenshteinDistance(input, cmd.Name)
-		// Skip exact matches (distance 0) and only suggest similar commands
 		if distance > 0 && distance <= threshold {
-			suggestions = append(suggestions, cmd.Name)
+			allSuggestions = append(allSuggestions, subcommandSuggestion{
+				canonicalName: cmd.Name,
+				distance:      distance,
+				isTranslated:  false,
+			})
+		}
+
+		// Check translated name if available
+		if p.translationRegistry != nil && cmd.NameKey != "" {
+			// For subcommands, build the full path
+			fullPath := cmd.Name
+			if parentPath != "" {
+				fullPath = parentPath + " " + cmd.Name
+			}
+			if translatedName, found := p.translationRegistry.GetCommandTranslation(fullPath, currentLang); found {
+				translatedDistance := util.LevenshteinDistance(input, translatedName)
+				if translatedDistance > 0 && translatedDistance <= threshold {
+					// Check if we already have this command in suggestions
+					found := false
+					for i, s := range allSuggestions {
+						if s.canonicalName == cmd.Name {
+							// Update if translated is closer
+							if translatedDistance < s.distance {
+								allSuggestions[i].distance = translatedDistance
+								allSuggestions[i].isTranslated = true
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						allSuggestions = append(allSuggestions, subcommandSuggestion{
+							canonicalName: cmd.Name,
+							distance:      translatedDistance,
+							isTranslated:  true,
+						})
+					}
+				}
+			}
 		}
 	}
 
-	// Sort by similarity
-	sort.Slice(suggestions, func(i, j int) bool {
-		return util.LevenshteinDistance(input, suggestions[i]) < util.LevenshteinDistance(input, suggestions[j])
+	// Find minimum distance
+	minDistance := 3
+	for _, s := range allSuggestions {
+		if s.distance < minDistance {
+			minDistance = s.distance
+		}
+	}
+
+	// If we have distance 1 matches, only show those
+	// Otherwise show all matches up to the configured threshold
+	finalThreshold := minDistance
+	if minDistance > 1 && p.cmdSuggestionThreshold > 1 {
+		finalThreshold = p.cmdSuggestionThreshold
+	}
+
+	// Filter and collect canonical names
+	var suggestions []string
+	hasTranslated := false
+
+	for _, s := range allSuggestions {
+		if s.distance <= finalThreshold {
+			suggestions = append(suggestions, s.canonicalName)
+			if s.isTranslated {
+				hasTranslated = true
+			}
+		}
+	}
+
+	// Remove duplicates
+	uniqueSuggestions := make(map[string]bool)
+	var result []string
+	for _, s := range suggestions {
+		if !uniqueSuggestions[s] {
+			uniqueSuggestions[s] = true
+			result = append(result, s)
+		}
+	}
+
+	// Sort by distance
+	sort.Slice(result, func(i, j int) bool {
+		dist1 := 3
+		dist2 := 3
+		for _, s := range allSuggestions {
+			if s.canonicalName == result[i] {
+				dist1 = s.distance
+			}
+			if s.canonicalName == result[j] {
+				dist2 = s.distance
+			}
+		}
+		return dist1 < dist2
 	})
 
 	// Limit to top 3
-	if len(suggestions) > 3 {
-		suggestions = suggestions[:3]
+	if len(result) > 3 {
+		result = result[:3]
 	}
 
+	return result, hasTranslated
+}
+
+// findSimilarFlagsWithContext finds flags similar to the input and detects if input is likely translated
+func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) ([]string, bool) {
+	type flagSuggestion struct {
+		canonicalName string
+		distance      int
+		isTranslated  bool
+	}
+
+	var allSuggestions []flagSuggestion
+	threshold := p.flagSuggestionThreshold
+	if threshold == 0 {
+		return nil, false // Suggestions disabled for flags
+	}
+
+	// Remove prefix from input if present
+	cleanInput := strings.TrimLeftFunc(input, p.prefixFunc)
+	currentLang := p.GetLanguage()
+
+	// Check all flags - both canonical and translated names
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		flagKey := *f.Key
+		flagInfo := f.Value
+
+		// Skip flags not in the current command context
+		if commandPath != "" && flagInfo.CommandPath != commandPath && flagInfo.CommandPath != "" {
+			continue
+		}
+
+		// Extract flag name without command path
+		flagParts := splitPathFlag(flagKey)
+		flagName := flagParts[0]
+
+		// Check canonical name
+		distance := util.LevenshteinDistance(cleanInput, flagName)
+		if distance > 0 && distance <= threshold {
+			allSuggestions = append(allSuggestions, flagSuggestion{
+				canonicalName: flagName,
+				distance:      distance,
+				isTranslated:  false,
+			})
+		}
+
+		// Check short form if available
+		if flagInfo.Argument.Short != "" {
+			shortDistance := util.LevenshteinDistance(cleanInput, flagInfo.Argument.Short)
+			if shortDistance > 0 && shortDistance <= threshold {
+				// Check if we already have this flag in suggestions
+				found := false
+				for i, s := range allSuggestions {
+					if s.canonicalName == flagName {
+						// Update if short form is closer
+						if shortDistance < s.distance {
+							allSuggestions[i].distance = shortDistance
+						}
+						found = true
+						break
+					}
+				}
+				if !found {
+					allSuggestions = append(allSuggestions, flagSuggestion{
+						canonicalName: flagName,
+						distance:      shortDistance,
+						isTranslated:  false,
+					})
+				}
+			}
+		}
+
+		// Check translated name if available
+		if p.translationRegistry != nil && flagInfo.Argument.NameKey != "" {
+			if translatedName, found := p.translationRegistry.GetFlagTranslation(flagName, currentLang); found {
+				translatedDistance := util.LevenshteinDistance(cleanInput, translatedName)
+				if translatedDistance > 0 && translatedDistance <= threshold {
+					// Check if we already have this flag in suggestions
+					found := false
+					for i, s := range allSuggestions {
+						if s.canonicalName == flagName {
+							// Update if translated is closer
+							if translatedDistance < s.distance {
+								allSuggestions[i].distance = translatedDistance
+								allSuggestions[i].isTranslated = true
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						allSuggestions = append(allSuggestions, flagSuggestion{
+							canonicalName: flagName,
+							distance:      translatedDistance,
+							isTranslated:  true,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Find minimum distance
+	minDistance := 3
+	for _, s := range allSuggestions {
+		if s.distance < minDistance {
+			minDistance = s.distance
+		}
+	}
+
+	// If we have distance 1 matches, only show those
+	// Otherwise show all matches up to the configured threshold
+	finalThreshold := minDistance
+	if minDistance > 1 && p.flagSuggestionThreshold > 1 {
+		finalThreshold = p.flagSuggestionThreshold
+	}
+
+	// Filter and collect canonical names
+	var suggestions []string
+	hasTranslated := false
+
+	for _, s := range allSuggestions {
+		if s.distance <= finalThreshold {
+			suggestions = append(suggestions, s.canonicalName)
+			if s.isTranslated {
+				hasTranslated = true
+			}
+		}
+	}
+
+	// Remove duplicates
+	uniqueSuggestions := make(map[string]bool)
+	var result []string
+	for _, s := range suggestions {
+		if !uniqueSuggestions[s] {
+			uniqueSuggestions[s] = true
+			result = append(result, s)
+		}
+	}
+
+	// Sort by distance
+	sort.Slice(result, func(i, j int) bool {
+		dist1 := 3
+		dist2 := 3
+		for _, s := range allSuggestions {
+			if s.canonicalName == result[i] {
+				dist1 = s.distance
+			}
+			if s.canonicalName == result[j] {
+				dist2 = s.distance
+			}
+		}
+		return dist1 < dist2
+	})
+
+	// Limit to top 3
+	if len(result) > 3 {
+		result = result[:3]
+	}
+
+	return result, hasTranslated
+}
+
+// findSimilarRootCommandsWithContext finds root commands similar to the input
+func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, bool) {
+	type suggestion struct {
+		canonicalName string
+		distance      int
+		isTranslated  bool
+	}
+
+	var allSuggestions []suggestion
+	currentLang := p.GetLanguage()
+	threshold := p.cmdSuggestionThreshold
+	if threshold == 0 {
+		return nil, false // Suggestions disabled for commands
+	}
+
+	// Check all commands - both canonical and translated names
+	for c := p.registeredCommands.Front(); c != nil; c = c.Next() {
+		cmd := c.Value
+		cmdName := *c.Key
+
+		// Check canonical name
+		distance := util.LevenshteinDistance(input, cmdName)
+		if distance > 0 && distance <= threshold {
+			allSuggestions = append(allSuggestions, suggestion{
+				canonicalName: cmdName,
+				distance:      distance,
+				isTranslated:  false,
+			})
+		}
+
+		// Check translated name if available
+		if p.translationRegistry != nil && cmd.NameKey != "" {
+			if translated, found := p.translationRegistry.GetCommandTranslation(cmdName, currentLang); found {
+				translatedDistance := util.LevenshteinDistance(input, translated)
+				if translatedDistance > 0 && translatedDistance <= threshold {
+					// Check if we already have this command in suggestions
+					found := false
+					for i, s := range allSuggestions {
+						if s.canonicalName == cmdName {
+							// Update if translated is closer
+							if translatedDistance < s.distance {
+								allSuggestions[i].distance = translatedDistance
+								allSuggestions[i].isTranslated = true
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						allSuggestions = append(allSuggestions, suggestion{
+							canonicalName: cmdName,
+							distance:      translatedDistance,
+							isTranslated:  true,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Find minimum distance
+	minDistance := 3
+	for _, s := range allSuggestions {
+		if s.distance < minDistance {
+			minDistance = s.distance
+		}
+	}
+
+	// If we have distance 1 matches, only show those
+	// Otherwise show all matches up to the configured threshold
+	finalThreshold := minDistance
+	if minDistance > 1 && p.cmdSuggestionThreshold > 1 {
+		finalThreshold = p.cmdSuggestionThreshold
+	}
+
+	// Filter and determine if we should show translated names
+	var finalSuggestions []string
+	hasTranslated := false
+
+	for _, s := range allSuggestions {
+		if s.distance <= finalThreshold {
+			finalSuggestions = append(finalSuggestions, s.canonicalName)
+			if s.isTranslated {
+				hasTranslated = true
+			}
+		}
+	}
+
+	// Sort by distance
+	sort.Slice(finalSuggestions, func(i, j int) bool {
+		dist1 := 3
+		dist2 := 3
+		for _, s := range allSuggestions {
+			if s.canonicalName == finalSuggestions[i] {
+				dist1 = s.distance
+			}
+			if s.canonicalName == finalSuggestions[j] {
+				dist2 = s.distance
+			}
+		}
+		return dist1 < dist2
+	})
+
+	// Limit to top 3
+	if len(finalSuggestions) > 3 {
+		finalSuggestions = finalSuggestions[:3]
+	}
+
+	return finalSuggestions, hasTranslated
+}
+
+func (p *Parser) findSimilarRootCommands(input string) []string {
+	suggestions, _ := p.findSimilarRootCommandsWithContext(input)
 	return suggestions
+}
+
+// generateFlagError generates an error for an unknown flag with suggestions
+func (p *Parser) generateFlagError(flagName string, commandPath string) {
+	suggestions, _ := p.findSimilarFlagsWithContext(flagName, commandPath)
+	if len(suggestions) > 0 {
+		// Format suggestions with proper prefixes
+		formattedSuggestions := make([]string, len(suggestions))
+
+		// Remove prefix from input for comparison
+		cleanInput := strings.TrimLeftFunc(flagName, p.prefixFunc)
+
+		for i, s := range suggestions {
+			// Decide whether to show canonical or translated based on distances
+			displayName := s
+
+			if p.translationRegistry != nil {
+				// Check if there's a translation
+				if translated, found := p.translationRegistry.GetFlagTranslation(s, p.GetLanguage()); found {
+					// Compare distances to determine which form to show
+					canonicalDist := util.LevenshteinDistance(cleanInput, s)
+					translatedDist := util.LevenshteinDistance(cleanInput, translated)
+
+					// Show the form that's closer to what user typed
+					if translatedDist < canonicalDist {
+						displayName = translated
+					} else if translatedDist == canonicalDist && translated != s {
+						// If equal distance and different words, show both forms
+						displayName = s + " / " + translated
+					}
+				}
+			}
+
+			if len(displayName) == 1 || (strings.Contains(displayName, " / ") && len(s) == 1) {
+				// Short flag
+				formattedSuggestions[i] = string(p.prefixes[0]) + displayName
+			} else {
+				// Long flag
+				if len(p.prefixes) > 1 {
+					formattedSuggestions[i] = string(p.prefixes[1]) + string(p.prefixes[1]) + displayName
+				} else {
+					formattedSuggestions[i] = string(p.prefixes[0]) + string(p.prefixes[0]) + displayName
+				}
+			}
+		}
+		// Use custom formatter if set, otherwise default to comma-separated list
+		var formatted string
+		if p.suggestionsFormatter != nil {
+			formatted = p.suggestionsFormatter(formattedSuggestions)
+		} else {
+			formatted = strings.Join(formattedSuggestions, ", ")
+		}
+		p.addError(errs.ErrUnknownFlagWithSuggestions.WithArgs(flagName, formatted))
+	} else {
+		p.addError(errs.ErrUnknownFlag.WithArgs(flagName))
+	}
 }
 
 func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string) (bool, *Command) {
@@ -862,6 +1433,21 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		}
 	}
 
+	// If not found, try translation lookup
+	if !found {
+		for _, sub = range currentCmd.Subcommands {
+			// Check if currentArg is a translated name
+			if sub.NameKey != "" {
+				translator := p.GetTranslator()
+				translatedName := translator.TL(p.GetLanguage(), sub.NameKey)
+				if strings.EqualFold(translatedName, currentArg) {
+					found = true
+					break
+				}
+			}
+		}
+	}
+
 	if found {
 		p.registerCommand(&sub, currentArg)
 		cmdQueue.Push(&sub) // Keep subcommands in the queue
@@ -870,13 +1456,57 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		// Check if the current arg looks like it was meant to be a subcommand
 		// (not a flag or positional argument)
 		if !p.isFlag(currentArg) {
-			// Find similar subcommands
-			suggestions := p.findSimilarSubcommands(currentCmd.Subcommands, currentArg)
+			// Find similar subcommands - pass the parent command's path
+			suggestions, _ := p.findSimilarSubcommandsWithContext(currentCmd.Subcommands, currentArg, currentCmd.path)
 			if len(suggestions) > 0 {
 				// Create a more helpful error message
-				p.addError(errs.ErrCommandNotFound.WithArgs(currentCmd.Name + " " + currentArg))
-				// Add a hint about similar commands
-				p.addError(fmt.Errorf("Did you mean one of these?\n  %s", strings.Join(suggestions, "\n  ")))
+				p.addError(errs.ErrCommandNotFound.WithArgs(currentCmd.path + " " + currentArg))
+
+				// Decide whether to show canonical or translated based on distances
+				displaySuggestions := make([]string, len(suggestions))
+				for i, suggestion := range suggestions {
+					displaySuggestions[i] = suggestion
+
+					// Find the subcommand to check for translation
+					for _, sub := range currentCmd.Subcommands {
+						if sub.Name == suggestion && sub.NameKey != "" && p.translationRegistry != nil {
+							// Build the full path for the subcommand
+							fullPath := suggestion
+							if currentCmd.path != "" {
+								fullPath = currentCmd.path + " " + suggestion
+							}
+							if translated, found := p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage()); found {
+								// Compare distances to determine which form to show
+								canonicalDist := util.LevenshteinDistance(currentArg, suggestion)
+								translatedDist := util.LevenshteinDistance(currentArg, translated)
+
+								// Debug logging
+								// fmt.Printf("DEBUG subcommand: currentArg=%s, suggestion=%s, translated=%s, canonicalDist=%d, translatedDist=%d, fullPath=%s\n",
+								//     currentArg, suggestion, translated, canonicalDist, translatedDist, fullPath)
+
+								// Show the form that's closer to what user typed
+								if translatedDist < canonicalDist {
+									displaySuggestions[i] = translated
+								} else if translatedDist == canonicalDist && translated != suggestion {
+									// If equal distance and different words, show both forms
+									displaySuggestions[i] = suggestion + " / " + translated
+								}
+							}
+							break
+						}
+					}
+				}
+
+				// Format suggestions using the formatter if available
+				var formatted string
+				if p.suggestionsFormatter != nil {
+					formatted = p.suggestionsFormatter(displaySuggestions)
+				} else {
+					// Default format with i18n
+					didYouMean := p.layeredProvider.GetMessage(messages.MsgDidYouMeanKey)
+					formatted = fmt.Sprintf("%s\n  %s", didYouMean, strings.Join(displaySuggestions, "\n  "))
+				}
+				p.addError(fmt.Errorf("%s", formatted))
 			} else {
 				// No similar commands found, show available subcommands
 				p.addError(errs.ErrCommandExpectsSubcommand.WithArgs(currentCmd.Name, currentCmd.Subcommands))
@@ -1372,6 +2002,11 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 		p.addError(err)
 	}
 
+	// Merge translation registry
+	if nestedCmdLine.translationRegistry != nil && p.translationRegistry != nil {
+		p.translationRegistry.Merge(nestedCmdLine.translationRegistry)
+	}
+
 	return nil
 }
 
@@ -1462,6 +2097,7 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 		WithDescription(c.Description),
 		WithDefaultValue(c.Default),
 		WithDescriptionKey(c.DescriptionKey),
+		WithNameKey(c.NameKey),
 		WithDependencyMap(c.DependsOn),
 		WithShortFlag(c.Short),
 		WithRequired(c.Required),
@@ -1517,21 +2153,40 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 	return arg, nil
 }
 
+// CommandConfig holds configuration for building a command
+type CommandConfig struct {
+	Path           string
+	Description    string
+	DescriptionKey string
+	NameKey        string
+	Parent         *Command
+}
+
 func (p *Parser) buildCommand(commandPath, description, descriptionKey string, parent *Command) (*Command, error) {
-	if commandPath == "" {
+	// Backward compatibility wrapper
+	return p.buildCommandFromConfig(&CommandConfig{
+		Path:           commandPath,
+		Description:    description,
+		DescriptionKey: descriptionKey,
+		Parent:         parent,
+	})
+}
+
+func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error) {
+	if config.Path == "" {
 		return nil, errs.ErrEmptyCommandPath
 	}
 
-	commandNames := strings.Split(commandPath, " ")
+	commandNames := strings.Split(config.Path, " ")
 
-	var topParent = parent
+	var topParent = config.Parent
 	var currentCommand *Command
 
 	for _, cmdName := range commandNames {
 		found := false
 
 		// If we're at the top level (parent is nil)
-		if parent == nil {
+		if config.Parent == nil {
 			// Look for the command at the top level
 			if cmd, exists := p.registeredCommands.Get(cmdName); exists {
 				currentCommand = cmd
@@ -1539,20 +2194,21 @@ func (p *Parser) buildCommand(commandPath, description, descriptionKey string, p
 			} else {
 				// Create a new top-level command
 				newCommand := &Command{
-					Name: cmdName,
+					Name:    cmdName,
+					NameKey: config.NameKey,
 				}
 
-				p.resolveCommandDescription(description, newCommand, cmdName, descriptionKey)
+				p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
 				p.registeredCommands.Set(cmdName, newCommand)
 				currentCommand = newCommand
 			}
 		} else {
-			if cmdName == parent.Name {
+			if cmdName == config.Parent.Name {
 				continue
 			}
-			for idx, subCmd := range parent.Subcommands {
+			for idx, subCmd := range config.Parent.Subcommands {
 				if subCmd.Name == cmdName {
-					currentCommand = &parent.Subcommands[idx] // Use the existing subcommand
+					currentCommand = &config.Parent.Subcommands[idx] // Use the existing subcommand
 					found = true
 					break
 				}
@@ -1561,12 +2217,13 @@ func (p *Parser) buildCommand(commandPath, description, descriptionKey string, p
 			if !found {
 				newCommand := &Command{
 					Name:        cmdName,
+					NameKey:     config.NameKey,
 					Subcommands: []Command{},
-					path:        commandPath,
+					path:        config.Path,
 				}
-				p.resolveCommandDescription(description, newCommand, cmdName, descriptionKey)
-				parent.Subcommands = append(parent.Subcommands, *newCommand)
-				currentCommand = &parent.Subcommands[len(parent.Subcommands)-1] // Update currentCommand to point to the new subcommand
+				p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
+				config.Parent.Subcommands = append(config.Parent.Subcommands, *newCommand)
+				currentCommand = &config.Parent.Subcommands[len(config.Parent.Subcommands)-1] // Update currentCommand to point to the new subcommand
 			}
 		}
 
@@ -1576,11 +2233,11 @@ func (p *Parser) buildCommand(commandPath, description, descriptionKey string, p
 		}
 
 		// Move to the next level in the hierarchy
-		parent = currentCommand
+		config.Parent = currentCommand
 	}
 
 	// Add the top-level command if not already registered
-	if topParent != nil && parent == nil {
+	if topParent != nil && config.Parent == nil {
 		if _, exists := p.registeredCommands.Get(topParent.Name); !exists {
 			p.registeredCommands.Set(topParent.Name, topParent)
 		}
@@ -1854,7 +2511,13 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 
 	if unwrappedValue.Type() == reflect.TypeOf(Command{}) {
 		cmd := unwrappedValue.Interface().(Command)
-		_, err := p.buildCommand(cmd.path, cmd.Description, cmd.DescriptionKey, nil)
+		_, err := p.buildCommandFromConfig(&CommandConfig{
+			Path:           cmd.path,
+			Description:    cmd.Description,
+			DescriptionKey: cmd.DescriptionKey,
+			NameKey:        cmd.NameKey,
+			Parent:         nil,
+		})
 		if err != nil {
 			return errs.ErrProcessingCommand.WithArgs(cmd.path).Wrap(err)
 		}
@@ -1927,7 +2590,13 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				}
 			}
 
-			buildCmd, err := p.buildCommand(cmdPath, cmd.Description, cmd.DescriptionKey, parent)
+			buildCmd, err := p.buildCommandFromConfig(&CommandConfig{
+				Path:           cmdPath,
+				Description:    cmd.Description,
+				DescriptionKey: cmd.DescriptionKey,
+				NameKey:        cmd.NameKey,
+				Parent:         parent,
+			})
 			if err != nil {
 				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
 			}
@@ -1968,7 +2637,13 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			}
 
 			// Build and register the command
-			buildCmd, err := p.buildCommand(cmdPath, config.Description, config.DescriptionKey, parent)
+			buildCmd, err := p.buildCommandFromConfig(&CommandConfig{
+				Path:           cmdPath,
+				Description:    config.Description,
+				DescriptionKey: config.DescriptionKey,
+				NameKey:        config.NameKey,
+				Parent:         parent,
+			})
 			if err != nil {
 				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
 			}
@@ -2722,4 +3397,81 @@ func extractFlagPrefix(flagName string) string {
 		return strings.Join(parts[:len(parts)-1], ".")
 	}
 	return ""
+}
+
+// checkNamingConsistency checks if explicit flag and command names follow the naming convention
+// defined by the converters. Returns warnings for any inconsistencies found.
+func (p *Parser) checkNamingConsistency() []string {
+	var warnings []string
+
+	// Check flags
+	for kv := p.acceptedFlags.Front(); kv != nil; kv = kv.Next() {
+		flagName := *kv.Key
+		flagInfo := kv.Value
+
+		// Skip command-specific flags (handle them with their command context)
+		if strings.Contains(flagName, "@") {
+			parts := strings.Split(flagName, "@")
+			if len(parts) == 2 {
+				flagName = parts[0]
+			}
+		}
+
+		// Check if the flag name matches what the converter would produce
+		// This indicates the flag was explicitly named (not generated from struct field)
+		converted := p.flagNameConverter(flagName)
+		if flagName != converted {
+			warnings = append(warnings,
+				fmt.Sprintf("Flag '--%s' doesn't follow naming convention (converter would produce '--%s')",
+					flagName, converted))
+		}
+
+		// Check flag translations
+		if p.translationRegistry != nil && flagInfo.Argument.NameKey != "" {
+			currentLang := p.GetLanguage()
+			if currentLang != language.Und {
+				translation, ok := p.translationRegistry.GetFlagTranslation(*kv.Key, currentLang)
+				if ok && translation != "" && translation != flagName {
+					convertedTranslation := p.flagNameConverter(translation)
+					if translation != convertedTranslation {
+						warnings = append(warnings,
+							fmt.Sprintf("Translation '--%s' for flag '--%s' doesn't follow naming convention (converter would produce '--%s')",
+								translation, flagName, convertedTranslation))
+					}
+				}
+			}
+		}
+	}
+
+	// Check commands
+	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		cmdName := *kv.Key
+		cmd := kv.Value
+
+		// Check if the command name matches what the converter would produce
+		converted := p.commandNameConverter(cmdName)
+		if cmdName != converted {
+			warnings = append(warnings,
+				fmt.Sprintf("Command '%s' doesn't follow naming convention (converter would produce '%s')",
+					cmdName, converted))
+		}
+
+		// Check command translations
+		if p.translationRegistry != nil && cmd.NameKey != "" {
+			currentLang := p.GetLanguage()
+			if currentLang != language.Und {
+				translation, ok := p.translationRegistry.GetCommandTranslation(cmdName, currentLang)
+				if ok && translation != "" && translation != cmdName {
+					convertedTranslation := p.commandNameConverter(translation)
+					if translation != convertedTranslation {
+						warnings = append(warnings,
+							fmt.Sprintf("Translation '%s' for command '%s' doesn't follow naming convention (converter would produce '%s')",
+								translation, cmdName, convertedTranslation))
+					}
+				}
+			}
+		}
+	}
+
+	return warnings
 }

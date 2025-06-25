@@ -12,11 +12,9 @@ import (
 func TestUpdateMessageProvider(t *testing.T) {
 	originalMsg := ErrEmptyFlag.Error()
 
-	// Create a bundle with Finnish as default language
+	// Create a Finnish bundle
 	bundle := i18n.NewEmptyBundle()
-	err := bundle.SetDefaultLanguage(language.Finnish)
-	assert.NoError(t, err)
-	err = bundle.AddLanguage(language.Finnish, map[string]string{
+	err := bundle.AddLanguage(language.Finnish, map[string]string{
 		"goopt.error.empty_flag":          "Tyhjä lippu",
 		"goopt.error.flag_already_exists": "Lippu on jo olemassa: %s",
 	})
@@ -24,7 +22,7 @@ func TestUpdateMessageProvider(t *testing.T) {
 
 	// Create a message provider from the bundle
 	provider := i18n.NewLayeredMessageProvider(bundle, nil, nil)
-
+	provider.SetDefaultLanguage(language.Finnish)
 	// Check that the error message has changed
 	newMsg := ErrEmptyFlag.Format(provider)
 	assert.NotEqual(t, originalMsg, newMsg, "Expected error message to change after formatting with new provider, but got same: %s", newMsg)

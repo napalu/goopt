@@ -66,6 +66,13 @@ func WithCommandDescriptionKey(descriptionKey string) ConfigureCommandFunc {
 	}
 }
 
+// WithCommandNameKey sets a translation key for the command's name to support localization.
+func WithCommandNameKey(nameKey string) ConfigureCommandFunc {
+	return func(command *Command) {
+		command.NameKey = nameKey
+	}
+}
+
 // WithSubcommands function takes a list of subcommands and associates them with a command.
 func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {

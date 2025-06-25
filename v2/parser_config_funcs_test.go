@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	esLocale "github.com/napalu/goopt/v2/i18n/locales/es"
 	"strings"
 	"testing"
 
@@ -483,17 +484,14 @@ func TestWithLanguage(t *testing.T) {
 		p, err := NewParserWith(WithLanguage(language.German))
 		assert.NoError(t, err)
 
-		// The parser should have German as the default language
-		bundle := p.GetSystemBundle()
-		assert.Equal(t, language.German, bundle.GetDefaultLanguage())
+		assert.Equal(t, language.German, p.GetLanguage())
 	})
 
 	t.Run("set language to French", func(t *testing.T) {
 		p, err := NewParserWith(WithLanguage(language.French))
 		assert.NoError(t, err)
 
-		bundle := p.GetSystemBundle()
-		assert.Equal(t, language.French, bundle.GetDefaultLanguage())
+		assert.Equal(t, language.French, p.GetLanguage())
 	})
 }
 
@@ -607,4 +605,134 @@ func TestWithExecOnParseComplete(t *testing.T) {
 		// Callback should have executed during parse due to WithExecOnParse
 		assert.True(t, executed)
 	})
+}
+
+func TestWithHelpConfig(t *testing.T) {
+	t.Run("WithHelpConfig sets configuration", func(t *testing.T) {
+		config := HelpConfig{
+			Style:            HelpStyleCompact,
+			ShowDefaults:     false,
+			ShowShortFlags:   false,
+			ShowRequired:     false,
+			ShowDescription:  false,
+			MaxGlobals:       5,
+			GroupSharedFlags: false,
+			CompactThreshold: 10,
+		}
+
+		parser, err := NewParserWith(
+			WithHelpConfig(config),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, parser)
+
+		// Verify config was set
+		actualConfig := parser.GetHelpConfig()
+		assert.Equal(t, HelpStyleCompact, actualConfig.Style)
+		assert.False(t, actualConfig.ShowDefaults)
+		assert.False(t, actualConfig.ShowShortFlags)
+		assert.False(t, actualConfig.ShowRequired)
+		assert.False(t, actualConfig.ShowDescription)
+		assert.Equal(t, 5, actualConfig.MaxGlobals)
+		assert.False(t, actualConfig.GroupSharedFlags)
+		assert.Equal(t, 10, actualConfig.CompactThreshold)
+	})
+}
+
+func TestWithSuggestionsFormatter(t *testing.T) {
+	parser, err := NewParserWith(
+		WithSuggestionsFormatter(func(suggestions []string) string {
+			return "Did you mean: " + suggestions[0]
+		}),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+}
+
+func TestWithCheckSystemLocale(t *testing.T) {
+	parser, err := NewParserWith(
+		WithCheckSystemLocale(),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+}
+
+func TestWithLanguageEnvVar(t *testing.T) {
+	parser, err := NewParserWith(
+		WithLanguageEnvVar("MY_LANG"),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+}
+
+func TestWithSystemLocales(t *testing.T) {
+	parser := NewParser()
+
+	// Use complete Spanish translations from the es package
+	spanishLocale := i18n.NewLocale(esLocale.Tag, esLocale.SystemTranslations)
+
+	// Apply locale
+	var err error
+	configFunc := WithSystemLocales(spanishLocale)
+	configFunc(parser, &err)
+
+	assert.NoError(t, err)
+
+	// Verify Spanish was added
+	bundle := parser.GetSystemBundle()
+	assert.True(t, bundle.HasLanguage(language.Spanish))
+
+	// Test that Spanish messages are accessible
+	parser.SetLanguage(language.Spanish)
+	translator := parser.GetTranslator()
+
+	// Test a few Spanish messages
+	assert.Equal(t, "opcional", translator.T("goopt.msg.optional"))
+	assert.Equal(t, "requerido", translator.T("goopt.msg.required"))
+}
+
+func TestWithSystemLocales_LanguageOverrides(t *testing.T) {
+	parser := NewParser()
+
+	// First add complete Spanish translations
+	spanishLocale := i18n.NewLocale(esLocale.Tag, esLocale.SystemTranslations)
+
+	var err error
+	configFunc := WithSystemLocales(spanishLocale)
+	configFunc(parser, &err)
+	assert.NoError(t, err)
+
+	// Now override specific Spanish messages
+	spanishOverrides := i18n.NewLocale(language.Spanish, `{
+		"goopt.msg.optional": "opcional (personalizado)",
+		"goopt.msg.required": "requerido (personalizado)"
+	}`)
+
+	configFunc = WithSystemLocales(spanishOverrides)
+	configFunc(parser, &err)
+	assert.NoError(t, err)
+
+	// Verify overrides work
+	parser.SetLanguage(language.Spanish)
+	translator := parser.GetTranslator()
+
+	assert.Equal(t, "opcional (personalizado)", translator.T("goopt.msg.optional"))
+	assert.Equal(t, "requerido (personalizado)", translator.T("goopt.msg.required"))
+
+	// Verify other messages still work (not overridden)
+	assert.Equal(t, "Comandos", translator.T("goopt.msg.commands"))
+}
+
+func TestWithSystemLocales_InvalidJSON(t *testing.T) {
+	parser := NewParser()
+
+	// Create locale with invalid JSON
+	invalidLocale := i18n.NewLocale(language.Spanish, `{invalid json}`)
+
+	// Apply locale
+	var err error
+	configFunc := WithSystemLocales(invalidLocale)
+	configFunc(parser, &err)
+
+	assert.Error(t, err)
 }

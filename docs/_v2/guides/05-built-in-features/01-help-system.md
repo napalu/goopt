@@ -187,6 +187,95 @@ myapp --help --style compact
 myapp --help --help
 ```
 
+### Command and Flag Suggestions
+
+`goopt` automatically helps users when they mistype commands or flags by suggesting similar alternatives.
+
+```bash
+# User types a wrong command
+$ myapp serverr start
+Error: Unknown command "serverr". Did you mean "server"?
+
+# User types a wrong flag
+$ myapp --verbse
+Error: unknown flag: verbse. Did you mean one of these?
+  --verbose
+  --version
+```
+
+The suggestion system uses intelligent matching (Levenshtein distance) to find the most likely intended command or flag, making your CLI more user-friendly and reducing frustration from typos. This feature works both during normal parsing and when displaying help.
+
+#### Customizing Suggestion Thresholds
+
+You can control how fuzzy the suggestion matching should be by setting custom thresholds:
+
+```go
+// Set different thresholds for flags and commands
+parser.SetSuggestionThreshold(3, 2)  // Flags: max distance 3, Commands: max distance 2
+
+// Or during parser creation
+parser, _ := goopt.NewParserWith(
+    goopt.WithSuggestionThreshold(3, 2),
+)
+
+// Disable suggestions entirely
+parser.SetSuggestionThreshold(0, 0)  // No suggestions for either flags or commands
+```
+
+The default threshold is 2 for both flags and commands, which provides good suggestions without being too permissive. The system also uses conservative filtering - if there are suggestions with distance 1, it won't show suggestions with distance 2 or higher.
+
+#### Customizing Suggestion Formatting
+
+By default, suggestions are displayed as a comma-separated list in square brackets. You can customize this formatting to match your CLI's style:
+
+```go
+// Default format
+// "unknown flag: verbse. Did you mean one of these? [--verbose, --version]"
+
+// Bullet list format
+parser.SetSuggestionsFormatter(func(suggestions []string) string {
+    return "\n  • " + strings.Join(suggestions, "\n  • ")
+})
+// Result: "unknown flag: verbse. Did you mean one of these? [
+//   • --verbose
+//   • --version]"
+
+// Numbered list format
+parser.SetSuggestionsFormatter(func(suggestions []string) string {
+    var result []string
+    for i, s := range suggestions {
+        result = append(result, fmt.Sprintf("%d. %s", i+1, s))
+    }
+    return "\n  " + strings.Join(result, "\n  ")
+})
+
+// Alternative phrasing
+parser.SetSuggestionsFormatter(func(suggestions []string) string {
+    return "'" + strings.Join(suggestions, "' or '") + "'"
+})
+// Result: "unknown flag: verbse. Did you mean one of these? ['--verbose' or '--version']"
+
+// Or set it during parser creation
+parser, _ := goopt.NewParserWith(
+    goopt.WithSuggestionsFormatter(func(suggestions []string) string {
+        if len(suggestions) == 1 {
+            return suggestions[0]
+        }
+        return suggestions[0] + " (or " + strings.Join(suggestions[1:], ", ") + ")"
+    }),
+)
+```
+
+The formatter receives a slice of suggestions that are already properly formatted with their prefixes (e.g., `--verbose`, `-v`), so you only need to decide how to combine and display them.
+
+This formatter is used consistently throughout goopt:
+- When displaying suggestions for unknown flags during parsing
+- When displaying suggestions for unknown commands during parsing  
+- When the help system shows suggestions for invalid commands
+- In all error messages that include "did you mean" suggestions
+
+This ensures a consistent user experience across your entire CLI.
+
 ### Version Integration
 If you use the [Version Support]({{ site.baseurl }}/v2/05-built-in-features/02-version-support/) feature, you can configure it to display the version in the help header.
 ```go

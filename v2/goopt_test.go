@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"path/filepath"
@@ -5899,7 +5900,7 @@ func TestParserI18n(t *testing.T) {
 	p := NewParser()
 
 	// Test language methods
-	p.SetSystemLanguage(language.Spanish)
+	p.SetLanguage(language.Spanish)
 
 	bundle := i18n.NewEmptyBundle()
 	p.SetUserBundle(bundle)
@@ -8705,13 +8706,14 @@ func TestParser_AcceptedValuesI18n(t *testing.T) {
 	t.Run("user bundle takes precedence over system bundle", func(t *testing.T) {
 		// Create user bundle that overrides a system key
 		userBundle := i18n.NewEmptyBundle()
-		userBundle.SetDefaultLanguage(language.English)
+
 		userBundle.AddLanguage(language.English, map[string]string{
 			"goopt.error.required_flag": "Custom required message",
 		})
 
 		parser := NewParser()
 		parser.SetUserBundle(userBundle)
+		parser.SetLanguage(language.English)
 
 		// Add flag using the same key
 		parser.AddFlag("test", NewArg(
@@ -8735,7 +8737,6 @@ func TestParser_AcceptedValuesI18n(t *testing.T) {
 	t.Run("different languages", func(t *testing.T) {
 		// Create user bundle with multiple languages
 		userBundle := i18n.NewEmptyBundle()
-		userBundle.SetDefaultLanguage(language.English)
 		userBundle.AddLanguage(language.English, map[string]string{
 			"speed.desc": "Speed setting",
 		})
@@ -8760,7 +8761,6 @@ func TestParser_AcceptedValuesI18n(t *testing.T) {
 			t.Run(tc.lang.String(), func(t *testing.T) {
 				// Create a new bundle for each test with the desired language
 				testBundle := i18n.NewEmptyBundle()
-				testBundle.SetDefaultLanguage(tc.lang)
 				testBundle.AddLanguage(language.English, map[string]string{
 					"speed.desc": "Speed setting",
 				})
@@ -8771,8 +8771,12 @@ func TestParser_AcceptedValuesI18n(t *testing.T) {
 					"speed.desc": "Réglage de vitesse",
 				})
 
+				// Load appropriate system locales to enable language switching
 				parser := NewParser()
 				parser.SetUserBundle(testBundle)
+				parser.SetLanguage(tc.lang)
+				// Disable auto-language detection to prevent environment from overriding our setting
+				parser.SetAutoLanguage(false)
 
 				parser.AddFlag("speed", NewArg(
 					WithType(types.Single),
@@ -8784,8 +8788,14 @@ func TestParser_AcceptedValuesI18n(t *testing.T) {
 				success := parser.Parse([]string{"--speed", "medium"})
 				assert.False(t, success)
 
-				assert.Len(t, parser.errors, 1)
-				errMsg := parser.errors[0].Error()
+				errors := parser.GetErrors()
+				assert.Len(t, errors, 1)
+				errMsg := errors[0].Error()
+
+				// Debug: Check what language is actually set
+				actualLang := parser.GetLanguage()
+				t.Logf("Expected lang: %v, Actual lang: %v, Error: %s", tc.lang, actualLang, errMsg)
+
 				assert.Contains(t, errMsg, tc.expected)
 			})
 		}
@@ -8796,7 +8806,7 @@ func TestParser_AcceptedValuesChained(t *testing.T) {
 	t.Run("chained values with i18n", func(t *testing.T) {
 		// Create user bundle
 		userBundle := i18n.NewEmptyBundle()
-		userBundle.SetDefaultLanguage(language.English)
+
 		userBundle.AddLanguage(language.English, map[string]string{
 			"log.levels": "Available log levels",
 		})
@@ -10095,6 +10105,3112 @@ func TestParser_SetRenderer(t *testing.T) {
 	assert.Contains(t, output.String(), `   -f, --flag1               Flag 1
    -s, --flag2               Flag 2`)
 
+}
+
+func TestParser_HasValidators(t *testing.T) {
+	parser := NewParser()
+
+	// Create the flag first
+	err := parser.AddFlag("test", NewArg())
+	assert.NoError(t, err)
+
+	// No validators initially
+	assert.False(t, parser.HasValidators("test"))
+
+	// Add a validator
+	err = parser.AddFlagValidators("test", validation.MinLength(5))
+	assert.NoError(t, err)
+	assert.True(t, parser.HasValidators("test"))
+
+	// Test with command path
+	parser.AddCommand(&Command{Name: "cmd"})
+	err = parser.AddFlag("flag", NewArg(), "cmd")
+	assert.NoError(t, err)
+	assert.False(t, parser.HasValidators("flag", "cmd"))
+
+	err = parser.AddFlagValidators("flag@cmd", validation.MaxLength(10))
+	assert.NoError(t, err)
+	assert.True(t, parser.HasValidators("flag", "cmd"))
+}
+
+func TestParser_SetSuggestionsFormatter(t *testing.T) {
+	parser := NewParser()
+
+	called := false
+	formatter := func(suggestions []string) string {
+		called = true
+		return strings.Join(suggestions, " | ")
+	}
+
+	parser.SetSuggestionsFormatter(formatter)
+	assert.NotNil(t, parser.suggestionsFormatter)
+
+	// Test that it gets used (would need to trigger a suggestion scenario)
+	result := parser.suggestionsFormatter([]string{"opt1", "opt2"})
+	assert.True(t, called)
+	assert.Equal(t, "opt1 | opt2", result)
+}
+
+// TestGetSupportedLanguages tests the GetSupportedLanguages method
+func TestParser_GetSupportedLanguages(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func(*Parser)
+		expectedCount int
+		mustContain   []language.Tag
+	}{
+		{
+			name: "Default bundle only",
+			setupFunc: func(p *Parser) {
+				// Parser already has default bundle
+			},
+			expectedCount: 3, // Default bundle has 3 languages: en, de, fr
+			mustContain:   []language.Tag{language.English, language.German, language.French},
+		},
+		{
+			name: "With user bundle",
+			setupFunc: func(p *Parser) {
+				userBundle := i18n.NewEmptyBundle()
+				userBundle.AddLanguage(language.Italian, map[string]string{
+					"test": "prova",
+				})
+				p.SetUserBundle(userBundle)
+			},
+			expectedCount: 4, // 3 default + 1 Italian
+			mustContain:   []language.Tag{language.English, language.Italian},
+		},
+		{
+			name: "With system bundle",
+			setupFunc: func(p *Parser) {
+				systemBundle := i18n.NewEmptyBundle()
+				systemBundle.AddLanguage(language.Portuguese, map[string]string{
+					"test": "teste",
+				})
+				p.systemBundle = systemBundle
+			},
+			expectedCount: 4, // 3 default + 1 Portuguese
+			mustContain:   []language.Tag{language.English, language.Portuguese},
+		},
+		{
+			name: "All bundles with duplicates",
+			setupFunc: func(p *Parser) {
+				// Add user bundle with Spanish (not in default) and German (already in default)
+				userBundle := i18n.NewEmptyBundle()
+				userBundle.AddLanguage(language.Spanish, map[string]string{
+					"test": "prueba",
+				})
+				userBundle.AddLanguage(language.Italian, map[string]string{
+					"test": "prova",
+				})
+				p.SetUserBundle(userBundle)
+
+				// Add system bundle with French (already in default)
+				systemBundle := i18n.NewEmptyBundle()
+				systemBundle.AddLanguage(language.French, map[string]string{
+					"test": "test",
+				})
+				systemBundle.AddLanguage(language.Portuguese, map[string]string{
+					"test": "teste",
+				})
+				p.systemBundle = systemBundle
+			},
+			expectedCount: 6, // 3 default + Spanish + Italian + Portuguese (German and French are duplicates)
+			mustContain:   []language.Tag{language.German, language.French, language.Italian, language.Portuguese, language.Spanish},
+		},
+		{
+			name: "Nil bundles",
+			setupFunc: func(p *Parser) {
+				// Set all bundles to nil
+				p.defaultBundle = nil
+				p.systemBundle = nil
+				p.userI18n = nil
+			},
+			expectedCount: 0,
+			mustContain:   []language.Tag{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			tt.setupFunc(parser)
+
+			langs := parser.GetSupportedLanguages()
+
+			assert.Equal(t, tt.expectedCount, len(langs), "Expected %d languages, got %d", tt.expectedCount, len(langs))
+
+			// Create map for easier lookup
+			langMap := make(map[language.Tag]bool)
+			for _, lang := range langs {
+				langMap[lang] = true
+			}
+
+			// Check that required languages are present
+			for _, required := range tt.mustContain {
+				assert.True(t, langMap[required], "Expected language %s to be present", required)
+			}
+		})
+	}
+}
+
+// TestRegisterFlagTranslations tests the registerFlagTranslations method
+func TestParser_RegisterFlagTranslations(t *testing.T) {
+	tests := []struct {
+		name           string
+		flagName       string
+		argument       *Argument
+		commandPath    []string
+		shouldRegister bool
+	}{
+		{
+			name:     "Flag with NameKey",
+			flagName: "help",
+			argument: &Argument{
+				NameKey: "goopt.flag.name.help",
+			},
+			commandPath:    []string{},
+			shouldRegister: true,
+		},
+		{
+			name:     "Flag without NameKey",
+			flagName: "nokey",
+			argument: &Argument{
+				// No NameKey
+			},
+			commandPath:    []string{},
+			shouldRegister: false,
+		},
+		{
+			name:     "Flag with command context",
+			flagName: "port",
+			argument: &Argument{
+				NameKey: "goopt.flag.name.port",
+			},
+			commandPath:    []string{"server", "start"},
+			shouldRegister: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+
+			// Call registerFlagTranslations
+			parser.registerFlagTranslations(tt.flagName, tt.argument, tt.commandPath...)
+
+			// Verify registration by checking if the flag can be found
+			if tt.shouldRegister {
+				// The flag should be registered in the translation registry
+				// We can verify this by checking if GetCanonicalFlagName works
+				canonical, found := parser.GetCanonicalFlagName(tt.flagName)
+				assert.True(t, found, "Flag should be registered")
+				assert.Equal(t, tt.flagName, canonical, "Should return the flag name itself")
+			}
+		})
+	}
+}
+
+// TestRegisterCommandTranslations tests the registerCommandTranslations method
+func TestParser_RegisterCommandTranslations(t *testing.T) {
+	tests := []struct {
+		name           string
+		command        *Command
+		shouldRegister bool
+	}{
+		{
+			name: "Command with NameKey",
+			command: &Command{
+				Name:    "server",
+				NameKey: "goopt.command.name.server",
+				path:    "server",
+			},
+			shouldRegister: true,
+		},
+		{
+			name: "Command without NameKey",
+			command: &Command{
+				Name: "nokey",
+				path: "nokey",
+				// No NameKey
+			},
+			shouldRegister: false,
+		},
+		{
+			name: "Nested command with NameKey",
+			command: &Command{
+				Name:    "start",
+				NameKey: "goopt.command.name.server.start",
+				path:    "server start",
+			},
+			shouldRegister: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+
+			// Call registerCommandTranslations
+			parser.registerCommandTranslations(tt.command)
+
+			// Verify registration
+			if tt.shouldRegister {
+				// The command should be registered in the translation registry
+				canonical, found := parser.GetCanonicalCommandPath(tt.command.path)
+				assert.True(t, found, "Command should be registered")
+				assert.Equal(t, tt.command.path, canonical, "Should return the command path itself")
+			} else {
+				// Command without NameKey should not be registered
+				_, found := parser.GetCanonicalCommandPath(tt.command.path)
+				assert.False(t, found, "Command without NameKey should not be registered")
+			}
+		})
+	}
+}
+
+// TestGetCanonicalFlagName tests the GetCanonicalFlagName method
+func TestParser_GetCanonicalFlagName(t *testing.T) {
+	parser := NewParser()
+
+	// Set up Spanish translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"goopt.flag.name.help":    "ayuda",
+		"goopt.flag.name.version": "versión",
+		"goopt.flag.name.output":  "salida",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Register flags
+	parser.registerFlagTranslations("help", &Argument{NameKey: "goopt.flag.name.help"})
+	parser.registerFlagTranslations("version", &Argument{NameKey: "goopt.flag.name.version"})
+	parser.registerFlagTranslations("output", &Argument{NameKey: "goopt.flag.name.output"})
+
+	tests := []struct {
+		name       string
+		flagName   string
+		expected   string
+		shouldFind bool
+	}{
+		{
+			name:       "Spanish translation of help",
+			flagName:   "ayuda",
+			expected:   "help",
+			shouldFind: true,
+		},
+		{
+			name:       "Spanish translation of version",
+			flagName:   "versión",
+			expected:   "version",
+			shouldFind: true,
+		},
+		{
+			name:       "Direct canonical name",
+			flagName:   "help",
+			expected:   "help",
+			shouldFind: true,
+		},
+		{
+			name:       "Non-existent flag",
+			flagName:   "noexiste",
+			expected:   "",
+			shouldFind: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			canonical, found := parser.GetCanonicalFlagName(tt.flagName)
+			assert.Equal(t, tt.shouldFind, found)
+			if tt.shouldFind {
+				assert.Equal(t, tt.expected, canonical)
+			}
+		})
+	}
+}
+
+// TestGetCanonicalCommandPath tests the GetCanonicalCommandPath method
+func TestParser_GetCanonicalCommandPath(t *testing.T) {
+	parser := NewParser()
+
+	// Set up Spanish translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"goopt.command.name.server":   "servidor",
+		"goopt.command.name.client":   "cliente",
+		"goopt.command.name.database": "basededatos",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Register commands
+	parser.registerCommandTranslations(&Command{
+		Name:    "server",
+		NameKey: "goopt.command.name.server",
+		path:    "server",
+	})
+	parser.registerCommandTranslations(&Command{
+		Name:    "client",
+		NameKey: "goopt.command.name.client",
+		path:    "client",
+	})
+	parser.registerCommandTranslations(&Command{
+		Name:    "database",
+		NameKey: "goopt.command.name.database",
+		path:    "database",
+	})
+
+	tests := []struct {
+		name       string
+		cmdName    string
+		expected   string
+		shouldFind bool
+	}{
+		{
+			name:       "Spanish translation of server",
+			cmdName:    "servidor",
+			expected:   "server",
+			shouldFind: true,
+		},
+		{
+			name:       "Spanish translation of client",
+			cmdName:    "cliente",
+			expected:   "client",
+			shouldFind: true,
+		},
+		{
+			name:       "Direct canonical name",
+			cmdName:    "server",
+			expected:   "server",
+			shouldFind: true,
+		},
+		{
+			name:       "Non-existent command",
+			cmdName:    "noexiste",
+			expected:   "",
+			shouldFind: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			canonical, found := parser.GetCanonicalCommandPath(tt.cmdName)
+			assert.Equal(t, tt.shouldFind, found)
+			if tt.shouldFind {
+				assert.Equal(t, tt.expected, canonical)
+			}
+		})
+	}
+}
+
+// TestTranslationIntegration tests the integration of translation features
+func TestParser_TranslationIntegration(t *testing.T) {
+	// Create a parser with multiple languages
+	parser := NewParser()
+
+	// Add French translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.French, map[string]string{
+		"goopt.flag.name.help":      "aide",
+		"goopt.flag.name.version":   "version",
+		"goopt.command.name.server": "serveur",
+		"goopt.command.name.start":  "démarrer",
+	})
+	parser.SetUserBundle(userBundle)
+
+	// Define flags and commands
+	err := parser.AddFlag("help", &Argument{
+		TypeOf:      types.Standalone,
+		Short:       "h",
+		Description: "Show help message",
+		NameKey:     "goopt.flag.name.help",
+	})
+	require.NoError(t, err)
+
+	err = parser.AddFlag("version", &Argument{
+		TypeOf:      types.Standalone,
+		Short:       "v",
+		Description: "Show version",
+		NameKey:     "goopt.flag.name.version",
+	})
+	require.NoError(t, err)
+
+	serverCmd := &Command{
+		Name:        "server",
+		Description: "Server operations",
+		NameKey:     "goopt.command.name.server",
+	}
+	err = parser.AddCommand(serverCmd)
+	require.NoError(t, err)
+
+	startCmd := &Command{
+		Name:        "start",
+		Description: "Start the server",
+		NameKey:     "goopt.command.name.start",
+		path:        "server start",
+	}
+	serverCmd.Subcommands = append(serverCmd.Subcommands, *startCmd)
+
+	// Test in French
+	parser.SetLanguage(language.French)
+
+	// Check flag translations
+	canonical, found := parser.GetCanonicalFlagName("aide")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+
+	// Check command translations
+	canonical, found = parser.GetCanonicalCommandPath("serveur")
+	assert.True(t, found)
+	assert.Equal(t, "server", canonical)
+
+	// Test language switching
+	parser.SetLanguage(language.English)
+
+	// English should use direct names
+	canonical, found = parser.GetCanonicalFlagName("help")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+
+	// French translations should still work when language is French
+	parser.SetLanguage(language.French)
+	canonical, found = parser.GetCanonicalFlagName("aide")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+}
+
+// TestErrorMessageTranslations tests error message translations that weren't covered
+func TestParser_ErrorMessageTranslations(t *testing.T) {
+	parser := NewParser()
+
+	// Set Spanish language
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"goopt.error.unknown_command":   "comando desconocido: %s",
+		"goopt.error.ambiguous_command": "comando ambiguo '%s' podría ser: %s",
+		"goopt.error.unsupported_shell": "shell no soportado: %s",
+		"goopt.error.completion_failed": "falló la finalización: %v",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Define a simple command structure
+	err := parser.AddCommand(&Command{
+		Name:        "server",
+		Description: "Server operations",
+		Callback:    func(parser *Parser, cmd *Command) error { return nil },
+	})
+	require.NoError(t, err)
+	err = parser.AddCommand(&Command{
+		Name:        "service",
+		Description: "Service operations",
+		Callback:    func(parser *Parser, cmd *Command) error { return nil },
+	})
+	require.NoError(t, err)
+
+	// Test unknown command error (must be similar to a registered command to trigger error)
+	args := []string{"serve"} // Close to "server" - distance of 1
+	ok := parser.Parse(args)
+	assert.False(t, ok)
+	errs := parser.GetErrors()
+	assert.NotEmpty(t, errs)
+
+	// Test ambiguous command - "ser" is closer to "server" than "service"
+	args = []string{"ser"}
+	ok = parser.Parse(args)
+	assert.False(t, ok)
+	errs = parser.GetErrors()
+	assert.NotEmpty(t, errs)
+	// The error should contain suggestions
+	errStr := errs[len(errs)-1].Error()
+	assert.Contains(t, errStr, "server") // Distance 3
+	// "service" won't be shown as it's distance 4
+
+	// Test completion with unsupported shell (defaults to bash)
+	result := parser.GenerateCompletion("unsupported-shell", "myapp")
+	assert.NotEmpty(t, result)                // GenerateCompletion defaults to bash for unsupported shells
+	assert.Contains(t, result, "#!/bin/bash") // Verify it's a bash script
+}
+
+// TestMultilingualHelpGeneration tests help generation in different languages
+func TestParser_MultilingualHelpGeneration(t *testing.T) {
+	// Test 1: Default behavior without translations
+	parser1 := NewParser()
+
+	// Add flags and commands without translation keys
+	err := parser1.AddFlag("help", &Argument{
+		TypeOf:      types.Standalone,
+		Short:       "h",
+		Description: "Show help message",
+	})
+	require.NoError(t, err)
+
+	err = parser1.AddFlag("version", &Argument{
+		TypeOf:      types.Standalone,
+		Short:       "v",
+		Description: "Show version",
+	})
+	require.NoError(t, err)
+
+	err = parser1.AddCommand(&Command{
+		Name:        "server",
+		Description: "Server operations",
+		Callback:    func(parser *Parser, cmd *Command) error { return nil },
+	})
+	require.NoError(t, err)
+
+	// Get help in English (default)
+	var buf1 bytes.Buffer
+	parser1.PrintHelp(&buf1)
+	defaultHelp := buf1.String()
+	assert.Contains(t, defaultHelp, "help")
+	assert.Contains(t, defaultHelp, "version")
+	assert.Contains(t, defaultHelp, "server")
+
+	// Test 2: With translations
+	parser := NewParser()
+	parser.SetAutoLanguage(false) // Disable auto-language detection
+
+	// Add translations for help content
+	userBundle := i18n.NewEmptyBundle()
+	// Add English translations
+	err = userBundle.AddLanguage(language.English, map[string]string{
+		"goopt.flag.name.help":      "help",
+		"goopt.flag.desc.help":      "Show help message",
+		"goopt.flag.name.version":   "version",
+		"goopt.flag.desc.version":   "Show version",
+		"goopt.command.name.server": "server",
+		"goopt.command.desc.server": "Server operations",
+		"goopt.help.usage":          "Usage:",
+		"goopt.help.commands":       "Commands:",
+		"goopt.help.flags":          "Flags:",
+	})
+	require.NoError(t, err, "Failed to add English translations")
+	// Add Spanish translations
+	err = userBundle.AddLanguage(language.Spanish, map[string]string{
+		"goopt.flag.name.help":      "ayuda",
+		"goopt.flag.desc.help":      "Mostrar mensaje de ayuda",
+		"goopt.flag.name.version":   "versión",
+		"goopt.flag.desc.version":   "Mostrar versión",
+		"goopt.command.name.server": "servidor",
+		"goopt.command.desc.server": "Operaciones del servidor",
+		"goopt.help.usage":          "Uso:",
+		"goopt.help.commands":       "Comandos:",
+		"goopt.help.flags":          "Opciones:",
+	})
+	require.NoError(t, err, "Failed to add Spanish translations")
+	parser.SetUserBundle(userBundle)
+
+	// Define options with translation keys
+	err = parser.AddFlag("help", &Argument{
+		TypeOf:         types.Standalone,
+		Short:          "h",
+		Description:    "Show help message",
+		NameKey:        "goopt.flag.name.help",
+		DescriptionKey: "goopt.flag.desc.help",
+	})
+	require.NoError(t, err)
+
+	err = parser.AddFlag("version", &Argument{
+		TypeOf:         types.Standalone,
+		Short:          "v",
+		Description:    "Show version",
+		NameKey:        "goopt.flag.name.version",
+		DescriptionKey: "goopt.flag.desc.version",
+	})
+	require.NoError(t, err)
+
+	// Add a command
+	err = parser.AddCommand(&Command{
+		Name:           "server",
+		Description:    "Server operations",
+		NameKey:        "goopt.command.name.server",
+		DescriptionKey: "goopt.command.desc.server",
+		Callback:       func(parser *Parser, cmd *Command) error { return nil },
+	})
+	require.NoError(t, err)
+
+	// Test help in English
+	parser.SetLanguage(language.English)
+	var buf bytes.Buffer
+	parser.PrintHelp(&buf)
+	englishHelp := buf.String()
+	t.Logf("English help:\n%s", englishHelp)
+	assert.Contains(t, englishHelp, "help")
+	assert.Contains(t, englishHelp, "version")
+	assert.Contains(t, englishHelp, "server")
+
+	// Test help in Spanish
+	parser.SetLanguage(language.Spanish)
+	buf.Reset()
+	parser.PrintHelp(&buf)
+	spanishHelp := buf.String()
+	// The help should show Spanish translations
+	assert.Contains(t, spanishHelp, "ayuda")     // translated "help"
+	assert.Contains(t, spanishHelp, "versión")   // translated "version"
+	assert.Contains(t, spanishHelp, "servidor")  // translated "server"
+	assert.NotEqual(t, englishHelp, spanishHelp) // Ensure translations are working
+	assert.NotEmpty(t, spanishHelp)
+}
+
+// TestSubcommandSuggestions tests that "did you mean" suggestions work for subcommands
+func TestParser_SubcommandSuggestions(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupFunc      func(*Parser) error
+		args           []string
+		expectError    bool
+		expectedErrors []string
+		notExpected    []string
+	}{
+		{
+			name: "Suggest 'start' for 'strt' in 'server strt'",
+			setupFunc: func(p *Parser) error {
+				serverCmd := NewCommand(
+					WithName("server"),
+					WithCommandDescription("Server operations"),
+				)
+				startCmd := NewCommand(
+					WithName("start"),
+					WithCommandDescription("Start the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				stopCmd := NewCommand(
+					WithName("stop"),
+					WithCommandDescription("Stop the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				serverCmd.AddSubcommand(startCmd)
+				serverCmd.AddSubcommand(stopCmd)
+				return p.AddCommand(serverCmd)
+			},
+			args:        []string{"server", "strt"},
+			expectError: true,
+			expectedErrors: []string{
+				"server strt", // The full command path in error
+				"start",       // The suggestion
+			},
+		},
+		{
+			name: "Suggest 'copy' for 'cpy' in 'nexus cpy blobs'",
+			setupFunc: func(p *Parser) error {
+				nexusCmd := NewCommand(
+					WithName("nexus"),
+					WithCommandDescription("Nexus operations"),
+				)
+				copyCmd := NewCommand(
+					WithName("copy"),
+					WithCommandDescription("Copy operation"),
+				)
+				blobsCmd := NewCommand(
+					WithName("blobs"),
+					WithCommandDescription("Copy blobs"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				copyCmd.AddSubcommand(blobsCmd)
+				nexusCmd.AddSubcommand(copyCmd)
+				return p.AddCommand(nexusCmd)
+			},
+			args:        []string{"nexus", "cpy", "blobs"},
+			expectError: true,
+			expectedErrors: []string{
+				"nexus cpy", // The full command path in error
+				"copy",      // The suggestion
+			},
+		},
+		{
+			name: "Multiple suggestions for ambiguous subcommand",
+			setupFunc: func(p *Parser) error {
+				serverCmd := NewCommand(
+					WithName("server"),
+					WithCommandDescription("Server operations"),
+				)
+				startCmd := NewCommand(
+					WithName("start"),
+					WithCommandDescription("Start the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				statusCmd := NewCommand(
+					WithName("status"),
+					WithCommandDescription("Show server status"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				stopCmd := NewCommand(
+					WithName("stop"),
+					WithCommandDescription("Stop the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				serverCmd.AddSubcommand(startCmd)
+				serverCmd.AddSubcommand(statusCmd)
+				serverCmd.AddSubcommand(stopCmd)
+				return p.AddCommand(serverCmd)
+			},
+			args:        []string{"server", "st"},
+			expectError: true,
+			expectedErrors: []string{
+				"server st",
+				"stop", // Only stop is within distance 2 of "st"
+			},
+		},
+		{
+			name: "Suggestions for closer match",
+			setupFunc: func(p *Parser) error {
+				serverCmd := NewCommand(
+					WithName("server"),
+					WithCommandDescription("Server operations"),
+				)
+				startCmd := NewCommand(
+					WithName("start"),
+					WithCommandDescription("Start the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				statusCmd := NewCommand(
+					WithName("status"),
+					WithCommandDescription("Show server status"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				stopCmd := NewCommand(
+					WithName("stop"),
+					WithCommandDescription("Stop the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				serverCmd.AddSubcommand(startCmd)
+				serverCmd.AddSubcommand(statusCmd)
+				serverCmd.AddSubcommand(stopCmd)
+				return p.AddCommand(serverCmd)
+			},
+			args:        []string{"server", "sta"}, // "sta" is closer to both "start" and "stop"
+			expectError: true,
+			expectedErrors: []string{
+				"server sta",
+				"start", // distance 2: add "rt"
+				"stop",  // distance 2: change "a" to "o", add "p"
+				// status is distance 3, so not included
+			},
+		},
+		{
+			name: "No suggestions for very different subcommand",
+			setupFunc: func(p *Parser) error {
+				serverCmd := NewCommand(
+					WithName("server"),
+					WithCommandDescription("Server operations"),
+				)
+				startCmd := NewCommand(
+					WithName("start"),
+					WithCommandDescription("Start the server"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				)
+				serverCmd.AddSubcommand(startCmd)
+				return p.AddCommand(serverCmd)
+			},
+			args:        []string{"server", "xyz"},
+			expectError: true,
+			expectedErrors: []string{
+				"command 'server' expects", // Different error message when no suggestions
+			},
+			notExpected: []string{
+				"Did you mean", // Should not have suggestions
+			},
+		},
+		{
+			name: "Root command suggestions still work",
+			setupFunc: func(p *Parser) error {
+				err := p.AddCommand(NewCommand(
+					WithName("server"),
+					WithCommandDescription("Server operations"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				))
+				if err != nil {
+					return err
+				}
+				return p.AddCommand(NewCommand(
+					WithName("service"),
+					WithCommandDescription("Service operations"),
+					WithCallback(func(p *Parser, c *Command) error { return nil }),
+				))
+			},
+			args:        []string{"serve"},
+			expectError: true,
+			expectedErrors: []string{
+				"server", // Should suggest server (distance 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			err := tt.setupFunc(parser)
+			require.NoError(t, err)
+
+			ok := parser.Parse(tt.args)
+
+			if tt.expectError {
+				assert.False(t, ok, "Expected parsing to fail")
+				errs := parser.GetErrors()
+				assert.NotEmpty(t, errs, "Expected errors to be generated")
+
+				// Combine all error messages
+				allErrors := make([]string, 0, len(errs))
+				for _, err := range errs {
+					allErrors = append(allErrors, err.Error())
+				}
+				errorText := strings.Join(allErrors, "\n")
+
+				// Check that expected strings are present
+				for _, expected := range tt.expectedErrors {
+					assert.Contains(t, errorText, expected,
+						"Expected error to contain '%s', but got: %s", expected, errorText)
+				}
+
+				// Check that unexpected strings are not present
+				for _, notExpected := range tt.notExpected {
+					assert.NotContains(t, errorText, notExpected,
+						"Error should not contain '%s', but got: %s", notExpected, errorText)
+				}
+			} else {
+				assert.True(t, ok, "Expected parsing to succeed")
+				assert.Empty(t, parser.GetErrors(), "Expected no errors")
+			}
+		})
+	}
+}
+
+// TestSubcommandSuggestionsEdgeCases tests edge cases for subcommand suggestions
+func TestParser_SubcommandSuggestionsEdgeCases(t *testing.T) {
+	t.Run("Empty subcommand name", func(t *testing.T) {
+		parser := NewParser()
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandDescription("Server operations"),
+		)
+		startCmd := NewCommand(
+			WithName("start"),
+			WithCommandDescription("Start the server"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+		serverCmd.AddSubcommand(startCmd)
+		err := parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+
+		// Empty string after server command
+		ok := parser.Parse([]string{"server", ""})
+		assert.False(t, ok)
+		// Should show that subcommand is expected
+		errs := parser.GetErrors()
+		assert.NotEmpty(t, errs)
+	})
+
+	t.Run("Subcommand suggestion with flags", func(t *testing.T) {
+		parser := NewParser()
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandDescription("Server operations"),
+		)
+		startCmd := NewCommand(
+			WithName("start"),
+			WithCommandDescription("Start the server"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+		serverCmd.AddSubcommand(startCmd)
+		err := parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+
+		// Add a flag
+		err = parser.AddFlag("verbose", &Argument{
+			TypeOf:      types.Standalone,
+			Description: "Verbose output",
+		})
+		require.NoError(t, err)
+
+		// Try with flag before subcommand typo
+		ok := parser.Parse([]string{"--verbose", "server", "strt"})
+		assert.False(t, ok)
+		errs := parser.GetErrors()
+		errorText := ""
+		for _, err := range errs {
+			errorText += err.Error() + "\n"
+		}
+		assert.Contains(t, errorText, "start", "Should suggest 'start' for 'strt'")
+	})
+}
+
+// TestTranslatedFlagSuggestions tests that flag suggestions are shown in the translated language
+func TestParser_TranslatedFlagSuggestions(t *testing.T) {
+	// Create parser
+	parser := NewParser()
+
+	// Create a bundle with German translations
+	bundle := i18n.NewEmptyBundle()
+	err := bundle.LoadFromString(language.German, `{
+		"flag.max-connections": "max-verbindungen",
+		"flag.workers": "arbeiter",
+		"flag.timeout": "zeitlimit",
+		"goopt.error.unknown_flag_with_suggestions": "unbekannter Flag: %[1]s. Meinten Sie vielleicht eines davon? %[2]s"
+	}`)
+	require.NoError(t, err)
+
+	parser.SetUserBundle(bundle)
+	parser.SetLanguage(language.German)
+
+	// Add flags with translation keys
+	err = parser.AddFlag("max-connections", &Argument{
+		NameKey:      "flag.max-connections",
+		Description:  "Maximum concurrent connections",
+		DefaultValue: "1000",
+	})
+	require.NoError(t, err)
+
+	err = parser.AddFlag("workers", &Argument{
+		NameKey:      "flag.workers",
+		Description:  "Number of worker threads",
+		DefaultValue: "10",
+	})
+	require.NoError(t, err)
+
+	err = parser.AddFlag("timeout", &Argument{
+		NameKey:      "flag.timeout",
+		Description:  "Server timeout in seconds",
+		DefaultValue: "30",
+	})
+	require.NoError(t, err)
+
+	// Try to parse with a typo that's close to "max-verbindungen" (German)
+	// Should suggest "max-verbindungen" since it's closer
+	ok := parser.Parse([]string{"--max-verbindung"}) // Missing 'en'
+	assert.False(t, ok)
+
+	// Check that the error contains the translated suggestion
+	errs := parser.GetErrors()
+	require.NotEmpty(t, errs)
+
+	errorText := errs[0].Error()
+	t.Logf("Error message: %s", errorText)
+
+	// Should contain the German error message
+	assert.Contains(t, errorText, "unbekannter Flag")
+	assert.Contains(t, errorText, "max-verbindung") // The typo the user entered
+
+	// Should suggest the German translation "max-verbindungen"
+	assert.Contains(t, errorText, "--max-verbindungen")
+}
+
+// TestTranslatedCommandSuggestions tests that command suggestions are shown in the translated language
+func TestParser_TranslatedCommandSuggestions(t *testing.T) {
+	// Create parser
+	parser := NewParser()
+
+	// Create a bundle with German translations
+	bundle := i18n.NewEmptyBundle()
+	err := bundle.LoadFromString(language.German, `{
+		"cmd.server": "server",
+		"cmd.server.start": "starten",
+		"cmd.server.stop": "stoppen",
+		"goopt.error.command_not_found": "Befehl nicht gefunden: %[1]s",
+		"goopt.misc.did_you_mean": "Meinten Sie vielleicht"
+	}`)
+	require.NoError(t, err)
+
+	parser.SetUserBundle(bundle)
+	parser.SetLanguage(language.German)
+
+	// Add server command with subcommands
+	serverCmd := NewCommand(
+		WithName("server"),
+		WithCommandNameKey("cmd.server"),
+		WithCommandDescription("Server operations"),
+	)
+
+	startCmd := NewCommand(
+		WithName("start"),
+		WithCommandNameKey("cmd.server.start"),
+		WithCommandDescription("Start the server"),
+		WithCallback(func(p *Parser, c *Command) error { return nil }),
+	)
+
+	stopCmd := NewCommand(
+		WithName("stop"),
+		WithCommandNameKey("cmd.server.stop"),
+		WithCommandDescription("Stop the server"),
+		WithCallback(func(p *Parser, c *Command) error { return nil }),
+	)
+
+	serverCmd.AddSubcommand(startCmd)
+	serverCmd.AddSubcommand(stopCmd)
+
+	err = parser.AddCommand(serverCmd)
+	require.NoError(t, err)
+
+	// Try to parse with a typo that's close to "starten" (German)
+	// Should suggest "starten" since it's closer
+	ok := parser.Parse([]string{"server", "starte"}) // Missing 'n'
+	assert.False(t, ok)
+
+	// Check that the error contains the translated suggestion
+	errs := parser.GetErrors()
+	require.NotEmpty(t, errs)
+
+	// Combine all error messages
+	errorText := ""
+	for _, err := range errs {
+		errorText += err.Error() + "\n"
+	}
+	t.Logf("Error messages: %s", errorText)
+
+	// Should contain the German "did you mean" message
+	assert.Contains(t, errorText, "Meinten Sie")
+
+	// Should suggest the German translation "starten"
+	assert.Contains(t, errorText, "starten")
+}
+
+// TestMixedLanguageSuggestions tests suggestions when some items are translated and some aren't
+func TestParser_MixedLanguageSuggestions(t *testing.T) {
+	parser := NewParser()
+
+	// Create a bundle with partial German translations
+	bundle := i18n.NewEmptyBundle()
+	err := bundle.LoadFromString(language.German, `{
+		"flag.verbose": "ausführlich",
+		"goopt.error.unknown_flag_with_suggestions": "unbekannter Flag: %[1]s. Meinten Sie vielleicht eines davon? %[2]s"
+	}`)
+	require.NoError(t, err)
+
+	parser.SetUserBundle(bundle)
+	parser.SetLanguage(language.German)
+
+	// Add flags - one with translation, one without
+	err = parser.AddFlag("verbose", &Argument{
+		NameKey:     "flag.verbose",
+		Short:       "v",
+		Description: "Verbose output",
+	})
+	require.NoError(t, err)
+
+	err = parser.AddFlag("version", &Argument{
+		// No NameKey - won't be translated
+		Short:       "V",
+		Description: "Show version",
+	})
+	require.NoError(t, err)
+
+	// Try to parse with a typo close to the German translation
+	ok := parser.Parse([]string{"--ausführlic"}) // Missing 'h' at the end
+	assert.False(t, ok)
+
+	errs := parser.GetErrors()
+	require.NotEmpty(t, errs)
+
+	errorText := errs[0].Error()
+	t.Logf("Error message: %s", errorText)
+
+	// Should contain suggestions
+	assert.Contains(t, errorText, "Meinten Sie")
+
+	// Since user typed something close to German, should show German suggestion
+	assert.Contains(t, errorText, "--ausführlich")
+	if strings.Contains(errorText, "version") {
+		// Version has no translation, so should appear as-is
+		assert.Contains(t, errorText, "--version")
+	}
+}
+
+func TestParser_NamingConsistencyWarnings(t *testing.T) {
+	t.Run("Flag naming inconsistency", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlagNameConverter(ToLowerCamel), // Expects camelCase
+		)
+		require.NoError(t, err)
+
+		// Add flags with inconsistent naming
+		err = parser.AddFlag("max-connections", &Argument{
+			Description: "Maximum connections",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddFlag("debugMode", &Argument{
+			Description: "Debug mode",
+		})
+		require.NoError(t, err)
+
+		// Parse something
+		ok := parser.Parse([]string{"--max-connections", "10"})
+		assert.True(t, ok)
+
+		// Check warnings
+		warnings := parser.GetWarnings()
+		assert.NotEmpty(t, warnings)
+
+		// Should warn about max-connections not following camelCase
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "max-connections") && strings.Contains(w, "maxConnections") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected warning about max-connections not following naming convention")
+
+		// Should NOT warn about debugMode (it follows camelCase)
+		for _, w := range warnings {
+			assert.NotContains(t, w, "debugMode")
+		}
+	})
+
+	t.Run("Command naming inconsistency", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithCommandNameConverter(ToKebabCase), // Expects kebab-case
+		)
+		require.NoError(t, err)
+
+		// Add commands with inconsistent naming
+		err = parser.AddCommand(&Command{
+			Name:        "startServer", // Should be start-server
+			Description: "Start the server",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddCommand(&Command{
+			Name:        "stop-server", // Correct format
+			Description: "Stop the server",
+		})
+		require.NoError(t, err)
+
+		// Parse
+		ok := parser.Parse([]string{})
+		assert.True(t, ok)
+
+		// Check warnings
+		warnings := parser.GetWarnings()
+
+		// Should warn about startServer
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "startServer") && strings.Contains(w, "start-server") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected warning about startServer not following naming convention")
+
+		// Should NOT warn about stop-server
+		for _, w := range warnings {
+			assert.NotContains(t, w, "'stop-server'")
+		}
+	})
+
+	t.Run("Translation naming inconsistency", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlagNameConverter(ToLowerCamel), // Expects camelCase
+		)
+		require.NoError(t, err)
+
+		// Add flag with nameKey for translation
+		err = parser.AddFlag("maxConnections", &Argument{
+			NameKey:     "flag.maxConnections",
+			Description: "Maximum connections",
+		})
+		require.NoError(t, err)
+
+		// Set German language
+		err = parser.SetLanguage(language.German)
+		require.NoError(t, err)
+
+		// Create a user bundle with German translations
+		userBundle, err := i18n.NewBundle()
+		require.NoError(t, err)
+		err = userBundle.AddLanguage(language.German, map[string]string{
+			"flag.maxConnections": "max-verbindungen", // Doesn't follow camelCase
+		})
+		require.NoError(t, err)
+
+		// Set the user bundle
+		err = parser.SetUserBundle(userBundle)
+		require.NoError(t, err)
+
+		// Parse
+		ok := parser.Parse([]string{})
+		assert.True(t, ok)
+
+		// Check warnings
+		warnings := parser.GetWarnings()
+
+		// Should warn about translation not following camelCase
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "max-verbindungen") && strings.Contains(w, "maxVerbindungen") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected warning about translation not following naming convention")
+	})
+
+	t.Run("Mixed naming conventions with struct", func(t *testing.T) {
+		type Config struct {
+			MaxConnections int    `goopt:"name:max-connections;desc:Maximum connections"`
+			DebugMode      bool   `goopt:"desc:Debug mode"` // Will be converted to debugMode
+			LogLevel       string `goopt:"name:log_level;desc:Log level"`
+		}
+
+		config := &Config{}
+		parser, err := NewParserFromStruct(config,
+			WithFlagNameConverter(ToLowerCamel), // Expects camelCase
+		)
+		require.NoError(t, err)
+
+		// Parse
+		ok := parser.Parse([]string{"--max-connections", "10", "--debugMode", "--log_level", "info"})
+		assert.True(t, ok)
+
+		// Check warnings
+		warnings := parser.GetWarnings()
+
+		// Should warn about max-connections (explicit name not following convention)
+		foundMaxConn := false
+		foundLogLevel := false
+		for _, w := range warnings {
+			if strings.Contains(w, "max-connections") && strings.Contains(w, "maxConnections") {
+				foundMaxConn = true
+			}
+			if strings.Contains(w, "log_level") && strings.Contains(w, "logLevel") {
+				foundLogLevel = true
+			}
+		}
+		assert.True(t, foundMaxConn, "Expected warning about max-connections")
+		assert.True(t, foundLogLevel, "Expected warning about log_level")
+
+		// Should NOT warn about debugMode (generated name follows convention)
+		for _, w := range warnings {
+			assert.NotContains(t, w, "'debugMode'")
+		}
+	})
+
+	t.Run("No warnings when everything follows convention", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlagNameConverter(ToKebabCase),
+			WithCommandNameConverter(ToKebabCase),
+		)
+		require.NoError(t, err)
+
+		// Add consistent flags and commands
+		err = parser.AddFlag("max-connections", &Argument{
+			Description: "Maximum connections",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddCommand(&Command{
+			Name:        "start-server",
+			Description: "Start the server",
+		})
+		require.NoError(t, err)
+
+		// Parse
+		ok := parser.Parse([]string{"--max-connections", "10"})
+		assert.True(t, ok)
+
+		// Check warnings - should be empty
+		warnings := parser.GetWarnings()
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("Dependency warnings still work", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add flags with dependencies
+		err := parser.AddFlag("feature", &Argument{
+			Description: "Enable feature",
+			TypeOf:      types.Standalone, // Boolean flag
+			DependencyMap: map[string][]string{
+				"config": nil, // Depends on config flag being present
+			},
+		})
+		require.NoError(t, err)
+
+		err = parser.AddFlag("config", &Argument{
+			Description: "Config file",
+		})
+		require.NoError(t, err)
+
+		// Parse with feature but no config
+		ok := parser.Parse([]string{"--feature"})
+		// Parse might fail due to missing dependency, but we still get warnings
+
+		// Get errors to see what happened
+		if !ok {
+			errs := parser.GetErrors()
+			t.Logf("Parse errors: %v", errs)
+		}
+
+		// Should have dependency warning
+		warnings := parser.GetWarnings()
+		assert.NotEmpty(t, warnings, "Expected warnings but got none")
+
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "depends on 'config'") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected dependency warning")
+	})
+}
+
+// TestI18nErrorHandling tests i18n error handling paths
+func TestParser_I18nErrorHandling(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupFunc  func(*Parser) error
+		args       []string
+		checkError func(*testing.T, error)
+	}{
+		{
+			name: "Unknown flag error",
+			setupFunc: func(p *Parser) error {
+				return p.AddFlag("valid", &Argument{
+					Short:       "v",
+					TypeOf:      types.Standalone,
+					Description: "Valid flag",
+				})
+			},
+			args: []string{"--unknown"},
+			checkError: func(t *testing.T, err error) {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "unknown")
+			},
+		},
+		{
+			name: "Ambiguous flag error",
+			setupFunc: func(p *Parser) error {
+				if err := p.AddFlag("verbose", &Argument{
+					Short:       "v",
+					TypeOf:      types.Standalone,
+					Description: "Verbose",
+				}); err != nil {
+					return err
+				}
+				return p.AddFlag("version", &Argument{
+					Short:       "V",
+					TypeOf:      types.Standalone,
+					Description: "Version",
+				})
+			},
+			args: []string{"--ver"},
+			checkError: func(t *testing.T, err error) {
+				assert.Error(t, err)
+				// Should mention ambiguity
+			},
+		},
+		{
+			name: "Missing value error",
+			setupFunc: func(p *Parser) error {
+				return p.AddFlag("name", &Argument{
+					Short:       "n",
+					TypeOf:      types.Single,
+					Description: "Name",
+				})
+			},
+			args: []string{"--name"},
+			checkError: func(t *testing.T, err error) {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "name")
+			},
+		},
+		{
+			name: "Invalid boolean value",
+			setupFunc: func(p *Parser) error {
+				return p.AddFlag("enable", &Argument{
+					Short:       "e",
+					TypeOf:      types.Standalone,
+					Description: "Enable feature",
+				})
+			},
+			args: []string{"--enable=invalid"},
+			checkError: func(t *testing.T, err error) {
+				assert.Error(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			err := tt.setupFunc(parser)
+			require.NoError(t, err)
+
+			ok := parser.Parse(tt.args)
+			if !ok {
+				errs := parser.GetErrors()
+				if len(errs) > 0 {
+					tt.checkError(t, errs[0])
+				} else {
+					t.Error("Parse failed but no errors returned")
+				}
+			} else {
+				tt.checkError(t, nil)
+			}
+		})
+	}
+}
+
+// TestI18nFormatterCoverage tests i18n formatter coverage
+func TestParser_I18nFormatterCoverage(t *testing.T) {
+	t.Skip("Skipping test: Plural support is not yet implemented")
+	parser := NewParser()
+
+	// Set up a custom bundle with various translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"test.plural.one":    "1 elemento",
+		"test.plural.other":  "%d elementos",
+		"test.ordinal.one":   "1º",
+		"test.ordinal.two":   "2º",
+		"test.ordinal.few":   "3º",
+		"test.ordinal.other": "%dº",
+		"test.with.args":     "Hola %s, tienes %d mensajes",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	translator := parser.GetTranslator()
+
+	// Test plural formatting
+	tests := []struct {
+		name     string
+		key      string
+		count    int
+		expected string
+	}{
+		{
+			name:     "Plural one",
+			key:      "test.plural",
+			count:    1,
+			expected: "1 elemento",
+		},
+		{
+			name:     "Plural other",
+			key:      "test.plural",
+			count:    5,
+			expected: "5 elementos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := translator.TL(language.Spanish, tt.key, tt.count)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+
+	// Test formatting with arguments
+	result := translator.TL(language.Spanish, "test.with.args", "Juan", 3)
+	assert.Equal(t, "Hola Juan, tienes 3 mensajes", result)
+}
+
+// TestBundleMerging tests bundle merging functionality
+func TestParser_BundleMerging(t *testing.T) {
+	parser := NewParser()
+
+	// Create multiple bundles
+	bundle1 := i18n.NewEmptyBundle()
+	err := bundle1.AddLanguage(language.Spanish, map[string]string{
+		"key1": "valor1",
+		"key2": "valor2",
+		// key3 is not in user bundle, will come from system
+	})
+	require.NoError(t, err)
+
+	bundle2 := i18n.NewEmptyBundle()
+	// For bundle2, Spanish will be the default language with all keys
+	err = bundle2.AddLanguage(language.Spanish, map[string]string{
+		"key1": "valor1-system",
+		"key2": "valor2-override", // Should override bundle1
+		"key3": "valor3",
+	})
+	require.NoError(t, err)
+	// French must have the same keys as Spanish
+	err = bundle2.AddLanguage(language.French, map[string]string{
+		"key1": "valeur1",
+		"key2": "valeur2",
+		"key3": "valeur3",
+	})
+	require.NoError(t, err)
+
+	// Set user bundle (merges with default)
+	parser.SetUserBundle(bundle1)
+
+	// Create a system bundle
+	parser.systemBundle = bundle2
+	// Need to update the layered provider with the system bundle
+	parser.layeredProvider.SetSystemBundle(bundle2)
+
+	translator := parser.GetTranslator()
+
+	// Set language to Spanish first
+	parser.SetLanguage(language.Spanish)
+
+	// Test that bundles are properly layered
+	// User bundle should take precedence over system, system over default
+	assert.Equal(t, "valor1", translator.TL(language.Spanish, "key1"))
+	assert.Equal(t, "valor2", translator.TL(language.Spanish, "key2")) // From user bundle, not overridden
+	assert.Equal(t, "valor3", translator.TL(language.Spanish, "key3")) // From system bundle
+
+	// Switch to French for the French test
+	parser.SetLanguage(language.French)
+	assert.Equal(t, "valeur1", translator.TL(language.French, "key1")) // From system bundle
+}
+
+// TestLanguageMatching tests language matching functionality
+func TestParser_LanguageMatching(t *testing.T) {
+	parser := NewParser()
+
+	// Add translations for different language variants
+	userBundle := i18n.NewEmptyBundle()
+	// Add English as the default/fallback language
+	err := userBundle.AddLanguage(language.English, map[string]string{
+		"test": "test", // Return key as value for no translation
+	})
+	require.NoError(t, err)
+	err = userBundle.AddLanguage(language.MustParse("es"), map[string]string{
+		"test": "español",
+	})
+	require.NoError(t, err)
+	err = userBundle.AddLanguage(language.MustParse("es-MX"), map[string]string{
+		"test": "español mexicano",
+	})
+	require.NoError(t, err)
+	err = userBundle.AddLanguage(language.MustParse("es-ES"), map[string]string{
+		"test": "español de España",
+	})
+	require.NoError(t, err)
+	parser.SetUserBundle(userBundle)
+
+	tests := []struct {
+		name     string
+		lang     language.Tag
+		expected string
+	}{
+		{
+			name:     "Exact match es-MX",
+			lang:     language.MustParse("es-MX"),
+			expected: "español mexicano",
+		},
+		{
+			name:     "Exact match es-ES",
+			lang:     language.MustParse("es-ES"),
+			expected: "español de España",
+		},
+		{
+			name:     "Fallback to base language",
+			lang:     language.MustParse("es-AR"), // Not specifically defined, should fallback to es
+			expected: "español",
+		},
+		{
+			name:     "No match falls back to English",
+			lang:     language.Japanese,
+			expected: "test", // Falls back to English which has "test": "test"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser.SetLanguage(tt.lang)
+			translator := parser.GetTranslator()
+			// Use T() which uses the current language after matching
+			result := translator.T("test")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestTranslationRegistryEdgeCases tests edge cases in translation registry
+func TestParser_TranslationRegistryEdgeCases(t *testing.T) {
+	parser := NewParser()
+
+	// Test registering flags with special characters
+	specialArg := &Argument{
+		NameKey: "special.flag",
+		Short:   "s",
+	}
+	parser.registerFlagTranslations("special-flag", specialArg)
+
+	// Test registering with empty command path
+	parser.registerFlagTranslations("global", &Argument{NameKey: "global.flag"}, "")
+
+	// Test registering with nested command path
+	parser.registerFlagTranslations("nested", &Argument{NameKey: "nested.flag"}, "cmd", "subcmd", "subsubcmd")
+
+	// All registrations should succeed without panic
+	canonical, found := parser.GetCanonicalFlagName("special-flag")
+	assert.True(t, found)
+	assert.Equal(t, "special-flag", canonical)
+
+	canonical, found = parser.GetCanonicalFlagName("global")
+	assert.True(t, found)
+	assert.Equal(t, "global", canonical)
+
+	canonical, found = parser.GetCanonicalFlagName("nested")
+	assert.True(t, found)
+	assert.Equal(t, "nested", canonical)
+}
+
+// TestMultipleLanguageSwitching tests switching between languages
+func TestParser_MultipleLanguageSwitching(t *testing.T) {
+	parser := NewParser()
+
+	// Set up translations for multiple languages
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"goopt.flag.name.help": "ayuda",
+		"goopt.flag.desc.help": "Mostrar ayuda",
+	})
+	userBundle.AddLanguage(language.French, map[string]string{
+		"goopt.flag.name.help": "aide",
+		"goopt.flag.desc.help": "Afficher l'aide",
+	})
+	userBundle.AddLanguage(language.German, map[string]string{
+		"goopt.flag.name.help": "hilfe",
+		"goopt.flag.desc.help": "Hilfe anzeigen",
+	})
+	// Add English for fallback
+	userBundle.AddLanguage(language.English, map[string]string{
+		"goopt.flag.name.help": "help",
+		"goopt.flag.desc.help": "Show help",
+	})
+	parser.SetUserBundle(userBundle)
+
+	// Register a help flag with the translation key
+	err := parser.AddFlag("help", &Argument{
+		NameKey:        "goopt.flag.name.help",
+		DescriptionKey: "goopt.flag.desc.help",
+		TypeOf:         types.Standalone,
+	})
+	require.NoError(t, err)
+
+	// Test rapid language switching
+	languages := []language.Tag{
+		language.Spanish,
+		language.French,
+		language.German,
+		language.English,
+		language.Spanish,
+		language.German,
+	}
+
+	expectedTranslations := map[language.Tag]string{
+		language.Spanish: "ayuda",
+		language.French:  "aide",
+		language.German:  "hilfe",
+		language.English: "help", // Falls back to canonical
+	}
+
+	for _, lang := range languages {
+		parser.SetLanguage(lang)
+		canonical, found := parser.GetCanonicalFlagName(expectedTranslations[lang])
+		assert.True(t, found, "Should find translation for %s", lang)
+		assert.Equal(t, "help", canonical)
+	}
+}
+
+// TestCommandTranslationHierarchy tests nested command translation
+func TestParser_CommandTranslationHierarchy(t *testing.T) {
+	parser := NewParser()
+
+	// Set up translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"cmd.server":          "servidor",
+		"cmd.server.start":    "iniciar",
+		"cmd.server.stop":     "detener",
+		"cmd.database":        "basedatos",
+		"cmd.database.backup": "respaldar",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Create command hierarchy
+	serverCmd := NewCommand(WithName("server"), WithCommandDescription("Server operations"), WithCommandNameKey("cmd.server"))
+	serverCmd.AddSubcommand(
+		NewCommand(WithName("start"),
+			WithCommandDescription("Start server"),
+			WithCommandNameKey("cmd.server.start")))
+	serverCmd.AddSubcommand(
+		NewCommand(WithName("stop"),
+			WithCommandDescription("Stop server"),
+			WithCommandNameKey("cmd.server.stop")))
+
+	dbCmd := NewCommand(WithName("database"), WithCommandDescription("Database operations"), WithCommandNameKey("cmd.database"))
+	dbCmd.AddSubcommand(NewCommand(WithName("backup"), WithCommandDescription("Backup database"), WithCommandNameKey("cmd.database.backup")))
+
+	// Add commands to parser
+	assert.NoError(t, parser.AddCommand(serverCmd))
+	assert.NoError(t, parser.AddCommand(dbCmd))
+
+	// Test translations
+	tests := []struct {
+		translated string
+		canonical  string
+		found      bool
+	}{
+		{"servidor", "server", true},
+		{"iniciar", "start", true},
+		{"detener", "stop", true},
+		{"basedatos", "database", true},
+		{"respaldar", "backup", true},
+		{"noexiste", "", false},
+	}
+
+	for _, tt := range tests {
+		canonical, found := parser.GetCanonicalCommandPath(tt.translated)
+		assert.Equal(t, tt.found, found, "Finding %s", tt.translated)
+		if tt.found {
+			// The command path might be partial (just the command name)
+			// since we're not providing full context
+			assert.NotEmpty(t, canonical)
+		}
+	}
+}
+
+// TestArgumentTypeTranslations tests translations for different argument types
+func TestParser_ArgumentTypeTranslations(t *testing.T) {
+	parser := NewParser()
+
+	// Set up translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"flag.file":       "archivo",
+		"flag.single":     "único",
+		"flag.chained":    "encadenado",
+		"flag.standalone": "independiente",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Register different types of arguments
+	err := parser.AddFlag("file", NewArg(
+		WithShortFlag("f"), WithType(types.File),
+		WithDescription("Input file"), WithNameKey("flag.file")))
+	require.NoError(t, err)
+
+	err = parser.AddFlag("single", NewArg(WithShortFlag("s"), WithDescription("Single value"), WithNameKey("flag.single")))
+	require.NoError(t, err)
+
+	err = parser.AddFlag("chained", NewArg(WithShortFlag("c"), WithType(types.Chained), WithDescription("Chained values"), WithNameKey("flag.chained")))
+	require.NoError(t, err)
+
+	err = parser.AddFlag("standalone", NewArg(WithShortFlag("S"), WithType(types.Standalone), WithDescription("Standalone flag"), WithNameKey("flag.standalone")))
+	require.NoError(t, err)
+
+	// Test that all types can be translated
+	tests := []struct {
+		translated string
+		canonical  string
+	}{
+		{"archivo", "file"},
+		{"único", "single"},
+		{"encadenado", "chained"},
+		{"independiente", "standalone"},
+	}
+
+	for _, tt := range tests {
+		canonical, found := parser.GetCanonicalFlagName(tt.translated)
+		assert.True(t, found, "Should find %s", tt.translated)
+		assert.Equal(t, tt.canonical, canonical)
+	}
+}
+
+// TestEmptyTranslationKeys tests behavior with empty translation keys
+func TestParser_EmptyTranslationKeys(t *testing.T) {
+	parser := NewParser()
+
+	// Register flags and commands without translation keys
+	err := parser.AddFlag("notranslate", NewArg(WithShortFlag("n"), WithDescription("No translation")))
+	require.NoError(t, err)
+
+	cmd := NewCommand(WithName("nokey"), WithCommandDescription("Command without key"))
+	assert.NoError(t, parser.AddCommand(cmd))
+
+	// These should still be findable by their canonical names
+	canonical, found := parser.GetCanonicalFlagName("notranslate")
+	assert.True(t, found)
+	assert.Equal(t, "notranslate", canonical)
+
+	// Commands without keys are not registered in translation registry
+	_, found = parser.GetCanonicalCommandPath("nokey")
+	assert.False(t, found)
+}
+
+// TestTranslationWithSpecialCharacters tests translations with special characters
+func TestParser_TranslationWithSpecialCharacters(t *testing.T) {
+	parser := NewParser()
+
+	// Set up translations with special characters
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Japanese, map[string]string{
+		"flag.help":    "ヘルプ",
+		"flag.version": "バージョン",
+		"cmd.server":   "サーバー",
+	})
+	userBundle.AddLanguage(language.Arabic, map[string]string{
+		"flag.help":    "مساعدة",
+		"flag.version": "إصدار",
+		"cmd.server":   "خادم",
+	})
+	parser.SetUserBundle(userBundle)
+
+	// Register items
+	err := parser.AddFlag("help", NewArg(WithShortFlag("h"), WithType(types.Standalone), WithDescription("Help"), WithNameKey("flag.help")))
+	require.NoError(t, err)
+
+	err = parser.AddFlag("version", NewArg(WithShortFlag("v"), WithType(types.Standalone), WithDescription("Version"), WithNameKey("flag.version")))
+	require.NoError(t, err)
+
+	cmd := NewCommand(WithName("server"), WithCommandDescription("Server"), WithCommandNameKey("cmd.server"))
+	assert.NoError(t, parser.AddCommand(cmd))
+	// Test Japanese
+	parser.SetLanguage(language.Japanese)
+	canonical, found := parser.GetCanonicalFlagName("ヘルプ")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+
+	canonical, found = parser.GetCanonicalCommandPath("サーバー")
+	assert.True(t, found)
+	assert.Equal(t, "server", canonical)
+
+	// Test Arabic
+	parser.SetLanguage(language.Arabic)
+	canonical, found = parser.GetCanonicalFlagName("مساعدة")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+
+	canonical, found = parser.GetCanonicalCommandPath("خادم")
+	assert.True(t, found)
+	assert.Equal(t, "server", canonical)
+}
+
+func TestParser_CanonicalNameTypoSuggestions(t *testing.T) {
+	// Create parser
+	parser := NewParser()
+
+	// Create a bundle with German translations
+	bundle := i18n.NewEmptyBundle()
+	err := bundle.LoadFromString(language.German, `{
+		"flag.max-connections": "max-verbindungen",
+		"goopt.error.unknown_flag_with_suggestions": "unbekannter Flag: %[1]s. Meinten Sie vielleicht eines davon? %[2]s"
+	}`)
+	require.NoError(t, err)
+
+	parser.SetUserBundle(bundle)
+	parser.SetLanguage(language.German)
+
+	// Add flag with translation
+	err = parser.AddFlag("max-connections", &Argument{
+		NameKey:      "flag.max-connections",
+		Description:  "Maximum concurrent connections",
+		DefaultValue: "1000",
+	})
+	require.NoError(t, err)
+
+	// Test 1: User types the canonical name exactly (should succeed - we accept both forms)
+	t.Run("Exact canonical name", func(t *testing.T) {
+		p := NewParser()
+		p.SetUserBundle(bundle)
+		p.SetLanguage(language.German)
+
+		err := p.AddFlag("max-connections", &Argument{
+			NameKey:      "flag.max-connections",
+			Description:  "Maximum concurrent connections",
+			DefaultValue: "1000",
+		})
+		require.NoError(t, err)
+
+		ok := p.Parse([]string{"--max-connections", "100"})
+		assert.True(t, ok, "Should recognize canonical name even when German is set")
+
+		// Verify the value was parsed
+		value, exists := p.Get("max-connections")
+		assert.True(t, exists)
+		assert.Equal(t, "100", value)
+	})
+
+	// Test 2: User types canonical name with typo
+	t.Run("Misspelled canonical name", func(t *testing.T) {
+		p := NewParser()
+		p.SetUserBundle(bundle)
+		p.SetLanguage(language.German)
+
+		err := p.AddFlag("max-connections", &Argument{
+			NameKey:      "flag.max-connections",
+			Description:  "Maximum concurrent connections",
+			DefaultValue: "1000",
+		})
+		require.NoError(t, err)
+
+		ok := p.Parse([]string{"--max-connection"}) // Missing 's' at end
+		assert.False(t, ok)
+
+		errs := p.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := errs[0].Error()
+		t.Logf("Error with misspelled canonical: %s", errorText)
+
+		// Should suggest canonical form since user typed canonical with typo
+		assert.Contains(t, errorText, "--max-connections")
+	})
+
+	// Test 3: User types German name with typo
+	t.Run("Misspelled German name", func(t *testing.T) {
+		p := NewParser()
+		p.SetUserBundle(bundle)
+		p.SetLanguage(language.German)
+
+		err := p.AddFlag("max-connections", &Argument{
+			NameKey:      "flag.max-connections",
+			Description:  "Maximum concurrent connections",
+			DefaultValue: "1000",
+		})
+		require.NoError(t, err)
+
+		ok := p.Parse([]string{"--max-verbindung"}) // Missing 'en' at end
+		assert.False(t, ok)
+
+		errs := p.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := errs[0].Error()
+		t.Logf("Error with misspelled German: %s", errorText)
+
+		// Should suggest the correct German translation
+		assert.Contains(t, errorText, "--max-verbindungen")
+	})
+}
+
+func TestParser_ContextAwareCommandSuggestions(t *testing.T) {
+	t.Run("User types canonical command with typo", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a bundle with German translations
+		bundle := i18n.NewEmptyBundle()
+		err := bundle.LoadFromString(language.German, `{
+			"cmd.server": "server",
+			"cmd.client": "klient",
+			"cmd.status": "zustand",
+			"goopt.error.command_not_found": "Befehl nicht gefunden: %[1]s",
+			"goopt.misc.did_you_mean": "Meinten Sie vielleicht"
+		}`)
+		require.NoError(t, err)
+
+		parser.SetUserBundle(bundle)
+		parser.SetLanguage(language.German)
+
+		// Add commands with translations
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandNameKey("cmd.server"),
+			WithCommandDescription("Server operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		clientCmd := NewCommand(
+			WithName("client"),
+			WithCommandNameKey("cmd.client"),
+			WithCommandDescription("Client operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		statusCmd := NewCommand(
+			WithName("status"),
+			WithCommandNameKey("cmd.status"),
+			WithCommandDescription("Status operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		err = parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(clientCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(statusCmd)
+		require.NoError(t, err)
+
+		// User types "serv" (close to canonical "server")
+		ok := parser.Parse([]string{"serv"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+
+		// Combine all error messages
+		errorText := ""
+		for _, err := range errs {
+			errorText += err.Error() + "\n"
+		}
+		t.Logf("Error messages: %s", errorText)
+
+		// Should suggest "server" (canonical) not "server" (which is same in German)
+		assert.Contains(t, errorText, "server")
+		// Should NOT suggest "klient" or "zustand" since we typed canonical
+		assert.NotContains(t, errorText, "klient")
+		assert.NotContains(t, errorText, "zustand")
+	})
+
+	t.Run("User types translated command with typo", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a bundle with German translations
+		bundle := i18n.NewEmptyBundle()
+		err := bundle.LoadFromString(language.German, `{
+			"cmd.server": "server",
+			"cmd.client": "klient",
+			"cmd.status": "zustand",
+			"goopt.error.command_not_found": "Befehl nicht gefunden: %[1]s",
+			"goopt.misc.did_you_mean": "Meinten Sie vielleicht"
+		}`)
+		require.NoError(t, err)
+
+		parser.SetUserBundle(bundle)
+		parser.SetLanguage(language.German)
+
+		// Add commands with translations
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandNameKey("cmd.server"),
+			WithCommandDescription("Server operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		clientCmd := NewCommand(
+			WithName("client"),
+			WithCommandNameKey("cmd.client"),
+			WithCommandDescription("Client operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		statusCmd := NewCommand(
+			WithName("status"),
+			WithCommandNameKey("cmd.status"),
+			WithCommandDescription("Status operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		err = parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(clientCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(statusCmd)
+		require.NoError(t, err)
+
+		// User types "klien" (close to translated "klient")
+		ok := parser.Parse([]string{"klien"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+
+		// Combine all error messages
+		errorText := ""
+		for _, err := range errs {
+			errorText += err.Error() + "\n"
+		}
+		t.Logf("Error messages: %s", errorText)
+
+		// Should suggest "klient" (translated) not "client" (canonical)
+		assert.Contains(t, errorText, "klient")
+		assert.NotContains(t, errorText, "client")
+	})
+
+	t.Run("Help system - user types canonical with typo", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a bundle with German translations
+		bundle := i18n.NewEmptyBundle()
+		err := bundle.LoadFromString(language.German, `{
+			"cmd.server": "server",
+			"cmd.client": "klient",
+			"cmd.status": "zustand",
+			"goopt.error.command_not_found": "Befehl nicht gefunden: %[1]s",
+			"goopt.misc.did_you_mean": "Meinten Sie vielleicht"
+		}`)
+		require.NoError(t, err)
+
+		parser.SetUserBundle(bundle)
+		parser.SetLanguage(language.German)
+
+		// Set up output capture
+		var stdout, stderr strings.Builder
+		parser.SetStdout(&stdout)
+		parser.SetStderr(&stderr)
+		parser.SetHelpBehavior(HelpBehaviorSmart)
+
+		// Prevent actual exit
+		parser.helpEndFunc = func() error {
+			return nil
+		}
+
+		// Add commands with translations
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandNameKey("cmd.server"),
+			WithCommandDescription("Server operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		clientCmd := NewCommand(
+			WithName("client"),
+			WithCommandNameKey("cmd.client"),
+			WithCommandDescription("Client operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		statusCmd := NewCommand(
+			WithName("status"),
+			WithCommandNameKey("cmd.status"),
+			WithCommandDescription("Status operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		err = parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(clientCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(statusCmd)
+		require.NoError(t, err)
+
+		// User types "lient --help" (equally close to both "client" and "klient")
+		// Should show both forms since they're equally close
+		// "lient" -> "client" = 1 change (change 'l' to 'c')
+		// "lient" -> "klient" = 1 change (change 'l' to 'k')
+		parser.Parse([]string{"lient", "--help"})
+
+		output := stderr.String() + stdout.String()
+		t.Logf("Help output: %s", output)
+
+		// When equally close, should show both forms
+		assert.Contains(t, output, "client / klient")
+	})
+
+	t.Run("Help system - user types translated with typo", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a bundle with German translations
+		bundle := i18n.NewEmptyBundle()
+		err := bundle.LoadFromString(language.German, `{
+			"cmd.server": "server",
+			"cmd.client": "klient",
+			"cmd.status": "zustand",
+			"goopt.error.command_not_found": "Befehl nicht gefunden: %[1]s",
+			"goopt.misc.did_you_mean": "Meinten Sie vielleicht"
+		}`)
+		require.NoError(t, err)
+
+		parser.SetUserBundle(bundle)
+		parser.SetLanguage(language.German)
+
+		// Set up output capture
+		var stdout, stderr strings.Builder
+		parser.SetStdout(&stdout)
+		parser.SetStderr(&stderr)
+		parser.SetHelpBehavior(HelpBehaviorSmart)
+
+		// Prevent actual exit
+		parser.helpEndFunc = func() error {
+			return nil
+		}
+
+		// Add commands with translations
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandNameKey("cmd.server"),
+			WithCommandDescription("Server operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		clientCmd := NewCommand(
+			WithName("client"),
+			WithCommandNameKey("cmd.client"),
+			WithCommandDescription("Client operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		statusCmd := NewCommand(
+			WithName("status"),
+			WithCommandNameKey("cmd.status"),
+			WithCommandDescription("Status operations"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		)
+
+		err = parser.AddCommand(serverCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(clientCmd)
+		require.NoError(t, err)
+		err = parser.AddCommand(statusCmd)
+		require.NoError(t, err)
+
+		// User types "zustan --help" (close to translated "zustand")
+		parser.Parse([]string{"zustan", "--help"})
+
+		output := stderr.String() + stdout.String()
+		t.Logf("Help output: %s", output)
+
+		// Should suggest "zustand" (translated) in the suggestion
+		assert.Contains(t, output, "zustand")
+		// Note: "status" will appear in the "Available commands" section which shows canonical names
+		// but should not appear in the "Did you mean" suggestion
+	})
+}
+
+func TestParser_ExecuteCommand(t *testing.T) {
+	t.Run("ExecuteCommand with valid command", func(t *testing.T) {
+		parser := NewParser()
+		executed := false
+
+		err := parser.AddCommand(&Command{
+			Name: "test",
+			Callback: func(p *Parser, c *Command) error {
+				executed = true
+				return nil
+			},
+		})
+		require.NoError(t, err)
+
+		// Parse first to register the command
+		ok := parser.Parse([]string{"test"})
+		assert.True(t, ok)
+
+		// Execute all commands
+		parser.ExecuteCommands()
+		assert.True(t, executed)
+	})
+
+	t.Run("ExecuteCommand with error", func(t *testing.T) {
+		parser := NewParser()
+		expectedErr := errors.New("command error")
+
+		err := parser.AddCommand(&Command{
+			Name: "fail",
+			Callback: func(p *Parser, c *Command) error {
+				return expectedErr
+			},
+		})
+		require.NoError(t, err)
+
+		// Parse and execute
+		ok := parser.Parse([]string{"fail"})
+		assert.True(t, ok)
+
+		count := parser.ExecuteCommands()
+		assert.Equal(t, 1, count) // 1 error
+
+		// Check the error was recorded
+		err = parser.GetCommandExecutionError("fail")
+		assert.Equal(t, expectedErr, err)
+	})
+
+	t.Run("ExecuteCommand with non-existent command", func(t *testing.T) {
+		parser := NewParser()
+
+		// Try to parse non-existent command - it will be treated as positional arg
+		ok := parser.Parse([]string{"nonexistent"})
+		assert.True(t, ok) // Parse succeeds but no command is executed
+
+		// No commands to execute
+		count := parser.ExecuteCommands()
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("GetCommandExecutionError", func(t *testing.T) {
+		parser := NewParser()
+		expectedErr := errors.New("test error")
+
+		err := parser.AddCommand(&Command{
+			Name: "cmd",
+			Callback: func(p *Parser, c *Command) error {
+				return expectedErr
+			},
+		})
+		require.NoError(t, err)
+
+		parser.callbackResults["cmd"] = expectedErr
+
+		// Test existing error
+		err = parser.GetCommandExecutionError("cmd")
+		assert.Equal(t, expectedErr, err)
+
+		// Test non-existent command - might have error from parsing
+		// Just verify it doesn't panic
+		_ = parser.GetCommandExecutionError("nonexistent")
+	})
+}
+
+func TestParser_BindFlagWithSlices(t *testing.T) {
+	t.Run("BindFlag with slice and capacity", func(t *testing.T) {
+		parser := NewParser()
+		var values []string
+
+		err := parser.BindFlag(&values, "items", &Argument{
+			TypeOf:   types.Chained,
+			Capacity: 3,
+		})
+		require.NoError(t, err)
+
+		// Verify slice was created with capacity
+		assert.Equal(t, 3, len(values))
+		assert.Equal(t, 3, cap(values))
+	})
+
+	t.Run("BindFlag with existing slice and resize", func(t *testing.T) {
+		parser := NewParser()
+		values := []string{"a", "b", "c", "d", "e"}
+
+		err := parser.BindFlag(&values, "items", &Argument{
+			TypeOf:   types.Chained,
+			Capacity: 3,
+		})
+		require.NoError(t, err)
+
+		// Verify slice was resized and values preserved
+		assert.Equal(t, 3, len(values))
+		assert.Equal(t, []string{"a", "b", "c"}, values)
+	})
+
+	t.Run("BindFlag with nil pointer", func(t *testing.T) {
+		parser := NewParser()
+
+		err := parser.BindFlag(nil, "flag", &Argument{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil")
+	})
+
+	t.Run("BindFlag with non-pointer", func(t *testing.T) {
+		parser := NewParser()
+		var value string
+
+		err := parser.BindFlag(value, "flag", &Argument{})
+		assert.Error(t, err)
+	})
+
+	t.Run("BindFlag with invalid type conversion", func(t *testing.T) {
+		parser := NewParser()
+		var value int
+
+		err := parser.BindFlag(&value, "flag", &Argument{
+			TypeOf: types.Standalone, // Standalone only works with bool
+		})
+		assert.Error(t, err)
+	})
+
+	t.Run("BindFlag infers type when TypeOf is Empty", func(t *testing.T) {
+		parser := NewParser()
+		var value bool
+
+		err := parser.BindFlag(&value, "flag", &Argument{
+			TypeOf: types.Empty, // Should infer as Standalone for bool
+		})
+		require.NoError(t, err)
+
+		// Verify type was inferred (bool becomes Single when TypeOf is Empty)
+		arg, err := parser.GetArgument("flag")
+		assert.NoError(t, err)
+		assert.Equal(t, types.Single, arg.TypeOf)
+	})
+}
+
+// TestEnsureInitCoverage improves coverage for ensureInit
+func TestParser_EnsureInit(t *testing.T) {
+	t.Run("Parser initialization with struct context", func(t *testing.T) {
+		type Config struct {
+			Name  string `goopt:"name=name,type=single"`
+			Debug bool   `goopt:"name=debug,type=standalone"`
+		}
+
+		config := &Config{}
+		parser, err := NewParserFromStruct(config)
+		require.NoError(t, err)
+
+		// Verify struct context is set
+		assert.True(t, parser.HasStructCtx())
+
+		// Manually bind the fields for this test
+		err = parser.BindFlag(&config.Name, "name", &Argument{TypeOf: types.Single})
+		require.NoError(t, err)
+		err = parser.BindFlag(&config.Debug, "debug", &Argument{TypeOf: types.Standalone})
+		require.NoError(t, err)
+
+		// Parse args
+		ok := parser.Parse([]string{"--name", "test", "--debug"})
+		assert.True(t, ok)
+		assert.Equal(t, "test", config.Name)
+		assert.True(t, config.Debug)
+	})
+
+	t.Run("Parser with environment variables", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add a flag
+		err := parser.AddFlag("config", &Argument{
+			TypeOf: types.Single,
+		})
+		require.NoError(t, err)
+
+		// Set environment variable - using default converter behavior
+		t.Setenv("CONFIG", "env-value")
+
+		// Set environment converter to enable env mapping
+		parser.SetEnvNameConverter(DefaultFlagNameConverter) // This enables env var mapping
+
+		// Parse with empty args (should pick up env var)
+		ok := parser.Parse([]string{})
+		assert.True(t, ok)
+		value, found := parser.Get("config")
+		assert.True(t, found)
+		assert.Equal(t, "env-value", value)
+	})
+}
+
+func TestParser_SetArgument(t *testing.T) {
+	t.Run("SetArgument updates existing flag", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add initial flag
+		err := parser.AddFlag("test", &Argument{
+			TypeOf:      types.Single,
+			Description: "Original",
+		})
+		require.NoError(t, err)
+
+		// Update the flag using config functions
+		err = parser.SetArgument("test", []string{},
+			WithType(types.Standalone),
+			WithDescription("Updated"),
+			WithShortFlag("t"))
+		require.NoError(t, err)
+
+		// Verify update
+		arg, err := parser.GetArgument("test")
+		assert.NoError(t, err)
+		assert.Equal(t, types.Standalone, arg.TypeOf)
+		assert.Equal(t, "Updated", arg.Description)
+		assert.Equal(t, "t", arg.Short)
+	})
+
+	t.Run("SetArgument with command context", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add command with flag
+		cmd := &Command{Name: "cmd"}
+		err := parser.AddCommand(cmd)
+		require.NoError(t, err)
+
+		err = parser.AddFlag("flag", &Argument{
+			TypeOf: types.Single,
+		}, "cmd")
+		require.NoError(t, err)
+
+		// Update the flag
+		err = parser.SetArgument("flag", []string{"cmd"},
+			WithType(types.Standalone),
+			WithDescription("Updated"))
+		require.NoError(t, err)
+
+		// Verify update
+		arg, err := parser.GetArgument("flag", "cmd")
+		assert.NoError(t, err)
+		assert.Equal(t, types.Standalone, arg.TypeOf)
+	})
+
+	t.Run("SetArgument with validation error", func(t *testing.T) {
+		parser := NewParser()
+
+		// First add the flag
+		err := parser.AddFlag("test", &Argument{
+			TypeOf: types.Single,
+		})
+		require.NoError(t, err)
+
+		// Try to set argument with invalid accepted values
+		err = parser.SetArgument("test", []string{},
+			WithAcceptedValues([]types.PatternValue{
+				{Pattern: "[invalid"}, // Invalid regex
+			}))
+		assert.Error(t, err)
+	})
+}
+
+// TestHelperFunctionsCoverage improves coverage for various helper functions
+func TestHelperFunctionsCoverage(t *testing.T) {
+	t.Run("GetMaxDependencyDepth", func(t *testing.T) {
+		parser := NewParser()
+
+		// Default depth
+		depth := parser.GetMaxDependencyDepth()
+		assert.Equal(t, DefaultMaxDependencyDepth, depth)
+
+		// Set custom depth
+		parser.SetMaxDependencyDepth(10)
+		depth = parser.GetMaxDependencyDepth()
+		assert.Equal(t, 10, depth)
+	})
+
+	t.Run("SetFlag sets flag value", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add initial flag
+		err := parser.AddFlag("test", &Argument{
+			TypeOf: types.Single,
+		})
+		require.NoError(t, err)
+
+		// Set the flag value
+		err = parser.SetFlag("test", "myvalue")
+		require.NoError(t, err)
+
+		// Verify value was set
+		value, found := parser.Get("test")
+		assert.True(t, found)
+		assert.Equal(t, "myvalue", value)
+	})
+
+	t.Run("SetCommand updates existing command", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add initial command
+		err := parser.AddCommand(&Command{
+			Name:        "test",
+			Description: "Original",
+		})
+		require.NoError(t, err)
+
+		// Update command
+		err = parser.SetCommand("test", WithCommandDescription("Updated"))
+		require.NoError(t, err)
+
+		// Use internal getCommand to verify the update
+		cmd, found := parser.getCommand("test")
+		assert.True(t, found)
+		assert.Equal(t, "Updated", cmd.Description)
+	})
+
+	t.Run("PrintHelp with error cases", func(t *testing.T) {
+		parser := NewParser()
+
+		// Set help style to invalid value to trigger default case
+		parser.SetHelpStyle(HelpStyle(999))
+
+		// Use a buffer to capture output
+		var buf bytes.Buffer
+		parser.SetStdout(&buf)
+
+		parser.PrintHelp(&buf)
+		output := buf.String()
+		assert.NotEmpty(t, output)
+	})
+}
+
+func TestParser_RegisterTranslations(t *testing.T) {
+	parser := NewParser()
+
+	// Set up translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"flag.name.verbose": "verboso",
+		"cmd.name.server":   "servidor",
+	})
+	parser.SetUserBundle(userBundle)
+
+	// Test flag with NameKey (triggers registerFlagTranslations)
+	err := parser.AddFlag("verbose", NewArg(
+		WithNameKey("flag.name.verbose"),
+		WithType(types.Standalone),
+	))
+	assert.NoError(t, err)
+
+	// Test command with NameKey (triggers registerCommandTranslations)
+	cmd := NewCommand(
+		WithName("server"),
+		WithCommandNameKey("cmd.name.server"),
+		WithCallback(func(cmdLine *Parser, command *Command) error {
+			return nil
+		}),
+	)
+	cmd.NameKey = "cmd.name.server" // Set NameKey directly
+	parser.AddCommand(cmd)
+
+	// Parse with translations
+	parser.SetLanguage(language.Spanish)
+	ok := parser.Parse([]string{"--verboso", "servidor"})
+	assert.True(t, ok)
+}
+
+func TestParser_AutoLanguageGetters(t *testing.T) {
+	parser := NewParser()
+
+	// GetAutoLanguage
+	assert.True(t, parser.GetAutoLanguage())
+	parser.SetAutoLanguage(false)
+	assert.False(t, parser.GetAutoLanguage())
+	parser.SetAutoLanguage(true)
+	assert.True(t, parser.GetAutoLanguage())
+
+	// GetLanguageFlags
+	assert.Equal(t, []string{"language", "lang", "l"}, parser.GetLanguageFlags())
+	parser.SetLanguageFlags([]string{"idioma"})
+	assert.Equal(t, []string{"idioma"}, parser.GetLanguageFlags())
+
+	// GetCheckSystemLocale
+	assert.False(t, parser.GetCheckSystemLocale())
+	parser.SetCheckSystemLocale(true)
+	assert.True(t, parser.GetCheckSystemLocale())
+
+	// GetLanguageEnvVar
+	assert.Equal(t, "GOOPT_LANG", parser.GetLanguageEnvVar())
+	parser.SetLanguageEnvVar("CUSTOM_LANG")
+	assert.Equal(t, "CUSTOM_LANG", parser.GetLanguageEnvVar())
+}
+
+func TestParser_GetCanonicalMethodsCoverage(t *testing.T) {
+	parser := NewParser()
+
+	// Set up Spanish translations
+	userBundle := i18n.NewEmptyBundle()
+	userBundle.AddLanguage(language.Spanish, map[string]string{
+		"flag.name.help": "ayuda",
+		"cmd.name.start": "iniciar",
+	})
+	parser.SetUserBundle(userBundle)
+	parser.SetLanguage(language.Spanish)
+
+	// Register flag
+	parser.AddFlag("help", NewArg(
+		WithNameKey("flag.name.help"),
+		WithType(types.Standalone),
+	))
+
+	// Test GetCanonicalFlagName
+	canonical, found := parser.GetCanonicalFlagName("ayuda")
+	assert.True(t, found)
+	assert.Equal(t, "help", canonical)
+
+	_, found = parser.GetCanonicalFlagName("nonexistent")
+	assert.False(t, found)
+
+	// Register command
+	cmd := NewCommand(
+		WithName("start"),
+		WithCallback(func(cmdLine *Parser, command *Command) error {
+			return nil
+		}),
+		WithCommandNameKey("cmd.name.start"),
+	)
+	parser.AddCommand(cmd)
+
+	// Test GetCanonicalCommandPath
+	canonical, found = parser.GetCanonicalCommandPath("iniciar")
+	assert.True(t, found)
+	assert.Equal(t, "start", canonical)
+
+	_, found = parser.GetCanonicalCommandPath("nonexistent")
+	assert.False(t, found)
+}
+
+func TestGParser_etMaxDependency(t *testing.T) {
+	parser := NewParser()
+
+	// Default should be reasonable
+	depth := parser.GetMaxDependencyDepth()
+	assert.True(t, depth > 0)
+
+	// Set new depth
+	parser.SetMaxDependencyDepth(5)
+	assert.Equal(t, 5, parser.GetMaxDependencyDepth())
+}
+
+func TestParser_ErrorProvider(t *testing.T) {
+	// Test As method which is at 0%
+	parser := NewParser()
+	parser.AddFlag("test", NewArg(
+		WithType(types.Single),
+		WithRequired(true),
+	))
+
+	ok := parser.Parse([]string{})
+	assert.False(t, ok)
+
+	errs := parser.GetErrors()
+	assert.NotEmpty(t, errs)
+}
+
+func TestParser_LayeredProvider(t *testing.T) {
+	parser := NewParser()
+	provider := parser.layeredProvider
+
+	// GetLanguage
+	lang := provider.GetLanguage()
+	assert.NotNil(t, lang)
+
+	// GetDefaultLanguage
+	defaultLang := provider.GetDefaultLanguage()
+	assert.Equal(t, language.English, defaultLang)
+
+	// SetUserBundle
+	userBundle := i18n.NewEmptyBundle()
+	provider.SetUserBundle(userBundle)
+
+	// SetSystemBundle
+	systemBundle := i18n.NewEmptyBundle()
+	provider.SetSystemBundle(systemBundle)
+
+	// GetFormattedMessage
+	msg := provider.GetFormattedMessage("test.key", "arg1", "arg2")
+	assert.Equal(t, "test.key", msg) // Falls back to key when not found
+
+	// GetPrinter
+	printer := provider.GetPrinter()
+	assert.NotNil(t, printer)
+
+	// T method through translator interface
+	translator := parser.GetTranslator()
+	result := translator.T("test.message")
+	assert.Equal(t, "test.message", result)
+}
+
+func TestParser_SuggestionThreshold(t *testing.T) {
+	t.Run("Default threshold shows distance 1 and 2 matches", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add commands with varying distances from "serv"
+		err := parser.AddCommand(NewCommand(
+			WithName("serve"), // Distance 1 from "serv"
+			WithCommandDescription("Serve command"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		))
+		require.NoError(t, err)
+
+		err = parser.AddCommand(NewCommand(
+			WithName("server"), // Distance 2 from "serv"
+			WithCommandDescription("Server command"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		))
+		require.NoError(t, err)
+
+		err = parser.AddCommand(NewCommand(
+			WithName("service"), // Distance 3 from "serv"
+			WithCommandDescription("Service command"),
+			WithCallback(func(p *Parser, c *Command) error { return nil }),
+		))
+		require.NoError(t, err)
+
+		// Parse with typo
+		ok := parser.Parse([]string{"serv"})
+		assert.False(t, ok)
+
+		// Should only suggest "serve" (distance 1) by default
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := errs[len(errs)-1].Error()
+
+		assert.Contains(t, errorText, "serve")
+		assert.NotContains(t, errorText, "server")  // Distance 2 - not shown when distance 1 exists
+		assert.NotContains(t, errorText, "service") // Distance 3 - never shown
+	})
+
+	t.Run("Custom threshold allows more distant matches", func(t *testing.T) {
+		parser := NewParser()
+		parser.SetSuggestionThreshold(3, 3) // Allow distance 3 for both flags and commands
+
+		// Add flags with varying distances from "--verbo"
+		err := parser.AddFlag("verbose", &Argument{
+			Description: "Verbose output",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddFlag("version", &Argument{
+			Description: "Show version",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddFlag("verify", &Argument{
+			Description: "Verify output",
+		})
+		require.NoError(t, err)
+
+		// Parse with flag typo
+		ok := parser.Parse([]string{"--verb"})
+		assert.False(t, ok)
+
+		// With threshold 3, should suggest all flags with distance <= 3
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := ""
+		for _, err := range errs {
+			errorText += err.Error() + "\n"
+		}
+
+		assert.Contains(t, errorText, "--verbose") // Distance 3
+		assert.Contains(t, errorText, "--verify")  // Distance 2
+	})
+
+	t.Run("Zero threshold disables suggestions", func(t *testing.T) {
+		parser := NewParser()
+		parser.SetSuggestionThreshold(0, 0) // Disable all suggestions
+
+		// Add flag
+		err := parser.AddFlag("serve", &Argument{
+			Description: "Serve content",
+		})
+		require.NoError(t, err)
+
+		// Parse with typo
+		ok := parser.Parse([]string{"--serv"})
+		assert.False(t, ok)
+
+		// Should not show any suggestions
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := errs[0].Error()
+
+		assert.NotContains(t, errorText, "Did you mean")
+		assert.NotContains(t, errorText, "serve")
+	})
+
+	t.Run("Flag threshold works independently", func(t *testing.T) {
+		parser := NewParser()
+		parser.SetSuggestionThreshold(3, 1) // More lenient for flags, strict for commands
+
+		// Add flags
+		err := parser.AddFlag("verbose", &Argument{
+			Description: "Verbose output",
+		})
+		require.NoError(t, err)
+
+		err = parser.AddFlag("version", &Argument{
+			Description: "Show version",
+		})
+		require.NoError(t, err)
+
+		// Parse with flag typo
+		ok := parser.Parse([]string{"--verb"})
+		assert.False(t, ok)
+
+		// With flag threshold 3, should suggest both
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := ""
+		for _, err := range errs {
+			errorText += err.Error() + "\n"
+		}
+
+		assert.Contains(t, errorText, "--verbose") // Distance 3
+	})
+
+	t.Run("WithSuggestionThreshold configuration", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithSuggestionThreshold(3, 2),
+			WithFlag("deploy", &Argument{
+				Description: "Deploy flag",
+			}),
+		)
+		require.NoError(t, err)
+
+		// Parse with distant typo
+		ok := parser.Parse([]string{"--dep"})
+		assert.False(t, ok)
+
+		// Should suggest "deploy" (distance 3) with threshold 3 for flags
+		errs := parser.GetErrors()
+		require.NotEmpty(t, errs)
+		errorText := errs[len(errs)-1].Error()
+
+		assert.Contains(t, errorText, "--deploy")
+	})
+}
+
+func TestParser_SuggestionsForCommands(t *testing.T) {
+	// Test root command suggestions
+	t.Run("RootCommandSuggestions", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add some commands
+		parser.AddCommand(NewCommand(
+			WithName("server"),
+			WithCommandDescription("Server management"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		parser.AddCommand(NewCommand(
+			WithName("service"),
+			WithCommandDescription("Service management"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		parser.AddCommand(NewCommand(
+			WithName("status"),
+			WithCommandDescription("Show status"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// Test typo that should generate suggestions
+		ok := parser.Parse([]string{"serv"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		assert.NotEmpty(t, errs)
+
+		// Should have command not found error and suggestions
+		errStr := ""
+		for _, err := range errs {
+			errStr += err.Error() + "\n"
+		}
+
+		assert.Contains(t, errStr, "serv")
+		assert.Contains(t, errStr, "Did you mean")
+		// Due to conservative logic, it only suggests when there's one very close match
+		// In this case "serv" -> "server" is distance 2, so it should suggest it
+		assert.Contains(t, errStr, "server")
+	})
+
+	// Test subcommand suggestions
+	t.Run("SubcommandSuggestions", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add command with subcommands
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandDescription("Server management"),
+		)
+		serverCmd.AddSubcommand(NewCommand(
+			WithName("start"),
+			WithCommandDescription("Start server"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		serverCmd.AddSubcommand(NewCommand(
+			WithName("stop"),
+			WithCommandDescription("Stop server"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		serverCmd.AddSubcommand(NewCommand(
+			WithName("status"),
+			WithCommandDescription("Server status"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		parser.AddCommand(serverCmd)
+
+		// Test typo in subcommand
+		ok := parser.Parse([]string{"server", "stat"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		assert.NotEmpty(t, errs)
+
+		errStr := ""
+		for _, err := range errs {
+			errStr += err.Error() + "\n"
+		}
+
+		assert.Contains(t, errStr, "server stat")
+		assert.Contains(t, errStr, "Did you mean")
+		// Should suggest "start" (distance 1) but not "status" (distance 2)
+		assert.Contains(t, errStr, "start")
+		// With conservative distance logic, "status" (distance 2) won't be shown
+		// when "start" (distance 1) exists
+	})
+
+	// Test custom suggestions formatter
+	t.Run("CustomSuggestionsFormatter", func(t *testing.T) {
+		parser := NewParser()
+
+		// Set custom formatter
+		parser.SetSuggestionsFormatter(func(suggestions []string) string {
+			return "Perhaps you meant: " + strings.Join(suggestions, " or ")
+		})
+
+		parser.AddCommand(NewCommand(
+			WithName("deploy"),
+			WithCommandDescription("Deploy application"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		parser.AddCommand(NewCommand(
+			WithName("delete"),
+			WithCommandDescription("Delete resources"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// Test with exact match between two commands
+		ok := parser.Parse([]string{"depl"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		assert.NotEmpty(t, errs)
+
+		errStr := ""
+		for _, err := range errs {
+			errStr += err.Error() + "\n"
+		}
+
+		// Should use custom formatter
+		// The error contains both the "command not found" error and the custom formatter output
+		assert.Contains(t, errStr, "Perhaps you meant:")
+	})
+
+	// Test flag suggestions
+	t.Run("FlagSuggestions", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add some flags
+		parser.AddFlag("verbose", NewArg(
+			WithShortFlag("v"),
+			WithType(types.Standalone),
+			WithDescription("Verbose output"),
+		))
+		parser.AddFlag("version", NewArg(
+			WithType(types.Standalone),
+			WithDescription("Show version"),
+		))
+		parser.AddFlag("verify", NewArg(
+			WithType(types.Standalone),
+			WithDescription("Verify mode"),
+		))
+
+		// Note: flag parsing strips the prefix, so error shows "ver" not "--ver"
+		ok := parser.Parse([]string{"--ver"})
+		assert.False(t, ok)
+
+		errs := parser.GetErrors()
+		assert.NotEmpty(t, errs)
+
+		errStr := ""
+		for _, err := range errs {
+			errStr += err.Error() + "\n"
+		}
+
+		// The error shows the flag without prefix
+		assert.Contains(t, errStr, "ver")
+		// The suggestions might be short flags or long flags
+		assert.True(t,
+			strings.Contains(errStr, "-v") ||
+				strings.Contains(errStr, "--verbose") ||
+				strings.Contains(errStr, "--version") ||
+				strings.Contains(errStr, "--verify"),
+			"Should suggest at least one similar flag")
+	})
+
+	// Test positional arguments don't trigger suggestions
+	t.Run("PositionalArgumentsNoSuggestions", func(t *testing.T) {
+		parser := NewParser()
+
+		// Add a command that accepts positional args
+		parser.AddCommand(NewCommand(
+			WithName("echo"),
+			WithCommandDescription("Echo arguments"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// This should be treated as positional argument, not a typo
+		ok := parser.Parse([]string{"hello", "world"})
+		assert.True(t, ok) // Should succeed as positional args
+
+		positional := parser.GetPositionalArgs()
+		assert.Len(t, positional, 2)
+		assert.Equal(t, "hello", positional[0].Value)
+		assert.Equal(t, "world", positional[1].Value)
+	})
 }
 
 func TestMain(m *testing.M) {

@@ -79,14 +79,16 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 	parts := strings.Split(tag, ";")
 
 	for _, part := range parts {
-		key, value, found := strings.Cut(part, ":")
+		k, value, found := strings.Cut(part, ":")
 		if !found {
 			return nil, errs.ErrInvalidTagFormat.WithArgs(part)
 		}
 
-		switch key {
-		case "descKey":
+		switch key := strings.ToLower(k); key {
+		case "desckey":
 			config.DescriptionKey = value
+		case "namekey":
+			config.NameKey = value
 		case "kind":
 			switch types.Kind(value) {
 			case types.KindFlag, types.KindCommand, types.KindEmpty:
@@ -163,7 +165,7 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 		case "validators":
 			config.Validators = ValidatorSpecs(value)
 		default:
-			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", key, field.Name)
+			return nil, errs.ErrInvalidAttributeForType.WithArgs(key, field.Name)
 		}
 	}
 

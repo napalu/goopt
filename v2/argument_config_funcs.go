@@ -32,6 +32,13 @@ func WithDescription(description string) ConfigureArgumentFunc {
 	}
 }
 
+// WithNameKey sets the translation key for the flag name
+func WithNameKey(nameKey string) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.NameKey = nameKey
+	}
+}
+
 // WithType - one of three types:
 //  1. Single - a flag which expects a value
 //  2. Chained - a flag which expects a delimited value representing elements in a list (and is evaluated as a list)

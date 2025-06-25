@@ -2,7 +2,7 @@
 
 [![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2)
 [![Go Report Card v2](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt/v2)
-![Coverage](https://img.shields.io/badge/Coverage-83.6%25-brightgreen)
+[![v2 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v2)](https://codecov.io/gh/napalu/goopt?flag=v2)
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
 
 `goopt` is a flexible and powerful command-line option parser for Go that supports multiple declarative and programmatic approaches to building your CLI. It's designed to be simple for small tools but scales elegantly for complex applications with features like first-class internationalization, advanced validation, and command lifecycle hooks.
@@ -22,13 +22,10 @@
 
 While `goopt` handles the basics with ease, its real strength lies in providing sophisticated features that solve common, complex CLI development challenges out of the box.
 
-*   **Adaptive Help System:** Move beyond static help text. `goopt` features an **adaptive help system** that automatically chooses the best display style (`flat`, `grouped`, `compact`, `hierarchical`) based on your CLI's complexity. Its **interactive help parser** allows users to query for help on specific topics (e.g., `myapp --help globals`, `myapp --help --search "database"`), providing a vastly superior user experience.
-
+*   **Adaptive Help System:** Move beyond static help text. `goopt` features an **adaptive help system** that automatically chooses the best display style (`flat`, `grouped`, `compact`, `hierarchical`) based on your CLI's complexity. Its **interactive help parser** allows users to query for help on specific topics(e.g., `myapp --help globals`, `myapp --help --search "database"`), providing a superior user experience. Plus, intelligent "did you mean?" suggestions help users recover from typos.
 *   **Powerful, Composable Validation:** No tedious input validation boilerplate. `goopt`'s validation engine allows you to define validation rules directly in your struct tags. Compose built-in validators (`email`, `port`, `range`) with custom logic and logical operators (`oneof`, `all`, `not`) to create robust and readable validation for your flags.
-
 *   **Lifecycle Management with Execution Hooks:** Implement cross-cutting concerns cleanly with a powerful pre- and post-execution hook system. Perfect for handling authentication, setting up database connections, logging metrics, or ensuring resource cleanup, hooks can be applied globally or to specific commands, giving you full control over the command lifecycle.
-
-*   **First-Class Internationalization (i18n):** i18n is a core feature of `goopt`. Use `descKey` tags to reference translations, and let the included `goopt-i18n-gen` tool automate the entire workflow—from auditing your code for missing keys to generating type-safe message constants that eliminate runtime errors.
+*   **First-Class Internationalization (i18n):** i18n is a core feature of `goopt`. Use `descKey` and `nameKey` tags to translate descriptions and names, enjoy automatic RTL language support, locale-aware number/date formatting, and regional variants (e.g., Swiss German). The included `goopt-i18n-gen` tool automates the entire workflow—from auditing your code for missing keys to generating type-safe message constants that eliminate runtime errors.
 
 ## Key Features
 
@@ -45,7 +42,8 @@ While `goopt` handles the basics with ease, its real strength lies in providing 
 - **Repeated Flags:** Natively supports both `--tag one --tag two` and `--tag "one,two"` for slice flags.
 
 #### Developer Experience
-- **Auto-Help & Auto-Version:** Zero-config `--help` and `--version` flags that just work.
+- **Auto-Help & Auto-Version:** Zero-config `--help` and `--version` flags that just work. 
+- **Intelligent Suggestions:** Automatic "did you mean?" suggestions for mistyped commands and flags.
 - **Full i18n Tooling:** The `goopt-i18n-gen` tool facilitates translation management.
 - **Shell Completion:** Generate completion scripts for Bash, Zsh, Fish, and PowerShell.
 - **Secure Input:** Built-in support for securely prompting for passwords and other secrets.

@@ -105,7 +105,7 @@ func LegacyUnmarshalTagFormat(field reflect.StructField) (*types.TagConfig, erro
 			}
 			config.DependsOn = deps
 		default:
-			return nil, errs.ErrInvalidAttributeForType.WithArgs("'unrecognized'", tag, field.Name)
+			return nil, errs.ErrInvalidAttributeForType.WithArgs(tag, field.Name)
 		}
 	}
 

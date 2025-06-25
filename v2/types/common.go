@@ -67,6 +67,7 @@ const (
 type TagConfig struct {
 	Kind           Kind
 	Name           string
+	NameKey        string // Translation key for the flag/command name
 	Short          string
 	TypeOf         OptionType
 	Description    string

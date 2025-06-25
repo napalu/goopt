@@ -1,11 +1,8 @@
 name: Test Go Modules (v1 & v2)
 
 permissions:
-  # For actions/checkout and running tests
   contents: read
-  # For create-pull-request action
   pull-requests: write
-  # For creating branches (needed by create-pull-request)
   statuses: write
 
 on:
@@ -14,162 +11,49 @@ on:
       - main
   pull_request:
     branches:
-      - '**'  # all branches
-  workflow_dispatch: # Allow manual triggering
+      - '**'
+  workflow_dispatch:
 
 jobs:
   test:
     strategy:
       matrix:
-        go-version: [ 1.18.x, stable ]
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        go-version: [1.18.x, stable]
+        os: [ubuntu-latest, macos-latest, windows-latest]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@v4
 
-      - name: Setup go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Run Test (v1)
+      # v1 tests
+      - name: Run Test & Coverage (v1)
         run: |
-          go test ./...
+          go test -v ./... -covermode=atomic -coverprofile=coverage_v1.out
 
-      - name: Run Test (v2)
+      - name: Upload Coverage to Codecov (v1)
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage_v1.out
+          flags: v1
+          name: codecov-v1-${{ matrix.os }}-${{ matrix.go-version }}
+          fail_ci_if_error: true
+
+      # v2 tests
+      - name: Run Test & Coverage (v2)
         working-directory: ./v2
         run: |
-          go test ./...
+          go test -v ./... -covermode=atomic -coverprofile=coverage_v2.out
 
-  update-badges:
-    needs: test  # This ensures all tests pass first
-    runs-on: ubuntu-latest  # Only needs to run once
-    permissions:
-      contents: write    # Only needed for this job
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Setup go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
+      - name: Upload Coverage to Codecov (v2)
+        uses: codecov/codecov-action@v4
         with:
-          go-version: stable
-
-      # ===== v1 Coverage =====
-      - name: Generate v1 Coverage
-        run: |
-          go test -v ./... -covermode=count -coverprofile=coverage.out
-          go tool cover -func=coverage.out -o=coverage.out
-
-      - name: Go Coverage Badge (v1)
-        uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
-        with:
-          filename: coverage.out
-
-      # Save v1 badge for later
-      - name: Extract v1 Badge
-        run: |
-          BADGE_LINE=$(grep -n '!\[Coverage\]' README.md | tail -1 | sed 's/^[0-9]*://')
-          echo "V1_BADGE_LINE=$BADGE_LINE" >> $GITHUB_ENV
-
-      # ===== v2 Coverage =====
-      - name: Generate v2 Coverage
-        run: |
-          cd v2
-          go test -v ./... -covermode=count -coverprofile=coverage.out
-          go tool cover -func=coverage.out -o=coverage.out
-          cd ..
-          cp v2/coverage.out v2_coverage.out
-
-      - name: Go Coverage Badge (v2)
-        uses: tj-actions/coverage-badge-go@84540b9f82b4f569ac9f248cf6f2893ac3cc4791
-        with:
-          filename: v2_coverage.out
-
-      # Save v2 badge for later
-      - name: Extract v2 Badge
-        run: |
-          BADGE_LINE=$(grep -n '!\[Coverage\]' README.md | tail -1 | sed 's/^[0-9]*://')
-          echo "V2_BADGE_LINE=$BADGE_LINE" >> $GITHUB_ENV
-          
-      # Restore v1 badge to main README
-      - name: Restore v1 Badge to README
-        run: |
-          # Replace the current badge with the v1 badge
-          if [ ! -z "$V1_BADGE_LINE" ]; then
-            sed -i 's|!\[Coverage\].*|'"$V1_BADGE_LINE"'|' README.md
-          fi
-
-      # Update v2 README with v2 badge
-      - name: Update v2 README
-        run: |
-          if [ ! -z "$V2_BADGE_LINE" ]; then
-            # Write badge to temporary file to avoid escaping issues
-            echo "$V2_BADGE_LINE" > /tmp/badge_line.txt
-            
-            # Check if badge already exists in v2 README
-            if grep -q '!\[Coverage\]' v2/README.md; then
-              # Create new README with badge replaced
-              awk '{
-                if ($0 ~ /!\[Coverage\]/) {
-                  system("cat /tmp/badge_line.txt")
-                } else {
-                  print $0
-                }
-              }' v2/README.md > /tmp/new_readme.md
-              mv /tmp/new_readme.md v2/README.md
-            else
-              # Insert badge after the first heading (line starting with #)
-              awk '{
-                print $0;
-                if ($0 ~ /^# / && !badge_printed) {
-                  print "";
-                  system("cat /tmp/badge_line.txt");
-                  badge_printed = 1;
-                }
-              }' v2/README.md > /tmp/new_readme.md
-              mv /tmp/new_readme.md v2/README.md
-            fi
-          fi
-          
-      # ===== Check files changed =====
-      - name: Verify Changed files
-        uses: tj-actions/verify-changed-files@6ed7632824d235029086612d4330d659005af687
-        id: verify-changed-files
-        with:
-          files: |
-            README.md
-            v2/README.md
-
-      - name: Debug info
-        run: |
-          echo "Files changed: ${{ steps.verify-changed-files.outputs.files_changed }}"
-          echo "Changed files: ${{ steps.verify-changed-files.outputs.changed_files }}"
-
-      # ===== Create PR if changes detected =====
-      - name: Create Pull Request
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
-        uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f
-        id: create-pr
-        with:
-          token: ${{ github.token }}
-          commit-message: "chore: Updated coverage badges for v1 and v2"
-          title: "Update coverage badges for v1 and v2"
-          body: |
-            Automated PR to update coverage badges
-            
-            Changed files:
-            ${{ steps.verify-changed-files.outputs.changed_files }}
-          branch: chore/update-coverage-badges
-          base: main
-          delete-branch: true
-
-      - name: PR Output
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
-        run: |
-          echo "PR created: ${{ steps.create-pr.outputs.pull-request-created }}"
-          echo "PR number: ${{ steps.create-pr.outputs.pull-request-number }}"
-          echo "PR URL: ${{ steps.create-pr.outputs.pull-request-url }}"
+          files: v2/coverage_v2.out
+          flags: v2
+          name: codecov-v2-${{ matrix.os }}-${{ matrix.go-version }}
+          fail_ci_if_error: true

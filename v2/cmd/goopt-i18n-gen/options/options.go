@@ -77,6 +77,14 @@ type SyncCmd struct {
 	Exec        goopt.CommandFunc
 }
 
+// GenerateLocalesCmd command configuration for generating locale packages
+type GenerateLocalesCmd struct {
+	Output      string `goopt:"short:o;desc:Output directory for locale packages;required:true;descKey:app.generate_locales_cmd.output_desc"`
+	PackageBase string `goopt:"short:p;desc:Base package path;default:github.com/napalu/goopt/v2/i18n/locales;descKey:app.generate_locales_cmd.package_base_desc"`
+	DryRun      bool   `goopt:"short:n;desc:Preview what would be generated;descKey:app.generate_locales_cmd.dry_run_desc"`
+	Exec        goopt.CommandFunc
+}
+
 // AppConfig main application configuration
 type AppConfig struct {
 	Input    []string        `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.app_config.input_desc"`
@@ -88,7 +96,8 @@ type AppConfig struct {
 	Audit    AuditCmd        `goopt:"kind:command;name:audit;desc:Audit goopt fields for missing descKey tags;descKey:app.app_config.audit_desc"`
 	Init     InitCmd         `goopt:"kind:command;name:init;desc:Initialize a new i18n setup;descKey:app.app_config.init_desc"`
 	Add      AddCmd          `goopt:"kind:command;name:add;desc:Add new translation keys to locale files;descKey:app.app_config.add_desc"`
-	Extract  ExtractCmd      `goopt:"kind:command;name:extract;desc:Extract strings from Go source files;descKey:app.app_config.extract_desc"`
-	Sync     SyncCmd         `goopt:"kind:command;name:sync;desc:Synchronize keys across locale files;descKey:app.app_config.sync_desc"`
-	TR       i18n.Translator `ignore:"true"` // Translator for messages
+	Extract         ExtractCmd         `goopt:"kind:command;name:extract;desc:Extract strings from Go source files;descKey:app.app_config.extract_desc"`
+	Sync            SyncCmd            `goopt:"kind:command;name:sync;desc:Synchronize keys across locale files;descKey:app.app_config.sync_desc"`
+	GenerateLocales GenerateLocalesCmd `goopt:"kind:command;name:generate-locales;desc:Generate Go packages from locale JSON files;descKey:app.app_config.generate_locales_desc"`
+	TR              i18n.Translator    `ignore:"true"` // Translator for messages
 }

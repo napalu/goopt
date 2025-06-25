@@ -32,6 +32,7 @@ func main() {
 	cfg.Add.Exec = translations.Add
 	cfg.Extract.Exec = translations.Extract
 	cfg.Sync.Exec = translations.Sync
+	cfg.GenerateLocales.Exec = translations.GenerateLocales
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")
@@ -59,8 +60,8 @@ func main() {
 		lang := parseLanguage(cfg.Language)
 		if lang != language.Und {
 			bundle.SetDefaultLanguage(lang)
-			// update goopt system bundle (important for goopt error and message translations)
-			i18n.Default().SetDefaultLanguage(lang)
+			// Don't modify global default bundle - it's now immutable
+			// Parser language settings should be used instead
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/internal/messages"
 	"github.com/napalu/goopt/v2/internal/util"
+	"golang.org/x/text/language"
 )
 
 // HelpMode defines different help query modes
@@ -305,18 +306,60 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 	writer := h.getWriter()
 
 	// Find similar commands
-	suggestions := h.findSimilarCommands(invalidCmd)
+	suggestions, _ := h.findSimilarCommandsWithContext(invalidCmd)
 
 	fmt.Fprintf(writer, "%s: %s\n\n",
 		h.mainParser.layeredProvider.GetMessage(messages.MsgErrorPrefixKey),
 		h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUnknownCommandKey, invalidCmd))
 
 	if len(suggestions) > 0 {
-		fmt.Fprintf(writer, "%s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey))
-		for _, s := range suggestions {
-			fmt.Fprintf(writer, "  %s\n", s)
+		// Display each suggestion in the form that was closest to user input
+		displaySuggestions := make([]string, len(suggestions))
+		for i, suggestion := range suggestions {
+			// By default show canonical
+			displaySuggestions[i] = suggestion
+
+			// Check if we should show translated form
+			if h.mainParser.translationRegistry != nil {
+				// Get the command to check translation
+				var cmd *Command
+				if c, found := h.mainParser.registeredCommands.Get(suggestion); found {
+					cmd = c
+				}
+
+				if cmd != nil && cmd.NameKey != "" {
+					if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(suggestion, h.mainParser.GetLanguage()); found {
+						// Compare distances to determine which form to show
+						canonicalDist := util.LevenshteinDistance(invalidCmd, suggestion)
+						translatedDist := util.LevenshteinDistance(invalidCmd, translated)
+
+						// Debug logging
+						// fmt.Printf("DEBUG handleInvalidCommand: invalidCmd=%s, suggestion=%s, translated=%s, canonicalDist=%d, translatedDist=%d\n",
+						//     invalidCmd, suggestion, translated, canonicalDist, translatedDist)
+
+						// Show the form that's closer to what user typed
+						if translatedDist < canonicalDist {
+							displaySuggestions[i] = translated
+						} else if translatedDist == canonicalDist && translated != suggestion {
+							// If equal distance and different words, show both forms
+							displaySuggestions[i] = fmt.Sprintf("%s / %s", suggestion, translated)
+						}
+					}
+				}
+			}
 		}
-		fmt.Fprintln(writer)
+
+		// Use the parser's suggestions formatter if available
+		var formatted string
+		if h.mainParser.suggestionsFormatter != nil {
+			formatted = h.mainParser.suggestionsFormatter(displaySuggestions)
+		} else {
+			// Default format for help system
+			formatted = "\n  " + strings.Join(displaySuggestions, "\n  ")
+		}
+		fmt.Fprintf(writer, "%s %s\n\n",
+			h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey),
+			formatted)
 	}
 
 	// Show available commands
@@ -351,13 +394,20 @@ func (h *HelpParser) handleInvalidSubcommand(commandPath, invalidSub string) err
 
 	// Show suggestions if any
 	if len(suggestions) > 0 {
-		fmt.Fprintf(writer, "%s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey))
-		for _, s := range suggestions {
-			fmt.Fprintf(writer, "  %s\n", s)
+		// Use the parser's suggestions formatter if available
+		var formatted string
+		if h.mainParser.suggestionsFormatter != nil {
+			formatted = h.mainParser.suggestionsFormatter(suggestions)
+		} else {
+			// Default format for help system
+			formatted = "\n  " + strings.Join(suggestions, "\n  ")
 		}
-		h.mainParser.addError(fmt.Errorf("%s\n  %s",
+		fmt.Fprintf(writer, "%s %s\n",
 			h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey),
-			strings.Join(suggestions, "\n  ")))
+			formatted)
+		h.mainParser.addError(fmt.Errorf("%s %s",
+			h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey),
+			formatted))
 	}
 
 	fmt.Fprintln(writer)
@@ -366,45 +416,133 @@ func (h *HelpParser) handleInvalidSubcommand(commandPath, invalidSub string) err
 	return h.renderCommandHelp(writer, commandPath)
 }
 
-// findSimilarCommands finds commands similar to the input
-func (h *HelpParser) findSimilarCommands(input string) []string {
-	var suggestions []string
-	threshold := 2 // Levenshtein distance threshold
+// suggestion represents a command suggestion with its distance and translation status
+type suggestion struct {
+	commandPath  string
+	distance     int
+	isTranslated bool
+}
 
-	// Check all registered commands including subcommands
+// findSimilarCommandsWithContext finds commands similar to the input and detects if input is likely translated
+func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, bool) {
+
+	var allSuggestions []suggestion
+	currentLang := h.mainParser.GetLanguage()
+
+	// Check all commands - both canonical and translated names
 	for kv := h.mainParser.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		cmd := kv.Value
+
+		// Check canonical name
 		distance := util.LevenshteinDistance(input, cmd.Name)
-		// Skip exact matches (distance 0) and only suggest similar commands
-		if distance > 0 && distance <= threshold {
-			suggestions = append(suggestions, cmd.Name)
+		if distance > 0 && distance <= 2 {
+			allSuggestions = append(allSuggestions, suggestion{
+				commandPath:  cmd.Name,
+				distance:     distance,
+				isTranslated: false,
+			})
+		}
+
+		// Check translated name if available
+		if h.mainParser.translationRegistry != nil && cmd.NameKey != "" {
+			if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(cmd.Name, currentLang); found {
+				translatedDistance := util.LevenshteinDistance(input, translated)
+				if translatedDistance > 0 && translatedDistance <= 2 {
+					// Check if we already have this command in suggestions
+					found := false
+					for i, s := range allSuggestions {
+						if s.commandPath == cmd.Name {
+							// Update if translated is closer
+							if translatedDistance < s.distance {
+								allSuggestions[i].distance = translatedDistance
+								allSuggestions[i].isTranslated = true
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						allSuggestions = append(allSuggestions, suggestion{
+							commandPath:  cmd.Name,
+							distance:     translatedDistance,
+							isTranslated: true,
+						})
+					}
+				}
+			}
 		}
 
 		// Check subcommands
 		if len(cmd.Subcommands) > 0 {
-			h.findSimilarCommandsInSlice(cmd.Name, cmd.Subcommands, input, threshold, &suggestions)
+			h.findSimilarCommandsInSliceWithContext(cmd.Name, cmd.Subcommands, input, &allSuggestions, currentLang)
 		}
 	}
 
-	// Sort by similarity
-	sort.Slice(suggestions, func(i, j int) bool {
-		// Extract just the command name for comparison
-		name1 := suggestions[i]
-		name2 := suggestions[j]
-		if idx := strings.LastIndex(name1, " "); idx >= 0 {
-			name1 = name1[idx+1:]
+	// Find minimum distance
+	minDistance := 3
+	for _, s := range allSuggestions {
+		if s.distance < minDistance {
+			minDistance = s.distance
 		}
-		if idx := strings.LastIndex(name2, " "); idx >= 0 {
-			name2 = name2[idx+1:]
+	}
+
+	// If we have distance 1 matches, only show those
+	// Otherwise show all matches up to distance 2
+	threshold := minDistance
+	if minDistance > 1 {
+		threshold = 2
+	}
+
+	// Filter and determine if we should show translated names
+	var finalSuggestions []string
+	hasTranslated := false
+
+	for _, s := range allSuggestions {
+		if s.distance <= threshold {
+			finalSuggestions = append(finalSuggestions, s.commandPath)
+			if s.isTranslated {
+				hasTranslated = true
+			}
 		}
-		return util.LevenshteinDistance(input, name1) < util.LevenshteinDistance(input, name2)
+	}
+
+	// Remove duplicates
+	uniqueSuggestions := make(map[string]bool)
+	var filtered []string
+	for _, s := range finalSuggestions {
+		if !uniqueSuggestions[s] {
+			uniqueSuggestions[s] = true
+			filtered = append(filtered, s)
+		}
+	}
+	finalSuggestions = filtered
+
+	// Sort by distance
+	sort.Slice(finalSuggestions, func(i, j int) bool {
+		dist1 := 3
+		dist2 := 3
+		for _, s := range allSuggestions {
+			if s.commandPath == finalSuggestions[i] {
+				dist1 = s.distance
+			}
+			if s.commandPath == finalSuggestions[j] {
+				dist2 = s.distance
+			}
+		}
+		return dist1 < dist2
 	})
 
 	// Limit to top 3
-	if len(suggestions) > 3 {
-		suggestions = suggestions[:3]
+	if len(finalSuggestions) > 3 {
+		finalSuggestions = finalSuggestions[:3]
 	}
 
+	return finalSuggestions, hasTranslated
+}
+
+// findSimilarCommands finds commands similar to the input
+func (h *HelpParser) findSimilarCommands(input string) []string {
+	suggestions, _ := h.findSimilarCommandsWithContext(input)
 	return suggestions
 }
 
@@ -456,6 +594,61 @@ func (h *HelpParser) detectBestStyle() HelpStyle {
 
 	// Simple CLI
 	return HelpStyleFlat
+}
+
+// findSimilarCommandsInSliceWithContext recursively searches for similar commands considering both canonical and translated names
+func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, commands []Command, input string, suggestions *[]suggestion, currentLang language.Tag) {
+	for i := range commands {
+		cmd := &commands[i]
+		commandPath := cmd.Name
+		if prefix != "" {
+			commandPath = prefix + " " + cmd.Name
+		}
+
+		// Check canonical name
+		distance := util.LevenshteinDistance(input, cmd.Name)
+		if distance > 0 && distance <= 2 {
+			*suggestions = append(*suggestions, suggestion{
+				commandPath:  commandPath,
+				distance:     distance,
+				isTranslated: false,
+			})
+		}
+
+		// Check translated name if available
+		if h.mainParser.translationRegistry != nil && cmd.NameKey != "" {
+			if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(commandPath, currentLang); found {
+				translatedDistance := util.LevenshteinDistance(input, translated)
+				if translatedDistance > 0 && translatedDistance <= 2 {
+					// Check if we already have this command in suggestions
+					found := false
+					for j, s := range *suggestions {
+						if s.commandPath == commandPath {
+							// Update if translated is closer
+							if translatedDistance < s.distance {
+								(*suggestions)[j].distance = translatedDistance
+								(*suggestions)[j].isTranslated = true
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						*suggestions = append(*suggestions, suggestion{
+							commandPath:  commandPath,
+							distance:     translatedDistance,
+							isTranslated: true,
+						})
+					}
+				}
+			}
+		}
+
+		// Check subcommands
+		if len(cmd.Subcommands) > 0 {
+			h.findSimilarCommandsInSliceWithContext(commandPath, cmd.Subcommands, input, suggestions, currentLang)
+		}
+	}
 }
 
 // findSimilarCommandsInSlice recursively searches for similar commands in a slice

@@ -156,7 +156,7 @@ func WithEnvNameConverter(converter NameConversionFunc) ConfigureCmdLineFunc {
 // WithLanguage allows setting the language for the parser.
 func WithLanguage(lang language.Tag) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
-		if setErr := cmdLine.SetSystemLanguage(lang); setErr != nil && err != nil {
+		if setErr := cmdLine.SetLanguage(lang); setErr != nil && err != nil {
 			*err = setErr
 		}
 	}
@@ -312,5 +312,53 @@ func WithValidationHook(hook func(*Parser) error) ConfigureCmdLineFunc {
 func WithHelpBehavior(behavior HelpBehavior) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		cmdLine.SetHelpBehavior(behavior)
+	}
+}
+
+// WithSuggestionsFormatter sets a custom formatter for displaying suggestions in error messages
+func WithSuggestionsFormatter(formatter SuggestionsFormatter) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetSuggestionsFormatter(formatter)
+	}
+}
+
+// WithSystemLocales adds system locale translations to the parser.
+// This allows loading additional language support at runtime.
+// The translations should be the contents of locale JSON files.
+func WithSystemLocales(locales ...i18n.Locale) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		*err = p.SetSystemLocales(locales...)
+	}
+}
+
+// WithCheckSystemLocale enables checking system locale environment variables (LC_ALL, LC_MESSAGES, LANG)
+// for auto-language detection. By default, only GOOPT_LANG is checked.
+func WithCheckSystemLocale() ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetCheckSystemLocale(true)
+	}
+}
+
+// WithLanguageEnvVar sets a custom environment variable name for language detection.
+// Default is "GOOPT_LANG". Set to empty string to disable environment variable checking.
+func WithLanguageEnvVar(envVar string) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetLanguageEnvVar(envVar)
+	}
+}
+
+// WithSuggestionThreshold sets the maximum Levenshtein distance for suggestions.
+// You can set different thresholds for flags and commands.
+// A threshold of 0 disables suggestions for that type.
+// Default is 2 for both flags and commands.
+//
+// Example:
+//
+//	parser, err := NewParserWith(
+//		WithSuggestionThreshold(3, 2), // More lenient for flags, standard for commands
+//	)
+func WithSuggestionThreshold(flagThreshold, commandThreshold int) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetSuggestionThreshold(flagThreshold, commandThreshold)
 	}
 }

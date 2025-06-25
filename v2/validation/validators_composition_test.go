@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -222,5 +223,71 @@ func TestCompositionalValidators(t *testing.T) {
 		emptyAll := All()
 		assert.NoError(t, emptyAll("anything"))
 		assert.NoError(t, emptyAll(""))
+	})
+}
+
+func TestValidator_Creation(t *testing.T) {
+	t.Run("Complex validator parsing", func(t *testing.T) {
+		testCases := []struct {
+			name      string
+			spec      string
+			testValue string
+			shouldErr bool
+		}{
+			{
+				name:      "OneOf with multiple validators",
+				spec:      "oneof(email,url)",
+				testValue: "test@example.com",
+				shouldErr: false,
+			},
+			{
+				name:      "All with multiple validators",
+				spec:      "all(minlength(3),maxlength(10))",
+				testValue: "hello",
+				shouldErr: false,
+			},
+			{
+				name:      "Not validator",
+				spec:      "not(email)",
+				testValue: "not-an-email",
+				shouldErr: false,
+			},
+			{
+				name:      "IsOneOf validator",
+				spec:      "isoneof(dev,staging,prod)",
+				testValue: "staging",
+				shouldErr: false,
+			},
+			{
+				name:      "Complex nested validators",
+				spec:      "oneof(all(minlength(5),alphanumeric),email)",
+				testValue: "test@example.com",
+				shouldErr: false,
+			},
+			{
+				name:      "Invalid validator depth",
+				spec:      "all(all(all(all(all(all(all(all(all(all(all(all(email))))))))))))", // 12 levels, exceeds max of 10
+				testValue: "test@example.com",
+				shouldErr: true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				validators, err := ParseValidators([]string{tc.spec})
+
+				if tc.shouldErr {
+					assert.Error(t, err)
+					return
+				}
+
+				require.NoError(t, err)
+				assert.Len(t, validators, 1)
+
+				// Test the validator
+				err = validators[0](tc.testValue)
+				assert.NoError(t, err)
+			})
+		}
 	})
 }
