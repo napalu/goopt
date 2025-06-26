@@ -85,10 +85,12 @@ func TestLangIDToLocaleName(t *testing.T) {
 		},
 		{
 			name:     "German",
+			langID:   0x0407,
 			expected: "de-DE",
 		},
 		{
 			name:     "French",
+			langID:   0x040C,
 			expected: "fr-FR",
 		},
 		{
@@ -103,10 +105,12 @@ func TestLangIDToLocaleName(t *testing.T) {
 		},
 		{
 			name:     "Japanese",
+			langID:   0x0411,
 			expected: "ja-JP",
 		},
 		{
 			name:     "Spanish",
+			langID:   0x040A,
 			expected: "es-ES_tradnl",
 		},
 		{
