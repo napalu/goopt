@@ -86,12 +86,10 @@ func TestLangIDToLocaleName(t *testing.T) {
 		{
 			name:     "German",
 			expected: "de-DE",
-			expected: "de",
 		},
 		{
 			name:     "French",
 			expected: "fr-FR",
-			expected: "fr",
 		},
 		{
 			name:     "Chinese Simplified",
@@ -106,12 +104,10 @@ func TestLangIDToLocaleName(t *testing.T) {
 		{
 			name:     "Japanese",
 			expected: "ja-JP",
-			expected: "ja",
 		},
 		{
 			name:     "Spanish",
 			expected: "es-ES_tradnl",
-			expected: "es",
 		},
 		{
 			name:     "Unknown language",
@@ -248,16 +244,13 @@ func TestGetSystemLocale_Integration(t *testing.T) {
 	// This is an integration test that will actually call Windows APIs
 	// It may produce different results on different systems
 	t.Run("can detect locale", func(t *testing.T) {
-		ClearWindowsLocaleCache()
 		tag, err := GetSystemLocale(os.Getenv)
-		tag, err := GetSystemLocale()
 
 		// We should get some locale, even if it's just English
 		assert.NoError(t, err)
 		assert.NotEqual(t, language.Und, tag)
 
 		tag2, err2 := GetSystemLocale(os.Getenv)
-		tag2, err2 := GetSystemLocale()
 		assert.NoError(t, err2)
 		assert.Equal(t, tag, tag2)
 	})
