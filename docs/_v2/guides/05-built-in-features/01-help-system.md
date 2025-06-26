@@ -29,17 +29,17 @@ parser, _ := goopt.NewParserFromStruct(&Config{})
 
 // Parse arguments
 if !parser.Parse(os.Args) {
-// Handle parsing errors...
-os.Exit(1)
+    // Handle parsing errors...
+    os.Exit(1)
 }
 
 // By default, goopt exits after showing help.
 // The WasHelpShown() check is primarily for tests or when the
 // default exit behavior is overridden.
 if parser.WasHelpShown() {
-// This block is typically not reached in a final application
-// but is useful for testing.
-os.Exit(0)
+    // This block is typically not reached in a final application
+    // but is useful for testing.
+    os.Exit(0)
 }
 
 // ... your application logic continues here ...
@@ -51,7 +51,7 @@ If you need complete control over the `--help` flag, you can disable the automat
 
 ```go
 parser, _ := goopt.NewParserWith(
-goopt.WithAutoHelp(false),
+    goopt.WithAutoHelp(false),
 )
 // Now, --help and -h are not registered automatically.
 ```
