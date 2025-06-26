@@ -73,11 +73,16 @@ type Config struct {
 
 func main() {
 	cfg := &Config{}
-	parser, _ := goopt.NewParserFromStruct(cfg)
+	// It's good practice to handle the potential error from the constructor.
+	parser, err := goopt.NewParserFromStruct(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating parser: %v\n", err)
+		os.Exit(1)
+	}
 
-	// goopt automatically handles --help and --version.
+	// Parse returns false on failure or if help was requested.
+	// goopt automatically handles printing errors or help text.
 	if !parser.Parse(os.Args) {
-		parser.PrintHelp(os.Stderr)
 		os.Exit(1)
 	}
 
@@ -86,6 +91,9 @@ func main() {
 			fmt.Println("Greeting verbosely...")
 		}
 		fmt.Printf("Hello, %s!\n", cfg.Greet.Name)
+	} else {
+		// If no command is given, it's good practice to show the help.
+		parser.PrintHelp(os.Stdout)
 	}
 }
 ```

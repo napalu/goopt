@@ -2,7 +2,7 @@
 layout: default
 title: Getting Started
 parent: Guides
-nav_order: 1
+nav_order: 4
 version: v2
 ---
 
@@ -56,25 +56,28 @@ func main() {
 	}
 
 	// Parse the command-line arguments.
+	// The Parse method returns false if parsing fails or if help was requested.
 	if !parser.Parse(os.Args) {
-		// If parsing fails (e.g., missing required flag), goopt
-		// populates an error list. We can print them and show the help.
+		// If parsing fails (e.g., missing a required flag), goopt
+		// populates an error list which we can print.
 		for _, e := range parser.GetErrors() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", e)
 		}
-		fmt.Fprintln(os.Stderr)
-		parser.PrintHelp(os.Stderr)
+		
+		// In a production app, goopt's default behavior is to print help
+		// for certain errors and then call os.Exit. We exit here to
+		// handle all other failure cases.
 		os.Exit(1)
 	}
 
-	// Check if a command was run and access its flags.
+	// Check which command was run and access its flags.
 	if parser.HasCommand("greet") {
 		if cfg.Verbose {
 			fmt.Println("Verbose mode is enabled. Preparing to greet...")
 		}
 		fmt.Printf("Hello, %s!\n", cfg.Greet.Name)
 	} else {
-		// If no command was given, show the help.
+		// If no command was specified, show the default help text.
 		parser.PrintHelp(os.Stdout)
 	}
 }
@@ -113,7 +116,7 @@ Hello, Alice!
 ```
 
 **See the auto-generated help text:**
-Because we enabled `auto-help` (the default), `goopt` automatically handles the `--help` flag for you.
+`goopt` automatically handles the `--help` flag for you. It will print the help text and exit your program.
 ```bash
 go run . --help
 ```
@@ -123,15 +126,14 @@ Usage: main [global-flags] <command> [command-flags] [args]
 
 Global Flags:
   --help, -h      Show help information
-  --verbose, -v "Enable verbose output" (optional)
-  ...
+  --verbose, -v   Enable verbose output (optional)
 
 Commands:
   greet           Prints a greeting
 
 Examples:
-  main --help                    # Show this help
-  main greet --help            # Show greet command help
+  main --help          # Show this help
+  main greet --help    # Show greet command help
 ```
 
 ## What's Happening?
@@ -139,7 +141,7 @@ Examples:
 *   **`type Config struct {...}`**: You defined the entire CLI structure—flags, commands, and descriptions—using a single Go struct.
 *   **`goopt:"..."`**: These struct tags tell `goopt` how to create flags and commands. `short:v` creates a `-v` alias, and `desc:"..."` sets the help text.
 *   **`goopt.NewParserFromStruct(cfg)`**: This powerful function inspects your struct and builds the entire command-line parser for you.
-*   **`parser.Parse(os.Args)`**: This is where `goopt` processes the command-line arguments and populates your `cfg` struct with the values.
+*   **`parser.Parse(os.Args)`**: This is where `goopt` processes the command-line arguments, populates your `cfg` struct, and handles automatic behaviors like `--help`.
 *   **`parser.HasCommand("greet")`**: This lets you check which command the user ran so you can execute the correct logic.
 *   **`cfg.Greet.Name`**: You access the parsed flag values directly from your typed struct, which is clean and type-safe.
 

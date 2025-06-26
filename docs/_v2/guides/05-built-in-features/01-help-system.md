@@ -33,8 +33,12 @@ if !parser.Parse(os.Args) {
 os.Exit(1)
 }
 
-// Check if help was shown and exit cleanly.
+// By default, goopt exits after showing help.
+// The WasHelpShown() check is primarily for tests or when the
+// default exit behavior is overridden.
 if parser.WasHelpShown() {
+// This block is typically not reached in a final application
+// but is useful for testing.
 os.Exit(0)
 }
 
@@ -73,6 +77,7 @@ You can customize every aspect of the help system's appearance and behavior.
 
 #### `HelpStyleFlat`
 The traditional, simple list of all flags and commands. Best for small tools.
+
 ```
 Usage: myapp
  --verbose, -v     Enable verbose output (optional)
@@ -81,7 +86,8 @@ Usage: myapp
 
 #### `HelpStyleGrouped`
 Groups flags by their associated commands. Ideal for CLIs where different commands have different sets of flags.
-```
+
+```bash
 Usage: myapp
 
 Global Flags:
@@ -96,7 +102,8 @@ Commands:
 
 #### `HelpStyleCompact`
 A minimal, deduplicated output for large CLIs with many shared flags.
-```
+
+```bash
 Global Flags:
   --verbose, -v (optional)
   --config, -c (required)
@@ -108,10 +115,12 @@ Shared Flags:
 Commands:
   auth            Authenticate users              [15 flags]
   user            Manage users                    [12 flags]```
+```
 
 #### `HelpStyleHierarchical`
 A command-focused view for deeply nested CLIs (like `git` or `kubectl`). It shows the command structure and encourages users to explore subcommands.
-```
+
+```bash
 Usage: myapp [global-flags] <command> [command-flags]
 
 Command Structure:
@@ -187,94 +196,19 @@ myapp --help --style compact
 myapp --help --help
 ```
 
-### Command and Flag Suggestions
+### Smart "Did You Mean?" Suggestions
 
-`goopt` automatically helps users when they mistype commands or flags by suggesting similar alternatives.
+`goopt` automatically helps users when they mistype commands or flags by suggesting similar alternatives, making your CLI more user-friendly and reducing frustration from typos.
 
 ```bash
 # User types a wrong command
 $ myapp serverr start
 Error: Unknown command "serverr". Did you mean "server"?
-
-# User types a wrong flag
-$ myapp --verbse
-Error: unknown flag: verbse. Did you mean one of these?
-  --verbose
-  --version
 ```
 
-The suggestion system uses intelligent matching (Levenshtein distance) to find the most likely intended command or flag, making your CLI more user-friendly and reducing frustration from typos. This feature works both during normal parsing and when displaying help.
+This feature is part of a larger, more powerful suggestion system that is deeply integrated with goopt's internationalization capabilities to provide context-aware hints. The matching sensitivity and display format are fully customizable.
 
-#### Customizing Suggestion Thresholds
-
-You can control how fuzzy the suggestion matching should be by setting custom thresholds:
-
-```go
-// Set different thresholds for flags and commands
-parser.SetSuggestionThreshold(3, 2)  // Flags: max distance 3, Commands: max distance 2
-
-// Or during parser creation
-parser, _ := goopt.NewParserWith(
-    goopt.WithSuggestionThreshold(3, 2),
-)
-
-// Disable suggestions entirely
-parser.SetSuggestionThreshold(0, 0)  // No suggestions for either flags or commands
-```
-
-The default threshold is 2 for both flags and commands, which provides good suggestions without being too permissive. The system also uses conservative filtering - if there are suggestions with distance 1, it won't show suggestions with distance 2 or higher.
-
-#### Customizing Suggestion Formatting
-
-By default, suggestions are displayed as a comma-separated list in square brackets. You can customize this formatting to match your CLI's style:
-
-```go
-// Default format
-// "unknown flag: verbse. Did you mean one of these? [--verbose, --version]"
-
-// Bullet list format
-parser.SetSuggestionsFormatter(func(suggestions []string) string {
-    return "\n  • " + strings.Join(suggestions, "\n  • ")
-})
-// Result: "unknown flag: verbse. Did you mean one of these? [
-//   • --verbose
-//   • --version]"
-
-// Numbered list format
-parser.SetSuggestionsFormatter(func(suggestions []string) string {
-    var result []string
-    for i, s := range suggestions {
-        result = append(result, fmt.Sprintf("%d. %s", i+1, s))
-    }
-    return "\n  " + strings.Join(result, "\n  ")
-})
-
-// Alternative phrasing
-parser.SetSuggestionsFormatter(func(suggestions []string) string {
-    return "'" + strings.Join(suggestions, "' or '") + "'"
-})
-// Result: "unknown flag: verbse. Did you mean one of these? ['--verbose' or '--version']"
-
-// Or set it during parser creation
-parser, _ := goopt.NewParserWith(
-    goopt.WithSuggestionsFormatter(func(suggestions []string) string {
-        if len(suggestions) == 1 {
-            return suggestions[0]
-        }
-        return suggestions[0] + " (or " + strings.Join(suggestions[1:], ", ") + ")"
-    }),
-)
-```
-
-The formatter receives a slice of suggestions that are already properly formatted with their prefixes (e.g., `--verbose`, `-v`), so you only need to decide how to combine and display them.
-
-This formatter is used consistently throughout goopt:
-- When displaying suggestions for unknown flags during parsing
-- When displaying suggestions for unknown commands during parsing  
-- When the help system shows suggestions for invalid commands
-- In all error messages that include "did you mean" suggestions
-
-This ensures a consistent user experience across your entire CLI.
+For a complete guide, please see the **[Smart Suggestions Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/05-smart-suggestions.md)**.
 
 ### Version Integration
 If you use the [Version Support]({{ site.baseurl }}/v2/05-built-in-features/02-version-support/) feature, you can configure it to display the version in the help header.
@@ -312,11 +246,12 @@ func (r *CustomRenderer) FlagUsage(arg *goopt.Argument) string {
 }
 
 // Use the custom renderer in your parser
-parser.SetRenderer(&CustomRenderer{
-    DefaultRenderer: goopt.NewDefaultRenderer(parser),
-})
+    parser.SetRenderer(&CustomRenderer{
+        DefaultRenderer: goopt.NewDefaultRenderer(parser),
+    })
 
-parser.PrintHelp(os.StdErr)
+    parser.PrintHelp(os.StdErr)
+}
 ```
 This approach provides a structured way to customize the output without losing the benefits of the adaptive styling and interactive help parser.
       
@@ -341,10 +276,10 @@ parser, _ := goopt.NewParserFromStruct(&Config{})
 // Set a custom function that does *not* exit.
 // This is perfect for testing.
 parser.SetEndHelpFunc(func() error {
-// We can log that help was shown and then return nil
-// to allow the application to continue running.
-fmt.Println("[test harness] Help was displayed, not exiting.")
-return nil
+    // We can log that help was shown and then return nil
+    // to allow the application to continue running.
+    fmt.Println("[test harness] Help was displayed, not exiting.")
+    return nil
 })
 
 // Now, when you parse with a help flag...
@@ -352,7 +287,7 @@ parser.Parse([]string{"--help"})
 
 // ...the application will NOT exit. You can then make assertions.
 if !parser.WasHelpShown() {
-t.Errorf("Expected help to have been shown")
+    t.Errorf("Expected help to have been shown")
 }
 ```
 

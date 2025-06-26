@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Internationalization
-nav_order: 6
+parent: Guides
+nav_order: 9
 has_children: true
 ---
 

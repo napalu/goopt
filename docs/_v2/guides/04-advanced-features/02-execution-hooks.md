@@ -8,8 +8,34 @@ version: v2
 
 # Execution Hooks Guide
 
-The goopt v2 execution hooks feature provides pre- and post-execution hooks for command lifecycle management, enabling 
-cross-cutting concerns such as logging, authentication, and cleanup.
+The goopt v2 execution hooks feature provides pre- and post-execution hooks for command lifecycle management, enabling cross-cutting concerns such as logging, authentication, and cleanup.
+
+## In a Nutshell: A Quick Look
+
+Hooks allow you to run code before (`PreHook`) and after (`PostHook`) your commands execute. This is ideal for centralized logging, setup, and teardown logic.
+
+```go
+// A simple pre-hook for logging when a command starts.
+parser.AddGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
+    log.Printf("Starting execution of: %s", c.Path())
+    return nil // Returning an error would cancel execution
+})
+
+// A simple post-hook for logging completion and handling errors.
+parser.AddGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, cmdErr error) error {
+    if cmdErr != nil {
+        log.Printf("Execution of %s failed: %v", c.Path(), cmdErr)
+    } else {
+        log.Printf("Successfully finished: %s", c.Path())
+    }
+    // You can do cleanup here, which runs even if the command failed.
+    return nil 
+})
+```
+
+This guide will explore this feature in depth, from global vs. command-specific hooks to advanced use cases like transaction management and authentication.
+
+---
 
 ## Overview
 
@@ -75,12 +101,12 @@ parser.AddCommandPostHook("server start", notifyServerStarted)
 
 ```go
 parser, err := goopt.NewParserWith(
-    goopt.WithGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
+	goopt.WithGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
         return authenticate()
     }),
-    goopt.WithGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) error {
+	goopt.WithGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) error {
         return logExecution(c, err)
-    }),
+	}),
     goopt.WithCommandPreHook("deploy", validateDeployment),
     goopt.WithHookOrder(goopt.OrderGlobalFirst),
 )
@@ -139,12 +165,12 @@ parser.AddGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) erro
     duration := telemetry.EndSpan(c.Path())
     
     if err != nil {
-        log.Printf("[ERROR] Command: %s, Error: %v, Duration: %v", 
-            c.Path(), err, duration)
+        log.Printf("[ERROR] Command: %s, Error: %v, Duration: %v",
+        c.Path(), err, duration)
         metrics.IncrementErrors(c.Path())
     } else {
-        log.Printf("[SUCCESS] Command: %s, Duration: %v", 
-            c.Path(), duration)
+        log.Printf("[SUCCESS] Command: %s, Duration: %v",
+        c.Path(), duration)
         metrics.IncrementSuccess(c.Path())
     }
     
@@ -165,7 +191,7 @@ parser.AddGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
             return fmt.Errorf("database connection failed: %w", err)
         }
         dbConn = conn
-    }
+	}
     return nil
 })
 
@@ -177,6 +203,7 @@ parser.AddGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) erro
     }
     closeOpenFiles()
     releaseLocks()
+	
     return nil
 })
 ```
@@ -204,6 +231,7 @@ parser.AddCommandPostHook("db update", func(p *goopt.Parser, c *goopt.Command, e
     if err != nil {
         return tx.Rollback()
     }
+	
     return tx.Commit()
 })
 ```
@@ -356,11 +384,11 @@ import (
 )
 
 func AuthenticationHook(p *goopt.Parser, c *goopt.Command) error {
-    // Skip auth for public commands
-    if c.Name == "login" || c.Name == "help" {
-        return nil
-    }
-    // ... authentication logic
+	// Skip auth for public commands
+	if c.Name == "login" || c.Name == "help" {
+		return nil
+	}
+	// ... authentication logic
 }
 ```
 
@@ -370,13 +398,13 @@ func AuthenticationHook(p *goopt.Parser, c *goopt.Command) error {
 package main
 
 import (
-    "errors"
+	"errors"
 	"os"
-    "fmt"
-    "log"
-    "time"
-    
-    "github.com/napalu/goopt/v2"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/napalu/goopt/v2"
 )
 
 func confirmProduction() bool {
@@ -401,55 +429,55 @@ func cleanupTempFiles() {
 }
 
 func main() {
-    parser, err := goopt.NewParserWith(
-        // Global logging
-        goopt.WithGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
-            log.Printf("[%s] Starting: %s", time.Now().Format(time.RFC3339), c.Path())
-            return nil
-        }),
-        goopt.WithGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) error {
-            status := "SUCCESS"
-            if err != nil {
-                status = "FAILED"
-            }
-            log.Printf("[%s] %s: %s", time.Now().Format(time.RFC3339), status, c.Path())
-            return nil
-        }),
-        
-        // Command-specific validation
-        goopt.WithCommandPreHook("deploy production", func(p *goopt.Parser, c *goopt.Command) error {
-            if !confirmProduction() {
-                return errors.New("production deployment cancelled")
-            }
-            return validateDeploymentConfig()
-        }),
-        
-        // Cleanup hook
-        goopt.WithCommandPostHook("deploy production", func(p *goopt.Parser, c *goopt.Command, err error) error {
-            if err != nil {
-                rollbackDeployment()
-            } else {
-                notifyDeploymentSuccess()
-            }
-            cleanupTempFiles()
-            return nil
-        }),
-    )
-    
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Add commands...
-    
-    if !parser.Parse(os.Args) {
-        parser.PrintHelp(os.Stderr)
-        os.Exit(1)
-    }
-    
-    if errs := parser.ExecuteCommands(); errs > 0 {
-        os.Exit(1)
-    }
+	parser, err := goopt.NewParserWith(
+		// Global logging
+		goopt.WithGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
+			log.Printf("[%s] Starting: %s", time.Now().Format(time.RFC3339), c.Path())
+			return nil
+		}),
+		goopt.WithGlobalPostHook(func(p *goopt.Parser, c *goopt.Command, err error) error {
+			status := "SUCCESS"
+			if err != nil {
+				status = "FAILED"
+			}
+			log.Printf("[%s] %s: %s", time.Now().Format(time.RFC3339), status, c.Path())
+			return nil
+		}),
+
+		// Command-specific validation
+		goopt.WithCommandPreHook("deploy production", func(p *goopt.Parser, c *goopt.Command) error {
+			if !confirmProduction() {
+				return errors.New("production deployment cancelled")
+			}
+			return validateDeploymentConfig()
+		}),
+
+		// Cleanup hook
+		goopt.WithCommandPostHook("deploy production", func(p *goopt.Parser, c *goopt.Command, err error) error {
+			if err != nil {
+				rollbackDeployment()
+			} else {
+				notifyDeploymentSuccess()
+			}
+			cleanupTempFiles()
+			return nil
+		}),
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Add commands...
+
+	if !parser.Parse(os.Args) {
+		parser.PrintHelp(os.Stderr)
+		os.Exit(1)
+	}
+
+	if errs := parser.ExecuteCommands(); errs > 0 {
+		os.Exit(1)
+	}
 }
 ```
 

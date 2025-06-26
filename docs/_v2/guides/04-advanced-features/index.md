@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Advanced Features
-nav_order: 4
+nav_order: 7
 parent: Guides
 has_children: true
 version: v2

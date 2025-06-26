@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Defining Your CLI
-nav_order: 3
+nav_order: 6
 parent: Guides
 has_children: true
 version: v2

@@ -21,7 +21,7 @@ version: v2
 
 ### 🌐 Low-Config Internationalization (i18n)
 Ship a single binary that speaks your users' language. `goopt` provides out-of-the-box i18n for all system messages and a powerful code generation tool (`goopt-i18n-gen`) to automate the entire translation workflow for your application.
-<br/>*[Read the Internationalization Guide]({{ site.baseurl }}/v2/guides/06-internationalization/)*
+<br/>*[Read the Internationalization Guide]({{ site.baseurl }}/v2/guides/06-internationalization/index/)*
 
 ### 🚀 An Advanced, Interactive Help System
 Stop writing boilerplate help text. `goopt` features an **adaptive help system** that automatically chooses the best display style for your CLI's complexity. Its interactive parser lets users search and filter help (`--help --search "db"`), providing a superior experience.

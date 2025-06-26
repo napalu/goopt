@@ -1,62 +1,43 @@
 # goopt: a flexible and powerful command-line parser
-[![v1 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v1)](https://codecov.io/gh/napalu/goopt?flag=v1)
-[![Go Reference v1](https://pkg.go.dev/badge/github.com/napalu/goopt.svg)](https://pkg.go.dev/github.com/napalu/goopt)
+
+[![v2 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v2)](https://codecov.io/gh/napalu/goopt?flag=v2)
+[![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2)
 [![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 
-`goopt` is a flexible and powerful command-line option parser for Go applications. It provides a way to define commands, subcommands, flags, and their relationships declaratively or programmatically, offering both ease of use and extensibility.
+`goopt` is a flexible and powerful command-line option parser for Go. It provides a declarative, struct-first approach to building CLIs that are robust, maintainable, and user-friendly.
+
+The library is designed to be intuitive for simple tools and scalable for complex applications, with "batteries-included" features like an **advanced help system**, a **composable validation engine**, **command lifecycle hooks**, and comprehensive **internationalization (i18n)** support.
+
+[📚 View Full Documentation for v2](https://napalu.github.io/goopt/v2)
 
 ---
 
-**Version 2 Available**
+## Installation (v2)
 
-**This README describes goopt v1.x.** Version 2 (`v2`) is now the recommended version for new projects and includes significant improvements like **hierarchical flag inheritance**, API cleanup, and bug fixes.
-
-*   **New Users:** Please start with [goopt v2](https://github.com/napalu/goopt/tree/main/v2).
-*   **v1 Users:** Consider migrating to v2. See the [v2 Migration Guide](https://napalu.github.io/goopt/v2/migration/).
-
-[📚 View Full Documentation (v1 & v2)](https://napalu.github.io/goopt)
-
----
-
-## Key Features (v1.x)
-
-*Note: v2 includes these features plus enhancements like flag inheritance.*
-
-- **Declarative and Programmatic Definition**: Supports both declarative struct tag parsing (`goopt:"..."` format) and programmatic definition.
-- **Command and Flag Grouping**: Organize commands and flags hierarchically.
-- **Flag Dependencies**: Enforce flag dependencies based on presence or specific values.
-- **POSIX Compatibility**: Offers optional POSIX-compliant flag parsing.
-- **Secure Flags**: Enable secure, hidden input for sensitive information.
-- **Automatic Usage Generation**: Generates usage documentation.
-- **Positional Arguments**: Supports arguments defined by position.
-- **i18n**: Built-in internationalization support (backported from v2).
-- **Struct Tag Parsing**: Supports the modern `goopt:"key:value;"` format (backported from v2).
-
-## Installation (v1.x)
+Version 2 is the recommended version for all new projects.
 
 ```bash
-# For the legacy v1 version:
-go get github.com/napalu/goopt # Or specify latest v1.x tag e.g. @v1.9.9
+go get github.com/napalu/goopt/v2
 ```
 
-## Quick Start
+## Quick Start (v2)
 
-### Struct-based Definition
+Define your entire CLI structure—commands, flags, and descriptions—using a single Go struct.
 
 ```go
 package main
 
 import (
-    "os"
     "fmt"
-    "github.com/napalu/goopt"
+    "os"
+    "github.com/napalu/goopt/v2"
 )
 
 type Config struct {
     // Global flags
-    Verbose bool   `goopt:"short:v;desc:Enable verbose output"`
-    Output  string `goopt:"short:o;desc:Output file;required:true"`
-    // Command with subcommands
+    Verbose bool `goopt:"short:v;desc:Enable verbose output"`
+
+    // 'create' command with a subcommand
     Create struct {
         Force bool `goopt:"short:f;desc:Force creation"`
         User struct {
@@ -68,15 +49,42 @@ type Config struct {
 
 func main() {
     cfg := &Config{}
-    parser, _:= goopt.NewParserFromStruct(cfg)
+    // Note: In v2, the parser type is simply `Parser`
+    parser, err := goopt.NewParserFromStruct(cfg)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error creating parser: %v\n", err)
+        os.Exit(1)
+    }
+
+    // Parse returns false on failure or if --help was requested
     if !parser.Parse(os.Args) {
-        parser.PrintUsage(os.Stdout)
-        return
+        // goopt handles printing errors and help text by default
+        os.Exit(1)
+    }
+
+    // Your application logic here...
+    if parser.HasCommand("create", "user") {
+        fmt.Printf("Creating user: %s\n", cfg.Create.User.Username)
     }
 }
 ```
 
-### Programmatic Definition
+For more examples and advanced guides, please visit the [**v2 Documentation Site**](https://napalu.github.io/goopt/v2).
+
+---
+
+## Legacy Version (v1.x)
+
+<details>
+<summary>Click to expand information for goopt v1.x</summary>
+
+This version is in maintenance mode. For new projects, please use **[goopt v2](https://github.com/napalu/goopt/tree/main/v2)**.
+
+- **Installation (v1):** `go get github.com/napalu/goopt@v1`
+- **[Documentation (v1)](https://napalu.github.io/goopt/v1)**
+- **[Migration Guide to v2](https://napalu.github.io/goopt/v2/migration/)**
+
+### Quick Start (v1)
 
 ```go
 package main
@@ -84,20 +92,14 @@ package main
 import (
     "os"
     "fmt"
-    "github.com/napalu/goopt"
-)   
+    "github.comcom/napalu/goopt"
+)
+
+// ...Config struct is identical to v2 example...
 
 func main() {
-    parser := goopt.NewParser()
-    parser.AddCommand(goopt.NewCommand(
-        goopt.WithName("create"),
-        goopt.WithDescription("Create resources"),
-    ))
-    parser.AddFlag("verbose", goopt.NewArg(
-        goopt.WithShort("v"),
-        goopt.WithDescription("Enable verbose output"),
-    ))
-
+    cfg := &Config{}
+    parser, _:= goopt.NewCmdLineFromStruct(cfg)
     if !parser.Parse(os.Args) {
         parser.PrintUsage(os.Stdout)
         return
@@ -105,7 +107,7 @@ func main() {
 }
 ```
 
-For more examples and detailed documentation, visit the [documentation site](https://napalu.github.io/goopt).
+</details>
 
 ---
 
@@ -116,4 +118,3 @@ For more examples and detailed documentation, visit the [documentation site](htt
 ## Contributing
 
 Contributions are welcome! Contributions should be based on open issues (feel free to open one).
-<!-- Updated: Wed Apr 23 15:38:43 UTC 2025 -->
