@@ -5,7 +5,6 @@ package i18n
 
 import (
 	"os"
-	"te
 	"testing"
 
 	"github.com/stretchr/testify/assert"
