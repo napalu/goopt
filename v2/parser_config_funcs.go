@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"github.com/napalu/goopt/v2/env"
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/validation"
@@ -360,5 +361,12 @@ func WithLanguageEnvVar(envVar string) ConfigureCmdLineFunc {
 func WithSuggestionThreshold(flagThreshold, commandThreshold int) ConfigureCmdLineFunc {
 	return func(p *Parser, err *error) {
 		p.SetSuggestionThreshold(flagThreshold, commandThreshold)
+	}
+}
+
+// WithEnvResolver sets a custom environment resolver for a parser using the provided env.Resolver implementation.
+func WithEnvResolver(resolver env.Resolver) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		*err = p.SetEnvResolver(resolver)
 	}
 }

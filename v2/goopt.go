@@ -18,6 +18,7 @@ package goopt
 import (
 	"errors"
 	"fmt"
+	"github.com/napalu/goopt/v2/env"
 	"sync"
 
 	"github.com/napalu/goopt/v2/input"
@@ -85,6 +86,7 @@ func NewParser() *Parser {
 			os.Exit(0)
 			return nil
 		},
+		envResolver:             &env.DefaultEnvResolver{},
 		autoRegisteredHelp:      make(map[string]bool),
 		autoVersion:             true,
 		versionFlags:            []string{"version", "v"},
@@ -211,6 +213,16 @@ func (p *Parser) GetSupportedLanguages() []language.Tag {
 	}
 
 	return result
+}
+
+// SetEnvResolver sets the environment resolver for the parser. Returns an error if the provided resolver is nil.
+func (p *Parser) SetEnvResolver(resolver env.Resolver) error {
+	if resolver != nil {
+		p.envResolver = resolver
+		return nil
+	}
+
+	return errs.ErrNilPointer.WithArgs("resolver")
 }
 
 // SetEndHelpFunc sets a custom function to be executed at the end of the help output. By default, os.exit(0) is called
@@ -380,14 +392,14 @@ func (p *Parser) GetCommandExecutionError(commandName string) error {
 // GetCommandExecutionErrors returns the errors which occurred during execution of command callbacks
 // after ExecuteCommands has been called. Returns a KeyValue list of command name and error
 func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
-	var errors []types.KeyValue[string, error]
+	var execErrs []types.KeyValue[string, error]
 	for key, err := range p.callbackResults {
 		if err != nil {
-			errors = append(errors, types.KeyValue[string, error]{Key: key, Value: err})
+			execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: err})
 		}
 	}
 
-	return errors
+	return execErrs
 }
 
 // AddFlagPreValidationFilter adds a filter (user-defined transform/evaluate function) which is called on the Flag value during Parse
@@ -555,8 +567,11 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 
 	// Auto-detect language before showing help
 	if p.autoLanguage {
-		if lang := p.detectLanguageInArgs(args); lang != language.Und {
-			p.SetLanguage(lang)
+		if lang := p.detectLanguageInArgs(args, p.envResolver.Get); lang != language.Und {
+			err := p.SetLanguage(lang)
+			if err != nil {
+				p.addError(err)
+			}
 		}
 	}
 
@@ -2188,16 +2203,13 @@ func (p *Parser) hasHelpInArgs(args []string) bool {
 	return false
 }
 
-// envGetter is a function type for getting environment variables (mockable for testing)
-type envGetter func(string) string
-
 // detectLanguageInArgs quickly scans args to detect language preference without full parsing
-func (p *Parser) detectLanguageInArgs(args []string) language.Tag {
-	return p.detectLanguageInArgsWithEnv(args, os.Getenv)
+func (p *Parser) detectLanguageInArgs(args []string, getter types.EnvGetter) language.Tag {
+	return p.detectLanguageInArgsWithEnv(args, getter)
 }
 
 // detectLanguageInArgsWithEnv is the testable version that accepts an environment getter
-func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) language.Tag {
+func (p *Parser) detectLanguageInArgsWithEnv(args []string, getter types.EnvGetter) language.Tag {
 	if !p.autoLanguage || len(p.languageFlags) == 0 {
 		return language.Und
 	}
@@ -2217,7 +2229,7 @@ func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) la
 				for _, langFlag := range p.languageFlags {
 					if langFlag == flagName {
 						// Normalize underscore to dash for BCP 47 compatibility
-						normalizedValue := strings.Replace(value, "_", "-", -1)
+						normalizedValue := i18n.NormalizeLocaleString(value)
 						if tag, err := language.Parse(normalizedValue); err == nil {
 							lastLang = tag
 						}
@@ -2228,7 +2240,7 @@ func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) la
 				for _, langFlag := range p.languageFlags {
 					if stripped == langFlag && i+1 < len(args) && !p.isFlag(args[i+1]) {
 						// Normalize underscore to dash for BCP 47 compatibility
-						normalizedValue := strings.Replace(args[i+1], "_", "-", -1)
+						normalizedValue := i18n.NormalizeLocaleString(args[i+1])
 						if tag, err := language.Parse(normalizedValue); err == nil {
 							lastLang = tag
 						}
@@ -2246,9 +2258,8 @@ func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) la
 	// Otherwise, fallback to environment variables
 	// Always check the configured language environment variable first
 	if p.languageEnvVar != "" {
-		if lang := getenv(p.languageEnvVar); lang != "" {
-			// Normalize underscore to dash for BCP 47 compatibility
-			lang = strings.Replace(lang, "_", "-", -1)
+		if lang := getter(p.languageEnvVar); lang != "" {
+			lang = i18n.NormalizeLocaleString(lang)
 			if tag, err := language.Parse(lang); err == nil {
 				return tag
 			}
@@ -2258,13 +2269,13 @@ func (p *Parser) detectLanguageInArgsWithEnv(args []string, getenv envGetter) la
 	// Only check system locale if explicitly enabled
 	if p.checkSystemLocale {
 		// Use platform-specific locale detection
-		if tag, err := i18n.GetSystemLocale(); err == nil && tag != language.Und {
+		if tag, err := i18n.GetSystemLocale(getter); err == nil && tag != language.Und {
 			return tag
 		}
 
 		// Fallback to environment variables (for compatibility)
 		for _, envVar := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
-			if lang := getenv(envVar); lang != "" {
+			if lang := getter(envVar); lang != "" {
 				// Use the normalization function from i18n package
 				lang = i18n.NormalizeLocaleString(lang)
 				if tag, err := language.Parse(lang); err == nil {

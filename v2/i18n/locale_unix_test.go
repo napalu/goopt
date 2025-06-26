@@ -4,7 +4,7 @@
 package i18n
 
 import (
-	"os"
+	"github.com/napalu/goopt/v2/types"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -73,18 +73,6 @@ func TestNormalizeLocaleString(t *testing.T) {
 }
 
 func TestGetSystemLocale(t *testing.T) {
-	// Save current environment
-	oldLang := os.Getenv("LANG")
-	oldLcAll := os.Getenv("LC_ALL")
-	oldLcMessages := os.Getenv("LC_MESSAGES")
-
-	defer func() {
-		// Restore environment
-		os.Setenv("LANG", oldLang)
-		os.Setenv("LC_ALL", oldLcAll)
-		os.Setenv("LC_MESSAGES", oldLcMessages)
-	}()
-
 	tests := []struct {
 		name        string
 		lcAll       string
@@ -162,23 +150,20 @@ func TestGetSystemLocale(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear environment
-			os.Unsetenv("LC_ALL")
-			os.Unsetenv("LC_MESSAGES")
-			os.Unsetenv("LANG")
-
-			// Set test environment
-			if tt.lcAll != "" {
-				os.Setenv("LC_ALL", tt.lcAll)
-			}
-			if tt.lcMessages != "" {
-				os.Setenv("LC_MESSAGES", tt.lcMessages)
-			}
-			if tt.lang != "" {
-				os.Setenv("LANG", tt.lang)
+			var eGet types.EnvGetter = func(key string) string {
+				switch key {
+				case "LC_ALL":
+					return tt.lcAll
+				case "LC_MESSAGES":
+					return tt.lcMessages
+				case "LANG":
+					return tt.lang
+				default:
+					return ""
+				}
 			}
 
-			tag, err := GetSystemLocale()
+			tag, err := GetSystemLocale(eGet)
 
 			if tt.expectError {
 				assert.Error(t, err)

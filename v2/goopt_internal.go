@@ -1929,7 +1929,7 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 	if p.envNameConverter == nil {
 		return commandEnvVars
 	}
-	for _, env := range os.Environ() {
+	for _, env := range p.envResolver.Environ() {
 		kv := strings.Split(env, "=")
 		v := p.envNameConverter(kv[0])
 		if v == "" {

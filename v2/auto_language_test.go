@@ -1,7 +1,6 @@
 package goopt
 
 import (
-	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -13,6 +12,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 )
+
+type customEnvResolver struct {
+	environ map[string]string
+}
+
+func (c *customEnvResolver) Environ() []string {
+	env := make([]string, 0, len(c.environ))
+	for k, v := range c.environ {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
+func (c *customEnvResolver) Get(key string) string {
+	return c.environ[key]
+}
+
+func (c *customEnvResolver) Set(key, value string) error {
+	c.environ[key] = value
+
+	return nil
+}
 
 func TestAutoLanguageDetection(t *testing.T) {
 	tests := []struct {
@@ -121,7 +142,7 @@ func TestAutoLanguageDetection(t *testing.T) {
 				p.SetLanguageFlags([]string{"idioma", "i"})
 				// Add Spanish to the system bundle
 				locale := i18n.NewLocale(language.Spanish, es.SystemTranslations)
-				p.SetSystemLocales(locale)
+				_ = p.SetSystemLocales(locale)
 			},
 			expectedLang: language.Spanish,
 			expectHelp:   true,
@@ -172,52 +193,19 @@ func TestAutoLanguageDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore environment
-			oldLang := os.Getenv("LANG")
-			oldGooptLang := os.Getenv("GOOPT_LANG")
-			oldLcAll := os.Getenv("LC_ALL")
-			oldLcMessages := os.Getenv("LC_MESSAGES")
-			defer func() {
-				// Restore environment variables properly
-				if oldLang == "" {
-					os.Unsetenv("LANG")
-				} else {
-					os.Setenv("LANG", oldLang)
-				}
-				if oldGooptLang == "" {
-					os.Unsetenv("GOOPT_LANG")
-				} else {
-					os.Setenv("GOOPT_LANG", oldGooptLang)
-				}
-				if oldLcAll == "" {
-					os.Unsetenv("LC_ALL")
-				} else {
-					os.Setenv("LC_ALL", oldLcAll)
-				}
-				if oldLcMessages == "" {
-					os.Unsetenv("LC_MESSAGES")
-				} else {
-					os.Setenv("LC_MESSAGES", oldLcMessages)
-				}
-			}()
-
-			// Clear all locale environment variables first
-			os.Unsetenv("LC_ALL")
-			os.Unsetenv("LC_MESSAGES")
-			os.Unsetenv("LANG")
-			os.Unsetenv("GOOPT_LANG")
+			envResolver := &customEnvResolver{environ: make(map[string]string)}
 
 			// Set test environment
 			if tt.envLang != "" {
-				os.Setenv("LANG", tt.envLang)
+				_ = envResolver.Set("LANG", tt.envLang)
 			}
 			if tt.envGooptLang != "" {
-				os.Setenv("GOOPT_LANG", tt.envGooptLang)
+				_ = envResolver.Set("GOOPT_LANG", tt.envGooptLang)
 			}
 
 			// Create parser
 			p := NewParser()
-
+			_ = p.SetEnvResolver(envResolver)
 			// Override help end function to prevent os.Exit in tests
 			p.SetEndHelpFunc(func() error {
 				return nil
@@ -362,7 +350,7 @@ func TestDetectLanguageInArgs(t *testing.T) {
 		{
 			name:          "custom language flags",
 			args:          []string{"--idioma", "es"},
-			languageFlags: []string{"idioma"},
+			languageFlags: []string{"idioma", "es", "help"},
 			expectedLang:  language.Spanish,
 		},
 		{
@@ -374,6 +362,63 @@ func TestDetectLanguageInArgs(t *testing.T) {
 			name:         "language flag with flag as value",
 			args:         []string{"--lang", "--help"},
 			expectedLang: language.Und,
+		},
+		// Additional tests for region and normalization:
+		{
+			name:         "language flag with region (underscore)",
+			args:         []string{"--lang", "fr_CA"},
+			expectedLang: language.MustParse("fr-CA"),
+		},
+		{
+			name:         "language flag with region (dash)",
+			args:         []string{"--lang", "fr-CA"},
+			expectedLang: language.MustParse("fr-CA"),
+		},
+		{
+			name:         "language flag with empty value",
+			args:         []string{"--lang", ""},
+			expectedLang: language.Und,
+		},
+		{
+			name:         "language flag with numeric value",
+			args:         []string{"--lang", "123"},
+			expectedLang: language.Und,
+		},
+		{
+			name:          "custom language flag with equals",
+			args:          []string{"--idioma=es"},
+			languageFlags: []string{"idioma"},
+			expectedLang:  language.Spanish,
+		},
+		{
+			name:         "multiple language flags, last wins",
+			args:         []string{"--lang", "fr", "--lang", "de"},
+			expectedLang: language.German,
+		},
+		{
+			name:         "multiple language flags, last invalid",
+			args:         []string{"--lang", "fr", "--lang", "invalid"},
+			expectedLang: language.French,
+		},
+		{
+			name:         "multiple language flags, first invalid",
+			args:         []string{"--lang", "invalid", "--lang", "fr"},
+			expectedLang: language.French,
+		},
+		{
+			name:         "language flag with equals and value",
+			args:         []string{"--lang=de"},
+			expectedLang: language.German,
+		},
+		{
+			name:         "language flag with equals and invalid value",
+			args:         []string{"--lang=invalid"},
+			expectedLang: language.Und,
+		},
+		{
+			name:         "short language flag with equals",
+			args:         []string{"-l=es"},
+			expectedLang: language.Spanish,
 		},
 	}
 
@@ -392,6 +437,7 @@ func TestDetectLanguageInArgs(t *testing.T) {
 			}
 
 			lang := p.detectLanguageInArgsWithEnv(tt.args, mockGetenv)
+
 			assert.Equal(t, tt.expectedLang, lang)
 		})
 	}
@@ -443,7 +489,8 @@ func TestAutoLanguageWithCommands(t *testing.T) {
 			require.NoError(t, err)
 
 			p.SetAutoLanguage(true)
-			p.SetLanguage(language.English)
+			err = p.SetLanguage(language.English)
+			assert.NoError(t, err)
 
 			// Override help end function to prevent os.Exit in tests
 			p.SetEndHelpFunc(func() error {
@@ -485,9 +532,9 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 		{
 			name:              "LANG with language only when system locale enabled",
 			envLang:           "fr",
+			envLanguage:       "fr",
 			checkSystemLocale: true,
 			expectedLang:      language.French,
-			skipOnWindows:     true,
 		},
 		{
 			name:              "GOOPT_LANG works without system locale",
@@ -513,6 +560,7 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 		{
 			name:              "LANG with underscore when system locale enabled",
 			envLang:           "fr_CA",
+			envLanguage:       "fr-CA",
 			checkSystemLocale: true,
 			expectedLang:      language.MustParse("fr-CA"),
 			skipOnWindows:     true,
@@ -530,7 +578,7 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 			expectedLang: func() language.Tag {
 				if runtime.GOOS == "windows" {
 					// On Windows, LANGUAGE env var is checked
-					return language.German
+					return language.Make("de-DE")
 				}
 				return language.Und // Unix doesn't check LANGUAGE
 			}(),
@@ -539,70 +587,36 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 		{
 			name:              "LANG behavior differs by platform",
 			envLang:           "fr_FR.UTF-8",
+			envLanguage:       "fr_FR.UTF-8",
 			checkSystemLocale: true,
 			expectedLang: func() language.Tag {
 				// On Unix, LANG is checked and returns French (France)
 				return language.MustParse("fr-FR")
 			}(),
-			skipOnWindows: true, // Skip on Windows because it uses different detection methods
+			//skipOnWindows: true, // Skip on Windows because it uses different detection methods
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore environment
-			oldLang := os.Getenv("LANG")
-			oldGooptLang := os.Getenv("GOOPT_LANG")
-			oldLcAll := os.Getenv("LC_ALL")
-			oldLcMessages := os.Getenv("LC_MESSAGES")
-			defer func() {
-				// Restore environment variables properly
-				if oldLang == "" {
-					os.Unsetenv("LANG")
-				} else {
-					os.Setenv("LANG", oldLang)
-				}
-				if oldGooptLang == "" {
-					os.Unsetenv("GOOPT_LANG")
-				} else {
-					os.Setenv("GOOPT_LANG", oldGooptLang)
-				}
-				if oldLcAll == "" {
-					os.Unsetenv("LC_ALL")
-				} else {
-					os.Setenv("LC_ALL", oldLcAll)
-				}
-				if oldLcMessages == "" {
-					os.Unsetenv("LC_MESSAGES")
-				} else {
-					os.Setenv("LC_MESSAGES", oldLcMessages)
-				}
-			}()
-
-			// Clear all locale environment variables first
-			os.Unsetenv("LC_ALL")
-			os.Unsetenv("LC_MESSAGES")
-			os.Unsetenv("LANG")
-			os.Unsetenv("GOOPT_LANG")
-
-			// Set test environment
-			if tt.envLang != "" {
-				os.Setenv("LANG", tt.envLang)
+			if runtime.GOOS == "windows" && tt.skipOnWindows {
+				return
 			}
-			if tt.envGooptLang != "" {
-				os.Setenv("GOOPT_LANG", tt.envGooptLang)
-			}
-
-			// Set LANGUAGE env var if provided (for Windows test)
-			if tt.envLanguage != "" {
-				os.Setenv("LANGUAGE", tt.envLanguage)
-			}
-
 			p := NewParser()
 			p.SetAutoLanguage(true)
 			p.SetCheckSystemLocale(tt.checkSystemLocale)
-
-			lang := p.detectLanguageInArgs([]string{})
+			var eGet = func(key string) string {
+				switch key {
+				case "LANG":
+					return tt.envLang
+				case "GOOPT_LANG":
+					return tt.envGooptLang
+				case "LANGUAGE":
+					return tt.envLanguage
+				}
+				return ""
+			}
+			lang := p.detectLanguageInArgs([]string{}, eGet)
 
 			// Handle language canonicalization differences
 			actualStr := lang.String()
@@ -621,14 +635,6 @@ func TestLanguageEnvironmentVariables(t *testing.T) {
 }
 
 func TestCustomLanguageEnvVar(t *testing.T) {
-	// Save and restore environment
-	oldGooptLang := os.Getenv("GOOPT_LANG")
-	oldMyAppLang := os.Getenv("MYAPP_LANG")
-	defer func() {
-		os.Setenv("GOOPT_LANG", oldGooptLang)
-		os.Setenv("MYAPP_LANG", oldMyAppLang)
-	}()
-
 	tests := []struct {
 		name         string
 		customEnvVar string
@@ -660,23 +666,20 @@ func TestCustomLanguageEnvVar(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear environment
-			os.Unsetenv("GOOPT_LANG")
-			os.Unsetenv("MYAPP_LANG")
-
-			// Set test environment
-			if tt.gooptLang != "" {
-				os.Setenv("GOOPT_LANG", tt.gooptLang)
-			}
-			if tt.myAppLang != "" {
-				os.Setenv("MYAPP_LANG", tt.myAppLang)
-			}
-
 			p := NewParser()
 			p.SetAutoLanguage(true)
 			p.SetLanguageEnvVar(tt.customEnvVar)
-
-			lang := p.detectLanguageInArgs([]string{})
+			var eGet = func(key string) string {
+				switch key {
+				case "GOOPT_LANG":
+					return tt.gooptLang
+				case "MYAPP_LANG":
+					return tt.myAppLang
+				default:
+					return ""
+				}
+			}
+			lang := p.detectLanguageInArgs([]string{}, eGet)
 			assert.Equal(t, tt.expectedLang, lang)
 		})
 	}

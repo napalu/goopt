@@ -95,3 +95,6 @@ func (r *PatternValue) Describe() string {
 // ListDelimiterFunc signature to match when supplying a user-defined function to check for the runes which form list delimiters.
 // Defaults to ',' || r == '|' || r == ' '.
 type ListDelimiterFunc func(matchOn rune) bool
+
+// EnvGetter is a function type for getting environment variables (mockable for testing)
+type EnvGetter func(string) string

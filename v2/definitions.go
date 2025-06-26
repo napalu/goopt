@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"github.com/napalu/goopt/v2/env"
 	"io"
 	"reflect"
 	"strings"
@@ -217,6 +218,7 @@ type Parser struct {
 	globalPostHooks         []PostHookFunc
 	commandPreHooks         map[string][]PreHookFunc
 	commandPostHooks        map[string][]PostHookFunc
+	envResolver             env.Resolver
 	hookOrder               HookOrder
 	validationHook          ValidationHookFunc
 	translationRegistry     *JITTranslationRegistry

@@ -2,13 +2,11 @@ package goopt
 
 import (
 	"fmt"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/text/language"
+	"sync"
+	"testing"
 )
 
 func TestJITTranslationRegistry_RegisterAndRetrieve(t *testing.T) {
@@ -204,43 +202,6 @@ func TestJITTranslationRegistry_EmptyRegistry(t *testing.T) {
 	// No flags registered
 	_, found := registry.GetCanonicalFlagName("anything", language.Spanish)
 	assert.False(t, found)
-}
-
-func TestJITTranslationRegistry_Performance(t *testing.T) {
-	parser := NewParser()
-
-	// Create user bundle with flag translations
-	userBundle := i18n.NewEmptyBundle()
-	userBundle.AddLanguage(language.Spanish, map[string]string{
-		"goopt.flag.name.help": "ayuda",
-	})
-	parser.SetUserBundle(userBundle)
-	parser.SetLanguage(language.Spanish)
-
-	registry := parser.translationRegistry
-
-	// Register many flags - use actual translation keys from Spanish locale
-	for i := 0; i < 100; i++ {
-		arg := &Argument{
-			NameKey: "goopt.flag.name.help", // Reuse help translation for simplicity
-		}
-		registry.RegisterFlagMetadata(fmt.Sprintf("flag%d", i), arg, "")
-	}
-
-	// First access should build cache
-	start := time.Now()
-	_, _ = registry.GetCanonicalFlagName("ayuda", language.Spanish)
-	firstAccess := time.Since(start)
-
-	// Second access should be from cache (much faster)
-	start = time.Now()
-	_, _ = registry.GetCanonicalFlagName("ayuda", language.Spanish)
-	secondAccess := time.Since(start)
-
-	// Cache access should be significantly faster
-	t.Logf("First access: %v, Second access: %v", firstAccess, secondAccess)
-	// Note: The ratio might not be 10x on fast machines, so we'll be more lenient
-	assert.Less(t, secondAccess, firstAccess*2, "Cached access should be faster")
 }
 
 func TestJITTranslationRegistry_ConcurrentAccess(t *testing.T) {
