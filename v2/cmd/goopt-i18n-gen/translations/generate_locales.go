@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/i18n"
 	"golang.org/x/text/language"
@@ -39,7 +40,7 @@ const (
 func GenerateLocales(parser *goopt.Parser, cmd *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		parser.GetUserBundle().T(messages.Keys.AppError.FailedToGetConfig)
 	}
 
 	tr := cfg.TR
@@ -54,7 +55,7 @@ func GenerateLocales(parser *goopt.Parser, cmd *goopt.Command) error {
 	// Process each locale
 	for _, locale := range locales {
 		if err := generateLocalePackage(locale, opt, tr); err != nil {
-			return fmt.Errorf("failed to generate package for %s: %w", locale.Code, err)
+			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToGeneratePackage, locale.Code, err))
 		}
 	}
 
@@ -78,7 +79,7 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 	for _, pattern := range patterns {
 		files, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf(tr.T(messages.Keys.AppError.InvalidPattern, pattern, err))
 		}
 
 		for _, file := range files {
@@ -98,12 +99,12 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 			// Read and parse JSON
 			data, err := os.ReadFile(file)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read %s: %w", file, err)
+				return nil, fmt.Errorf(tr.T(messages.Keys.AppError.FailedToReadFile, file, err))
 			}
 
 			var translations map[string]string
 			if err := json.Unmarshal(data, &translations); err != nil {
-				return nil, fmt.Errorf("failed to parse %s: %w", file, err)
+				return nil, fmt.Errorf(tr.T(messages.Keys.AppError.FailedToParseFile, file, err))
 			}
 
 			// Parse language tag
@@ -112,7 +113,7 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 				// Try with common mappings
 				lang = mapCommonLanguageCodes(langCode)
 				if lang == language.Und {
-					return nil, fmt.Errorf("unknown language code %q in %s", langCode, file)
+					return nil, fmt.Errorf(tr.T(messages.Keys.AppError.UnknownLanguageCode, langCode, file))
 				}
 			}
 
@@ -137,7 +138,7 @@ func generateLocalePackage(locale localeData, opt *options.GenerateLocalesCmd, t
 	packageDir := filepath.Join(opt.Output, locale.Code)
 	if !opt.DryRun {
 		if err := os.MkdirAll(packageDir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
+			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToCreateDirectory, err))
 		}
 	}
 
@@ -155,7 +156,7 @@ func generateLocalePackage(locale localeData, opt *options.GenerateLocalesCmd, t
 		fmt.Println()
 	} else {
 		if err := os.WriteFile(outputFile, []byte(content), 0644); err != nil {
-			return fmt.Errorf("failed to write file: %w", err)
+			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToWriteFile, err))
 		}
 		fmt.Printf("Generated: %s\n", outputFile)
 	}

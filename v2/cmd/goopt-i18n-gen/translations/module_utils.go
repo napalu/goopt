@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 )
 
 // findGoModPath finds the nearest go.mod file starting from the given directory
@@ -20,7 +22,7 @@ func findGoModPath(startDir string) (string, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached the root directory
-			return "", fmt.Errorf("go.mod not found")
+			return "", fmt.Errorf(messages.Keys.AppError.GoModNotFound)
 		}
 		dir = parent
 	}
@@ -49,7 +51,7 @@ func getModuleName(goModPath string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("module directive not found in go.mod")
+	return "", fmt.Errorf(messages.Keys.AppError.ModuleDirectiveNotFound)
 }
 
 // resolvePackagePath resolves the package path based on the module context
