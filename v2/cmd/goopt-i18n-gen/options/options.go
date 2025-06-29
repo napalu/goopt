@@ -87,15 +87,15 @@ type GenerateLocalesCmd struct {
 
 // AppConfig main application configuration
 type AppConfig struct {
-	Input    []string        `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.app_config.input_desc"`
-	Verbose  bool            `goopt:"short:v;desc:Enable verbose output;descKey:app.app_config.verbose_desc"`
-	Language string          `goopt:"short:l;desc:Language for output (en, de, fr);descKey:app.app_config.language_desc"`
-	Help     bool            `goopt:"short:h;desc:Show help;descKey:app.app_config.help_desc"`
-	Generate GenerateCmd     `goopt:"kind:command;name:generate;desc:Generate Go constants from JSON;descKey:app.app_config.generate_desc"`
-	Validate ValidateCmd     `goopt:"kind:command;name:validate;desc:Check that all descKey references have translations;descKey:app.app_config.validate_desc"`
-	Audit    AuditCmd        `goopt:"kind:command;name:audit;desc:Audit goopt fields for missing descKey tags;descKey:app.app_config.audit_desc"`
-	Init     InitCmd         `goopt:"kind:command;name:init;desc:Initialize a new i18n setup;descKey:app.app_config.init_desc"`
-	Add      AddCmd          `goopt:"kind:command;name:add;desc:Add new translation keys to locale files;descKey:app.app_config.add_desc"`
+	Input           []string           `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.app_config.input_desc"`
+	Verbose         bool               `goopt:"short:v;desc:Enable verbose output;descKey:app.app_config.verbose_desc"`
+	Language        string             `goopt:"short:l;desc:Language for output (en, de, fr);descKey:app.app_config.language_desc"`
+	Help            bool               `goopt:"short:h;desc:Show help;descKey:app.app_config.help_desc"`
+	Generate        GenerateCmd        `goopt:"kind:command;name:generate;desc:Generate Go constants from JSON;descKey:app.app_config.generate_desc"`
+	Validate        ValidateCmd        `goopt:"kind:command;name:validate;desc:Check that all descKey references have translations;descKey:app.app_config.validate_desc"`
+	Audit           AuditCmd           `goopt:"kind:command;name:audit;desc:Audit goopt fields for missing descKey tags;descKey:app.app_config.audit_desc"`
+	Init            InitCmd            `goopt:"kind:command;name:init;desc:Initialize a new i18n setup;descKey:app.app_config.init_desc"`
+	Add             AddCmd             `goopt:"kind:command;name:add;desc:Add new translation keys to locale files;descKey:app.app_config.add_desc"`
 	Extract         ExtractCmd         `goopt:"kind:command;name:extract;desc:Extract strings from Go source files;descKey:app.app_config.extract_desc"`
 	Sync            SyncCmd            `goopt:"kind:command;name:sync;desc:Synchronize keys across locale files;descKey:app.app_config.sync_desc"`
 	GenerateLocales GenerateLocalesCmd `goopt:"kind:command;name:generate-locales;desc:Generate Go packages from locale JSON files;descKey:app.app_config.generate_locales_desc"`
