@@ -14,7 +14,7 @@ go install github.com/napalu/goopt/v2/cmd/goopt-i18n-gen@latest
 
 **For complete documentation, command reference, and detailed workflow guides, please see the official `goopt` documentation site:**
 
-➡️ **[Full `goopt-i18n-gen` Guide](https://your-docs-site.com/v2/internationalization/02-tooling-goopt-i18n-gen/)**
+➡️ **[Full `goopt-i18n-gen` Guide](https://napalu.github.io/goopt/v2/guides/06-internationalization/01-tooling-goopt-i18n-gen/)**
 
 The main documentation provides comprehensive guides on:
 - The "360° Workflow" for adding i18n to existing projects.
