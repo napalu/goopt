@@ -21,7 +21,7 @@ version: v2
 ```bash
 go install github.com/napalu/goopt/v2/cmd/goopt-i18n-gen@latest
 ```
-For a complete, runnable demonstration of the workflows described below, see the [i18n-codegen-demo example](/v2/examples/i18n-codegen-demo).
+For a complete, runnable demonstration of the workflows described below, see the [i18n-codegen-demo example](https://github.com/napalu/goopt/tree/main/v2/examples/i18n-codegen-demo).
 
 ---
 

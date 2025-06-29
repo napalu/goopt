@@ -1,6 +1,8 @@
 module i18n-flag-names
 
-go 1.24.4
+go 1.23.0
+
+toolchain go1.24.4
 
 require (
 	github.com/napalu/goopt/v2 v2.0.0
