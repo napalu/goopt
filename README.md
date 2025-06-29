@@ -70,7 +70,7 @@ func main() {
 }
 ```
 
-For more examples and advanced guides, please visit the [**v2 Documentation Site**](https://napalu.github.io/goopt/v2).
+For more examples and advanced guides, please visit the [**v2 Documentation Site**](https://napalu.github.io/goopt/).
 
 ---
 
@@ -82,7 +82,7 @@ For more examples and advanced guides, please visit the [**v2 Documentation Site
 This version is in maintenance mode. For new projects, please use **[goopt v2](https://github.com/napalu/goopt/tree/main/v2)**.
 
 - **Installation (v1):** `go get github.com/napalu/goopt@v1`
-- **[Documentation (v1)](https://napalu.github.io/goopt/v1)**
+- **[Documentation (v1)](https://napalu.github.io/goopt/)**
 - **[Migration Guide to v2](https://napalu.github.io/goopt/v2/migration/)**
 
 ### Quick Start (v1)
