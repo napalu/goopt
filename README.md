@@ -8,7 +8,8 @@
 
 The library is designed to be intuitive for simple tools and scalable for complex applications, with "batteries-included" features like an **advanced help system**, a **composable validation engine**, **command lifecycle hooks**, and comprehensive **internationalization (i18n)** support.
 
-[📚 View Full Documentation for v2](https://napalu.github.io/goopt/v2)
+**Looking for the latest version?** `goopt v2` is here with major improvements!
+> 👉 [Check out v2 on GitHub](https://github.com/napalu/goopt/tree/main/v2) or [📚 read the full docs](https://napalu.github.io/goopt)
 
 ---
 
