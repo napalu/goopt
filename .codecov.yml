@@ -36,5 +36,10 @@ comment:
 flags:
   v1:
     carryforward: true
+    paths:
+      - ./
+
   v2:
     carryforward: true
+    paths:
+      - v2/
