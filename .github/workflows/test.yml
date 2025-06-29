@@ -41,7 +41,7 @@ jobs:
       # --- Run tests for v2 ---
       - name: Run Test & Coverage (v2)
         run: |
-          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=../coverage_v2.out
+          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=coverage_v2.out
         working-directory: ./v2
         shell: bash
 
@@ -51,7 +51,7 @@ jobs:
           echo "Working dir: $(pwd)"
           ls -l || true
           test -f coverage_v1.out && echo "✅ coverage_v1.out exists" || (echo "❌ coverage_v1.out missing" && exit 1)
-          test -f coverage_v2.out && echo "✅ coverage_v2.out exists" || (echo "❌ coverage_v2.out missing" && exit 1)
+          test -f v2/coverage_v2.out && echo "✅ v2/coverage_v2.out exists" || (echo "❌ coverage_v2.out missing in v2/ dir" && exit 1)
         shell: bash
 
       # --- Upload v1 coverage ---
@@ -72,7 +72,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage_v2.out
+          files: v2/coverage_v2.out
           flags: v2
           name: codecov-v2-${{ matrix.os }}-${{ matrix.go-version }}
           fail_ci_if_error: false
