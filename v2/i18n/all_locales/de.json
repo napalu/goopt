@@ -95,7 +95,7 @@
   "goopt.error.short_flag_not_defined": "Flag %[1]s hat kein Kurzflag definiert",
   "goopt.error.unknown_flag": "unbekannter Flag: %[1]s",
   "goopt.error.unknown_flag_in_command_path": "unbekannter Argument '%[1]s' in Befehlspfad '%[2]s'",
-  "goopt.error.unknown_flag_with_suggestions": "unbekannter Flag: %[1]s. Meinten Sie vielleicht eines davon? [%[2]s]",
+  "goopt.error.unknown_flag_with_suggestions": "unbekannter Flag: %[1]s. Meinten Sie vielleicht eines davon? %[2]s",
   "goopt.error.unmarshalling_tag": "Fehler beim Entpacken des Tags %[1]s",
   "goopt.error.unsupported_type": "Nicht unterstützte Typkonvertierung",
   "goopt.error.unsupported_type_conversion": "Nicht unterstützter Datentyp %[1]v für Argument %[2]s",
@@ -227,5 +227,7 @@
   "goopt.msg.validators": "Validatoren",
   "goopt.msg.version_description": "Versionsinformationen anzeigen",
   "goopt.warning.dependency_not_specified": "Flag '%[1]s' hängt von '%[2]s' ab, das nicht angegeben wurde.",
-  "goopt.warning.dependency_value_not_specified": "Flag '%[1]s' hängt von '%[2]s' mit Wert %[3]s ab, der nicht angegeben wurde. (Erhalten: '%[4]s')"
+  "goopt.warning.dependency_value_not_specified": "Flag '%[1]s' hängt von '%[2]s' mit Wert %[3]s ab, der nicht angegeben wurde. (Erhalten: '%[4]s')",
+  "goopt.flag.help": "Hilfe",
+  "goopt.flag.language": "Sprache"
 }

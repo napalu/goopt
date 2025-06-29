@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 )
@@ -15,7 +16,7 @@ import (
 func Init(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		return errors.ErrFailedToGetConfig
 	}
 	if len(cfg.Input) == 0 {
 		// Default to locales/en.json
@@ -33,7 +34,7 @@ func Init(parser *goopt.Parser, _ *goopt.Command) error {
 		// Create directory if needed
 		dir := filepath.Dir(inputFile)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToCreateDir), dir, err)
+			return errors.ErrFailedToCreateDir.WithArgs(dir, err)
 		}
 
 		// Create initial JSON with some example keys
@@ -45,11 +46,11 @@ func Init(parser *goopt.Parser, _ *goopt.Command) error {
 
 		data, err := json.MarshalIndent(initialData, "", "  ")
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToMarshal), err)
+			return errors.ErrFailedToMarshal.WithArgs(err)
 		}
 
 		if err := os.WriteFile(inputFile, data, 0644); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToCreateFile), inputFile, err)
+			return errors.ErrFailedToCreateFile.WithArgs(inputFile, err)
 		}
 
 		fmt.Println(cfg.TR.T(messages.Keys.AppInit.CreatedFile, inputFile))

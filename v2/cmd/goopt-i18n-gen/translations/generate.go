@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/templates"
@@ -21,13 +22,13 @@ import (
 func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToGetConfig))
+		return errors.ErrFailedToGetConfig
 	}
 
 	// Expand input files
 	inputFiles, err := expandInputFiles(cfg.Input)
 	if err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToExpandInput), err)
+		return errors.ErrFailedToExpandInput.WithArgs(err)
 	}
 
 	// Collect all unique keys from all locale files
@@ -35,18 +36,18 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, inputFile := range inputFiles {
 		// Ensure input file exists
 		if err := ensureInputFile(inputFile); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToPrepareInput), inputFile, err)
+			return errors.ErrFailedToPrepareInput.WithArgs(inputFile, err)
 		}
 
 		// Read JSON file
 		data, err := os.ReadFile(inputFile)
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToReadInput), inputFile, err)
+			return errors.ErrFailedToReadInput.WithArgs(inputFile, err)
 		}
 
 		var translations map[string]string
 		if err := json.Unmarshal(data, &translations); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToParseJson), inputFile, err)
+			return errors.ErrFailedToParseJson.WithArgs(inputFile, err)
 		}
 
 		// Collect keys
@@ -157,7 +158,7 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 	// Generate Go code
 	tmpl, err := template.New("generated").Parse(templates.GeneratedFileTemplate)
 	if err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToParseTemplate), err)
+		return errors.ErrFailedToParseTemplate.WithArgs(err)
 	}
 
 	var buf strings.Builder
@@ -166,7 +167,7 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 		Groups:  groupList,
 	})
 	if err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToExecuteTemplate), err)
+		return errors.ErrFailedToExecuteTemplate.WithArgs(err)
 	}
 
 	// Format the generated code
@@ -179,12 +180,12 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 	// Ensure output directory exists
 	outputDir := filepath.Dir(cfg.Generate.Output)
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToCreateOutputDir), err)
+		return errors.ErrFailedToCreateOutputDir.WithArgs(err)
 	}
 
 	// Write output file
 	if err := os.WriteFile(cfg.Generate.Output, formatted, 0644); err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToWriteOutput), err)
+		return errors.ErrFailedToWriteOutput.WithArgs(err)
 	}
 
 	if cfg.Verbose {

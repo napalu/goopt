@@ -99,6 +99,8 @@
   "goopt.error.validation_failed": "フラグ %[1]s の検証に失敗しました",
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.commands": "コマンド",
+  "goopt.msg.help_description": "ヘルプ情報を表示",
+  "goopt.msg.language_description": "表示言語を設定",
   "goopt.msg.conditional": "条件付き",
   "goopt.msg.defaults_to": "デフォルト値",
   "goopt.msg.global_flags": "グローバルオプション",

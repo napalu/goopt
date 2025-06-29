@@ -1791,8 +1791,8 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 				p.layeredProvider.GetMessage(messages.MsgPositionalKey),
 				arg.Position)))
 		}
+		_, _ = writer.Write([]byte("\n"))
 	}
-
 }
 
 // PrintGlobalFlags prints global (non-command-specific) flags
@@ -1946,6 +1946,8 @@ func (p *Parser) PrintHelp(writer io.Writer) {
 	default:
 		p.printFlatHelp(writer)
 	}
+
+	p.helpExecuted = true
 }
 
 func (p *Parser) DefaultPrettyPrintConfig() *PrettyPrintConfig {
@@ -2131,16 +2133,6 @@ func (p *Parser) GetAutoHelp() bool {
 	return p.autoHelp
 }
 
-// SetHelpFlags sets custom help flag names (default: "help" and "h")
-func (p *Parser) SetHelpFlags(flags []string) {
-	p.helpFlags = flags
-}
-
-// GetHelpFlags returns the current help flag names
-func (p *Parser) GetHelpFlags() []string {
-	return p.helpFlags
-}
-
 // SetAutoLanguage enables or disables automatic language detection
 func (p *Parser) SetAutoLanguage(enabled bool) {
 	p.autoLanguage = enabled
@@ -2149,16 +2141,6 @@ func (p *Parser) SetAutoLanguage(enabled bool) {
 // GetAutoLanguage returns whether automatic language detection is enabled
 func (p *Parser) GetAutoLanguage() bool {
 	return p.autoLanguage
-}
-
-// SetLanguageFlags sets custom language flag names (default: "language", "lang", and "l")
-func (p *Parser) SetLanguageFlags(flags []string) {
-	p.languageFlags = flags
-}
-
-// GetLanguageFlags returns the current language flag names
-func (p *Parser) GetLanguageFlags() []string {
-	return p.languageFlags
 }
 
 // SetCheckSystemLocale enables or disables checking system locale environment variables (LC_ALL, LC_MESSAGES, LANG).
@@ -2192,10 +2174,20 @@ func (p *Parser) hasHelpInArgs(args []string) bool {
 	for _, arg := range args {
 		if p.isFlag(arg) {
 			stripped := strings.TrimLeftFunc(arg, p.prefixFunc)
+
+			// First check direct match
 			for _, helpFlag := range p.helpFlags {
-				// Only trigger on help flags that we auto-registered
 				if p.autoRegisteredHelp[helpFlag] && stripped == helpFlag {
 					return true
+				}
+			}
+
+			// Then check if it's a translated help flag
+			if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+				for _, helpFlag := range p.helpFlags {
+					if p.autoRegisteredHelp[helpFlag] && canonical == helpFlag {
+						return true
+					}
 				}
 			}
 		}
@@ -2401,6 +2393,7 @@ func (p *Parser) ensureHelpFlags() error {
 
 	// Auto-register help flag with available flags
 	helpArg := &Argument{
+		NameKey:        "goopt.flag.help",
 		DescriptionKey: messages.MsgHelpDescriptionKey,
 		TypeOf:         types.Standalone,
 		DefaultValue:   "false",
@@ -2619,6 +2612,7 @@ func (p *Parser) ensureLanguageFlags() error {
 
 	// Auto-register language flag with available flags
 	langArg := &Argument{
+		NameKey:        "goopt.flag.language",
 		DescriptionKey: messages.MsgLanguageDescriptionKey,
 		TypeOf:         types.Single,
 		DefaultValue:   p.GetLanguage().String(),

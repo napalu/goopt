@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/i18n"
@@ -55,7 +56,7 @@ func GenerateLocales(parser *goopt.Parser, cmd *goopt.Command) error {
 	// Process each locale
 	for _, locale := range locales {
 		if err := generateLocalePackage(locale, opt, tr); err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToGeneratePackage, locale.Code, err))
+			return errors.ErrFailedToGeneratePackage.WithArgs(locale.Code, err)
 		}
 	}
 
@@ -79,7 +80,7 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 	for _, pattern := range patterns {
 		files, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil, fmt.Errorf(tr.T(messages.Keys.AppError.InvalidPattern, pattern, err))
+			return nil, errors.ErrInvalidPattern.WithArgs(pattern, err)
 		}
 
 		for _, file := range files {
@@ -99,12 +100,12 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 			// Read and parse JSON
 			data, err := os.ReadFile(file)
 			if err != nil {
-				return nil, fmt.Errorf(tr.T(messages.Keys.AppError.FailedToReadFile, file, err))
+				return nil, errors.ErrFailedToReadFile.WithArgs(file, err)
 			}
 
 			var translations map[string]string
 			if err := json.Unmarshal(data, &translations); err != nil {
-				return nil, fmt.Errorf(tr.T(messages.Keys.AppError.FailedToParseFile, file, err))
+				return nil, errors.ErrFailedToParseFile.WithArgs(file, err)
 			}
 
 			// Parse language tag
@@ -113,7 +114,7 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 				// Try with common mappings
 				lang = mapCommonLanguageCodes(langCode)
 				if lang == language.Und {
-					return nil, fmt.Errorf(tr.T(messages.Keys.AppError.UnknownLanguageCode, langCode, file))
+					return nil, errors.ErrUnknownLanguageCode.WithArgs(langCode, file)
 				}
 			}
 
@@ -138,7 +139,7 @@ func generateLocalePackage(locale localeData, opt *options.GenerateLocalesCmd, t
 	packageDir := filepath.Join(opt.Output, locale.Code)
 	if !opt.DryRun {
 		if err := os.MkdirAll(packageDir, 0755); err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToCreateDirectory, err))
+			return errors.ErrFailedToCreateDirectory.WithArgs(err)
 		}
 	}
 
@@ -156,7 +157,7 @@ func generateLocalePackage(locale localeData, opt *options.GenerateLocalesCmd, t
 		fmt.Println()
 	} else {
 		if err := os.WriteFile(outputFile, []byte(content), 0644); err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToWriteFile, err))
+			return errors.ErrFailedToWriteFile.WithArgs(err)
 		}
 		fmt.Printf("Generated: %s\n", outputFile)
 	}
@@ -168,7 +169,7 @@ func generatePackageContent(locale localeData, packageBase string) (string, erro
 	// Marshal translations back to JSON with proper formatting
 	jsonBytes, err := json.MarshalIndent(locale.Translations, "    ", "    ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal translations: %w", err)
+		return "", errors.ErrFailedToMarshal.WithArgs(err)
 	}
 
 	// Prepare template data
@@ -191,12 +192,12 @@ func generatePackageContent(locale localeData, packageBase string) (string, erro
 	// Execute template
 	tmpl, err := template.New("locale").Parse(localePackageTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", errors.ErrFailedToParseTemplate.WithArgs(err)
 	}
 
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
+		return "", errors.ErrFailedToExecuteTemplate.WithArgs(err)
 	}
 
 	return buf.String(), nil

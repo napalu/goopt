@@ -136,18 +136,6 @@ func TestAutoLanguageDetection(t *testing.T) {
 			expectHelp:   true,
 		},
 		{
-			name: "custom language flags",
-			args: []string{"--idioma", "es", "--help"},
-			setupFunc: func(p *Parser) {
-				p.SetLanguageFlags([]string{"idioma", "i"})
-				// Add Spanish to the system bundle
-				locale := i18n.NewLocale(language.Spanish, es.SystemTranslations)
-				_ = p.SetSystemLocales(locale)
-			},
-			expectedLang: language.Spanish,
-			expectHelp:   true,
-		},
-		{
 			name:         "language detection without help",
 			args:         []string{"--lang", "fr"},
 			expectedLang: language.French,
@@ -348,12 +336,6 @@ func TestDetectLanguageInArgs(t *testing.T) {
 			expectedLang: language.Und,
 		},
 		{
-			name:          "custom language flags",
-			args:          []string{"--idioma", "es"},
-			languageFlags: []string{"idioma", "es", "help"},
-			expectedLang:  language.Spanish,
-		},
-		{
 			name:         "language flag without value",
 			args:         []string{"--lang"},
 			expectedLang: language.Und,
@@ -383,12 +365,6 @@ func TestDetectLanguageInArgs(t *testing.T) {
 			name:         "language flag with numeric value",
 			args:         []string{"--lang", "123"},
 			expectedLang: language.Und,
-		},
-		{
-			name:          "custom language flag with equals",
-			args:          []string{"--idioma=es"},
-			languageFlags: []string{"idioma"},
-			expectedLang:  language.Spanish,
 		},
 		{
 			name:         "multiple language flags, last wins",
@@ -426,10 +402,6 @@ func TestDetectLanguageInArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := NewParser()
 			p.SetAutoLanguage(true)
-
-			if tt.languageFlags != nil {
-				p.SetLanguageFlags(tt.languageFlags)
-			}
 
 			// Mock environment that returns empty strings
 			mockGetenv := func(key string) string {

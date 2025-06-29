@@ -1,3 +1,21 @@
+// i18n-demo demonstrates how to extend goopt with support for additional languages
+// beyond the built-in English, German, and French.
+//
+// This example shows:
+// 1. How to create system message translations for new languages
+// 2. How to use WithExtendBundle() to add these languages to goopt
+// 3. How to create application-specific translations with goopt-i18n-gen
+//
+// While this demo uses Spanish and Japanese (which already have packages available),
+// the same technique can be used to add ANY language like Italian, Russian, Polish,
+// Vietnamese, etc. - languages that don't yet have official goopt support.
+//
+// To add a new language to your application:
+// 1. Create a JSON file with goopt system message translations (see system-locales/)
+// 2. Create your app's translations (see locales/)
+// 3. Use WithExtendBundle() to register your system translations
+// 4. Use WithUserBundle() for your app-specific translations
+
 package main
 
 // Build the tool first: cd ../../cmd/goopt-i18n-gen && go build
@@ -6,13 +24,11 @@ package main
 import (
 	"embed"
 	"fmt"
-	"os"
-	"strings"
-
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/examples/i18n-demo/messages"
 	"github.com/napalu/goopt/v2/i18n"
 	"golang.org/x/text/language"
+	"os"
 )
 
 //go:embed locales/*.json
@@ -22,10 +38,8 @@ var userLocales embed.FS
 var systemLocales embed.FS
 
 type Config struct {
-	Language string `goopt:"short:l;name:lang;descKey:i18n.demo.lang_desc;default:en"`
-	Verbose  bool   `goopt:"short:v;descKey:i18n.demo.verbose_desc"`
-	Help     bool   `goopt:"short:h;descKey:i18n.demo.help_desc"`
-	User     struct {
+	Verbose bool `goopt:"short:v;descKey:i18n.demo.verbose_desc"`
+	User    struct {
 		List struct {
 			ShowAll bool   `goopt:"short:a;name:all;descKey:i18n.demo.user.list.all_desc"`
 			Format  string `goopt:"short:f;descKey:i18n.demo.user.list.format_desc;default:table"`
@@ -78,38 +92,58 @@ func main() {
 		os.Exit(1)
 	}
 
-	// i18n.Default() is the default system bundle that is used by the parser
-	systemBundle := i18n.Default()
-	// add the missing Japanese and Spanish system languages to the parser
-	err = systemBundle.LoadFromFS(systemLocales, "system-locales")
+	// DEMONSTRATION: How to add support for languages not built into goopt
+	//
+	// While goopt includes English, German, and French by default, and has
+	// optional packages for Spanish, Japanese, Arabic, Hebrew, etc., you may
+	// need to support additional languages like Italian, Russian, Polish, etc.
+	//
+	// This example shows how to extend goopt's system messages with new languages
+	// by creating your own translation files. We're using Spanish and Japanese
+	// as examples, but the same technique works for ANY language.
+	//
+	// Step 1: Create a bundle with your system message translations
+	// The system-locales/ directory contains translations for goopt's built-in
+	// messages (errors, help text, etc.) in your target languages. Specify one of the
+	// languages which is specified in your locale files (otherwise language defaults to English,
+	// which will cause errors in English, is not in your bundle).
+	//
+	// ⚠️ Language Selection Behavior:
+	//
+	// goopt uses the language specified via '--lang', environment variables, or
+	// programmatically via goopt.WithLanguage(...).
+	//
+	// If none is specified, it defaults to English for CLI UI messages.
+	//
+	// The default language passed to i18n.NewBundleWithFS(..., defaultLang) affects
+	// which language is used as a fallback for validation and system messages.
+	//
+	// 👉 All translation files in a bundle must define the same keys.
+	//    Missing keys may silently fall back to the bundle's defaultLang, so keep
+	//    translations complete to ensure consistent behavior.
+	systemBundle, err := i18n.NewBundleWithFS(systemLocales, "system-locales", language.Spanish)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to add system-locales to bundle: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Assign the user bundle to the config. This will be to translate messages.
+	// Assign the user bundle to the config. This will be used to translate
+	// your application-specific messages (command descriptions, etc.)
 	cfg.TR = bundle
 
-	parser, err := goopt.NewParserFromStruct(cfg, goopt.WithUserBundle(bundle))
+	// Step 2: Create parser with both bundles
+	// - WithUserBundle: Your application's translations
+	// - WithExtendBundle: Extends goopt's system messages with new languages
+	parser, err := goopt.NewParserFromStruct(cfg,
+		goopt.WithUserBundle(bundle),
+		goopt.WithExtendBundle(systemBundle),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create parser: %v\n", err)
 		os.Exit(1)
 	}
 
 	success := parser.Parse(os.Args)
-	if cfg.Language != "" && cfg.Language != bundle.GetDefaultLanguage().String() {
-		lang := parseLanguage(cfg.Language)
-		if lang != language.Und {
-			bundle.SetDefaultLanguage(lang)
-			systemBundle.SetDefaultLanguage(lang)
-		}
-	}
-
-	// Handle help
-	if cfg.Help {
-		parser.PrintUsageWithGroups(os.Stderr)
-		os.Exit(0)
-	}
 
 	// Handle errors
 	if !success {
@@ -127,23 +161,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Command %s failed: %v\n", cmdErr.Key, cmdErr.Value)
 		}
 		os.Exit(1)
-	}
-}
-
-func parseLanguage(lang string) language.Tag {
-	switch strings.ToLower(lang) {
-	case "en":
-		return language.English
-	case "es":
-		return language.Spanish
-	case "ja":
-		return language.Japanese
-	case "fr":
-		return language.French
-	case "de":
-		return language.German
-	default:
-		return language.Und
 	}
 }
 

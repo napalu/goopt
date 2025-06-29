@@ -1,0 +1,8 @@
+{
+  "app.flag.language.desc": "インターフェース言語 (en, de, fr, es, ja, ar, he)",
+  "app.flag.verbose.desc": "詳細出力を有効にする",
+  "app.command.demo.desc": "追加システム言語のロードをデモンストレーション",
+  "app.flag.language": "言語",
+  "app.flag.verbose": "詳細",
+  "app.command.demo.name": "デモ"
+}

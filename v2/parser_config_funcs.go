@@ -205,13 +205,6 @@ func WithAutoHelp(enabled bool) ConfigureCmdLineFunc {
 	}
 }
 
-// WithHelpFlags sets custom help flag names (default: "help", "h")
-func WithHelpFlags(flags ...string) ConfigureCmdLineFunc {
-	return func(cmdLine *Parser, err *error) {
-		cmdLine.SetHelpFlags(flags)
-	}
-}
-
 // WithVersion sets a static version string and enables auto-version
 func WithVersion(version string) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
@@ -368,5 +361,12 @@ func WithSuggestionThreshold(flagThreshold, commandThreshold int) ConfigureCmdLi
 func WithEnvResolver(resolver env.Resolver) ConfigureCmdLineFunc {
 	return func(p *Parser, err *error) {
 		*err = p.SetEnvResolver(resolver)
+	}
+}
+
+// WithAutoLanguage sets the parser's auto-language detection mode based on the provided boolean value.
+func WithAutoLanguage(enabled bool) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetAutoLanguage(enabled)
 	}
 }

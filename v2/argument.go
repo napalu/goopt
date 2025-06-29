@@ -16,7 +16,6 @@ type Argument struct {
 	Description    string
 	DescriptionKey string
 	TypeOf         types.OptionType
-	IsHelp         bool
 	Required       bool
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
@@ -131,7 +130,6 @@ type comparableArgument struct {
 	Description    string
 	DescriptionKey string
 	TypeOf         types.OptionType
-	IsHelp         bool
 	Required       bool
 	Validators     []validation.ValidatorFunc
 	AcceptedValues []types.PatternValue
@@ -149,7 +147,6 @@ func toComparable(a *Argument) comparableArgument {
 		Description:    a.Description,
 		DescriptionKey: a.DescriptionKey,
 		TypeOf:         a.TypeOf,
-		IsHelp:         a.IsHelp,
 		Required:       a.Required,
 		Validators:     normalizeSlice(a.Validators),
 		AcceptedValues: normalizeSlice(a.AcceptedValues),

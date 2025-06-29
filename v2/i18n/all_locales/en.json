@@ -65,7 +65,7 @@
     "goopt.error.positional_argument_not_found": "positional argument at position %[1]d not found",
     "goopt.error.index_out_of_bounds": "index %d out of bounds at '%s': valid range is 0-%d",
     "goopt.error.unknown_flag": "unknown flag: %[1]s",
-    "goopt.error.unknown_flag_with_suggestions": "unknown flag: %[1]s. Did you mean one of these? [%[2]s]",
+    "goopt.error.unknown_flag_with_suggestions": "unknown flag: %[1]s. Did you mean one of these? %[2]s",
     "goopt.error.unknown_flag_in_command_path": "unknown argument '%[1]s' in command Path '%[2]s'",
     "goopt.error.nil_pointer": "nil pointer encountered: %[1]s",
     "goopt.error.no_valid_tags": "no valid tags found",
@@ -227,5 +227,7 @@
     "goopt.msg.tips": "Tips",
     "goopt.msg.tip_help_help": "Use '--help --help' or '--help help' to see this help system documentation",
     "goopt.msg.tip_search_pattern": "Search patterns support wildcards: * matches any characters, ? matches single character",
-    "goopt.msg.tip_style_auto": "The 'smart' style automatically selects the best format based on your CLI's complexity"
+    "goopt.msg.tip_style_auto": "The 'smart' style automatically selects the best format based on your CLI's complexity",
+    "goopt.flag.help": "help",
+    "goopt.flag.language": "language"
 }

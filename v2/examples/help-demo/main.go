@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"golang.org/x/text/language"
 	"os"
 	"strings"
 
@@ -14,7 +15,9 @@ type ComplexApp struct {
 	Verbose bool   `goopt:"short:v;desc:Enable verbose output"`
 	Config  string `goopt:"short:c;desc:Configuration file path"`
 	Debug   bool   `goopt:"desc:Enable debug mode"`
-
+	Demo    struct {
+		Exec goopt.CommandFunc
+	} `goopt:"desc:Demo mode;kind:command"`
 	// Core settings
 	Core struct {
 		LDAP struct {
@@ -84,49 +87,37 @@ type ComplexApp struct {
 
 func main() {
 	app := &ComplexApp{}
-
 	// Demo: Show different help modes
+	app.Demo.Exec = demonstrateHelpModes
+
 	// Create parser with improved help
 	parser, err := goopt.NewParserFromStruct(app,
 		goopt.WithHelpStyle(goopt.HelpStyleHierarchical),
 		goopt.WithHelpBehavior(goopt.HelpBehaviorSmart),
+		// start executing commands as soon as parse is done
+		goopt.WithExecOnParseComplete(true),
 	)
-
-	if len(os.Args) > 1 && os.Args[1] == "demo" {
-		demonstrateHelpModes(parser)
-	}
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating parser: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Parse arguments
-	if !parser.Parse(os.Args) {
-		// Errors were encountered
-		for _, e := range parser.GetErrors() {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", e)
-		}
-		os.Exit(1)
-	}
-
-	// Check if help was shown
-	if parser.WasHelpShown() {
-		os.Exit(0)
-	}
+	// Parse arguments - normally we'd check if parse was successful and display errors,
+	// but since we control the demo and want to show the help modes, we ignore them
+	_ = parser.ParseString(`demo --core.ldap.host localhost 
+		--core.ldap.bindUser test 
+		--core.db.name db_test 
+		--core.db.user app_user`)
 
 	// Normal execution
 	fmt.Println("Application running...")
-
 }
 
-func demonstrateHelpModes(parser *goopt.Parser) {
+func demonstrateHelpModes(parser *goopt.Parser, command *goopt.Command) error {
 	fmt.Println("\n=== Demonstrating Improved Help Features ===")
 
-	// Create help parser
-	helpConfig := parser.GetHelpConfig()
-	helpParser := goopt.NewHelpParser(parser, helpConfig)
-
+	languages := []string{"en", "de", "fr"}
 	demos := []struct {
 		name string
 		args []string
@@ -163,18 +154,37 @@ func demonstrateHelpModes(parser *goopt.Parser) {
 			name: "8. Show examples",
 			args: []string{"--help", "examples"},
 		},
+		{
+			name: "9. Show help for a command",
+			args: []string{"--help", "users", "create"},
+		},
+		{
+			name: "10. Show help for help",
+			args: []string{"--help", "--help"},
+		},
 	}
 
-	for _, demo := range demos {
-		fmt.Printf("\n--- %s ---\n", demo.name)
-		fmt.Printf("Command: app %s\n\n", strings.Join(demo.args, " "))
+	for _, lang := range languages {
+		// parser language sets help language
+		_ = parser.SetLanguage(language.Make(lang))
+		fmt.Printf("\n=== Language: %s ===\n", lang)
+		for _, demo := range demos {
+			fmt.Printf("\n--- %s ---\n", demo.name)
+			fmt.Printf("Command: app %s\n\n", strings.Join(demo.args, " "))
 
-		// Parse and show help
-		err := helpParser.Parse(demo.args)
-		if err != nil {
-			fmt.Printf("(Error: %v)\n", err)
+			// Create help parser
+			helpConfig := parser.GetHelpConfig()
+			helpParser := goopt.NewHelpParser(parser, helpConfig)
+
+			// Parse and show help
+			err := helpParser.Parse(demo.args)
+			if err != nil {
+				fmt.Printf("(Error: %v)\n", err)
+			}
+
+			fmt.Println("\n" + strings.Repeat("-", 60))
 		}
-
-		fmt.Println("\n" + strings.Repeat("-", 60))
 	}
+
+	return nil
 }

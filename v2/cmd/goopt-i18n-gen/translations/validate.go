@@ -9,6 +9,7 @@ import (
 
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 )
@@ -16,13 +17,13 @@ import (
 func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf(messages.Keys.AppError.FailedToGetConfig)
+		return errors.ErrFailedToGetConfig
 	}
 
 	// Expand input files
 	inputFiles, err := expandInputFiles(cfg.Input)
 	if err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToExpandInput), err)
+		return errors.ErrFailedToExpandInput.WithArgs(err)
 	}
 
 	// Read all translation files
@@ -30,12 +31,12 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, inputFile := range inputFiles {
 		data, err := os.ReadFile(inputFile)
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToReadInput), inputFile, err)
+			return errors.ErrFailedToReadInput.WithArgs(inputFile, err)
 		}
 
 		var translations map[string]string
 		if err := json.Unmarshal(data, &translations); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToParseJson), inputFile, err)
+			return errors.ErrFailedToParseJson.WithArgs(inputFile, err)
 		}
 
 		allTranslations[inputFile] = translations
@@ -53,7 +54,7 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 
 	if len(files) == 0 {
 		fmt.Println(cfg.TR.T(messages.Keys.AppError.NoFiles))
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.NoFiles))
+		return errors.ErrNoFiles
 	}
 
 	// Scan for descKey references
@@ -94,11 +95,11 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 				// Update the JSON file
 				updatedData, err := json.MarshalIndent(translations, "", "  ")
 				if err != nil {
-					return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToMarshal), err)
+					return errors.ErrFailedToMarshal.WithArgs(err)
 				}
 
 				if err := os.WriteFile(inputFile, updatedData, 0644); err != nil {
-					return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToWriteJson), inputFile, err)
+					return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 				}
 				fmt.Println(cfg.TR.T(messages.Keys.AppValidate.UpdatedFile, inputFile))
 			}
@@ -111,7 +112,7 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	if hasErrors && cfg.Validate.Strict && !cfg.Validate.GenerateMissing {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.ValidationFailed))
+		return errors.ErrValidationFailed
 	}
 
 	return nil

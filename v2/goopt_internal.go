@@ -1383,12 +1383,12 @@ func (p *Parser) generateFlagError(flagName string, commandPath string) {
 				}
 			}
 		}
-		// Use custom formatter if set, otherwise default to comma-separated list
+		// Use custom formatter if set, otherwise default to comma-separated list with brackets
 		var formatted string
 		if p.suggestionsFormatter != nil {
 			formatted = p.suggestionsFormatter(formattedSuggestions)
 		} else {
-			formatted = strings.Join(formattedSuggestions, ", ")
+			formatted = "[" + strings.Join(formattedSuggestions, ", ") + "]"
 		}
 		p.addError(errs.ErrUnknownFlagWithSuggestions.WithArgs(flagName, formatted))
 	} else {

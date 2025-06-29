@@ -263,21 +263,18 @@ func TestFormatter_SetRegionalLanguage(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test Swiss German
-	err = bundle.SetDefaultLanguage(language.MustParse("de-CH"))
-	assert.NoError(t, err)
+	bundle.SetDefaultLanguage(language.MustParse("de-CH"))
 	assert.Equal(t, "de-CH", bundle.GetDefaultLanguage().String())
 
 	// Verify we get Swiss-specific translation
 	assert.Equal(t, "CHF", bundle.T("currency"))
 
 	// Test Austrian German
-	err = bundle.SetDefaultLanguage(language.MustParse("de-AT"))
-	assert.NoError(t, err)
+	bundle.SetDefaultLanguage(language.MustParse("de-AT"))
 	assert.Equal(t, "de-AT", bundle.GetDefaultLanguage().String())
 
 	// Test standard German
-	err = bundle.SetDefaultLanguage(language.German)
-	assert.NoError(t, err)
+	bundle.SetDefaultLanguage(language.German)
 	assert.Equal(t, "de", bundle.GetDefaultLanguage().String())
 }
 

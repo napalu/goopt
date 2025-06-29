@@ -5,8 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/types"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/text/language"
 )
 
 func TestAutoHelp(t *testing.T) {
@@ -63,21 +65,6 @@ func TestAutoHelp(t *testing.T) {
 			},
 			args:         []string{"--help"},
 			expectedHelp: false,
-		},
-		{
-			name: "custom help flags",
-			setupParser: func() *Parser {
-				p, _ := NewParserWith(WithHelpFlags("help", "?"))
-				_ = p.AddFlag("verbose", &Argument{
-					Short:       "v",
-					Description: "Enable verbose output",
-					TypeOf:      types.Standalone,
-				})
-				return p
-			},
-			args:           []string{"-?"},
-			expectedHelp:   true,
-			expectedOutput: "Show help information",
 		},
 		{
 			name: "user-defined help flag takes precedence",
@@ -339,104 +326,6 @@ func TestAutoHelpRespectsHelpStyle(t *testing.T) {
 	}
 }
 
-func TestUserDefinedHelpFlag(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupParser    func() *Parser
-		args           []string
-		expectAutoHelp bool
-		expectUserHelp bool
-	}{
-		{
-			name: "user defines help without short flag",
-			setupParser: func() *Parser {
-				p := NewParser()
-				_ = p.AddFlag("help", &Argument{
-					Description: "Show my custom help",
-					TypeOf:      types.Standalone,
-				})
-				return p
-			},
-			args:           []string{"--help"},
-			expectAutoHelp: false,
-			expectUserHelp: true,
-		},
-		{
-			name: "user defines help with different short flag",
-			setupParser: func() *Parser {
-				p := NewParser()
-				_ = p.AddFlag("help", &Argument{
-					Short:       "?",
-					Description: "Show my custom help",
-					TypeOf:      types.Standalone,
-				})
-				return p
-			},
-			args:           []string{"-?"},
-			expectAutoHelp: false,
-			expectUserHelp: true,
-		},
-		{
-			name: "user defines different flag with -h short",
-			setupParser: func() *Parser {
-				p := NewParser()
-				_ = p.AddFlag("host", &Argument{
-					Short:       "h",
-					Description: "Database host",
-					TypeOf:      types.Single,
-				})
-				return p
-			},
-			args:           []string{"--help"},
-			expectAutoHelp: true,
-			expectUserHelp: false,
-		},
-		{
-			name: "struct tags define help flag",
-			setupParser: func() *Parser {
-				type Config struct {
-					Help bool `goopt:"name:help;short:h;desc:Custom help message"`
-				}
-				cfg := &Config{}
-				p, _ := NewParserFromStruct(cfg)
-				return p
-			},
-			args:           []string{"--help"},
-			expectAutoHelp: false,
-			expectUserHelp: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := tt.setupParser()
-
-			var buf bytes.Buffer
-			p.SetStdout(&buf)
-
-			p.helpEndFunc = func() error {
-				return nil
-			}
-			p.Parse(tt.args)
-
-			// Check if auto-help was triggered
-			assert.Equal(t, tt.expectAutoHelp, p.WasHelpShown())
-
-			// Check if user help flag was set
-			if tt.expectUserHelp {
-				val, found := p.Get("help")
-				assert.True(t, found)
-				assert.Equal(t, "true", val)
-			}
-
-			// If auto-help was triggered, check output
-			if tt.expectAutoHelp {
-				assert.Contains(t, buf.String(), "Show help information")
-			}
-		})
-	}
-}
-
 func TestHelpFlagPrecedence(t *testing.T) {
 	// Test that user can override help flags completely
 	type Config struct {
@@ -499,4 +388,23 @@ func TestCustomHelpOutput(t *testing.T) {
 	// In compact mode, should show condensed output
 	lines := strings.Split(output, "\n")
 	assert.Greater(t, len(lines), 3) // Should have multiple lines but be compact
+}
+
+// createTestBundle creates a test bundle with basic translations
+func createTestBundle(t *testing.T) *i18n.Bundle {
+	bundle := i18n.NewEmptyBundle()
+
+	// Load basic English translations
+	err := bundle.LoadFromString(language.English, `{
+		"goopt.flag.help": "help",
+		"goopt.flag.language": "language"
+	}`)
+	if err != nil {
+		t.Fatalf("Failed to load English translations: %v", err)
+	}
+
+	// Set English as default
+	bundle.SetDefaultLanguage(language.English)
+
+	return bundle
 }

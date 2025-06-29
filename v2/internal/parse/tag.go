@@ -124,8 +124,6 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			if config.Secure.IsSecure {
 				config.Secure.Prompt = value
 			}
-		case "help":
-			//
 		case "path":
 			config.Path = value
 		case "accepted":

@@ -331,10 +331,6 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 						canonicalDist := util.LevenshteinDistance(invalidCmd, suggestion)
 						translatedDist := util.LevenshteinDistance(invalidCmd, translated)
 
-						// Debug logging
-						// fmt.Printf("DEBUG handleInvalidCommand: invalidCmd=%s, suggestion=%s, translated=%s, canonicalDist=%d, translatedDist=%d\n",
-						//     invalidCmd, suggestion, translated, canonicalDist, translatedDist)
-
 						// Show the form that's closer to what user typed
 						if translatedDist < canonicalDist {
 							displaySuggestions[i] = translated

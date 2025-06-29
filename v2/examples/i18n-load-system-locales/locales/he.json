@@ -1,0 +1,8 @@
+{
+  "app.flag.language.desc": "שפת ממשק (en, de, fr, es, ja, ar, he)",
+  "app.flag.verbose.desc": "הפעל פלט מפורט",
+  "app.command.demo.desc": "הדגמת טעינת שפות מערכת נוספות",
+  "app.flag.language": "שפה",
+  "app.flag.verbose": "מפורט",
+  "app.command.demo.name": "הדגמה"
+}

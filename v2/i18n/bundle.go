@@ -159,16 +159,19 @@ func NewEmptyBundle() *Bundle {
 	return b
 }
 
-func NewBundleWithFS(fs embed.FS, dirPrefix string) (*Bundle, error) {
+func NewBundleWithFS(fs embed.FS, dirPrefix string, lang ...language.Tag) (*Bundle, error) {
 	b := &Bundle{
-		defaultLang:        language.English,
 		translations:       orderedmap.NewOrderedMap[string, map[string]string](),
 		catalog:            catalog.NewBuilder(),
 		printers:           make(map[language.Tag]*message.Printer),
 		validatedLanguages: make(map[language.Tag]struct{}),
 		mu:                 sync.RWMutex{},
 	}
-
+	if len(lang) > 0 {
+		b.defaultLang = lang[0]
+	} else {
+		b.defaultLang = language.English
+	}
 	if err := b.LoadFromFS(fs, dirPrefix); err != nil {
 		return nil, err
 	}
@@ -452,9 +455,9 @@ func (b *Bundle) HasKey(lang language.Tag, key string) bool {
 
 // SetDefaultLanguage sets the default language, using language matching to find
 // the best available match if the exact language is not available
-func (b *Bundle) SetDefaultLanguage(lang language.Tag) error {
+func (b *Bundle) SetDefaultLanguage(lang language.Tag) {
 	if b.isImmutable {
-		return ErrBundleImmutable
+		return
 	}
 
 	b.mu.Lock()
@@ -470,13 +473,12 @@ func (b *Bundle) SetDefaultLanguage(lang language.Tag) error {
 	} else {
 		// If no match found and bundle is not empty, keep current default
 		if b.translations.Len() > 0 {
-			return fmt.Errorf("no suitable match found for language %s", lang)
+			return
 		}
 		// Allow setting any language on empty bundle
 		b.defaultLang = lang
 	}
 
-	return nil
 }
 
 func (b *Bundle) GetDefaultLanguage() language.Tag {

@@ -104,17 +104,12 @@ $ myapp -l de --help
 
 ## Configuration Options
 
-### Customizing Language Flags
+### Turning off language detection
+
+If for some reason you want to disable auto-language detection you can SetAutoLanguage to false.
+This is a per-parser setting.
 
 ```go
-// Change the language flag names
-parser.SetLanguageFlags("locale", "loc", "L")
-
-// Now users can use:
-// --locale de
-// --loc de  
-// -L de
-
 // Disable auto-language detection entirely
 parser.SetAutoLanguage(false)
 ```
@@ -233,7 +228,7 @@ detectedLang := parser.GetLanguage()
 fmt.Printf("Using language: %s\n", detectedLang)
 
 // Check if system locale is enabled
-if parser.IsCheckSystemLocale() {
+if parser.GetCheckSystemLocale() {
     fmt.Println("System locale detection is ENABLED")
 }
 

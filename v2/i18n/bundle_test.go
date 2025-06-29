@@ -450,8 +450,7 @@ func TestBundle_SetDefaultLanguage(t *testing.T) {
 	bundle := NewEmptyBundle()
 
 	// Test setting default language on empty bundle - should be allowed
-	err := bundle.SetDefaultLanguage(language.Spanish)
-	assert.NoError(t, err)
+	bundle.SetDefaultLanguage(language.Spanish)
 	// On empty bundle, any language can be set as default
 	assert.Equal(t, language.Spanish, bundle.GetDefaultLanguage())
 
@@ -462,15 +461,12 @@ func TestBundle_SetDefaultLanguage(t *testing.T) {
 	bundle.AddLanguage(language.Spanish, map[string]string{"test": "prueba"})
 
 	// Test language matching - request French, should match to English (first in OrderedMap)
-	err = bundle.SetDefaultLanguage(language.French)
-	assert.NoError(t, err)
+	bundle.SetDefaultLanguage(language.French)
 	assert.Equal(t, language.English, bundle.GetDefaultLanguage())
 
 	// Test with immutable bundle
 	bundle.isImmutable = true
-	err = bundle.SetDefaultLanguage(language.German)
-	assert.Error(t, err)
-	assert.Equal(t, ErrBundleImmutable, err)
+	bundle.SetDefaultLanguage(language.German)
 	assert.Equal(t, language.English, bundle.GetDefaultLanguage()) // Should not change
 }
 

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 )
 
 // toGoName converts a string to a valid Go identifier
@@ -48,13 +48,13 @@ func ensureInputFile(path string) error {
 	// Create directory if needed
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf(messages.Keys.AppError.FailedToCreateDir, dir, err)
+		return errors.ErrFailedToCreateDir.WithArgs(dir, err)
 	}
 
 	// Create empty JSON file
 	emptyJSON := []byte("{}")
 	if err := os.WriteFile(path, emptyJSON, 0644); err != nil {
-		return fmt.Errorf(messages.Keys.AppError.FailedToCreateFile, path, err)
+		return errors.ErrFailedToCreateFile.WithArgs(path, err)
 	}
 
 	fmt.Printf("✓ Created %s\n", path)
@@ -69,7 +69,7 @@ func expandInputFiles(inputs []string) ([]string, error) {
 	for _, pattern := range inputs {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil, fmt.Errorf(messages.Keys.AppError.FailedToExpandPattern, pattern, err)
+			return nil, errors.ErrFailedToExpandPattern.WithArgs(pattern, err)
 		}
 
 		// If no matches, treat as literal file
@@ -86,7 +86,7 @@ func expandInputFiles(inputs []string) ([]string, error) {
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf(messages.Keys.AppError.NoFiles)
+		return nil, errors.ErrNoFiles
 	}
 
 	return files, nil
@@ -125,7 +125,7 @@ func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts Tr
 	existing := make(map[string]interface{})
 	if data, err := os.ReadFile(filename); err == nil && len(data) > 0 {
 		if err := json.Unmarshal(data, &existing); err != nil {
-			return nil, fmt.Errorf(messages.Keys.AppError.FailedToParseJsonSimple, err)
+			return nil, errors.ErrFailedToParseJsonSimple.WithArgs(err)
 		}
 	}
 
@@ -138,7 +138,7 @@ func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts Tr
 		if _, exists := existing[key]; exists {
 			switch opts.Mode {
 			case UpdateModeError:
-				return nil, fmt.Errorf(messages.Keys.AppError.KeyAlreadyExists, key, filename)
+				return nil, errors.ErrKeyAlreadyExists.WithArgs(key, filename)
 			case UpdateModeSkip:
 				result.Skipped++
 			case UpdateModeReplace:
@@ -165,11 +165,11 @@ func UpdateTranslationFile(filename string, keysToAdd map[string]string, opts Tr
 	if result.Modified && !opts.DryRun {
 		data, err := json.MarshalIndent(existing, "", "  ")
 		if err != nil {
-			return nil, fmt.Errorf(messages.Keys.AppError.FailedToMarshalJson, err)
+			return nil, errors.ErrFailedToMarshalJson.WithArgs(err)
 		}
 
 		if err := os.WriteFile(filename, data, 0644); err != nil {
-			return nil, fmt.Errorf(messages.Keys.AppError.FailedToWriteFile, err)
+			return nil, errors.ErrFailedToWriteFile.WithArgs(err)
 		}
 	}
 

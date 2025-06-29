@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 )
@@ -16,7 +17,7 @@ import (
 func Add(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToGetConfig))
+		return errors.ErrFailedToGetConfig
 	}
 
 	// Validate inputs
@@ -27,21 +28,21 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 	hasSingleKey := cfg.Add.Key != ""
 
 	if !hasFromFile && !hasSingleKey {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.NoKeys))
+		return errors.ErrNoKeys
 	}
 
 	if hasFromFile && hasSingleKey {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.BothSingleAndFile))
+		return errors.ErrBothSingleAndFile
 	}
 
 	if hasSingleKey && cfg.Add.Value == "" {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.MissingValue))
+		return errors.ErrMissingValue
 	}
 
 	// Validate mode
 	validModes := map[string]bool{"skip": true, "replace": true, "error": true}
 	if !validModes[cfg.Add.Mode] {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.InvalidMode), cfg.Add.Mode)
+		return errors.ErrInvalidMode.WithArgs(cfg.Add.Mode)
 	}
 
 	// Load keys
@@ -52,11 +53,11 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 
 		data, err := os.ReadFile(cfg.Add.FromFile)
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.FailedReadKeysFile), cfg.Add.FromFile, err)
+			return errors.ErrFailedReadKeysFile.WithArgs(cfg.Add.FromFile, err)
 		}
 
 		if err := json.Unmarshal(data, &keysToAdd); err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.FailedParseKeysFile), cfg.Add.FromFile, err)
+			return errors.ErrFailedParseKeysFile.WithArgs(cfg.Add.FromFile, err)
 		}
 
 		if cfg.Verbose {
@@ -70,7 +71,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 	// Expand input files
 	inputFiles, err := expandInputFiles(cfg.Input)
 	if err != nil {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToExpandInput), err)
+		return errors.ErrFailedToExpandInput.WithArgs(err)
 	}
 
 	// Determine default language (English if available, otherwise first file)
@@ -102,7 +103,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 		var translations map[string]string
 		data, err := os.ReadFile(inputFile)
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToReadInput), inputFile, err)
+			return errors.ErrFailedToReadInput.WithArgs(inputFile, err)
 		}
 
 		if err := json.Unmarshal(data, &translations); err != nil {
@@ -124,7 +125,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 			if exists {
 				switch cfg.Add.Mode {
 				case "error":
-					return fmt.Errorf(cfg.TR.T(messages.Keys.AppAdd.KeyExistsError), key, inputFile)
+					return errors.ErrKeyExistsError.WithArgs(key, inputFile)
 				case "skip":
 					if cfg.Add.DryRun {
 						fmt.Println(cfg.TR.T(messages.Keys.AppAdd.DryRunWouldSkip, key))
@@ -188,11 +189,11 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 			// Marshal with sorted keys
 			sortedData, err := json.MarshalIndent(translations, "", "  ")
 			if err != nil {
-				return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToMarshal), err)
+				return errors.ErrFailedToMarshal.WithArgs(err)
 			}
 
 			if err := os.WriteFile(inputFile, sortedData, 0644); err != nil {
-				return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToWriteJson), inputFile, err)
+				return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 			}
 
 			fmt.Println(cfg.TR.T(messages.Keys.AppAdd.UpdatedFile, inputFile, fileAdded, fileSkipped, fileReplaced))

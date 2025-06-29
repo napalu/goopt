@@ -95,7 +95,7 @@
   "goopt.error.short_flag_not_defined": "l'option %[1]s n'a pas de forme courte définie",
   "goopt.error.unknown_flag": "option inconnue : %[1]s",
   "goopt.error.unknown_flag_in_command_path": "argument inconnu '%[1]s' dans le chemin de commande '%[2]s'",
-  "goopt.error.unknown_flag_with_suggestions": "option inconnue : %[1]s. Vouliez-vous dire l'un de ceux-ci ? [%[2]s]",
+  "goopt.error.unknown_flag_with_suggestions": "option inconnue : %[1]s. Vouliez-vous dire l'un de ceux-ci ? %[2]s",
   "goopt.error.unmarshalling_tag": "erreur lors du décodage du tag %[1]s",
   "goopt.error.unsupported_type": "conversion de type non supportée",
   "goopt.error.unsupported_type_conversion": "type de données %[1]v non supporté pour l'argument %[2]s",
@@ -227,5 +227,7 @@
   "goopt.msg.validators": "validateurs",
   "goopt.msg.version_description": "Afficher les informations de version",
   "goopt.warning.dependency_not_specified": "L'option %[1]q dépend de %[2]q qui n'a pas été spécifiée",
-  "goopt.warning.dependency_value_not_specified": "L'option %[1]q dépend de %[2]q avec la valeur %[3]s qui n'a pas été spécifiée (reçu %[4]q)"
+  "goopt.warning.dependency_value_not_specified": "L'option %[1]q dépend de %[2]q avec la valeur %[3]s qui n'a pas été spécifiée (reçu %[4]q)",
+  "goopt.flag.help": "aide",
+  "goopt.flag.language": "langue"
 }

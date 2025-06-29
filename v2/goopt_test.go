@@ -5040,6 +5040,7 @@ Positional Arguments:
  source "Source file" (positional: 0)
  dest "Destination file" (positional: 1)
  optional "Optional file" (positional: 5)
+
 `,
 		},
 		{
@@ -5061,6 +5062,7 @@ Positional Arguments:
 Positional Arguments:
  source "Source file" (positional: 0)
  dest "Destination file" (positional: 1)
+
 `,
 		},
 	}
@@ -8847,19 +8849,6 @@ func TestParser_Getters(t *testing.T) {
 		// Test setting back to true
 		parser.SetAutoHelp(true)
 		assert.True(t, parser.GetAutoHelp())
-	})
-
-	t.Run("GetHelpFlags", func(t *testing.T) {
-		parser := NewParser()
-
-		// Default should be ["help", "h"]
-		flags := parser.GetHelpFlags()
-		assert.Equal(t, []string{"help", "h"}, flags)
-
-		// Test custom flags
-		parser.SetHelpFlags([]string{"ayuda", "a"})
-		flags = parser.GetHelpFlags()
-		assert.Equal(t, []string{"ayuda", "a"}, flags)
 	})
 
 	t.Run("GetAutoVersion", func(t *testing.T) {
@@ -12750,11 +12739,6 @@ func TestParser_AutoLanguageGetters(t *testing.T) {
 	assert.False(t, parser.GetAutoLanguage())
 	parser.SetAutoLanguage(true)
 	assert.True(t, parser.GetAutoLanguage())
-
-	// GetLanguageFlags
-	assert.Equal(t, []string{"language", "lang", "l"}, parser.GetLanguageFlags())
-	parser.SetLanguageFlags([]string{"idioma"})
-	assert.Equal(t, []string{"idioma"}, parser.GetLanguageFlags())
 
 	// GetCheckSystemLocale
 	assert.False(t, parser.GetCheckSystemLocale())

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"github.com/napalu/goopt/v2/types"
 	"os"
-	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -100,7 +99,7 @@ func getLocaleFromRegistry() (language.Tag, error) {
 	if lang, _, err := k.GetStringValue("sLanguage"); err == nil && lang != "" {
 		// sLanguage contains full language name like "English" or "German"
 		// Try to map it to a language code
-		if tag := mapLanguageNameToTag(lang); tag != language.Und {
+		if tag := LanguageNameToLanguageTag(lang); tag != language.Und {
 			return tag, nil
 		}
 	}
@@ -169,101 +168,4 @@ func langIDToLocaleName(langID uint16) string {
 
 	// Convert the UTF-16 buffer to a Go string and return it.
 	return windows.UTF16ToString(buf)
-}
-
-// mapLanguageNameToTag maps Windows language display names to language tags.
-// It includes a comprehensive list of languages and their native names,
-// and it can handle region-specific names like "French (Canada)" by stripping
-// the regional information before mapping.
-func mapLanguageNameToTag(langName string) language.Tag {
-	// Normalize the language name to lower case and trim whitespace.
-	langName = strings.ToLower(strings.TrimSpace(langName))
-
-	// Handle region-specific names like "English (United Kingdom)" by
-	// stripping the part in parentheses.
-	if idx := strings.Index(langName, " ("); idx != -1 {
-		langName = langName[:idx]
-	}
-
-	// A comprehensive map of language names (including endonyms) to language tags.
-	langMap := map[string]language.Tag{
-		"english":          language.English,
-		"german":           language.German,
-		"deutsch":          language.German,
-		"french":           language.French,
-		"français":         language.French,
-		"spanish":          language.Spanish,
-		"español":          language.Spanish,
-		"italian":          language.Italian,
-		"italiano":         language.Italian,
-		"japanese":         language.Japanese,
-		"日本語":              language.Japanese,
-		"chinese":          language.Chinese,
-		"中文":               language.Chinese,
-		"portuguese":       language.Portuguese,
-		"português":        language.Portuguese,
-		"russian":          language.Russian,
-		"русский":          language.Russian,
-		"arabic":           language.Arabic,
-		"العربية":          language.Arabic,
-		"hebrew":           language.Hebrew,
-		"עברית":            language.Hebrew,
-		"hindi":            language.Hindi,
-		"हिन्दी":           language.Hindi,
-		"korean":           language.Korean,
-		"한국어":              language.Korean,
-		"dutch":            language.Dutch,
-		"nederlands":       language.Dutch,
-		"polish":           language.Polish,
-		"polski":           language.Polish,
-		"swedish":          language.Swedish,
-		"svenska":          language.Swedish,
-		"turkish":          language.Turkish,
-		"türkçe":           language.Turkish,
-		"finnish":          language.Finnish,
-		"suomi":            language.Finnish,
-		"danish":           language.Danish,
-		"dansk":            language.Danish,
-		"norwegian":        language.Norwegian,
-		"norsk":            language.Norwegian,
-		"czech":            language.Czech,
-		"čeština":          language.Czech,
-		"hungarian":        language.Hungarian,
-		"magyar":           language.Hungarian,
-		"greek":            language.Greek,
-		"ελληνικά":         language.Greek,
-		"thai":             language.Thai,
-		"ไทย":              language.Thai,
-		"indonesian":       language.Indonesian,
-		"bahasa indonesia": language.Indonesian,
-		"vietnamese":       language.Vietnamese,
-		"tiếng việt":       language.Vietnamese,
-		"romanian":         language.Romanian,
-		"română":           language.Romanian,
-		"bulgarian":        language.Bulgarian,
-		"български":        language.Bulgarian,
-		"ukrainian":        language.Ukrainian,
-		"українська":       language.Ukrainian,
-		"catalan":          language.Catalan,
-		"català":           language.Catalan,
-		"slovak":           language.Slovak,
-		"slovenčina":       language.Slovak,
-		"croatian":         language.Croatian,
-		"hrvatski":         language.Croatian,
-		"slovenian":        language.Slovenian,
-		"slovenščina":      language.Slovenian,
-		"lithuanian":       language.Lithuanian,
-		"lietuvių":         language.Lithuanian,
-		"latvian":          language.Latvian,
-		"latviešu":         language.Latvian,
-		"estonian":         language.Estonian,
-		"eesti":            language.Estonian,
-	}
-
-	if tag, ok := langMap[langName]; ok {
-		return tag
-	}
-
-	// Return an undefined tag if no match is found.
-	return language.Und
 }

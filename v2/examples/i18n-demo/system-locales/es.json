@@ -99,6 +99,8 @@
   "goopt.error.validation_failed": "validación fallida para la bandera %[1]s",
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.commands": "Comandos",
+  "goopt.msg.help_description": "Mostrar información de ayuda",
+  "goopt.msg.language_description": "Establecer idioma de visualización",
   "goopt.msg.conditional": "condicional",
   "goopt.msg.defaults_to": "valor predeterminado",
   "goopt.msg.global_flags": "Opciones globales",
