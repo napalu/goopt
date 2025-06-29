@@ -2,6 +2,13 @@
 
 This demo showcases advanced help system capabilities of the [`goopt`](https://github.com/napalu/goopt/v2) CLI parser, including multilingual help, filtered views, and smart contextual error reporting.
 
+The demo makes it easier to:
+- Understand `goopt`’s smart help behavior
+- See how internationalization (i18n) integrates seamlessly
+- Inspect flag grouping, pattern filtering, and hierarchical layouts
+- Show helpful contextual error feedback to end users
+
+
 ## How to Run
 
 ```bash
@@ -46,15 +53,6 @@ Translations are applied automatically based on `LANG`, or programmatically via 
 - Go 1.18 or higher
 - [`golang.org/x/text`](https://pkg.go.dev/golang.org/x/text)
 - [`github.com/napalu/goopt`](https://github.com/napalu/goopt)
-
-## Why It Matters
-
-This demo makes it easier to:
-
-- Understand `goopt`’s smart help behavior
-- See how internationalization (i18n) integrates seamlessly
-- Inspect flag grouping, pattern filtering, and hierarchical layouts
-- Show helpful contextual error feedback to end users
 
 ## Related Links
 
