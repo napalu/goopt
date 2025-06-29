@@ -86,7 +86,7 @@ Here is a reference of the most common built-in validators.
 
 | Validator | Struct Tag | Description                                                                                                      |
 |---|---|------------------------------------------------------------------------------------------------------------------|
-| `Regex(pattern, desc)`| `regex(pattern:...,desc:...)` | Matches a regular expression. `desc` when supplied can be a message key (for translato^tion) or a literal string |
+| `Regex(pattern, desc)`| `regex(pattern:...,desc:...)` | Matches a regular expression. `desc` when supplied can be a message key (for translation) or a literal string |
 | `Email()` | `email` | A valid email address format.                                                                                    |
 | `URL(schemes...)` | `url(http,https)` | A valid URL, optionally restricted to schemes.                                                                   |
 | `Hostname()` | `hostname` | A valid DNS hostname.                                                                                            |

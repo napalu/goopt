@@ -2,10 +2,11 @@ package translations
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 )
 
 // findGoModPath finds the nearest go.mod file starting from the given directory
@@ -20,7 +21,7 @@ func findGoModPath(startDir string) (string, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached the root directory
-			return "", fmt.Errorf("go.mod not found")
+			return "", errors.ErrGoModNotFound
 		}
 		dir = parent
 	}
@@ -49,7 +50,7 @@ func getModuleName(goModPath string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("module directive not found in go.mod")
+	return "", errors.ErrModuleDirectiveNotFound
 }
 
 // resolvePackagePath resolves the package path based on the module context

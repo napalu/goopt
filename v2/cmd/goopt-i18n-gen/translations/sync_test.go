@@ -2,12 +2,13 @@ package translations
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	goopterrors "github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/types/orderedmap"
@@ -305,9 +306,9 @@ func TestSyncCommand(t *testing.T) {
 
 func TestSyncCommandErrors(t *testing.T) {
 	tests := []struct {
-		name        string
-		cfg         *options.AppConfig
-		expectError string
+		name          string
+		cfg           *options.AppConfig
+		expectedError error
 	}{
 		{
 			name: "less than 2 files",
@@ -315,7 +316,7 @@ func TestSyncCommandErrors(t *testing.T) {
 				Input: []string{"en.json"},
 				TR:    i18n.NewEmptyBundle(),
 			},
-			expectError: "sync requires at least 2 locale files",
+			expectedError: goopterrors.ErrSyncRequiresAtLeastTwoFiles,
 		},
 	}
 
@@ -323,9 +324,9 @@ func TestSyncCommandErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ExecuteSyncCommand(tt.cfg, &tt.cfg.Sync)
 			if err == nil {
-				t.Errorf("expected error containing %q, got nil", tt.expectError)
-			} else if !strings.Contains(err.Error(), tt.expectError) {
-				t.Errorf("expected error containing %q, got %v", tt.expectError, err)
+				t.Errorf("expected error %v, got nil", tt.expectedError)
+			} else if !errors.Is(err, tt.expectedError) {
+				t.Errorf("expected error %v, got %v", tt.expectedError, err)
 			}
 		})
 	}

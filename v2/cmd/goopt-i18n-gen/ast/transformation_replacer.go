@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/i18n"
 )
 
@@ -102,7 +103,7 @@ func (sr *TransformationReplacer) ProcessFiles(files []string) error {
 
 	for _, file := range files {
 		if err := sr.processFile(file); err != nil {
-			return fmt.Errorf("error processing %s: %w", file, err)
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.ErrorProcessingFile, file, err))
 		}
 	}
 	return nil
@@ -141,7 +142,7 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 		case *ast.BasicLit:
 			if x.Kind == token.STRING {
 				sr.parentStack = parents
-				sr.processStringLiteralForComment(fset, filename, x)
+				sr.processStringLiteralForComment(filename, x)
 			}
 		}
 		return true
@@ -151,7 +152,7 @@ func (sr *TransformationReplacer) processFile(filename string) error {
 }
 
 // processStringLiteralForComment processes a string literal for comment addition
-func (sr *TransformationReplacer) processStringLiteralForComment(fset *token.FileSet, filename string, lit *ast.BasicLit) {
+func (sr *TransformationReplacer) processStringLiteralForComment(filename string, lit *ast.BasicLit) {
 	// In comment mode, we want to add comments to ALL strings that have keys
 	// Don't skip user-facing functions - we're just adding comments, not transforming
 
@@ -317,7 +318,7 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 func (sr *TransformationReplacer) ApplyReplacements() error {
 	// Create backup directory
 	if err := os.MkdirAll(sr.config.BackupDir, 0755); err != nil {
-		return fmt.Errorf("failed to create backup directory: %w", err)
+		return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToCreateDirectory, err))
 	}
 
 	if sr.config.IsUpdateMode {
@@ -354,7 +355,7 @@ func (sr *TransformationReplacer) applyFormatTransformations() error {
 		// Transform using format transformer
 		transformed, err := sr.formatTransformer.TransformFile(file, src)
 		if err != nil {
-			return fmt.Errorf("failed to transform %s: %w", file, err)
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToTransformFile, file, err))
 		}
 
 		// Format the result
@@ -384,7 +385,7 @@ func (sr *TransformationReplacer) applySimpleReplacements() error {
 	// Process each file
 	for filename, replacements := range fileReplacements {
 		if err := sr.applySimpleToFile(filename, replacements); err != nil {
-			return fmt.Errorf("failed to update %s: %w", filename, err)
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToUpdateFile, filename, err))
 		}
 	}
 

@@ -327,10 +327,6 @@ func main() {
 
 	resultStr := string(result)
 
-	// Debug: print the extracted strings
-	t.Logf("Extracted strings: %v", stringMap)
-
-	// Debug: print relevant lines
 	lines := strings.Split(resultStr, "\n")
 	for i, line := range lines {
 		if strings.Contains(line, "port") || strings.Contains(line, "OK") || strings.Contains(line, "tr.T") {

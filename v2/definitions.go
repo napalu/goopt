@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"github.com/napalu/goopt/v2/env"
 	"io"
 	"reflect"
 	"strings"
@@ -192,6 +193,7 @@ type Parser struct {
 	layeredProvider         *i18n.LayeredMessageProvider
 	renderer                Renderer
 	structCtx               any
+	suggestionsFormatter    SuggestionsFormatter
 	helpConfig              HelpConfig
 	helpBehavior            HelpBehavior
 	autoHelp                bool
@@ -207,12 +209,21 @@ type Parser struct {
 	showVersionInHelp       bool
 	versionExecuted         bool
 	autoRegisteredVersion   map[string]bool
+	autoLanguage            bool
+	checkSystemLocale       bool
+	languageEnvVar          string
+	languageFlags           []string
+	autoRegisteredLanguage  map[string]bool
 	globalPreHooks          []PreHookFunc
 	globalPostHooks         []PostHookFunc
 	commandPreHooks         map[string][]PreHookFunc
 	commandPostHooks        map[string][]PostHookFunc
+	envResolver             env.Resolver
 	hookOrder               HookOrder
 	validationHook          ValidationHookFunc
+	translationRegistry     *JITTranslationRegistry
+	flagSuggestionThreshold int // Maximum Levenshtein distance for flag suggestions (default: 2)
+	cmdSuggestionThreshold  int // Maximum Levenshtein distance for command suggestions (default: 2)
 	mu                      sync.Mutex
 }
 
@@ -246,6 +257,9 @@ type PreHookFunc func(p *Parser, cmd *Command) error
 type PostHookFunc func(p *Parser, cmd *Command, cmdErr error) error
 
 type EndShowHelpHookFunc func() error
+
+// SuggestionsFormatter formats suggestions for display in error messages
+type SuggestionsFormatter func(suggestions []string) string
 
 // HookOrder defines the order in which hooks are executed
 type HookOrder int

@@ -81,6 +81,7 @@ const (
 	ErrMissingArgumentInfoKey          = ErrorPrefixKey + ".missing_argument_info"
 	ErrIndexOutOfBoundsKey             = ErrorPrefixKey + ".index_out_of_bounds"
 	ErrUnknownFlagKey                  = ErrorPrefixKey + ".unknown_flag"
+	ErrUnknownFlagWithSuggestionsKey   = ErrorPrefixKey + ".unknown_flag_with_suggestions"
 	ErrPositionMustBeNonNegativeKey    = ErrorPrefixKey + ".position_must_be_non_negative"
 	ErrPositionalArgumentNotFoundKey   = ErrorPrefixKey + ".positional_argument_not_found"
 	ErrUnknownFlagInCommandPathKey     = ErrorPrefixKey + ".unknown_flag_in_command_path"

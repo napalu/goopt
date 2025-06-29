@@ -71,6 +71,8 @@ var Keys = struct {
 
 		GenerateDesc string
 
+		GenerateLocalesDesc string
+
 		HelpDesc string
 
 		InitDesc string
@@ -189,9 +191,15 @@ var Keys = struct {
 	}
 
 	AppError struct {
+		BaseFileNotFound string
+
 		CommandFailed string
 
+		ErrorProcessingFile string
+
 		FailedToCreateDir string
+
+		FailedToCreateDirectory string
 
 		FailedToCreateFile string
 
@@ -199,29 +207,75 @@ var Keys = struct {
 
 		FailedToExecuteTemplate string
 
+		FailedToExpandFilePatterns string
+
 		FailedToExpandInput string
 
 		FailedToExpandPattern string
 
+		FailedToExpandReferencePatterns string
+
+		FailedToExpandTargetPatterns string
+
+		FailedToGeneratePackage string
+
 		FailedToGetConfig string
+
+		FailedToLoadFile string
+
+		FailedToLoadReferenceFile string
+
+		FailedToLoadTargetFile string
 
 		FailedToMarshal string
 
+		FailedToMarshalJson string
+
+		FailedToParseFile string
+
 		FailedToParseJson string
+
+		FailedToParseJsonSimple string
 
 		FailedToParseTemplate string
 
 		FailedToPrepareInput string
 
+		FailedToReadFile string
+
 		FailedToReadInput string
+
+		FailedToSaveFile string
+
+		FailedToTransformFile string
+
+		FailedToUpdateFile string
+
+		FailedToWriteFile string
 
 		FailedToWriteJson string
 
 		FailedToWriteOutput string
 
+		GoModNotFound string
+
+		InvalidPattern string
+
+		KeyAlreadyExists string
+
+		ModuleDirectiveNotFound string
+
 		NoFiles string
 
+		NoReferenceFiles string
+
+		NoTargetFiles string
+
 		ParseError string
+
+		SyncRequiresAtLeastTwoFiles string
+
+		UnknownLanguageCode string
 
 		ValidationFailed string
 	}
@@ -338,6 +392,14 @@ var Keys = struct {
 		PackageDesc string
 
 		PrefixDesc string
+	}
+
+	AppGenerateLocalesCmd struct {
+		DryRunDesc string
+
+		OutputDesc string
+
+		PackageBaseDesc string
 	}
 
 	AppGlobal struct {
@@ -560,6 +622,8 @@ var Keys = struct {
 
 		GenerateDesc string
 
+		GenerateLocalesDesc string
+
 		HelpDesc string
 
 		InitDesc string
@@ -582,6 +646,8 @@ var Keys = struct {
 		ExtractDesc: "app.app_config.extract_desc",
 
 		GenerateDesc: "app.app_config.generate_desc",
+
+		GenerateLocalesDesc: "app.app_config.generate_locales_desc",
 
 		HelpDesc: "app.app_config.help_desc",
 
@@ -799,9 +865,15 @@ var Keys = struct {
 	},
 
 	AppError: struct {
+		BaseFileNotFound string
+
 		CommandFailed string
 
+		ErrorProcessingFile string
+
 		FailedToCreateDir string
+
+		FailedToCreateDirectory string
 
 		FailedToCreateFile string
 
@@ -809,36 +881,88 @@ var Keys = struct {
 
 		FailedToExecuteTemplate string
 
+		FailedToExpandFilePatterns string
+
 		FailedToExpandInput string
 
 		FailedToExpandPattern string
 
+		FailedToExpandReferencePatterns string
+
+		FailedToExpandTargetPatterns string
+
+		FailedToGeneratePackage string
+
 		FailedToGetConfig string
+
+		FailedToLoadFile string
+
+		FailedToLoadReferenceFile string
+
+		FailedToLoadTargetFile string
 
 		FailedToMarshal string
 
+		FailedToMarshalJson string
+
+		FailedToParseFile string
+
 		FailedToParseJson string
+
+		FailedToParseJsonSimple string
 
 		FailedToParseTemplate string
 
 		FailedToPrepareInput string
 
+		FailedToReadFile string
+
 		FailedToReadInput string
+
+		FailedToSaveFile string
+
+		FailedToTransformFile string
+
+		FailedToUpdateFile string
+
+		FailedToWriteFile string
 
 		FailedToWriteJson string
 
 		FailedToWriteOutput string
 
+		GoModNotFound string
+
+		InvalidPattern string
+
+		KeyAlreadyExists string
+
+		ModuleDirectiveNotFound string
+
 		NoFiles string
 
+		NoReferenceFiles string
+
+		NoTargetFiles string
+
 		ParseError string
+
+		SyncRequiresAtLeastTwoFiles string
+
+		UnknownLanguageCode string
 
 		ValidationFailed string
 	}{
 
+		BaseFileNotFound: "app.error.base_file_not_found",
+
 		CommandFailed: "app.error.command_failed",
 
+		ErrorProcessingFile: "app.error.error_processing_file",
+
 		FailedToCreateDir: "app.error.failed_to_create_dir",
+
+		FailedToCreateDirectory: "app.error.failed_to_create_directory",
 
 		FailedToCreateFile: "app.error.failed_to_create_file",
 
@@ -846,29 +970,75 @@ var Keys = struct {
 
 		FailedToExecuteTemplate: "app.error.failed_to_execute_template",
 
+		FailedToExpandFilePatterns: "app.error.failed_to_expand_file_patterns",
+
 		FailedToExpandInput: "app.error.failed_to_expand_input",
 
 		FailedToExpandPattern: "app.error.failed_to_expand_pattern",
 
+		FailedToExpandReferencePatterns: "app.error.failed_to_expand_reference_patterns",
+
+		FailedToExpandTargetPatterns: "app.error.failed_to_expand_target_patterns",
+
+		FailedToGeneratePackage: "app.error.failed_to_generate_package",
+
 		FailedToGetConfig: "app.error.failed_to_get_config",
+
+		FailedToLoadFile: "app.error.failed_to_load_file",
+
+		FailedToLoadReferenceFile: "app.error.failed_to_load_reference_file",
+
+		FailedToLoadTargetFile: "app.error.failed_to_load_target_file",
 
 		FailedToMarshal: "app.error.failed_to_marshal",
 
+		FailedToMarshalJson: "app.error.failed_to_marshal_json",
+
+		FailedToParseFile: "app.error.failed_to_parse_file",
+
 		FailedToParseJson: "app.error.failed_to_parse_json",
+
+		FailedToParseJsonSimple: "app.error.failed_to_parse_json_simple",
 
 		FailedToParseTemplate: "app.error.failed_to_parse_template",
 
 		FailedToPrepareInput: "app.error.failed_to_prepare_input",
 
+		FailedToReadFile: "app.error.failed_to_read_file",
+
 		FailedToReadInput: "app.error.failed_to_read_input",
+
+		FailedToSaveFile: "app.error.failed_to_save_file",
+
+		FailedToTransformFile: "app.error.failed_to_transform_file",
+
+		FailedToUpdateFile: "app.error.failed_to_update_file",
+
+		FailedToWriteFile: "app.error.failed_to_write_file",
 
 		FailedToWriteJson: "app.error.failed_to_write_json",
 
 		FailedToWriteOutput: "app.error.failed_to_write_output",
 
+		GoModNotFound: "app.error.go_mod_not_found",
+
+		InvalidPattern: "app.error.invalid_pattern",
+
+		KeyAlreadyExists: "app.error.key_already_exists",
+
+		ModuleDirectiveNotFound: "app.error.module_directive_not_found",
+
 		NoFiles: "app.error.no_files",
 
+		NoReferenceFiles: "app.error.no_reference_files",
+
+		NoTargetFiles: "app.error.no_target_files",
+
 		ParseError: "app.error.parse_error",
+
+		SyncRequiresAtLeastTwoFiles: "app.error.sync_requires_at_least_two_files",
+
+		UnknownLanguageCode: "app.error.unknown_language_code",
 
 		ValidationFailed: "app.error.validation_failed",
 	},
@@ -1095,6 +1265,21 @@ var Keys = struct {
 		PackageDesc: "app.generate_cmd.package_desc",
 
 		PrefixDesc: "app.generate_cmd.prefix_desc",
+	},
+
+	AppGenerateLocalesCmd: struct {
+		DryRunDesc string
+
+		OutputDesc string
+
+		PackageBaseDesc string
+	}{
+
+		DryRunDesc: "app.generate_locales_cmd.dry_run_desc",
+
+		OutputDesc: "app.generate_locales_cmd.output_desc",
+
+		PackageBaseDesc: "app.generate_locales_cmd.package_base_desc",
 	},
 
 	AppGlobal: struct {

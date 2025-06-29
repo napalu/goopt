@@ -311,10 +311,10 @@ func TestHelpParser_SimilarCommands(t *testing.T) {
 
 	// Should suggest similar commands
 	assert.Contains(t, stderrOutput, "Did you mean:")
-	assert.Contains(t, stderrOutput, "serve")
-	assert.Contains(t, stderrOutput, "server")
-	// Should show suggestions (at least 2 since serve is very similar to serv)
-	assert.True(t, strings.Count(stderrOutput, "  ") >= 2)
+	assert.Contains(t, stderrOutput, "serve") // Distance 1 - will be shown
+	// "server" won't be shown as it's distance 2 when "serve" (distance 1) exists
+	// Should show at least one suggestion
+	assert.True(t, strings.Count(stderrOutput, "serve") >= 1)
 }
 
 func TestHelpWithInvalidSubcommand(t *testing.T) {

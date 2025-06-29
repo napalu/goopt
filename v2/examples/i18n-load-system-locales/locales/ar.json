@@ -1,0 +1,8 @@
+{
+  "app.flag.language.desc": "لغة الواجهة (en, de, fr, es, ja, ar, he)",
+  "app.flag.verbose.desc": "تفعيل الإخراج المفصل",
+  "app.command.demo.desc": "عرض تحميل لغات النظام الإضافية",
+  "app.flag.verbose": "مفصل",
+  "app.flag.language": "لغة",
+  "app.command.demo.name": "عرض"
+}

@@ -21,6 +21,17 @@ func TestLevenshteinDistance(t *testing.T) {
 		{"case sensitive", "Hello", "hello", 1},
 		{"longer example", "kitten", "sitting", 3},
 		{"reversed strings", "abc", "cba", 2},
+		// Unicode tests
+		{"japanese identical", "こんにちは", "こんにちは", 0},
+		{"japanese one char diff", "こんにちは", "こんにちわ", 1},
+		{"chinese characters", "你好", "您好", 1},
+		{"arabic rtl", "مرحبا", "مرحبا", 0},
+		{"arabic with diff", "مرحبا", "مرحب", 1},
+		{"emoji", "😀😃", "😀😄", 1},
+		{"mixed scripts", "hello世界", "hello世间", 1},
+		{"combining chars", "café", "cafe", 1}, // é vs e
+		{"hebrew rtl", "שלום", "שלם", 1},
+		{"devanagari", "नमस्ते", "नमस्कार", 3},
 	}
 
 	for _, tt := range tests {

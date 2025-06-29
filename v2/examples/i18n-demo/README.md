@@ -1,23 +1,62 @@
-# goopt v2 i18n Demo
+# i18n-demo: Extending goopt with New Languages
 
-This example demonstrates the comprehensive internationalization (i18n) features of goopt v2, showcasing how to build a fully localized CLI application that supports multiple languages.
+This example demonstrates how to add support for languages that are not built into goopt v2, showing how to extend the framework's system messages with your own translations.
+
+## Background
+
+goopt comes with:
+- **Built-in languages**: English, German, French (always available)
+- **Optional language packages**: Spanish, Japanese, Arabic, Hebrew, etc. (in `i18n/locales/`)
+
+But what if you need a language that doesn't exist yet, like Italian, Russian, Polish, or Vietnamese?
+
+## The Solution
+
+This demo shows how to extend goopt's system messages with your own translations using `WithExtendBundle()`.
+
+## Key Concept: Two Types of Translations
+
+1. **System Messages** (goopt's built-in messages):
+   - Error messages: "flag not found", "invalid value", etc.
+   - Help text: "Usage:", "Commands:", "Required", etc.
+   - UI elements: "or", "defaults to", etc.
+
+2. **Application Messages** (your app's custom text):
+   - Command descriptions
+   - Flag descriptions
+   - Your custom output messages
 
 ## Project Structure
 
 ```
 i18n-demo/
-├── i18n_demo.go           # Main application
-├── locales/               # User-defined translations
-│   ├── en.json           # English (application messages)
-│   ├── es.json           # Spanish (application messages)
-│   ├── ja.json           # Japanese (application messages)
-│   ├── fr.json           # French (application messages)
-│   └── de.json           # German (application messages)
-├── system-locales/        # Extended system translations
-│   ├── es.json           # Spanish (goopt system messages)
-│   └── ja.json           # Japanese (goopt system messages)
-├── go.mod
-└── README.md
+├── locales/               # Your application's translations
+│   ├── en.json           # English translations for your app
+│   ├── es.json           # Spanish translations for your app
+│   └── ja.json           # Japanese translations for your app
+├── system-locales/        # goopt system message translations
+│   ├── es.json           # Spanish translations for goopt's messages
+│   └── ja.json           # Japanese translations for goopt's messages
+└── messages/             # Generated code from goopt-i18n-gen
+    └── keys.go
+```
+
+## The Technique
+
+```go
+// Step 1: Load your app's translations
+userBundle, _ := i18n.NewBundleWithFS(userLocales, "locales")
+
+// Step 2: Load system message translations for new languages
+// Note: We're using Spanish/Japanese as examples, but this technique
+// works for ANY language not yet supported by goopt
+systemBundle, _ := i18n.NewBundleWithFS(systemLocales, "system-locales", language.Spanish)
+
+// Step 3: Create parser with both bundles
+parser, _ := goopt.NewParserFromStruct(cfg,
+    goopt.WithUserBundle(userBundle),        // Your app's translations
+    goopt.WithExtendBundle(systemBundle),    // Extend system messages with new languages
+)
 ```
 
 ## Building and Running
@@ -29,88 +68,77 @@ go build -o i18n-demo
 # Run with default language (English)
 ./i18n-demo --help
 
-# Run with Spanish
-./i18n-demo --lang es --help
+# Run with Spanish (demonstrating extended system messages)
+./i18n-demo --language es --help
 
-# Run with Japanese
-./i18n-demo --lang ja user list
-
-# Run with French
-./i18n-demo --lang fr database backup -o backup.sql
-
-# Run with German
-./i18n-demo --lang de user create -u hans -e hans@example.com
+# Run with Japanese (demonstrating extended system messages)
+./i18n-demo --language ja --help
 ```
 
-## Example Commands
+## Adding a Real New Language (e.g., Italian)
 
-### User Management
+To add support for a language not in goopt:
 
-```bash
-# List users (with verbose output in Spanish)
-./i18n-demo --lang es -v user list --all
+1. **Create a system messages template**:
+   ```bash
+   # Use goopt-i18n-gen to create a template with all system keys
+   goopt-i18n-gen sync -i "../../i18n/all_locales/en.json" -t "system-locales/it.json" --todo-prefix "[TODO]"
+   ```
 
-# Create a user (in Japanese)
-./i18n-demo --lang ja user create -u tanaka -e tanaka@example.com --admin
+2. **Translate the system messages** in `system-locales/it.json`:
+   - Replace ALL `[TODO]` prefixed messages with Italian translations
+   - Every key must be translated - missing keys will cause errors
 
-# Delete a user (in French, with force flag)
-./i18n-demo --lang fr user delete -u alice --force
-```
+3. **Create your app translations** in `locales/it.json`:
+   - Add translations for your app-specific commands and flags
 
-### Database Management
+4. **Update your code** to include Italian in the language list
 
-```bash
-# Create a compressed backup (in German)
-./i18n-demo --lang de database backup -o backup.sql.gz --compress
+5. **Run with Italian**:
+   ```bash
+   ./i18n-demo --language it --help
+   ```
 
-# Restore from backup (in Spanish)
-./i18n-demo --lang es db restore -i backup.sql.gz --drop-first
-```
+## Important Notes
 
-## Translation Files
+1. **Complete Translations Required**: You MUST translate ALL keys in system-locales. Missing keys will cause validation errors when loading the bundle - goopt enforces completeness to prevent partial translations that could confuse users.
 
-The `locales/` directory contains JSON files for each supported language:
+2. **For Existing Languages**: If you need Spanish or Japanese in a real app, use the official packages instead:
+   ```go
+   import (
+       esLocale "github.com/napalu/goopt/v2/i18n/locales/es"
+       jaLocale "github.com/napalu/goopt/v2/i18n/locales/ja"
+   )
+   
+   parser, _ := goopt.NewParserFromStruct(cfg,
+       goopt.WithSystemLocales(
+           goopt.NewSystemLocale(esLocale.Tag, esLocale.SystemTranslations),
+           goopt.NewSystemLocale(jaLocale.Tag, jaLocale.SystemTranslations),
+       ),
+   )
+   ```
 
-- `en.json` - English (default)
-- `es.json` - Spanish
-- `ja.json` - Japanese
-- `fr.json` - French
-- `de.json` - German
+3. **Bundle Default Language**: When creating the system bundle with `NewBundleWithFS`, specify one of the languages in your files as the default (third parameter). This is important for proper initialization.
 
-Each file contains translations for:
-- Command descriptions
-- Flag descriptions
-- Output messages
-- Status indicators
+## Why This Technique?
 
-## How It Works
+- **No waiting**: Don't wait for official goopt language support
+- **Full control**: You control the quality and tone of translations
+- **Immediate availability**: Add any language you need right now
+- **Community contribution**: Your translations can help others
 
-1. **Parser Creation**: The parser is created with a default language (English)
-2. **Translation Loading**: Custom translations are loaded from JSON files using `i18n.Bundle`
-3. **Language Detection**: After parsing, if a language flag is provided, the parser language is updated
-4. **Command Execution**: Commands use `bundle.TL(lang, key, args...)` for localized output
-5. **Help Generation**: goopt automatically uses the correct translations for help text
+## Example Use Cases
 
-## Key goopt v2 i18n Features Used
+- **Regional software**: Add local languages for specific markets
+- **Enterprise requirements**: Add languages required by your organization
+- **Specialized domains**: Use domain-specific terminology in your language
+- **Testing/Development**: Test i18n features with mock languages
 
-- `goopt.WithLanguage()` - Set the parser's language
-- `parser.SetUserBundle()` - Add custom translations
-- `i18n.Bundle.LoadLanguageFile()` - Load translations from JSON
-- `bundle.TL()` - Translate with specific language
-- Translation keys in struct tags - Automatic help text localization
+## Contributing Back
 
-## Adding New Languages
+If you create translations for a new language, consider contributing them to goopt! Submit a PR with:
+1. Your translation file in `i18n/all_locales/`
+2. Generated locale package in `i18n/locales/`
+3. Tests demonstrating the translation quality
 
-To add a new language:
-
-1. Create a new JSON file in `locales/` (e.g., `pt.json` for Portuguese)
-2. Add all translation keys with translated values
-3. Update the `languages` slice in `loadCustomTranslations()`
-4. Add a case in `parseLanguageTag()` for the new language code
-
-## Notes
-
-- Error messages from goopt itself are also localized (using built-in translations)
-- The example uses goopt's command execution pattern with `CommandFunc`
-- Language switching happens before command execution for proper localization
-- All user-facing strings use translation keys for complete localization
+Your contributions help make goopt accessible to more developers worldwide!

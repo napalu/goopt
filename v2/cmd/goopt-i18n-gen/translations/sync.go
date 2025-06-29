@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/v2"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
 )
@@ -17,7 +18,7 @@ import (
 func Sync(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		return errors.ErrFailedToGetConfig
 	}
 	return ExecuteSyncCommand(cfg, &cfg.Sync)
 }
@@ -38,11 +39,11 @@ func syncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	// Expand wildcards in input files
 	files, err := util.ExpandGlobPatterns(cfg.Input)
 	if err != nil {
-		return fmt.Errorf("failed to expand file patterns: %w", err)
+		return errors.ErrFailedToExpandFilePatterns.WithArgs(err)
 	}
 
 	if len(files) < 2 {
-		return fmt.Errorf("sync requires at least 2 locale files, found %d", len(files))
+		return errors.ErrSyncRequiresAtLeastTwoFiles.WithArgs(len(files))
 	}
 
 	// Use the first file as base
@@ -53,7 +54,7 @@ func syncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	for _, file := range files {
 		data, err := loadJSONFile(file)
 		if err != nil {
-			return fmt.Errorf("failed to load %s: %w", file, err)
+			return errors.ErrFailedToLoadFile.WithArgs(file, err)
 		}
 		locales[file] = data
 	}
@@ -61,7 +62,7 @@ func syncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	// Get base locale data
 	baseData, exists := locales[baseFile]
 	if !exists {
-		return fmt.Errorf("base file %s not found in input files", baseFile)
+		return errors.ErrBaseFileNotFound.WithArgs(baseFile)
 	}
 
 	// Get all keys from base file
@@ -76,21 +77,21 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	// Expand wildcards in reference files
 	refFiles, err := util.ExpandGlobPatterns(cfg.Input)
 	if err != nil {
-		return fmt.Errorf("failed to expand reference file patterns: %w", err)
+		return errors.ErrFailedToExpandReferencePatterns.WithArgs(err)
 	}
 
 	if len(refFiles) == 0 {
-		return fmt.Errorf("no reference files found")
+		return errors.ErrNoReferenceFiles
 	}
 
 	// Expand wildcards in target files
 	targetFiles, err := util.ExpandGlobPatterns(cmd.Target)
 	if err != nil {
-		return fmt.Errorf("failed to expand target file patterns: %w", err)
+		return errors.ErrFailedToExpandTargetPatterns.WithArgs(err)
 	}
 
 	if len(targetFiles) == 0 {
-		return fmt.Errorf("no target files found")
+		return errors.ErrNoTargetFiles
 	}
 
 	// Load all reference files and merge their keys
@@ -100,7 +101,7 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	for _, file := range refFiles {
 		data, err := loadJSONFile(file)
 		if err != nil {
-			return fmt.Errorf("failed to load reference file %s: %w", file, err)
+			return errors.ErrFailedToLoadReferenceFile.WithArgs(file, err)
 		}
 		refData[file] = data
 
@@ -116,7 +117,7 @@ func syncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd) error {
 	for _, file := range targetFiles {
 		data, err := loadJSONFile(file)
 		if err != nil {
-			return fmt.Errorf("failed to load target file %s: %w", file, err)
+			return errors.ErrFailedToLoadTargetFile.WithArgs(file, err)
 		}
 		targetData[file] = data
 	}
@@ -231,7 +232,7 @@ func processSyncWithinFiles(cfg *options.AppConfig, cmd *options.SyncCmd, baseFi
 			// Save file if modified
 			if modified {
 				if err := saveJSONFile(file, data); err != nil {
-					return fmt.Errorf("failed to save %s: %w", file, err)
+					return errors.ErrFailedToSaveFile.WithArgs(file, err)
 				}
 
 				msg := fmt.Sprintf("%s: ", filepath.Base(file))
@@ -344,7 +345,7 @@ func processSyncTargetFiles(cfg *options.AppConfig, cmd *options.SyncCmd, refKey
 			// Save file if modified
 			if modified {
 				if err := saveJSONFile(file, data); err != nil {
-					return fmt.Errorf("failed to save %s: %w", file, err)
+					return errors.ErrFailedToSaveFile.WithArgs(file, err)
 				}
 
 				msg := fmt.Sprintf("%s: ", filepath.Base(file))

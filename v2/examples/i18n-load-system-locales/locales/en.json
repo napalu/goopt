@@ -1,0 +1,8 @@
+{
+  "app.flag.language.desc": "Interface language (en, de, fr, es, ja, ar, he)",
+  "app.flag.verbose.desc": "Enable verbose output",
+  "app.command.demo.desc": "Demonstrate loading additional system languages",
+  "app.flag.language": "sprache",
+  "app.flag.verbose": "ausführlich",
+  "app.command.demo.name": "demo"
+}

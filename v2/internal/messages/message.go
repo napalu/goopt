@@ -20,6 +20,7 @@ const (
 	MsgDefaultsToKey          = MessagePrefixKey + ".defaults_to"
 	MsgPositionalKey          = MessagePrefixKey + ".positional"
 	MsgOrKey                  = MessagePrefixKey + ".or"
+	MsgRangeToKey             = MessagePrefixKey + ".range_to"
 	MsgUsageKey               = MessagePrefixKey + ".usage"
 	MsgCommandsKey            = MessagePrefixKey + ".commands"
 	MsgGlobalFlagsKey         = MessagePrefixKey + ".global_flags"
@@ -39,6 +40,7 @@ const (
 	MsgSubcommandHelpKey      = MessagePrefixKey + ".subcommand_help"
 	MsgHelpDescriptionKey     = MessagePrefixKey + ".help_description"
 	MsgVersionDescriptionKey  = MessagePrefixKey + ".version_description"
+	MsgLanguageDescriptionKey = MessagePrefixKey + ".language_description"
 	MsgAllParentFlagsKey      = MessagePrefixKey + ".all_parent_flags"
 
 	// Help parser specific messages

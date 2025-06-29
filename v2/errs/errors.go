@@ -73,6 +73,7 @@ var (
 	ErrMissingArgumentInfo          = i18n.NewError(ErrMissingArgumentInfoKey)
 	ErrIndexOutOfBounds             = i18n.NewError(ErrIndexOutOfBoundsKey)
 	ErrUnknownFlag                  = i18n.NewError(ErrUnknownFlagKey)
+	ErrUnknownFlagWithSuggestions   = i18n.NewError(ErrUnknownFlagWithSuggestionsKey)
 	ErrPositionMustBeNonNegative    = i18n.NewError(ErrPositionMustBeNonNegativeKey)
 	ErrPositionalArgumentNotFound   = i18n.NewError(ErrPositionalArgumentNotFoundKey)
 	ErrUnknownFlagInCommandPath     = i18n.NewError(ErrUnknownFlagInCommandPathKey)

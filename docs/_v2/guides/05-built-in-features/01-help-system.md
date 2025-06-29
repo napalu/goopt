@@ -29,13 +29,17 @@ parser, _ := goopt.NewParserFromStruct(&Config{})
 
 // Parse arguments
 if !parser.Parse(os.Args) {
-// Handle parsing errors...
-os.Exit(1)
+    // Handle parsing errors...
+    os.Exit(1)
 }
 
-// Check if help was shown and exit cleanly.
+// By default, goopt exits after showing help.
+// The WasHelpShown() check is primarily for tests or when the
+// default exit behavior is overridden.
 if parser.WasHelpShown() {
-os.Exit(0)
+    // This block is typically not reached in a final application
+    // but is useful for testing.
+    os.Exit(0)
 }
 
 // ... your application logic continues here ...
@@ -47,7 +51,7 @@ If you need complete control over the `--help` flag, you can disable the automat
 
 ```go
 parser, _ := goopt.NewParserWith(
-goopt.WithAutoHelp(false),
+    goopt.WithAutoHelp(false),
 )
 // Now, --help and -h are not registered automatically.
 ```
@@ -73,6 +77,7 @@ You can customize every aspect of the help system's appearance and behavior.
 
 #### `HelpStyleFlat`
 The traditional, simple list of all flags and commands. Best for small tools.
+
 ```
 Usage: myapp
  --verbose, -v     Enable verbose output (optional)
@@ -81,7 +86,8 @@ Usage: myapp
 
 #### `HelpStyleGrouped`
 Groups flags by their associated commands. Ideal for CLIs where different commands have different sets of flags.
-```
+
+```bash
 Usage: myapp
 
 Global Flags:
@@ -96,7 +102,8 @@ Commands:
 
 #### `HelpStyleCompact`
 A minimal, deduplicated output for large CLIs with many shared flags.
-```
+
+```bash
 Global Flags:
   --verbose, -v (optional)
   --config, -c (required)
@@ -108,10 +115,12 @@ Shared Flags:
 Commands:
   auth            Authenticate users              [15 flags]
   user            Manage users                    [12 flags]```
+```
 
 #### `HelpStyleHierarchical`
 A command-focused view for deeply nested CLIs (like `git` or `kubectl`). It shows the command structure and encourages users to explore subcommands.
-```
+
+```bash
 Usage: myapp [global-flags] <command> [command-flags]
 
 Command Structure:
@@ -187,6 +196,20 @@ myapp --help --style compact
 myapp --help --help
 ```
 
+### Smart "Did You Mean?" Suggestions
+
+`goopt` automatically helps users when they mistype commands or flags by suggesting similar alternatives, making your CLI more user-friendly and reducing frustration from typos.
+
+```bash
+# User types a wrong command
+$ myapp serverr start
+Error: Unknown command "serverr". Did you mean "server"?
+```
+
+This feature is part of a larger, more powerful suggestion system that is deeply integrated with goopt's internationalization capabilities to provide context-aware hints. The matching sensitivity and display format are fully customizable.
+
+For a complete guide, please see the **[Smart Suggestions Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/05-smart-suggestions.md)**.
+
 ### Version Integration
 If you use the [Version Support]({{ site.baseurl }}/v2/05-built-in-features/02-version-support/) feature, you can configure it to display the version in the help header.
 ```go
@@ -223,11 +246,12 @@ func (r *CustomRenderer) FlagUsage(arg *goopt.Argument) string {
 }
 
 // Use the custom renderer in your parser
-parser.SetRenderer(&CustomRenderer{
-    DefaultRenderer: goopt.NewDefaultRenderer(parser),
-})
+    parser.SetRenderer(&CustomRenderer{
+        DefaultRenderer: goopt.NewDefaultRenderer(parser),
+    })
 
-parser.PrintHelp(os.StdErr)
+    parser.PrintHelp(os.StdErr)
+}
 ```
 This approach provides a structured way to customize the output without losing the benefits of the adaptive styling and interactive help parser.
       
@@ -252,10 +276,10 @@ parser, _ := goopt.NewParserFromStruct(&Config{})
 // Set a custom function that does *not* exit.
 // This is perfect for testing.
 parser.SetEndHelpFunc(func() error {
-// We can log that help was shown and then return nil
-// to allow the application to continue running.
-fmt.Println("[test harness] Help was displayed, not exiting.")
-return nil
+    // We can log that help was shown and then return nil
+    // to allow the application to continue running.
+    fmt.Println("[test harness] Help was displayed, not exiting.")
+    return nil
 })
 
 // Now, when you parse with a help flag...
@@ -263,7 +287,7 @@ parser.Parse([]string{"--help"})
 
 // ...the application will NOT exit. You can then make assertions.
 if !parser.WasHelpShown() {
-t.Errorf("Expected help to have been shown")
+    t.Errorf("Expected help to have been shown")
 }
 ```
 

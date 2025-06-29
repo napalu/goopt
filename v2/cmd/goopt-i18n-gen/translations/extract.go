@@ -10,6 +10,7 @@ import (
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/constants"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
@@ -19,7 +20,7 @@ import (
 func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	config, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		return errors.ErrFailedToGetConfig
 	}
 	tr := config.TR
 	extractCmd := config.Extract
@@ -32,7 +33,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	// Create string extractor
 	extractor, err := ast.NewStringExtractor(tr, extractCmd.MatchOnly, extractCmd.SkipMatch, extractCmd.MinLength)
 	if err != nil {
-		return fmt.Errorf(tr.T(messages.Keys.AppExtract.InvalidRegex, err.Error()))
+		return errors.ErrInvalidRegex.WithArgs(err.Error())
 	}
 
 	// Find and process files
@@ -42,7 +43,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	patterns := strings.Split(extractCmd.Files, ",")
 	filesToProcess, err := util.ExpandGlobPatterns(patterns)
 	if err != nil {
-		return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, extractCmd.Files, err.Error()))
+		return errors.ErrGlobError.WithArgs(extractCmd.Files, err.Error())
 	}
 
 	// Extract strings from all files
@@ -116,14 +117,14 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 		// Expand input files, creating them if necessary
 		inputFiles, err := expandInputFiles(config.Input)
 		if err != nil {
-			return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToExpandInput), err)
+			return errors.ErrFailedToExpandInput.WithArgs(err)
 		}
 
 		updatedCount := 0
 		for _, file := range inputFiles {
 			// Ensure the file exists
 			if err := ensureInputFile(file); err != nil {
-				return fmt.Errorf(tr.T(messages.Keys.AppError.FailedToPrepareInput), file, err)
+				return errors.ErrFailedToPrepareInput.WithArgs(file, err)
 			}
 
 			opts := TranslationUpdateOptions{
@@ -133,7 +134,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 			}
 			result, err := UpdateTranslationFile(file, translations, opts)
 			if err != nil {
-				return fmt.Errorf(tr.T(messages.Keys.AppExtract.UpdateError, file, err.Error()))
+				return errors.ErrUpdateError.WithArgs(file, err.Error())
 			}
 			if result.Modified {
 				fmt.Printf("✓ %s %s\n", tr.T(messages.Keys.AppAdd.Updated), file)
@@ -394,7 +395,7 @@ func cleanI18nComments(config *options.AppConfig) error {
 	patterns := strings.Split(extractCmd.Files, ",")
 	filesToProcess, err := util.ExpandGlobPatterns(patterns)
 	if err != nil {
-		return fmt.Errorf(tr.T(messages.Keys.AppExtract.GlobError, extractCmd.Files, err.Error()))
+		return errors.ErrGlobError.WithArgs(extractCmd.Files, err.Error())
 	}
 
 	// Resolve package path based on module context

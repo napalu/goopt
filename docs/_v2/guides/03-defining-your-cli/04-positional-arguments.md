@@ -133,7 +133,7 @@ func main() {
 
 ***Command Line Scenarios***:
 
-| Command Line                        | cfg.InputFile | cgf.OutputFile | Unbound positionals | Reasoning                                        |
+| Command Line                        | cfg.InputFile | cfg.OutputFile | Unbound positionals | Reasoning                                        |
 |-------------------------------------|---------------|----------------|---------------------|--------------------------------------------------|
 | ./myapp in.txt out.txt              | "in.txt"      | "out.txt       | none                | Mapped by pos:0 and pos:1.                       | 
 | ./myapp in.txt --output flag.txt	   | "in.txt"      | "flag.txt"     | none                | Named flag --output takes precedence for pos:1   |

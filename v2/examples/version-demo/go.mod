@@ -1,8 +1,8 @@
 module version-demo
 
-go 1.21
+go 1.18
 
-require github.com/napalu/goopt/v2 v2.2.6
+require github.com/napalu/goopt/v2 v2.0.0
 
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect

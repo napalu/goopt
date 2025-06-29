@@ -1,0 +1,8 @@
+{
+  "app.flag.language.desc": "Schnittstellensprache (en, de, fr, es, ja, ar, he)",
+  "app.flag.verbose.desc": "Ausführliche Ausgabe aktivieren",
+  "app.command.demo.desc": "Laden zusätzlicher Systemsprachen demonstrieren",
+  "app.flag.language": "sprache",
+  "app.flag.verbose": "ausführlich",
+  "app.command.demo.name": "demo"
+}

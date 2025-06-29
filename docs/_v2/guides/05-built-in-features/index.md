@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Built-in Features
-nav_order: 5
+nav_order: 8
 parent: Guides
 has_children: true
 version: v2

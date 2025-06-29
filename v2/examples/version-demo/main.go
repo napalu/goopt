@@ -193,7 +193,7 @@ func runCLI() {
 			return fmt.Sprintf(`myapp %s
 
 A demo application showing goopt v2 version support.
-https://github.com/napalu/goopt
+https://github.com/napalu/goopt/v2
 
 %s`, version, version)
 		}),

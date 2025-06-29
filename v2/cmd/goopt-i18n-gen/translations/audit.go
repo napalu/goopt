@@ -8,6 +8,7 @@ import (
 
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/options"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
@@ -16,7 +17,7 @@ import (
 func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		return fmt.Errorf("failed to get config from parser")
+		return errors.ErrFailedToGetConfig
 	}
 	// Determine which files to audit
 	scanPatterns := cfg.Audit.Files
@@ -32,7 +33,7 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	if len(files) == 0 {
-		return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.NoFiles))
+		return errors.ErrNoFiles
 	}
 
 	// Scan for fields without descKey tags
@@ -79,25 +80,25 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 		// Expand input files
 		inputFiles, err := expandInputFiles(cfg.Input)
 		if err != nil {
-			return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToExpandInput), err)
+			return errors.ErrFailedToExpandInput.WithArgs(err)
 		}
 
 		// Update each locale file
 		for _, inputFile := range inputFiles {
 			// Ensure input file exists
 			if err := ensureInputFile(inputFile); err != nil {
-				return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToPrepareInput), inputFile, err)
+				return errors.ErrFailedToPrepareInput.WithArgs(inputFile, err)
 			}
 
 			// Read existing translations
 			data, err := os.ReadFile(inputFile)
 			if err != nil {
-				return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToReadInput), inputFile, err)
+				return errors.ErrFailedToReadInput.WithArgs(inputFile, err)
 			}
 
 			var translations map[string]string
 			if err := json.Unmarshal(data, &translations); err != nil {
-				return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToParseJson), inputFile, err)
+				return errors.ErrFailedToParseJson.WithArgs(inputFile, err)
 			}
 
 			// Add generated translations
@@ -113,11 +114,11 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 				// Write updated JSON
 				updatedData, err := json.MarshalIndent(translations, "", "  ")
 				if err != nil {
-					return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToMarshal), err)
+					return errors.ErrFailedToMarshal.WithArgs(err)
 				}
 
 				if err := os.WriteFile(inputFile, updatedData, 0644); err != nil {
-					return fmt.Errorf(cfg.TR.T(messages.Keys.AppError.FailedToWriteJson), inputFile, err)
+					return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 				}
 				fmt.Println()
 				fmt.Println(cfg.TR.T(messages.Keys.AppAudit.UpdatedJsonFile, inputFile))

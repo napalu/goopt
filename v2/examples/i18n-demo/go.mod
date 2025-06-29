@@ -2,10 +2,10 @@ module github.com/napalu/goopt/v2/examples/i18n-demo
 
 go 1.18
 
-replace github.com/napalu/goot/v2 => ../../
+replace github.com/napalu/goopt/v2 => ../../
 
 require (
-	github.com/napalu/goopt/v2 v2.2.6
+	github.com/napalu/goopt/v2 v2.2.0
 	golang.org/x/text v0.21.0
 )
 
