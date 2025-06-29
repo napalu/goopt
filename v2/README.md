@@ -5,6 +5,7 @@
 [![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2)
 [![Go Report Card v2](https://goreportcard.com/badge/github.com/napalu/goopt/v2)](https://goreportcard.com/report/github.com/napalu/goopt/v2)
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
+[![Awesome](https://awesome.re/badge.svg)](https://awesome-go.com)
 
 `goopt` is a flexible and powerful command-line option parser for Go that supports multiple declarative and programmatic approaches to building your CLI. It's designed to be simple for small tools but scales elegantly for complex applications with features like first-class internationalization, advanced validation, and command lifecycle hooks.
 
