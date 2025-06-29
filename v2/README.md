@@ -1,7 +1,7 @@
 # goopt: A Powerful & Flexible CLI Parser for Go
 
 
-[![v2 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v2)](https://app.codecov.io/gh/napalu/goopt/flags/v2)
+[![v2 Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg?flag=v2)](https://app.codecov.io/gh/napalu/goopt/tree/main/v2?flags%5B0%5D=v2)
 [![Go Reference v2](https://pkg.go.dev/badge/github.com/napalu/goopt/v2.svg)](https://pkg.go.dev/github.com/napalu/goopt/v2)
 [![Go Report Card v2](https://goreportcard.com/badge/github.com/napalu/goopt/v2)](https://goreportcard.com/report/github.com/napalu/goopt/v2)
 ![Go Version](https://img.shields.io/badge/go-1.18%2B-blue)
