@@ -238,7 +238,7 @@ func TestMapLanguageNameToTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mapLanguageNameToTag(tt.langName)
+			result := LanguageNameToLanguageTag(tt.langName)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
