@@ -1170,7 +1170,7 @@ func TestParser_StandaloneFlagWithExplicitValue(t *testing.T) {
 
 	setup()
 	assert.True(t, cmdLine.ParseString("-fa false -fb hello"), "should parse a command-line with a valid boolean flag value")
-	assert.Equal(t, 0, cmdLine.GetPositionalArgCount(), "should have 1 positional argument")
+	assert.Equal(t, 0, cmdLine.GetPositionalArgCount(), "should have 0 positional arguments")
 }
 
 func TestParser_PrintUsageWithGroups(t *testing.T) {

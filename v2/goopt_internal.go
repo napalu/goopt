@@ -310,8 +310,11 @@ func (p *Parser) buildFlagCache() *flagCache {
 		fv := flag.Value
 		longName := *flag.Key
 
-		if _, exists := cache.flags[longName]; !exists {
-			cache.flags[longName] = make(map[string]*FlagInfo)
+		// Extract the base flag name (before @)
+		baseName := splitPathFlag(longName)[0]
+
+		if _, exists := cache.flags[baseName]; !exists {
+			cache.flags[baseName] = make(map[string]*FlagInfo)
 		}
 
 		if shortName := fv.Argument.Short; shortName != "" {
@@ -325,15 +328,28 @@ func (p *Parser) buildFlagCache() *flagCache {
 			cmdPath = fv.CommandPath
 		}
 
-		cache.flags[longName][cmdPath] = fv
+		cache.flags[baseName][cmdPath] = fv
 		if shortName := fv.Argument.Short; shortName != "" {
 			cache.flags[shortName][cmdPath] = fv
 			cache.isStandalone[shortName] = fv.Argument.TypeOf == types.Standalone
 			cache.needsValue[shortName] = fv.Argument.TypeOf != types.Standalone
 		}
 
+		// Store needsValue and isStandalone with the full key including command path
 		cache.isStandalone[longName] = fv.Argument.TypeOf == types.Standalone
 		cache.needsValue[longName] = fv.Argument.TypeOf != types.Standalone
+
+		// Also store with base name for global flags
+		if cmdPath == "" {
+			cache.isStandalone[baseName] = fv.Argument.TypeOf == types.Standalone
+			cache.needsValue[baseName] = fv.Argument.TypeOf != types.Standalone
+		}
+
+		// Don't treat positional arguments as flags that need values
+		if fv.Argument.Position != nil {
+			cache.needsValue[longName] = false
+			cache.needsValue[baseName] = false
+		}
 	}
 
 	return cache
@@ -387,26 +403,76 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		if p.isFlag(arg) {
 			name := strings.TrimLeft(arg, "-")
-			if len(currentCmdPath) > 0 {
-				name = buildPathFlag(name, currentCmdPath...)
+
+			// Try to get canonical name from translation registry
+			canonicalName := name
+			if canonical, ok := p.translationRegistry.GetCanonicalFlagName(name, p.GetLanguage()); ok {
+				canonicalName = canonical
 			}
-			if cache.needsValue[name] {
+
+			// Check if this flag needs a value
+			needsValue := false
+
+			// First check if this flag exists in the current command context
+			if len(currentCmdPath) > 0 {
+				if flagInfo, exists := cache.flags[canonicalName]; exists {
+					cmdPath := strings.Join(currentCmdPath, " ")
+					if cmdFlagInfo, cmdExists := flagInfo[cmdPath]; cmdExists {
+						// Found flag in command context
+						needsValue = cmdFlagInfo.Argument.TypeOf != types.Standalone && cmdFlagInfo.Argument.Position == nil
+					} else if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
+						// Not in command context, but exists as global flag
+						needsValue = globalFlagInfo.Argument.TypeOf != types.Standalone && globalFlagInfo.Argument.Position == nil
+					}
+				}
+			} else {
+				// No command context, check global flags
+				if flagInfo, exists := cache.flags[canonicalName]; exists {
+					if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
+						needsValue = globalFlagInfo.Argument.TypeOf != types.Standalone && globalFlagInfo.Argument.Position == nil
+					}
+				}
+			}
+
+			if needsValue {
 				skipNext = true
 			}
 			continue
 		}
 
-		// Handle previous flag's value
+		// Special handling for standalone flags with boolean values
+		// If previous arg was a standalone flag and current arg is a valid boolean,
+		// skip it as it was consumed by the flag
 		if i > 0 && p.isFlag(args[i-1]) {
 			prevName := strings.TrimFunc(args[i-1], p.prefixFunc)
+
+			// Try to get canonical name from translation registry
+			canonicalPrevName := prevName
+			if canonical, ok := p.translationRegistry.GetCanonicalFlagName(prevName, p.GetLanguage()); ok {
+				canonicalPrevName = canonical
+			}
+
+			// Check if previous flag was standalone
+			isStandalone := false
 			if len(currentCmdPath) > 0 {
-				prevName = buildPathFlag(prevName, currentCmdPath...)
+				if flagInfo, exists := cache.flags[canonicalPrevName]; exists {
+					cmdPath := strings.Join(currentCmdPath, " ")
+					if cmdFlagInfo, cmdExists := flagInfo[cmdPath]; cmdExists {
+						isStandalone = cmdFlagInfo.Argument.TypeOf == types.Standalone
+					} else if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
+						isStandalone = globalFlagInfo.Argument.TypeOf == types.Standalone
+					}
+				}
+			} else {
+				if flagInfo, exists := cache.flags[canonicalPrevName]; exists {
+					if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
+						isStandalone = globalFlagInfo.Argument.TypeOf == types.Standalone
+					}
+				}
 			}
-			if cache.needsValue[prevName] {
-				skipNext = true
-				continue
-			}
-			if cache.isStandalone[prevName] {
+
+			// If previous was standalone and current is a valid boolean, skip it
+			if isStandalone {
 				if _, err := strconv.ParseBool(arg); err == nil {
 					continue
 				}
@@ -456,11 +522,21 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		// Find the matching declared positional for this command context
 		cmdPath := strings.Join(currentCmdPath, " ")
+		skipThisPositional := false
 		for _, decl := range declaredPos {
 			// Check if this declaration belongs to the current command path
 			if decl.flag.CommandPath == cmdPath && *decl.flag.Argument.Position == argPos {
-				pa.Argument = decl.flag.Argument
 				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+
+				// Check if this flag was already explicitly set via flag syntax
+				if _, alreadySet := p.options[lookup]; alreadySet {
+					// This positional slot was filled via explicit flag syntax
+					// Don't treat this value as a positional argument
+					skipThisPositional = true
+					continue
+				}
+
+				pa.Argument = decl.flag.Argument
 
 				// Run validators on positional argument
 				if len(decl.flag.Argument.Validators) > 0 {
@@ -480,7 +556,9 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			}
 		}
 
-		positional = append(positional, pa)
+		if !skipThisPositional {
+			positional = append(positional, pa)
+		}
 		argPos++
 	}
 
