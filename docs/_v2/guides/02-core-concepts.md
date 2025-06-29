@@ -110,4 +110,4 @@ Finally, `goopt` is designed to reduce boilerplate by providing powerful feature
 
 Now that you understand the core concepts, you're ready to learn how to structure your CLI in more detail.
 
-*   **Explore how to define flags, commands, and positional arguments in the [Defining Your CLI]({{ site.baseurl }}/v2/guides/03-defining-your-cli/) section.**
+*   **Explore how to define flags, commands, and positional arguments in the [Defining Your CLI]({{ site.baseurl }}/v2/guides/03-defining-your-cli/index) section.**
