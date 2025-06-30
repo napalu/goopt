@@ -4,6 +4,7 @@
 package errs
 
 import (
+	"errors"
 	"github.com/napalu/goopt/v2/i18n"
 )
 
@@ -158,3 +159,23 @@ var (
 	ErrValidatorRecursionDepthExceeded     = i18n.NewError(ErrValidatorRecursionDepthExceededKey)
 	ErrValidatorMustUseParentheses         = i18n.NewError(ErrValidatorMustUseParenthesesKey)
 )
+
+func WrapOnce[T i18n.TranslatableError](err error, wrapper T, fieldOrFlags ...any) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if the outermost error is already the same type as wrapper
+	if errors.Is(err, wrapper) {
+		// Already wrapped with the same error type
+		return err
+	}
+
+	// Convert []string to []interface{} for WithArgs
+	args := make([]interface{}, len(fieldOrFlags))
+	for i, v := range fieldOrFlags {
+		args[i] = v
+	}
+
+	return wrapper.WithArgs(args...).Wrap(err)
+}
