@@ -300,11 +300,24 @@ func (p *Parser) buildFlagCache() *flagCache {
 		if shortName := fv.Argument.Short; shortName != "" {
 			cache.flags[shortName][cmdPath] = fv
 			cache.isStandalone[shortName] = fv.Argument.TypeOf == types.Standalone
-			cache.needsValue[shortName] = fv.Argument.TypeOf != types.Standalone
+			cache.needsValue[shortName] = fv.Argument.TypeOf != types.Standalone && fv.Argument.Position == nil
 		}
 
 		cache.isStandalone[longName] = fv.Argument.TypeOf == types.Standalone
-		cache.needsValue[longName] = fv.Argument.TypeOf != types.Standalone
+		cache.needsValue[longName] = fv.Argument.TypeOf != types.Standalone && fv.Argument.Position == nil
+
+		// Also add command-scoped flag names to the cache
+		if cmdPath != "" {
+			scopedName := buildPathFlag(longName, cmdPath)
+			cache.isStandalone[scopedName] = fv.Argument.TypeOf == types.Standalone
+			cache.needsValue[scopedName] = fv.Argument.TypeOf != types.Standalone && fv.Argument.Position == nil
+
+			if shortName := fv.Argument.Short; shortName != "" {
+				scopedShortName := buildPathFlag(shortName, cmdPath)
+				cache.isStandalone[scopedShortName] = fv.Argument.TypeOf == types.Standalone
+				cache.needsValue[scopedShortName] = fv.Argument.TypeOf != types.Standalone && fv.Argument.Position == nil
+			}
+		}
 	}
 
 	return cache
@@ -358,10 +371,22 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		if p.isFlag(arg) {
 			name := strings.TrimLeft(arg, "-")
+			needsValue := false
+
+			// Check command-scoped version first
 			if len(currentCmdPath) > 0 {
-				name = buildPathFlag(name, currentCmdPath...)
+				scopedName := buildPathFlag(name, currentCmdPath...)
+				if cache.needsValue[scopedName] {
+					needsValue = true
+				}
 			}
-			if cache.needsValue[name] {
+
+			// Also check global version
+			if !needsValue && cache.needsValue[name] {
+				needsValue = true
+			}
+
+			if needsValue {
 				skipNext = true
 			}
 			continue
@@ -370,14 +395,33 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		// Handle previous flag's value
 		if i > 0 && p.isFlag(args[i-1]) {
 			prevName := strings.TrimFunc(args[i-1], p.prefixFunc)
+			needsValue := false
+			isStandalone := false
+
+			// Check command-scoped version first
 			if len(currentCmdPath) > 0 {
-				prevName = buildPathFlag(prevName, currentCmdPath...)
+				scopedName := buildPathFlag(prevName, currentCmdPath...)
+				if cache.needsValue[scopedName] {
+					needsValue = true
+				}
+				if cache.isStandalone[scopedName] {
+					isStandalone = true
+				}
 			}
-			if cache.needsValue[prevName] {
-				skipNext = true
+
+			// Also check global version
+			if !needsValue && cache.needsValue[prevName] {
+				needsValue = true
+			}
+			if !isStandalone && cache.isStandalone[prevName] {
+				isStandalone = true
+			}
+
+			if needsValue {
+				// This arg is consumed by the previous flag, skip it
 				continue
 			}
-			if cache.isStandalone[prevName] {
+			if isStandalone {
 				if _, err := strconv.ParseBool(arg); err == nil {
 					continue
 				}
@@ -422,11 +466,19 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 
 		// Find the matching declared positional for this command context
 		cmdPath := strings.Join(currentCmdPath, " ")
+		skipThisPositional := false
 		for _, decl := range declaredPos {
 			// Check if this declaration belongs to the current command path
 			if decl.flag.CommandPath == cmdPath && *decl.flag.Argument.Position == argPos {
-				pa.Argument = decl.flag.Argument
 				lookup := buildPathFlag(decl.key, decl.flag.CommandPath)
+				// Check if this flag was already explicitly set via flag syntax
+				if _, alreadySet := p.options[lookup]; alreadySet {
+					// This positional slot was filled via explicit flag syntax
+					// Don't treat this value as a positional argument
+					skipThisPositional = true
+					break
+				}
+				pa.Argument = decl.flag.Argument
 				p.registerFlagValue(lookup, arg, arg)
 				p.options[lookup] = arg
 				if err := p.setBoundVariable(arg, lookup); err != nil {
@@ -436,7 +488,9 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			}
 		}
 
-		positional = append(positional, pa)
+		if !skipThisPositional {
+			positional = append(positional, pa)
+		}
 		argPos++
 	}
 
