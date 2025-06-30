@@ -356,7 +356,7 @@ func (p *Parser) ExecuteCommand() error {
 				p.callbackResults[cmd.path] = preErr
 				// Execute post-hooks even on pre-hook failure
 				_ = p.executePostHooks(cmd, preErr)
-				return preErr
+				return p.wrapErrorIfTranslatable(preErr)
 			}
 
 			// Execute the command
@@ -367,11 +367,11 @@ func (p *Parser) ExecuteCommand() error {
 			if postErr := p.executePostHooks(cmd, cmdErr); postErr != nil {
 				if cmdErr == nil {
 					p.callbackResults[cmd.path] = postErr
-					return postErr
+					return p.wrapErrorIfTranslatable(postErr)
 				}
 			}
 
-			return cmdErr
+			return p.wrapErrorIfTranslatable(cmdErr)
 		}
 	}
 
@@ -383,12 +383,7 @@ func (p *Parser) ExecuteCommand() error {
 // no callback is associated with commandName
 func (p *Parser) GetCommandExecutionError(commandName string) error {
 	if err, found := p.callbackResults[commandName]; found {
-		var te i18n.TranslatableError
-		if errors.As(err, &te) {
-			return errs.WithProvider(te, p.layeredProvider)
-		}
-
-		return err
+		return p.wrapErrorIfTranslatable(err)
 	}
 
 	return errs.ErrCommandNotFound.WithArgs(commandName)
@@ -400,13 +395,7 @@ func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
 	var execErrs []types.KeyValue[string, error]
 	for key, err := range p.callbackResults {
 		if err != nil {
-			var te i18n.TranslatableError
-			if errors.As(err, &te) {
-				execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: errs.WithProvider(te, p.layeredProvider)})
-			} else {
-				execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: err})
-			}
-
+			execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: p.wrapErrorIfTranslatable(err)})
 		}
 	}
 

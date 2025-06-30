@@ -5232,6 +5232,131 @@ func TestParser_CommandPositional(t *testing.T) {
 	assert.True(t, cmd.Plugin.Disable.Verbose)
 }
 
+func TestParser_PositionalArgument(t *testing.T) {
+	type ServerCmd struct {
+		Workers    int    `goopt:"default:10"`
+		ConfigFile string `goopt:"pos:0"`
+	}
+
+	type Config struct {
+		Port   int       `goopt:"short:p;default:8080"`
+		Server ServerCmd `goopt:"kind:command"`
+	}
+
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "positional after flags",
+			args:     []string{"server", "--port", "8080", "--workers", "20", "config.yaml"},
+			expected: "config.yaml",
+		},
+		{
+			name:     "positional before flags",
+			args:     []string{"server", "config.yaml", "--port", "8080", "--workers", "20"},
+			expected: "config.yaml",
+		},
+		{
+			name:     "positional with short flags",
+			args:     []string{"server", "-p", "9000", "myconfig.yaml"},
+			expected: "myconfig.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			parser, err := NewParserFromStruct(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create parser: %v", err)
+			}
+
+			success := parser.Parse(tt.args)
+			if !success {
+				t.Fatalf("Parse failed: %v", parser.GetErrors())
+			}
+
+			if cfg.Server.ConfigFile != tt.expected {
+				t.Errorf("Expected ConfigFile=%q, got %q", tt.expected, cfg.Server.ConfigFile)
+			}
+		})
+	}
+}
+
+func TestParser_PositionalFlow(t *testing.T) {
+	p := NewParser()
+	p.AddFlag("valueFlag", NewArg())
+	p.AddFlag("source", NewArg(WithPosition(0)))
+	p.AddFlag("dest", NewArg(WithPosition(1)))
+
+	// Hook into setPositionalArguments to see what's happening
+	args := []string{"--valueFlag", "value", "--source", "override.txt", "dest.txt"}
+	fmt.Printf("Raw args: %v\n", args)
+
+	// Manually trace through setPositionalArguments logic
+	fmt.Println("\nTracing through argument processing:")
+	skipNext := false
+	for i, arg := range args {
+		if skipNext {
+			fmt.Printf("  [%d] '%s' - SKIPPED (consumed by previous flag)\n", i, arg)
+			skipNext = false
+			continue
+		}
+
+		if p.isFlag(arg) {
+			fmt.Printf("  [%d] '%s' - FLAG\n", i, arg)
+			// Would need to check if it needs a value
+			name := arg[2:] // strip --
+			if name == "valueFlag" || name == "source" {
+				skipNext = true
+			}
+			continue
+		}
+
+		fmt.Printf("  [%d] '%s' - POSITIONAL\n", i, arg)
+	}
+}
+
+func TestParser_PositionalOverrideDebug(t *testing.T) {
+	p := NewParser()
+	p.AddFlag("valueFlag", NewArg())
+	p.AddFlag("source", NewArg(WithPosition(0)))
+	p.AddFlag("dest", NewArg(WithPosition(1)))
+
+	args := "--valueFlag value --source override.txt dest.txt"
+	fmt.Printf("Parsing: %s\n", args)
+
+	ok := p.ParseString(args)
+	fmt.Printf("Parse success: %v\n", ok)
+
+	// Check what was parsed
+	fmt.Printf("\nFlag values:\n")
+	fmt.Printf("  valueFlag = %s\n", p.GetOrDefault("valueFlag", "NOT SET"))
+	fmt.Printf("  source = %s\n", p.GetOrDefault("source", "NOT SET"))
+	fmt.Printf("  dest = %s\n", p.GetOrDefault("dest", "NOT SET"))
+
+	// Check positional args
+	pos := p.GetPositionalArgs()
+	fmt.Printf("\nPositional args (count=%d):\n", len(pos))
+	for i, arg := range pos {
+		fmt.Printf("  [%d] Position=%d, Value=%s, ArgPos=%d, Argument=%v\n",
+			i, arg.Position, arg.Value, arg.ArgPos, arg.Argument != nil)
+	}
+
+	// Check raw args
+	fmt.Printf("\nRaw args:\n")
+	for k, v := range p.rawArgs {
+		fmt.Printf("  %s = %s\n", k, v)
+	}
+
+	// Check if HasRawFlag works
+	fmt.Printf("\nHasRawFlag checks:\n")
+	fmt.Printf("  HasRawFlag('source') = %v\n", p.HasRawFlag("source"))
+	fmt.Printf("  HasRawFlag('dest') = %v\n", p.HasRawFlag("dest"))
+}
+
 // Helper function for comparing string slices
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
