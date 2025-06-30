@@ -130,7 +130,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 
 	if isNestedSlicePath(currentArg) {
 		if err := p.validateSlicePath(lookup); err != nil {
-			p.addError(errs.ErrProcessingField.WithArgs(lookup).Wrap(err))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingField, lookup))
 			return
 		}
 	}
@@ -155,7 +155,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
 					if err := validator(boolVal); err != nil {
-						p.addError(wrapProcessingFlagError(err, lookup))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
 						return
 					}
 				}
@@ -165,7 +165,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(wrapProcessingFlagError(err, lookup))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
 			}
 		}
 	case types.Single, types.Chained, types.File:
@@ -176,6 +176,25 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 func (p *Parser) registerCommandRecursive(cmd *Command) {
 	// Add the current command to the map
 	cmd.topLevel = strings.Count(cmd.path, " ") == 0
+
+	// Check if command already exists and merge properties
+	if existing, found := p.registeredCommands.Get(cmd.path); found {
+		// Merge properties - prefer existing non-empty values
+		if existing.NameKey != "" && cmd.NameKey == "" {
+			cmd.NameKey = existing.NameKey
+		}
+		if existing.Description != "" && cmd.Description == "" {
+			cmd.Description = existing.Description
+		}
+		if existing.DescriptionKey != "" && cmd.DescriptionKey == "" {
+			cmd.DescriptionKey = existing.DescriptionKey
+		}
+		// Also preserve other important fields
+		if existing.Callback != nil && cmd.Callback == nil {
+			cmd.Callback = existing.Callback
+		}
+	}
+
 	p.registeredCommands.Set(cmd.path, cmd)
 
 	// Register command translations if NameKey is provided
@@ -542,7 +561,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				if len(decl.flag.Argument.Validators) > 0 {
 					for _, validator := range decl.flag.Argument.Validators {
 						if err := validator(arg); err != nil {
-							p.addError(wrapProcessingFlagError(err, lookup))
+							p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
 						}
 					}
 				}
@@ -632,12 +651,12 @@ func (p *Parser) evalExecOnParse(lastCommandPath string) string {
 	if p.callbackOnParse {
 		err := p.ExecuteCommand()
 		if err != nil {
-			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingCommand, lastCommandPath))
 		}
 	} else if cmd, ok := p.getCommand(lastCommandPath); ok && cmd.Callback != nil && cmd.ExecOnParse {
 		err := p.ExecuteCommand()
 		if err != nil {
-			p.addError(errs.ErrProcessingCommand.Wrap(err).WithArgs(lastCommandPath))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingCommand, lastCommandPath))
 		}
 	}
 
@@ -753,48 +772,6 @@ func (p *Parser) isGlobalFlag(arg string) bool {
 
 func (p *Parser) addError(err error) {
 	p.errors = append(p.errors, err)
-}
-
-// wrapProcessingFlagError wraps an error with ErrProcessingFlag if it's not already wrapped
-func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
-	// 1) If err already wraps ErrProcessingFlag, just extract
-	//    the TranslatableError for that sentinel and return it.
-	var te i18n.TranslatableError
-	if errors.Is(err, errs.ErrProcessingFlag) && errors.As(err, &te) {
-		return te
-	}
-
-	// 2) Otherwise wrap whatever you got in a new TrError
-	return errs.
-		ErrProcessingFlag.
-		WithArgs(flag).
-		Wrap(err)
-}
-
-func wrapProcessingFieldError(err error, field string) i18n.TranslatableError {
-	var te i18n.TranslatableError
-	if errors.Is(err, errs.ErrProcessingField) && errors.As(err, &te) {
-		return te
-	}
-
-	// 2) Otherwise wrap whatever you got in a new TrError
-	return errs.
-		ErrProcessingField.
-		WithArgs(field).
-		Wrap(err)
-}
-
-func wrapProcessingFieldWithPrefixError(err error, prefix, field string) i18n.TranslatableError {
-	var te i18n.TranslatableError
-	if errors.Is(err, errs.ErrProcessingField) && errors.As(err, &te) {
-		return te
-	}
-
-	// 2) Otherwise wrap whatever you got in a new TrError
-	return errs.
-		ErrProcessingFieldWithPrefix.
-		WithArgs(prefix, field).
-		Wrap(err)
 }
 
 func (p *Parser) getCommand(name string) (*Command, bool) {
@@ -967,7 +944,6 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 				}
 			}
 		}
-		// Otherwise, treat as potential positional argument
 	}
 
 	return terminating
@@ -1006,7 +982,7 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
-					p.addError(wrapProcessingFlagError(err, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
 				}
 			}
 		}
@@ -1628,7 +1604,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
 		for _, validator := range argument.Validators {
 			if err := validator(processed); err != nil {
-				return wrapProcessingFlagError(err, currentArg)
+				return errs.WrapOnce(err, errs.ErrProcessingFlag, currentArg)
 			}
 		}
 	}
@@ -1660,8 +1636,8 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 			// Run validators on secure value
 			if len(argInfo.Argument.Validators) > 0 {
 				for _, validator := range argInfo.Argument.Validators {
-					if err := validator(pass); err != nil {
-						p.addError(wrapProcessingFlagError(err, name))
+					if err = validator(pass); err != nil {
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
 						return
 					}
 				}
@@ -1670,10 +1646,10 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
-			p.addError(wrapProcessingFlagError(err, name))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
 		}
 	} else {
-		p.addError(errs.ErrSecureFlagExpectsValue.WithArgs(name).Wrap(err))
+		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, name))
 	}
 }
 
@@ -1743,7 +1719,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
 			if err := validator(value); err != nil {
-				p.addError(wrapProcessingFlagError(err, flag))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
 				return "", false
 			}
 		}
@@ -1799,7 +1775,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
 				if err := validator(args[i]); err != nil {
-					p.addError(wrapProcessingFlagError(err, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
 					return "", false
 				}
 			}
@@ -2073,7 +2049,23 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 		p.lookup[k] = v
 	}
 	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
-		p.registeredCommands.Set(*it.Key, it.Value)
+		// Check if command already exists and preserve its properties
+		if existing, found := p.registeredCommands.Get(*it.Key); found {
+			newCmd := it.Value
+			// Preserve existing properties that shouldn't be overwritten
+			if existing.NameKey != "" && newCmd.NameKey == "" {
+				newCmd.NameKey = existing.NameKey
+			}
+			if existing.Description != "" && newCmd.Description == "" {
+				newCmd.Description = existing.Description
+			}
+			if existing.DescriptionKey != "" && newCmd.DescriptionKey == "" {
+				newCmd.DescriptionKey = existing.DescriptionKey
+			}
+			p.registeredCommands.Set(*it.Key, newCmd)
+		} else {
+			p.registeredCommands.Set(*it.Key, it.Value)
+		}
 	}
 
 	// Merge errors from nested parser
@@ -2261,8 +2253,9 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 	var topParent = config.Parent
 	var currentCommand *Command
 
-	for _, cmdName := range commandNames {
+	for i, cmdName := range commandNames {
 		found := false
+		isLastCommand := (i == len(commandNames)-1)
 
 		// If we're at the top level (parent is nil)
 		if config.Parent == nil {
@@ -2270,14 +2263,28 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 			if cmd, exists := p.registeredCommands.Get(cmdName); exists {
 				currentCommand = cmd
 				found = true
+				// Update properties if this is the command being configured
+				if len(commandNames) == 1 || isLastCommand {
+					if config.NameKey != "" {
+						currentCommand.NameKey = config.NameKey
+					}
+					if config.Description != "" || config.DescriptionKey != "" {
+						p.resolveCommandDescription(config.Description, currentCommand, cmdName, config.DescriptionKey)
+					}
+				}
 			} else {
 				// Create a new top-level command
 				newCommand := &Command{
-					Name:    cmdName,
-					NameKey: config.NameKey,
+					Name: cmdName,
 				}
 
-				p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
+				// Only apply properties if this is the actual command being configured
+				// For a path like "top middle", when processing "top", we only set its properties
+				// if the full path is "top" (i.e., single command)
+				if len(commandNames) == 1 || isLastCommand {
+					newCommand.NameKey = config.NameKey
+					p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
+				}
 				p.registeredCommands.Set(cmdName, newCommand)
 				currentCommand = newCommand
 			}
@@ -2289,6 +2296,15 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 				if subCmd.Name == cmdName {
 					currentCommand = &config.Parent.Subcommands[idx] // Use the existing subcommand
 					found = true
+					// Update properties if this is the command being configured
+					if len(commandNames) == 1 || isLastCommand {
+						if config.NameKey != "" {
+							currentCommand.NameKey = config.NameKey
+						}
+						if config.Description != "" || config.DescriptionKey != "" {
+							p.resolveCommandDescription(config.Description, currentCommand, cmdName, config.DescriptionKey)
+						}
+					}
 					break
 				}
 			}
@@ -2296,11 +2312,15 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 			if !found {
 				newCommand := &Command{
 					Name:        cmdName,
-					NameKey:     config.NameKey,
 					Subcommands: []Command{},
 					path:        config.Path,
 				}
-				p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
+				// For single command paths, always apply properties
+				// For multi-command paths, only apply to the last command
+				if len(commandNames) == 1 || isLastCommand {
+					newCommand.NameKey = config.NameKey
+					p.resolveCommandDescription(config.Description, newCommand, cmdName, config.DescriptionKey)
+				}
 				config.Parent.Subcommands = append(config.Parent.Subcommands, *newCommand)
 				currentCommand = &config.Parent.Subcommands[len(config.Parent.Subcommands)-1] // Update currentCommand to point to the new subcommand
 			}
@@ -2358,7 +2378,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 	// Unwrap the value and type
 	unwrappedValue, err := util.UnwrapValue(structValue)
 	if err != nil {
-		return nil, errs.ErrUnwrappingValue.Wrap(err)
+		return nil, errs.WrapOnce(err, errs.ErrUnwrappingValue)
 	}
 
 	st := util.UnwrapType(structValue.Type())
@@ -2398,21 +2418,21 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			// Check if this is a validator syntax error that should fail immediately
 			var validatorErr *i18n.TrError
 			if errors.As(err, &validatorErr) && errors.Is(err, errs.ErrValidatorMustUseParentheses) {
-				return nil, wrapProcessingFieldError(err, field.Name)
+				return nil, errs.WrapOnce(err, errs.ErrProcessingField, field.Name)
 			}
 
 			// For other errors, decide based on field type
 			if !isFunction(field) && !isStructOrSliceType(field) {
 				// For simple fields with tag errors, we can skip them and continue
-				parser.addError(wrapProcessingFieldError(err, field.Name))
+				parser.addError(errs.WrapOnce(err, errs.ErrProcessingField, field.Name))
 				continue
 			}
 			// For structural fields (functions, nested structs, slices), fail fast
 			if !isFunction(field) {
 				if flagPrefix != "" {
-					return nil, wrapProcessingFieldWithPrefixError(err, flagPrefix, field.Name)
+					return nil, errs.WrapOnce(err, errs.ErrProcessingFieldWithPrefix, flagPrefix, field.Name)
 				} else {
-					return nil, wrapProcessingFieldError(err, field.Name)
+					return nil, errs.WrapOnce(err, errs.ErrProcessingField, field.Name)
 				}
 			}
 			continue
@@ -2476,13 +2496,13 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 		// Process the path tag to associate the flag with commands or global
 		if pathTag != "" {
 			if err = parser.processPathTag(pathTag, fieldValue, fullFlagName, arg); err != nil {
-				return parser, wrapProcessingFlagError(err, fullFlagName)
+				return parser, errs.WrapOnce(err, errs.ErrProcessingFlag, fullFlagName)
 			}
 		} else {
 			// If no path specified, use current command path (if any)
 			err = parser.bindArgument(commandPath, fieldValue, fullFlagName, arg)
 			if err != nil {
-				return parser, wrapProcessingFlagError(err, fullFlagName)
+				return parser, errs.WrapOnce(err, errs.ErrProcessingFlag, fullFlagName)
 			}
 		}
 	}
@@ -2512,7 +2532,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 			}
 
 			if cmd, err = p.buildCommand(parentCommand, "", "", pCmd); err != nil {
-				return errs.ErrProcessingCommand.WithArgs(parentCommand).Wrap(err)
+				return errs.WrapOnce(err, errs.ErrProcessingCommand, parentCommand)
 			}
 		}
 
@@ -2531,7 +2551,7 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
 			if err != nil {
 				// Default value binding errors are not critical - collect them
-				p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
+				p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
 			}
 		}
 	}
@@ -2570,7 +2590,7 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 		}
 		if err != nil {
 			// Default value binding errors are not critical - collect them
-			p.addError(errs.ErrSettingBoundValue.WithArgs(arg.DefaultValue).Wrap(err))
+			p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
 		}
 	}
 
@@ -2585,12 +2605,12 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 	// Handle case where the entire value is a Command type (not a struct containing commands)
 	unwrappedValue, err := util.UnwrapValue(val)
 	if err != nil {
-		return errs.ErrUnwrappingValue.Wrap(err)
+		return errs.WrapOnce(err, errs.ErrUnwrappingValue)
 	}
 
 	if unwrappedValue.Type() == reflect.TypeOf(Command{}) {
 		cmd := unwrappedValue.Interface().(Command)
-		_, err := p.buildCommandFromConfig(&CommandConfig{
+		_, err = p.buildCommandFromConfig(&CommandConfig{
 			Path:           cmd.path,
 			Description:    cmd.Description,
 			DescriptionKey: cmd.DescriptionKey,
@@ -2598,7 +2618,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			Parent:         nil,
 		})
 		if err != nil {
-			return errs.ErrProcessingCommand.WithArgs(cmd.path).Wrap(err)
+			return errs.WrapOnce(err, errs.ErrProcessingCommand, cmd.path)
 		}
 		err = p.AddCommand(&cmd)
 		if err != nil {
@@ -2692,7 +2712,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			// Parse the goopt tag for command configuration
 			config, err := parse.UnmarshalTagFormat(fieldType.Tag.Get("goopt"), fieldType)
 			if err != nil {
-				return errs.ErrUnmarshallingTag.WithArgs(fieldType.Name).Wrap(err)
+				return errs.WrapOnce(err, errs.ErrUnmarshallingTag, fieldType.Name)
 			}
 
 			cmdName := config.Name
@@ -2724,7 +2744,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				Parent:         parent,
 			})
 			if err != nil {
-				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
+				return errs.WrapOnce(err, errs.ErrProcessingCommand, cmdPath)
 			}
 
 			err = p.AddCommand(buildCmd)
@@ -2863,7 +2883,7 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 	// Unwrap the field value
 	unwrappedValue, err := util.UnwrapValue(fieldValue)
 	if err != nil {
-		return errs.ErrUnwrappingValue.WithArgs(flagPrefix).Wrap(err)
+		return errs.WrapOnce(err, errs.ErrUnwrappingValue, flagPrefix)
 	}
 
 	// Initialize or resize slice if needed
@@ -2886,10 +2906,10 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 
 		nestedCmdLine, err := newParserFromReflectValue(elem, elemPrefix, commandPath, maxDepth, currentDepth+1, config...)
 		if err != nil {
-			return errs.ErrProcessingField.WithArgs(flagPrefix, idx).Wrap(err)
+			return errs.WrapOnce(err, errs.ErrProcessingField, flagPrefix, idx)
 		}
 		if err = c.mergeCmdLine(nestedCmdLine); err != nil {
-			return errs.ErrProcessingField.WithArgs(flagPrefix, idx).Wrap(err)
+			return errs.WrapOnce(err, errs.ErrProcessingField, flagPrefix, idx)
 		}
 	}
 
@@ -2903,7 +2923,7 @@ func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Valu
 			// Nil pointer - this is fine
 			return nil
 		}
-		return errs.ErrUnwrappingValue.WithArgs(flagPrefix).Wrap(err)
+		return errs.WrapOnce(err, errs.ErrUnwrappingValue, flagPrefix)
 	}
 
 	var existingCmdDescription string
@@ -2915,7 +2935,7 @@ func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Valu
 
 	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1, config...)
 	if err != nil {
-		return wrapProcessingFieldError(err, flagPrefix)
+		return errs.WrapOnce(err, errs.ErrProcessingField, flagPrefix)
 	}
 
 	err = c.mergeCmdLine(nestedCmdLine)
@@ -3444,15 +3464,27 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 		ppConfig := p.DefaultPrettyPrintConfig()
 		if cmd.Value.topLevel {
-			fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
+			desc := p.renderer.CommandDescription(cmd.Value)
+			if desc != "" {
+				fmt.Fprintf(writer, "\n%-20s %s\n", cmd.Value.Name, desc)
+			} else {
+				fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
+			}
 			for i := range cmd.Value.Subcommands {
 				prefix := ppConfig.DefaultPrefix
 				if i == len(cmd.Value.Subcommands)-1 {
 					prefix = ppConfig.TerminalPrefix
 				}
 				sub := &cmd.Value.Subcommands[i]
-				desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-				fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+				// Look up the actual registered command to get the correct description
+				subPath := cmd.Value.Name + " " + sub.Name
+				if registeredSub, found := p.registeredCommands.Get(subPath); found {
+					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+				} else {
+					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+				}
 			}
 		}
 	}
