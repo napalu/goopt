@@ -25,8 +25,6 @@ coverage:
     - "v2/env"
     - "v2/internal/testutil"
     - "v2/i18n/locales/**"
-    - "v2/**/testdata/**"
-    - "**/mocks/**"
 
 comment:
   layout: "reach,diff,flags,files,tree"
