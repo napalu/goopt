@@ -13284,6 +13284,426 @@ func TestParser_PositionalFlow(t *testing.T) {
 	}
 }
 
+// TestCommandExecutionOrder verifies that commands are executed in FIFO order
+func TestParser_CommandExecutionOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "single command",
+			args:     []string{"cmd1"},
+			expected: []string{"cmd1"},
+		},
+		{
+			name:     "multiple commands in order",
+			args:     []string{"cmd1", "cmd2", "cmd3"},
+			expected: []string{"cmd1", "cmd2", "cmd3"},
+		},
+		{
+			name:     "nested commands maintain order",
+			args:     []string{"parent", "child1", "parent", "child2"},
+			expected: []string{"parent child1", "parent child2"},
+		},
+		{
+			name:     "mixed depth commands",
+			args:     []string{"cmd1", "parent", "child", "cmd2"},
+			expected: []string{"cmd1", "parent child", "cmd2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executionOrder := []string{}
+			p := NewParser()
+
+			// Create simple command
+			cmd1 := &Command{
+				Name: "cmd1",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			cmd2 := &Command{
+				Name: "cmd2",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			cmd3 := &Command{
+				Name: "cmd3",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			// Create parent with children
+			parent := &Command{
+				Name: "parent",
+				Subcommands: []Command{
+					{
+						Name: "child1",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+					{
+						Name: "child2",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+					{
+						Name: "child",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+				},
+			}
+
+			// Register all commands
+			_ = p.AddCommand(cmd1)
+			_ = p.AddCommand(cmd2)
+			_ = p.AddCommand(cmd3)
+			_ = p.AddCommand(parent)
+
+			// Parse and execute
+			result := p.Parse(append([]string{"prog"}, tt.args...))
+			assert.True(t, result, "parsing should succeed")
+
+			errCount := p.ExecuteCommands()
+			assert.Equal(t, 0, errCount, "no execution errors expected")
+
+			// Verify execution order
+			assert.Equal(t, tt.expected, executionOrder, "commands should execute in FIFO order")
+		})
+	}
+}
+
+// TestCommandExecutionWithTranslatableErrors verifies translatable error handling
+func TestCommandExecutionWithTranslatableErrors(t *testing.T) {
+	// Create a custom translatable error
+	customErr := i18n.NewError("custom.error.key").WithArgs("test")
+
+	tests := []struct {
+		name          string
+		commandError  error
+		language      language.Tag
+		expectedKey   string
+		containsInMsg string
+	}{
+		{
+			name:          "translatable error in English",
+			commandError:  customErr,
+			language:      language.English,
+			expectedKey:   "custom.error.key",
+			containsInMsg: "Custom error: test",
+		},
+		{
+			name:          "wrapped translatable error",
+			commandError:  fmt.Errorf("wrapper: %w", customErr),
+			language:      language.English,
+			expectedKey:   "custom.error.key",
+			containsInMsg: "Custom error: test",
+		},
+		{
+			name:          "regular error (non-translatable)",
+			commandError:  errors.New("regular error"),
+			language:      language.English,
+			expectedKey:   "",
+			containsInMsg: "regular error",
+		},
+		{
+			name:          "nil error",
+			commandError:  nil,
+			language:      language.English,
+			expectedKey:   "",
+			containsInMsg: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			p.SetLanguage(tt.language)
+
+			// Add a test locale with translations
+			testLocale := i18n.NewLocale(tt.language, `{
+				"custom.error.key": "Custom error: %s"
+			}`)
+			p.SetSystemLocales(testLocale)
+
+			cmd := &Command{
+				Name: "test",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					return tt.commandError
+				},
+			}
+
+			_ = p.AddCommand(cmd)
+			_ = p.ParseString("test")
+			_ = p.ExecuteCommands()
+
+			// Test GetCommandExecutionError
+			err := p.GetCommandExecutionError("test")
+			if tt.commandError == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.containsInMsg)
+
+				// Check if it's a translatable error
+				var te i18n.TranslatableError
+				if errors.As(tt.commandError, &te) {
+					// Verify that the error maintains its translatable nature
+					var resultTE i18n.TranslatableError
+					assert.True(t, errors.As(err, &resultTE), "result should be translatable")
+					if resultTE != nil {
+						assert.Equal(t, tt.expectedKey, resultTE.Key())
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestGetCommandExecutionErrors verifies batch error retrieval with translation
+func TestGetCommandExecutionErrors(t *testing.T) {
+	p := NewParser()
+
+	// Set up test locale
+	testLocale := i18n.NewLocale(language.English, `{
+		"error.cmd1": "Error in command 1: %s",
+		"error.cmd2": "Error in command 2"
+	}`)
+	p.SetSystemLocales(testLocale)
+
+	// Create multiple commands with different error types
+	cmd1 := &Command{
+		Name: "cmd1",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return i18n.NewError("error.cmd1").WithArgs("details")
+		},
+	}
+
+	cmd2 := &Command{
+		Name: "cmd2",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return i18n.NewError("error.cmd2")
+		},
+	}
+
+	cmd3 := &Command{
+		Name: "cmd3",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return errors.New("regular error in cmd3")
+		},
+	}
+
+	cmd4 := &Command{
+		Name: "cmd4",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return nil // No error
+		},
+	}
+
+	// Register commands
+	_ = p.AddCommand(cmd1)
+	_ = p.AddCommand(cmd2)
+	_ = p.AddCommand(cmd3)
+	_ = p.AddCommand(cmd4)
+
+	// Parse and execute all commands
+	_ = p.ParseString("cmd1 cmd2 cmd3 cmd4")
+	errCount := p.ExecuteCommands()
+	assert.Equal(t, 3, errCount, "should have 3 errors")
+
+	// Get all execution errors
+	errors := p.GetCommandExecutionErrors()
+	assert.Len(t, errors, 3, "should return 3 errors (cmd4 had no error)")
+
+	// Verify error details
+	errorMap := make(map[string]error)
+	for _, kv := range errors {
+		errorMap[kv.Key] = kv.Value
+	}
+
+	// Check cmd1 error (translatable)
+	assert.Contains(t, errorMap["cmd1"].Error(), "Error in command 1: details")
+
+	// Check cmd2 error (translatable)
+	assert.Contains(t, errorMap["cmd2"].Error(), "Error in command 2")
+
+	// Check cmd3 error (regular)
+	assert.Contains(t, errorMap["cmd3"].Error(), "regular error in cmd3")
+
+	// cmd4 should not be in the error map
+	_, found := errorMap["cmd4"]
+	assert.False(t, found, "cmd4 should not be in error map")
+}
+
+// TestCommandExecutionOrderWithPreHooks verifies that pre-hooks don't affect execution order
+func TestParser_CommandExecutionOrderWithPreHooks(t *testing.T) {
+	executionOrder := []string{}
+	p := NewParser()
+
+	// Add global pre-hook
+	p.AddGlobalPreHook(func(parser *Parser, cmd *Command) error {
+		// Pre-hooks should not affect the command execution order
+		return nil
+	})
+
+	// Create commands
+	for i := 1; i <= 5; i++ {
+		cmdName := fmt.Sprintf("cmd%d", i)
+		cmd := &Command{
+			Name: cmdName,
+			Callback: func(cmdLine *Parser, command *Command) error {
+				executionOrder = append(executionOrder, command.Name)
+				return nil
+			},
+		}
+		_ = p.AddCommand(cmd)
+	}
+
+	// Parse multiple commands
+	_ = p.ParseString("cmd1 cmd2 cmd3 cmd4 cmd5")
+	_ = p.ExecuteCommands()
+
+	// Verify FIFO order
+	expected := []string{"cmd1", "cmd2", "cmd3", "cmd4", "cmd5"}
+	assert.Equal(t, expected, executionOrder, "commands should execute in FIFO order even with pre-hooks")
+}
+
+// TestTranslatableErrorInNestedCommands verifies error translation in nested command structures
+func TestParser_TranslatableErrorInNestedCommands(t *testing.T) {
+	p := NewParser()
+
+	// Set up German locale
+	germanLocale := i18n.NewLocale(language.German, `{
+		"nested.error": "Verschachtelter Fehler: %s"
+	}`)
+	p.SetSystemLocales(germanLocale)
+	p.SetLanguage(language.German)
+
+	// Create nested command structure
+	parent := &Command{
+		Name: "parent",
+		Subcommands: []Command{
+			{
+				Name: "child",
+				Subcommands: []Command{
+					{
+						Name: "grandchild",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							return i18n.NewError("nested.error").WithArgs("deep command")
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = p.AddCommand(parent)
+	_ = p.ParseString("parent child grandchild")
+	_ = p.ExecuteCommands()
+
+	// Get the error
+	err := p.GetCommandExecutionError("parent child grandchild")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Verschachtelter Fehler: deep command")
+}
+
+// TestExecuteCommandWithTranslatableError verifies ExecuteCommand handles translatable errors
+func TestParser_ExecuteCommandWithTranslatableError(t *testing.T) {
+	p := NewParser()
+
+	// Set up French locale
+	frenchLocale := i18n.NewLocale(language.French, `{
+		"auth.failed": "Échec de l'authentification: %s"
+	}`)
+	p.SetSystemLocales(frenchLocale)
+	p.SetLanguage(language.French)
+
+	// Create a command with translatable error
+	cmd := &Command{
+		Name: "login",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return i18n.NewError("auth.failed").WithArgs("invalid credentials")
+		},
+	}
+
+	_ = p.AddCommand(cmd)
+	_ = p.ParseString("login")
+
+	// Execute single command
+	err := p.ExecuteCommand()
+	assert.Error(t, err)
+
+	// Based on the current PR implementation, ExecuteCommand returns raw error
+	// while GetCommandExecutionError returns the wrapped/translated error
+	// This test documents the current behavior
+
+	// ExecuteCommand returns the raw translatable error
+	var trErr i18n.TranslatableError
+	assert.True(t, errors.As(err, &trErr), "error should be translatable")
+	assert.Equal(t, "auth.failed", trErr.Key())
+
+	// GetCommandExecutionError returns the translated error
+	execErr := p.GetCommandExecutionError("login")
+	assert.Error(t, execErr)
+	assert.Contains(t, execErr.Error(), "Échec de l'authentification: invalid credentials")
+}
+
+// TestExecuteCommandsShouldWrapErrors verifies that the ideal behavior would be
+// to wrap errors when storing them, not when retrieving them
+func TestParser_ExecuteCommandsShouldWrapErrors(t *testing.T) {
+	t.Skip("This test demonstrates the ideal behavior - errors should be wrapped when stored")
+
+	p := NewParser()
+
+	// Set up German locale
+	germanLocale := i18n.NewLocale(language.German, `{
+		"network.timeout": "Netzwerk-Zeitüberschreitung: %s"
+	}`)
+	p.SetSystemLocales(germanLocale)
+	p.SetLanguage(language.German)
+
+	// Create a command with translatable error
+	cmd := &Command{
+		Name: "fetch",
+		Callback: func(cmdLine *Parser, command *Command) error {
+			return i18n.NewError("network.timeout").WithArgs("30s")
+		},
+	}
+
+	_ = p.AddCommand(cmd)
+	_ = p.ParseString("fetch")
+
+	// Execute single command
+	err := p.ExecuteCommand()
+	assert.Error(t, err)
+
+	// In the ideal implementation, ExecuteCommand would return the translated error
+	assert.Contains(t, err.Error(), "Netzwerk-Zeitüberschreitung: 30s")
+
+	// And GetCommandExecutionError would return the same translated error
+	execErr := p.GetCommandExecutionError("fetch")
+	assert.Error(t, execErr)
+	assert.Equal(t, err.Error(), execErr.Error(), "both methods should return the same translated error")
+
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }

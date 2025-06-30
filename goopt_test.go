@@ -5318,6 +5318,112 @@ func TestParser_PositionalFlow(t *testing.T) {
 	}
 }
 
+// TestCommandExecutionOrder verifies that commands are executed in FIFO order
+func TestParser_CommandExecutionOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "single command",
+			args:     []string{"cmd1"},
+			expected: []string{"cmd1"},
+		},
+		{
+			name:     "multiple commands in order",
+			args:     []string{"cmd1", "cmd2", "cmd3"},
+			expected: []string{"cmd1", "cmd2", "cmd3"},
+		},
+		{
+			name:     "nested commands maintain order",
+			args:     []string{"parent", "child1", "parent", "child2"},
+			expected: []string{"parent child1", "parent child2"},
+		},
+		{
+			name:     "mixed depth commands",
+			args:     []string{"cmd1", "parent", "child", "cmd2"},
+			expected: []string{"cmd1", "parent child", "cmd2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executionOrder := []string{}
+			p := NewParser()
+
+			// Create simple command
+			cmd1 := &Command{
+				Name: "cmd1",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			cmd2 := &Command{
+				Name: "cmd2",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			cmd3 := &Command{
+				Name: "cmd3",
+				Callback: func(cmdLine *Parser, command *Command) error {
+					executionOrder = append(executionOrder, command.Path())
+					return nil
+				},
+			}
+
+			// Create parent with children
+			parent := &Command{
+				Name: "parent",
+				Subcommands: []Command{
+					{
+						Name: "child1",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+					{
+						Name: "child2",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+					{
+						Name: "child",
+						Callback: func(cmdLine *Parser, command *Command) error {
+							executionOrder = append(executionOrder, command.Path())
+							return nil
+						},
+					},
+				},
+			}
+
+			// Register all commands
+			_ = p.AddCommand(cmd1)
+			_ = p.AddCommand(cmd2)
+			_ = p.AddCommand(cmd3)
+			_ = p.AddCommand(parent)
+
+			// Parse and execute
+			result := p.Parse(append([]string{"prog"}, tt.args...))
+			assert.True(t, result, "parsing should succeed")
+
+			errCount := p.ExecuteCommands()
+			assert.Equal(t, 0, errCount, "no execution errors expected")
+
+			// Verify execution order
+			assert.Equal(t, tt.expected, executionOrder, "commands should execute in FIFO order")
+		})
+	}
+}
+
 // Helper function for comparing string slices
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
