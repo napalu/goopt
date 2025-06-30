@@ -38,7 +38,7 @@ func TestWithProvider(t *testing.T) {
 	assert.Contains(t, err.Error(), "123")
 
 	// Test Unwrap
-	var wp *withProvider
+	var wp *ErrWithProvider
 	assert.True(t, errors.As(err, &wp))
 	assert.Equal(t, baseErr, wp.Unwrap())
 
@@ -72,8 +72,8 @@ func TestWithProvider_As(t *testing.T) {
 
 	err := WithProvider(baseErr, provider)
 
-	// Test As with withProvider type
-	var wp *withProvider
+	// Test As with ErrWithProvider type
+	var wp *ErrWithProvider
 	assert.True(t, errors.As(err, &wp))
 	assert.Equal(t, provider, wp.provider)
 

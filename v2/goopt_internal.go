@@ -949,7 +949,7 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 
 func (p *Parser) queueCommandCallback(cmd *Command) {
 	if cmd.Callback != nil {
-		p.callbackQueue.Push(cmd)
+		p.callbackQueue.Enqueue(cmd)
 	}
 }
 
@@ -3527,4 +3527,28 @@ func (p *Parser) checkNamingConsistency() []string {
 	}
 
 	return warnings
+}
+
+// wrapErrorIfTranslatable wraps a translatable error with the current language provider
+// This is called lazily when errors are accessed, ensuring they use the current language
+func (p *Parser) wrapErrorIfTranslatable(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if already wrapped with provider
+	if _, ok := err.(*errs.ErrWithProvider); ok {
+		// Already wrapped, return as-is
+		return err
+	}
+
+	// Check if it's a translatable error anywhere in the chain
+	var te i18n.TranslatableError
+	if errors.As(err, &te) {
+		// Wrap with current language provider
+		return errs.WithProvider(te, p.layeredProvider)
+	}
+
+	// Return non-translatable errors as-is
+	return err
 }

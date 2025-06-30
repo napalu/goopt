@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/napalu/goopt/v2"
@@ -36,10 +35,10 @@ func showExamples() {
 	example4Metrics()
 	example5CommandSpecific()
 
-	fmt.Println("\nTry running with real arguments:")
-	fmt.Println("  go run main.go login")
-	fmt.Println("  go run main.go protected-command")
-	fmt.Println("  go run main.go db backup --output=backup.sql")
+	fmt.Println("\nTry running with arguments:")
+	fmt.Println("  go run main.go login --username user")
+	fmt.Println("  go run main.go db backup --output backup.sql")
+	fmt.Println("  go run main.go login --username user logout")
 }
 
 func example1Logging() {
@@ -130,7 +129,7 @@ func example2Authentication() {
 
 	// Login
 	fmt.Println("\nLogging in:")
-	parser.Parse([]string{"login"})
+	parser.Parse([]string{"login", "user"})
 	parser.ExecuteCommands()
 
 	// Try protected with auth
@@ -407,11 +406,11 @@ func runCLI() {
 
 	// Global authentication hook (except for login)
 	parser.AddGlobalPreHook(func(p *goopt.Parser, c *goopt.Command) error {
-		// Skip auth for login command
-		if strings.HasPrefix(c.Path(), "login") {
+		fmt.Printf("global pre-hook: evaluating command '%s'\n", c.Path())
+		if c.Path() == "login" || c.Path() == "logout" {
 			return nil
 		}
-
+		fmt.Printf("command '%s' with auth token '%s' \n", c.Path(), authToken)
 		// Check if user is authenticated
 		if authToken == "" {
 			// Check env var as fallback
@@ -428,7 +427,7 @@ func runCLI() {
 	cfg.Login.Exec = func(cmdLine *goopt.Parser, command *goopt.Command) error {
 		authToken = cfg.Login.Username
 		fmt.Printf("Logged in as: %s\n", authToken)
-		fmt.Println("(In a real app, this would validate credentials)")
+
 		return nil
 	}
 
@@ -489,12 +488,17 @@ func runCLI() {
 
 	// Parse and execute
 	if !parser.Parse(os.Args) {
+		for _, e := range parser.GetErrors() {
+			fmt.Fprintf(os.Stderr, "%v\n", e)
+		}
 		parser.PrintHelp(os.Stderr)
 		os.Exit(1)
 	}
 
 	// Execute commands
 	if errs := parser.ExecuteCommands(); errs > 0 {
-		os.Exit(1)
+		for _, t := range parser.GetCommandExecutionErrors() {
+			fmt.Fprintf(os.Stderr, "command '%s': %s\n", t.Key, t.Value)
+		}
 	}
 }

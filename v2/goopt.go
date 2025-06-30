@@ -313,7 +313,7 @@ func GetStructCtxAs[T any](p *Parser) (T, bool) {
 func (p *Parser) ExecuteCommands() int {
 	callbackErrors := 0
 	for p.callbackQueue.Len() > 0 {
-		cmd, _ := p.callbackQueue.Pop()
+		cmd, _ := p.callbackQueue.Dequeue()
 		if cmd.Callback != nil {
 			// Execute pre-hooks
 			preErr := p.executePreHooks(cmd)
@@ -349,14 +349,14 @@ func (p *Parser) ExecuteCommands() int {
 // Returns the error which occurred during execution of a command callback.
 func (p *Parser) ExecuteCommand() error {
 	if p.callbackQueue.Len() > 0 {
-		cmd, _ := p.callbackQueue.Pop()
+		cmd, _ := p.callbackQueue.Dequeue()
 		if cmd.Callback != nil {
 			// Execute pre-hooks
 			if preErr := p.executePreHooks(cmd); preErr != nil {
 				p.callbackResults[cmd.path] = preErr
 				// Execute post-hooks even on pre-hook failure
 				_ = p.executePostHooks(cmd, preErr)
-				return preErr
+				return p.wrapErrorIfTranslatable(preErr)
 			}
 
 			// Execute the command
@@ -367,11 +367,11 @@ func (p *Parser) ExecuteCommand() error {
 			if postErr := p.executePostHooks(cmd, cmdErr); postErr != nil {
 				if cmdErr == nil {
 					p.callbackResults[cmd.path] = postErr
-					return postErr
+					return p.wrapErrorIfTranslatable(postErr)
 				}
 			}
 
-			return cmdErr
+			return p.wrapErrorIfTranslatable(cmdErr)
 		}
 	}
 
@@ -383,7 +383,7 @@ func (p *Parser) ExecuteCommand() error {
 // no callback is associated with commandName
 func (p *Parser) GetCommandExecutionError(commandName string) error {
 	if err, found := p.callbackResults[commandName]; found {
-		return err
+		return p.wrapErrorIfTranslatable(err)
 	}
 
 	return errs.ErrCommandNotFound.WithArgs(commandName)
@@ -395,7 +395,7 @@ func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
 	var execErrs []types.KeyValue[string, error]
 	for key, err := range p.callbackResults {
 		if err != nil {
-			execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: err})
+			execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: p.wrapErrorIfTranslatable(err)})
 		}
 	}
 
