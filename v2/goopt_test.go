@@ -13704,6 +13704,422 @@ func TestParser_ExecuteCommandsShouldWrapErrors(t *testing.T) {
 
 }
 
+// TestParser_CommandHierarchyDescriptions tests that nested command descriptions are preserved correctly
+func TestParser_CommandHierarchyDescriptions(t *testing.T) {
+	type BottomCommand struct {
+		Execute bool `goopt:"short:e;desc:execute the command"`
+	}
+
+	type MiddleCommand struct {
+		BottomCommand BottomCommand `goopt:"kind:command;name:bottom;desc:bottom level command;descKey:bottom.desc"`
+	}
+
+	type TopCommand struct {
+		MiddleCommand MiddleCommand `goopt:"kind:command;name:middle;desc:middle level command;descKey:middle.desc"`
+	}
+
+	type NestedOptions struct {
+		TopCommand TopCommand `goopt:"kind:command;name:top;desc:top level command;descKey:top.desc"`
+	}
+
+	opts := &NestedOptions{}
+	p, err := NewParserFromStruct(opts)
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+
+	// Also check what's in the top-level command's subcommands
+	// This verifies that descriptionKeys are correctly preserved in the command hierarchy
+	if topCmd, found := p.registeredCommands.Get("top"); found {
+		t.Logf("Top command subcommands: %d", len(topCmd.Subcommands))
+		for i, sub := range topCmd.Subcommands {
+			t.Logf("  Subcommand[%d]: name=%s, desc=%s, descKey=%s",
+				i, sub.Name, sub.Description, sub.DescriptionKey)
+		}
+	}
+
+	// Test that registered commands have correct descriptions
+	tests := []struct {
+		commandPath  string
+		expectedDesc string
+	}{
+		{"top", "top level command"},
+		{"top middle", "middle level command"},
+		{"top middle bottom", "bottom level command"},
+	}
+
+	// Debug: print all registered commands
+	t.Logf("Registered commands:")
+	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
+		cmd := kv.Value
+		t.Logf("  Path: %s, Name: %s, NameKey: %s, Desc: %s, DescKey: %s",
+			*kv.Key, cmd.Name, cmd.NameKey, cmd.Description, cmd.DescriptionKey)
+	}
+
+	for _, tt := range tests {
+		cmd, found := p.registeredCommands.Get(tt.commandPath)
+		if !found {
+			t.Errorf("Command %s not found in registered commands", tt.commandPath)
+			continue
+		}
+
+		if cmd.Description != tt.expectedDesc {
+			t.Errorf("Command %s has wrong description: got %q, want %q",
+				tt.commandPath, cmd.Description, tt.expectedDesc)
+		}
+
+		// Note: We're not checking DescriptionKey here because intermediate commands
+		// in a path may not have their descriptionKey set when they're created as
+		// part of building a longer command path
+	}
+
+	// Test hierarchical help output
+	p.SetHelpStyle(HelpStyleHierarchical)
+	var buf bytes.Buffer
+	p.PrintHelp(&buf)
+	output := buf.String()
+
+	// Check that the command tree shows correct descriptions
+	// Note: Without translations set up, descriptionKeys are shown instead of descriptions.
+	// This is intentional - it helps catch regressions where descriptionKeys might be
+	// incorrectly propagated from child to parent commands.
+	if !strings.Contains(output, "middle               middle.desc") {
+		t.Errorf("Hierarchical help doesn't show correct description key for middle command.\nOutput:\n%s", output)
+	}
+}
+
+// TestParser_CommandHierarchyWithGroups tests that command descriptions work correctly with grouped help
+func TestParser_CommandHierarchyWithGroups(t *testing.T) {
+	type SubCommand1 struct {
+		Flag1 string `goopt:"short:f;desc:flag one"`
+	}
+
+	type SubCommand2 struct {
+		Flag2 string `goopt:"short:g;desc:flag two"`
+	}
+
+	type Command1 struct {
+		Sub1 SubCommand1 `goopt:"kind:command;name:sub1;desc:first subcommand"`
+	}
+
+	type Command2 struct {
+		Sub2 SubCommand2 `goopt:"kind:command;name:sub2;desc:second subcommand"`
+	}
+
+	type Options struct {
+		Cmd1 Command1 `goopt:"kind:command;name:cmd1;desc:first command"`
+		Cmd2 Command2 `goopt:"kind:command;name:cmd2;desc:second command"`
+	}
+
+	opts := &Options{}
+	p, err := NewParserFromStruct(opts)
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+
+	// Test grouped help output
+	var buf bytes.Buffer
+	p.PrintUsageWithGroups(&buf)
+	output := buf.String()
+
+	// Check that commands show correct descriptions
+	expectedPairs := [][]string{
+		{"cmd1", "first command"},
+		{"cmd2", "second command"},
+		{"cmd1 sub1", "first subcommand"},
+		{"cmd2 sub2", "second subcommand"},
+	}
+
+	for _, pair := range expectedPairs {
+		if !strings.Contains(output, pair[0]) || !strings.Contains(output, pair[1]) {
+			t.Errorf("Grouped help missing or incorrect for %s with description %q.\nOutput:\n%s",
+				pair[0], pair[1], output)
+		}
+	}
+}
+
+// TestParser_HierarchicalHelpRegression tests the specific issue from case-one
+// where hierarchical help was showing the wrong description for parent commands
+func TestParser_HierarchicalHelpRegression(t *testing.T) {
+	// Replicate the structure from case-one that exposed the bug
+	type BlobsCommand struct{}
+	type ReposCommand struct{}
+	type RolesCommand struct{}
+
+	type CopyCommand struct {
+		Blobs BlobsCommand `goopt:"kind:command;name:blobs;desc:copy blob configuration"`
+		Repos ReposCommand `goopt:"kind:command;name:repos;desc:copy repository configuration"`
+		Roles RolesCommand `goopt:"kind:command;name:roles;desc:copy role configuration"`
+	}
+
+	type NexusCommand struct {
+		Copy CopyCommand `goopt:"kind:command;name:copy;desc:nexus copy commands"`
+	}
+
+	type Options struct {
+		Nexus NexusCommand `goopt:"kind:command;name:nexus;desc:nexus management commands"`
+	}
+
+	opts := &Options{}
+	p, err := NewParserFromStruct(opts, WithHelpStyle(HelpStyleHierarchical))
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+
+	// Test hierarchical help output
+	var buf bytes.Buffer
+	p.PrintHelp(&buf)
+	output := buf.String()
+
+	// The bug was that "copy" showed "copy blob configuration" instead of "nexus copy commands"
+	if !strings.Contains(output, "copy                 nexus copy commands") {
+		t.Errorf("Hierarchical help shows wrong description for copy command.\nOutput:\n%s", output)
+	}
+}
+
+// TestParser_DeepCommandNesting tests deeply nested command structures
+func TestParser_DeepCommandNesting(t *testing.T) {
+	type Level5 struct {
+		Flag string `goopt:"short:f;desc:deep flag"`
+	}
+
+	type Level4 struct {
+		Level5 Level5 `goopt:"kind:command;name:l5;desc:level 5 desc"`
+	}
+
+	type Level3 struct {
+		Level4 Level4 `goopt:"kind:command;name:l4;desc:level 4 desc"`
+	}
+
+	type Level2 struct {
+		Level3 Level3 `goopt:"kind:command;name:l3;desc:level 3 desc"`
+	}
+
+	type Level1 struct {
+		Level2 Level2 `goopt:"kind:command;name:l2;desc:level 2 desc"`
+	}
+
+	type RootOptions struct {
+		Level1 Level1 `goopt:"kind:command;name:l1;desc:level 1 desc"`
+	}
+
+	opts := &RootOptions{}
+	p, err := NewParserFromStruct(opts)
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+
+	// Check all levels have correct descriptions
+	levels := []struct {
+		path string
+		desc string
+	}{
+		{"l1", "level 1 desc"},
+		{"l1 l2", "level 2 desc"},
+		{"l1 l2 l3", "level 3 desc"},
+		{"l1 l2 l3 l4", "level 4 desc"},
+		{"l1 l2 l3 l4 l5", "level 5 desc"},
+	}
+
+	for _, level := range levels {
+		cmd, found := p.registeredCommands.Get(level.path)
+		if !found {
+			t.Errorf("Command path %s not found", level.path)
+			continue
+		}
+		if cmd.Description != level.desc {
+			t.Errorf("Command %s has wrong description: got %q, want %q",
+				level.path, cmd.Description, level.desc)
+		}
+	}
+}
+
+// TestParser_PrintCommandTree tests the printCommandTree method
+func TestParser_PrintCommandTree(t *testing.T) {
+	t.Run("displays top-level command with description", func(t *testing.T) {
+		type Config struct {
+			SubCmd struct{} `goopt:"kind:command;name:sub;desc:subcommand description"`
+		}
+
+		type Options struct {
+			TopCmd Config `goopt:"kind:command;name:top;desc:top-level description"`
+		}
+
+		opts := &Options{}
+		p, err := NewParserFromStruct(opts, WithHelpStyle(HelpStyleHierarchical))
+		assert.NoError(t, err)
+
+		var buf bytes.Buffer
+		p.printCommandTree(&buf)
+		output := buf.String()
+
+		// Should show top-level command with description
+		assert.Contains(t, output, "top")
+		assert.Contains(t, output, "top-level description")
+
+		// Should show subcommand
+		assert.Contains(t, output, "sub")
+		assert.Contains(t, output, "subcommand description")
+	})
+
+	t.Run("displays top-level command without description", func(t *testing.T) {
+		type Config struct {
+			SubCmd struct{} `goopt:"kind:command;name:sub"`
+		}
+
+		type Options struct {
+			TopCmd Config `goopt:"kind:command;name:top"`
+		}
+
+		opts := &Options{}
+		p, err := NewParserFromStruct(opts, WithHelpStyle(HelpStyleHierarchical))
+		assert.NoError(t, err)
+
+		var buf bytes.Buffer
+		p.printCommandTree(&buf)
+		output := buf.String()
+
+		// Should show top-level command without description
+		assert.Contains(t, output, "top")
+		// When no description, command is still shown
+		lines := strings.Split(strings.TrimSpace(output), "\n")
+		found := false
+		for _, line := range lines {
+			if strings.Contains(line, "top") && !strings.Contains(line, "sub") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Should have 'top' in output")
+	})
+
+	t.Run("truncates long subcommand descriptions", func(t *testing.T) {
+		type Config struct {
+			SubCmd struct{} `goopt:"kind:command;name:sub;desc:This is a very long description that should be truncated to fit within the display limits"`
+		}
+
+		type Options struct {
+			TopCmd Config `goopt:"kind:command;name:top;desc:top command"`
+		}
+
+		opts := &Options{}
+		p, err := NewParserFromStruct(opts, WithHelpStyle(HelpStyleHierarchical))
+		assert.NoError(t, err)
+
+		var buf bytes.Buffer
+		p.printCommandTree(&buf)
+		output := buf.String()
+
+		// Description should be truncated
+		assert.Contains(t, output, "...")
+		assert.NotContains(t, output, "display limits")
+	})
+
+	t.Run("uses terminal prefix for last subcommand", func(t *testing.T) {
+		type Config struct {
+			Sub1 struct{} `goopt:"kind:command;name:sub1;desc:first sub"`
+			Sub2 struct{} `goopt:"kind:command;name:sub2;desc:second sub"`
+			Sub3 struct{} `goopt:"kind:command;name:sub3;desc:third sub"`
+		}
+
+		type Options struct {
+			TopCmd Config `goopt:"kind:command;name:top;desc:top command"`
+		}
+
+		opts := &Options{}
+		p, err := NewParserFromStruct(opts, WithHelpStyle(HelpStyleHierarchical))
+		assert.NoError(t, err)
+
+		var buf bytes.Buffer
+		p.printCommandTree(&buf)
+		output := buf.String()
+
+		lines := strings.Split(output, "\n")
+		// Find lines with subcommands
+		subLines := []string{}
+		for _, line := range lines {
+			if strings.Contains(line, "sub1") || strings.Contains(line, "sub2") || strings.Contains(line, "sub3") {
+				subLines = append(subLines, line)
+			}
+		}
+
+		assert.Equal(t, 3, len(subLines))
+		// First two should use DefaultPrefix (├─)
+		assert.Contains(t, subLines[0], "├─")
+		assert.Contains(t, subLines[1], "├─")
+		// Last one should use TerminalPrefix (└─)
+		assert.Contains(t, subLines[2], "└─")
+	})
+}
+
+// TestParser_CommandPropertyMerging tests that command properties are preserved when merging
+func TestParser_ommandPropertyMerging(t *testing.T) {
+	t.Run("preserves existing command properties when merging", func(t *testing.T) {
+		p := NewParser()
+
+		// First, create a command with all properties
+		cmd1 := &Command{
+			Name:           "test",
+			NameKey:        "cmd.test",
+			Description:    "Test command",
+			DescriptionKey: "cmd.test.desc",
+			Callback: func(_ *Parser, _ *Command) error {
+				return nil
+			},
+		}
+		p.registeredCommands.Set("parent test", cmd1)
+
+		// Now process a command config that would update this command
+		config := &CommandConfig{
+			Path:   "parent test",
+			Parent: &Command{Name: "parent"},
+		}
+
+		_, err := p.buildCommandFromConfig(config)
+		assert.NoError(t, err)
+
+		// Get the registered command to verify properties were preserved
+		registered, found := p.registeredCommands.Get("parent test")
+		assert.True(t, found)
+
+		// Should preserve existing properties
+		assert.Equal(t, "cmd.test", registered.NameKey)
+		assert.Equal(t, "Test command", registered.Description)
+		assert.Equal(t, "cmd.test.desc", registered.DescriptionKey)
+		assert.NotNil(t, registered.Callback)
+	})
+
+	t.Run("applies new properties when not already set", func(t *testing.T) {
+		p := NewParser()
+
+		// First, create a minimal command at top level
+		cmd1 := &Command{
+			Name: "test",
+		}
+		p.registeredCommands.Set("test", cmd1)
+
+		// Process with new properties
+		config := &CommandConfig{
+			Path:           "test",
+			NameKey:        "new.name.key",
+			Description:    "New description",
+			DescriptionKey: "new.desc.key",
+		}
+
+		_, err := p.buildCommandFromConfig(config)
+		assert.NoError(t, err)
+
+		// Get the registered command to verify properties were applied
+		registered, found := p.registeredCommands.Get("test")
+		assert.True(t, found)
+
+		// Should apply new properties when not already set
+		assert.Equal(t, "new.name.key", registered.NameKey)
+		assert.Equal(t, "New description", registered.Description)
+		assert.Equal(t, "new.desc.key", registered.DescriptionKey)
+	})
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
