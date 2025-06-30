@@ -158,7 +158,7 @@ func (p *Parser) SetEnvNameConverter(converter NameConversionFunc) NameConversio
 func (p *Parser) ExecuteCommands() int {
 	callbackErrors := 0
 	for p.callbackQueue.Len() > 0 {
-		call, _ := p.callbackQueue.Pop()
+		call, _ := p.callbackQueue.Dequeue()
 		if call.callback != nil && len(call.arguments) == 2 {
 			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
 			cmd, cmdOk := call.arguments[1].(*Command)
@@ -179,7 +179,7 @@ func (p *Parser) ExecuteCommands() int {
 // Returns the error which occurred during execution of a command callback.
 func (p *Parser) ExecuteCommand() error {
 	if p.callbackQueue.Len() > 0 {
-		call, _ := p.callbackQueue.Pop()
+		call, _ := p.callbackQueue.Dequeue()
 		if call.callback != nil && len(call.arguments) == 2 {
 			cmdLine, cmdLineOk := call.arguments[0].(*Parser)
 			cmd, cmdOk := call.arguments[1].(*Command)
