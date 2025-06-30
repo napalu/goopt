@@ -281,53 +281,6 @@ func TestDefaultValueFormattingInHelp(t *testing.T) {
 	assert.Contains(t, help, "par défaut")          // French translation
 }
 
-// TestRTLDetection tests RTL language detection
-func TestRTLDetection(t *testing.T) {
-	tests := []struct {
-		name     string
-		language string
-		expected bool
-	}{
-		{"Arabic", "ar", true},
-		{"Arabic with region", "ar-SA", true},
-		{"Hebrew", "he", true},
-		{"Hebrew with region", "he-IL", true},
-		{"Persian", "fa", true},
-		{"English", "en", false},
-		{"English US", "en-US", false},
-		{"German", "de", false},
-		{"French", "fr", false},
-		{"Spanish", "es", false},
-		{"Chinese", "zh", false},
-		{"Japanese", "ja", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := NewParser()
-
-			// For this test, we just need to set the language directly
-			// The RTL detection should work based on the language tag itself,
-			// not requiring actual translations
-			p.SetLanguage(language.MustParse(tt.language))
-
-			// Force the layered provider to accept the language
-			// by adding a minimal locale for RTL languages
-			if tt.expected {
-				lang := language.MustParse(tt.language)
-				// Need at least one translation for the bundle to be used
-				locale := i18n.NewLocale(lang, `{"test.key": "test value"}`)
-				p.SetSystemLocales(locale)
-				// Set language again after adding locale
-				p.SetLanguage(lang)
-			}
-
-			renderer := p.renderer.(*DefaultRenderer)
-			assert.Equal(t, tt.expected, renderer.isRTLLanguage())
-		})
-	}
-}
-
 // TestContainsRTLRunes tests RTL character detection
 func TestContainsRTLRunes(t *testing.T) {
 	tests := []struct {

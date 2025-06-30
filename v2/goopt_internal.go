@@ -949,7 +949,7 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 
 func (p *Parser) queueCommandCallback(cmd *Command) {
 	if cmd.Callback != nil {
-		p.callbackQueue.Push(cmd)
+		p.callbackQueue.Enqueue(cmd)
 	}
 }
 

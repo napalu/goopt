@@ -2,6 +2,7 @@ package goopt
 
 import (
 	"fmt"
+	"github.com/napalu/goopt/v2/i18n"
 	"strconv"
 	"strings"
 
@@ -10,71 +11,13 @@ import (
 )
 
 type DefaultRenderer struct {
-	parser       *Parser
-	rtlLanguages map[string]bool
+	parser *Parser
 }
 
 func NewRenderer(parser *Parser) *DefaultRenderer {
 	return &DefaultRenderer{
 		parser: parser,
-		rtlLanguages: map[string]bool{
-			"ar":  true, // Arabic
-			"he":  true, // Hebrew
-			"fa":  true, // Persian/Farsi
-			"ur":  true, // Urdu
-			"ps":  true, // Pashto
-			"sd":  true, // Sindhi
-			"dv":  true, // Dhivehi/Maldivian
-			"yi":  true, // Yiddish
-			"ku":  true, // Kurdish (Sorani)
-			"arc": true, // Aramaic
-		},
 	}
-}
-
-// isRTLLanguage checks if the current language is RTL
-func (r *DefaultRenderer) isRTLLanguage() bool {
-	langTag := r.parser.GetLanguage()
-
-	// First try the base language using the proper API
-	base, _ := langTag.Base()
-	if base.String() != "und" {
-		if r.rtlLanguages[base.String()] {
-			return true
-		}
-	}
-
-	// Fall back to parsing the string representation
-	lang := langTag.String()
-
-	// Handle the -u-rg- format that language matcher might return
-	if idx := strings.Index(lang, "-u-"); idx > 0 {
-		lang = lang[:idx]
-	}
-
-	// Check base language code (e.g., "ar" from "ar-SA")
-	if idx := strings.Index(lang, "-"); idx > 0 {
-		lang = lang[:idx]
-	}
-
-	return r.rtlLanguages[lang]
-}
-
-// containsRTLRunes checks if a string contains RTL characters
-func (r *DefaultRenderer) containsRTLRunes(s string) bool {
-	for _, ch := range s {
-		// Check for common RTL Unicode blocks
-		if (ch >= 0x0590 && ch <= 0x05FF) || // Hebrew
-			(ch >= 0x0600 && ch <= 0x06FF) || // Arabic
-			(ch >= 0x0700 && ch <= 0x074F) || // Syriac
-			(ch >= 0x0750 && ch <= 0x077F) || // Arabic Supplement
-			(ch >= 0x08A0 && ch <= 0x08FF) || // Arabic Extended-A
-			(ch >= 0xFB50 && ch <= 0xFDFF) || // Arabic Presentation Forms-A
-			(ch >= 0xFE70 && ch <= 0xFEFF) { // Arabic Presentation Forms-B
-			return true
-		}
-	}
-	return false
 }
 
 // FlagName returns the name of the flag to display in help messages.
@@ -132,7 +75,7 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 // This method respects the HelpConfig settings and automatically handles RTL languages.
 func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := r.isRTLLanguage()
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (potentially translated)
 	flagName := r.FlagName(f)
@@ -207,7 +150,7 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 // This method respects the HelpConfig settings and automatically handles RTL languages.
 func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := r.isRTLLanguage()
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
 
 	cmdName := r.CommandName(c)
 
@@ -248,4 +191,21 @@ func (r *DefaultRenderer) formatDefaultValue(f *Argument) string {
 	}
 	// Return as-is for non-numeric or other types
 	return f.DefaultValue
+}
+
+// containsRTLRunes checks if a string contains RTL characters
+func (r *DefaultRenderer) containsRTLRunes(s string) bool {
+	for _, ch := range s {
+		// Check for common RTL Unicode blocks
+		if (ch >= 0x0590 && ch <= 0x05FF) || // Hebrew
+			(ch >= 0x0600 && ch <= 0x06FF) || // Arabic
+			(ch >= 0x0700 && ch <= 0x074F) || // Syriac
+			(ch >= 0x0750 && ch <= 0x077F) || // Arabic Supplement
+			(ch >= 0x08A0 && ch <= 0x08FF) || // Arabic Extended-A
+			(ch >= 0xFB50 && ch <= 0xFDFF) || // Arabic Presentation Forms-A
+			(ch >= 0xFE70 && ch <= 0xFEFF) { // Arabic Presentation Forms-B
+			return true
+		}
+	}
+	return false
 }

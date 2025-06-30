@@ -313,7 +313,7 @@ func GetStructCtxAs[T any](p *Parser) (T, bool) {
 func (p *Parser) ExecuteCommands() int {
 	callbackErrors := 0
 	for p.callbackQueue.Len() > 0 {
-		cmd, _ := p.callbackQueue.Pop()
+		cmd, _ := p.callbackQueue.Dequeue()
 		if cmd.Callback != nil {
 			// Execute pre-hooks
 			preErr := p.executePreHooks(cmd)
@@ -349,7 +349,7 @@ func (p *Parser) ExecuteCommands() int {
 // Returns the error which occurred during execution of a command callback.
 func (p *Parser) ExecuteCommand() error {
 	if p.callbackQueue.Len() > 0 {
-		cmd, _ := p.callbackQueue.Pop()
+		cmd, _ := p.callbackQueue.Dequeue()
 		if cmd.Callback != nil {
 			// Execute pre-hooks
 			if preErr := p.executePreHooks(cmd); preErr != nil {
@@ -383,6 +383,11 @@ func (p *Parser) ExecuteCommand() error {
 // no callback is associated with commandName
 func (p *Parser) GetCommandExecutionError(commandName string) error {
 	if err, found := p.callbackResults[commandName]; found {
+		var te i18n.TranslatableError
+		if errors.As(err, &te) {
+			return errs.WithProvider(te, p.layeredProvider)
+		}
+
 		return err
 	}
 
@@ -395,7 +400,13 @@ func (p *Parser) GetCommandExecutionErrors() []types.KeyValue[string, error] {
 	var execErrs []types.KeyValue[string, error]
 	for key, err := range p.callbackResults {
 		if err != nil {
-			execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: err})
+			var te i18n.TranslatableError
+			if errors.As(err, &te) {
+				execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: errs.WithProvider(te, p.layeredProvider)})
+			} else {
+				execErrs = append(execErrs, types.KeyValue[string, error]{Key: key, Value: err})
+			}
+
 		}
 	}
 
