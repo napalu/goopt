@@ -771,6 +771,32 @@ func wrapProcessingFlagError(err error, flag string) i18n.TranslatableError {
 		Wrap(err)
 }
 
+func wrapProcessingFieldError(err error, field string) i18n.TranslatableError {
+	var te i18n.TranslatableError
+	if errors.Is(err, errs.ErrProcessingField) && errors.As(err, &te) {
+		return te
+	}
+
+	// 2) Otherwise wrap whatever you got in a new TrError
+	return errs.
+		ErrProcessingField.
+		WithArgs(field).
+		Wrap(err)
+}
+
+func wrapProcessingFieldWithPrefixError(err error, prefix, field string) i18n.TranslatableError {
+	var te i18n.TranslatableError
+	if errors.Is(err, errs.ErrProcessingField) && errors.As(err, &te) {
+		return te
+	}
+
+	// 2) Otherwise wrap whatever you got in a new TrError
+	return errs.
+		ErrProcessingFieldWithPrefix.
+		WithArgs(prefix, field).
+		Wrap(err)
+}
+
 func (p *Parser) getCommand(name string) (*Command, bool) {
 	// First try canonical lookup
 	cmd, found := p.registeredCommands.Get(name)
@@ -2372,21 +2398,21 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 			// Check if this is a validator syntax error that should fail immediately
 			var validatorErr *i18n.TrError
 			if errors.As(err, &validatorErr) && errors.Is(err, errs.ErrValidatorMustUseParentheses) {
-				return nil, errs.ErrProcessingField.WithArgs(field.Name).Wrap(err)
+				return nil, wrapProcessingFieldError(err, field.Name)
 			}
 
 			// For other errors, decide based on field type
 			if !isFunction(field) && !isStructOrSliceType(field) {
 				// For simple fields with tag errors, we can skip them and continue
-				parser.addError(errs.ErrProcessingField.WithArgs(field.Name).Wrap(err))
+				parser.addError(wrapProcessingFieldError(err, field.Name))
 				continue
 			}
 			// For structural fields (functions, nested structs, slices), fail fast
 			if !isFunction(field) {
 				if flagPrefix != "" {
-					return nil, errs.ErrProcessingFieldWithPrefix.WithArgs(flagPrefix, field.Name).Wrap(err)
+					return nil, wrapProcessingFieldWithPrefixError(err, flagPrefix, field.Name)
 				} else {
-					return nil, errs.ErrProcessingField.WithArgs(field.Name).Wrap(err)
+					return nil, wrapProcessingFieldError(err, field.Name)
 				}
 			}
 			continue
@@ -2889,7 +2915,7 @@ func processNestedStruct(flagPrefix, commandPath string, fieldValue reflect.Valu
 
 	nestedCmdLine, err := newParserFromReflectValue(unwrappedValue.Addr(), flagPrefix, commandPath, maxDepth, currentDepth+1, config...)
 	if err != nil {
-		return errs.ErrProcessingField.WithArgs(flagPrefix).Wrap(err)
+		return wrapProcessingFieldError(err, flagPrefix)
 	}
 
 	err = c.mergeCmdLine(nestedCmdLine)
