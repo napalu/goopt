@@ -14053,7 +14053,7 @@ func TestParser_PrintCommandTree(t *testing.T) {
 }
 
 // TestParser_CommandPropertyMerging tests that command properties are preserved when merging
-func TestParser_ommandPropertyMerging(t *testing.T) {
+func TestParser_CommandPropertyMerging(t *testing.T) {
 	t.Run("preserves existing command properties when merging", func(t *testing.T) {
 		p := NewParser()
 
@@ -14117,6 +14117,170 @@ func TestParser_ommandPropertyMerging(t *testing.T) {
 		assert.Equal(t, "new.name.key", registered.NameKey)
 		assert.Equal(t, "New description", registered.Description)
 		assert.Equal(t, "new.desc.key", registered.DescriptionKey)
+	})
+}
+
+// TestParser_BuildCommandFromConfig tests uncovered paths in buildCommandFromConfig
+func TestParser_BuildCommandFromConfig(t *testing.T) {
+	t.Run("updates existing top-level command properties", func(t *testing.T) {
+		p := NewParser()
+
+		// Create an existing command
+		existingCmd := &Command{
+			Name: "test",
+		}
+		p.registeredCommands.Set("test", existingCmd)
+
+		// Update it with new properties
+		config := &CommandConfig{
+			Path:           "test",
+			NameKey:        "cmd.test",
+			Description:    "Test description",
+			DescriptionKey: "cmd.test.desc",
+		}
+
+		cmd, err := p.buildCommandFromConfig(config)
+		assert.NoError(t, err)
+		assert.NotNil(t, cmd)
+
+		// Verify properties were updated
+		assert.Equal(t, "cmd.test", cmd.NameKey)
+		assert.Equal(t, "Test description", cmd.Description)
+		assert.Equal(t, "cmd.test.desc", cmd.DescriptionKey)
+	})
+
+	t.Run("creates new top-level command with properties", func(t *testing.T) {
+		p := NewParser()
+
+		// Create a new command
+		config := &CommandConfig{
+			Path:           "newcmd",
+			NameKey:        "cmd.new",
+			Description:    "New command",
+			DescriptionKey: "cmd.new.desc",
+		}
+
+		cmd, err := p.buildCommandFromConfig(config)
+		assert.NoError(t, err)
+		assert.NotNil(t, cmd)
+
+		// Verify command was created with properties
+		assert.Equal(t, "newcmd", cmd.Name)
+		assert.Equal(t, "cmd.new", cmd.NameKey)
+		assert.Equal(t, "New command", cmd.Description)
+		assert.Equal(t, "cmd.new.desc", cmd.DescriptionKey)
+	})
+
+	t.Run("empty command path returns error", func(t *testing.T) {
+		p := NewParser()
+
+		config := &CommandConfig{
+			Path: "",
+		}
+
+		cmd, err := p.buildCommandFromConfig(config)
+		assert.Nil(t, cmd)
+		assert.True(t, errors.Is(err, errs.ErrEmptyCommandPath))
+	})
+
+	t.Run("handles multi-level path without parent", func(t *testing.T) {
+		p := NewParser()
+
+		// Build command with multi-level path
+		config := &CommandConfig{
+			Path:           "parent child",
+			NameKey:        "cmd.child",
+			Description:    "Child command",
+			DescriptionKey: "cmd.child.desc",
+		}
+
+		cmd, err := p.buildCommandFromConfig(config)
+		assert.NoError(t, err)
+		assert.NotNil(t, cmd)
+
+		// When no parent is provided, returns the first command in path
+		assert.Equal(t, "parent", cmd.Name)
+		// The child is added as a subcommand
+		assert.Equal(t, 1, len(cmd.Subcommands))
+		childCmd := &cmd.Subcommands[0]
+		assert.Equal(t, "child", childCmd.Name)
+		assert.Equal(t, "cmd.child", childCmd.NameKey)
+		assert.Equal(t, "Child command", childCmd.Description)
+		assert.Equal(t, "cmd.child.desc", childCmd.DescriptionKey)
+
+		// Parent command should exist but without the properties
+		parentCmd, found := p.registeredCommands.Get("parent")
+		assert.True(t, found)
+		assert.Equal(t, "parent", parentCmd.Name)
+		assert.Equal(t, "", parentCmd.NameKey) // Should be empty
+	})
+}
+
+// TestParser_MergeCmdLine tests uncovered paths in mergeCmdLine
+func TestParser_MergeCmdLine(t *testing.T) {
+	t.Run("preserves existing command properties during merge", func(t *testing.T) {
+		p1 := NewParser()
+		p2 := NewParser()
+
+		// Create command in p1 with all properties
+		cmd1 := &Command{
+			Name:           "test",
+			NameKey:        "cmd.test",
+			Description:    "Test command",
+			DescriptionKey: "cmd.test.desc",
+			Callback: func(_ *Parser, _ *Command) error {
+				return nil
+			},
+		}
+		p1.registeredCommands.Set("test", cmd1)
+
+		// Create same command in p2 with minimal properties
+		cmd2 := &Command{
+			Name: "test",
+		}
+		p2.registeredCommands.Set("test", cmd2)
+
+		// Merge p2 into p1
+		err := p1.mergeCmdLine(p2)
+		assert.NoError(t, err)
+
+		// Verify properties were preserved
+		mergedCmd, found := p1.registeredCommands.Get("test")
+		assert.True(t, found)
+		assert.Equal(t, "cmd.test", mergedCmd.NameKey)
+		assert.Equal(t, "Test command", mergedCmd.Description)
+		assert.Equal(t, "cmd.test.desc", mergedCmd.DescriptionKey)
+	})
+
+	t.Run("applies new properties when not already set", func(t *testing.T) {
+		p1 := NewParser()
+		p2 := NewParser()
+
+		// Create minimal command in p1
+		cmd1 := &Command{
+			Name: "test",
+		}
+		p1.registeredCommands.Set("test", cmd1)
+
+		// Create same command in p2 with properties
+		cmd2 := &Command{
+			Name:           "test",
+			NameKey:        "cmd.test.new",
+			Description:    "New description",
+			DescriptionKey: "cmd.test.new.desc",
+		}
+		p2.registeredCommands.Set("test", cmd2)
+
+		// Merge p2 into p1
+		err := p1.mergeCmdLine(p2)
+		assert.NoError(t, err)
+
+		// Verify new properties were applied
+		mergedCmd, found := p1.registeredCommands.Get("test")
+		assert.True(t, found)
+		assert.Equal(t, "cmd.test.new", mergedCmd.NameKey)
+		assert.Equal(t, "New description", mergedCmd.Description)
+		assert.Equal(t, "cmd.test.new.desc", mergedCmd.DescriptionKey)
 	})
 }
 
