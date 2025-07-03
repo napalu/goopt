@@ -2,11 +2,9 @@ package translations
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/ast"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/constants"
@@ -37,7 +35,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	// Find and process files
-	fmt.Println(tr.T(messages.Keys.AppExtract.ScanningFiles))
+	fmt.Println(tr.T(messages.Keys.App.Extract.ScanningFiles))
 
 	// Handle glob patterns using our utility that supports **
 	patterns := strings.Split(extractCmd.Files, ",")
@@ -51,7 +49,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, file := range filesToProcess {
 		if err := extractor.ExtractFromFiles(file); err != nil {
 			if config.Verbose {
-				fmt.Printf(tr.T(messages.Keys.AppExtract.FileError, file, err.Error()))
+				fmt.Printf(tr.T(messages.Keys.App.Extract.FileError, file, err.Error()))
 			}
 			continue
 		}
@@ -62,7 +60,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 	extractedStrings := extractor.GetExtractedStrings()
 
 	if len(extractedStrings) == 0 {
-		fmt.Println(tr.T(messages.Keys.AppExtract.NoStringsFound))
+		fmt.Println(tr.T(messages.Keys.App.Extract.NoStringsFound))
 		return nil
 	}
 
@@ -79,11 +77,11 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 		totalOccurrences += len(data.Locations)
 	}
 
-	fmt.Printf(tr.T(messages.Keys.AppExtract.FoundStrings, totalOccurrences, fileCount))
-	fmt.Printf(tr.T(messages.Keys.AppExtract.UniqueStrings, len(extractedStrings)))
+	fmt.Printf(tr.T(messages.Keys.App.Extract.FoundStrings, totalOccurrences, fileCount))
+	fmt.Printf(tr.T(messages.Keys.App.Extract.UniqueStrings, len(extractedStrings)))
 
 	if extractCmd.DryRun {
-		fmt.Println("\n" + tr.T(messages.Keys.AppExtract.DryRunMode))
+		fmt.Println("\n" + tr.T(messages.Keys.App.Extract.DryRunMode))
 	}
 
 	// Prepare translations map
@@ -94,8 +92,8 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 
 		if config.Verbose || extractCmd.DryRun {
 			data := extractedStrings[str]
-			fmt.Printf("\n%s (%d %s)\n", str, len(data.Locations), tr.T(messages.Keys.AppExtract.Occurrences))
-			fmt.Printf("  → %s: %s\n", tr.T(messages.Keys.AppExtract.Key), key)
+			fmt.Printf("\n%s (%d %s)\n", str, len(data.Locations), tr.T(messages.Keys.App.Extract.Occurrences))
+			fmt.Printf("  → %s: %s\n", tr.T(messages.Keys.App.Extract.Key), key)
 
 			if config.Verbose {
 				for _, loc := range data.Locations {
@@ -112,7 +110,7 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 
 	// If not dry run, update locale files
 	if !extractCmd.DryRun {
-		fmt.Println("\n" + tr.T(messages.Keys.AppExtract.UpdatingFiles))
+		fmt.Println("\n" + tr.T(messages.Keys.App.Extract.UpdatingFiles))
 
 		// Expand input files, creating them if necessary
 		inputFiles, err := expandInputFiles(config.Input)
@@ -137,13 +135,13 @@ func Extract(parser *goopt.Parser, _ *goopt.Command) error {
 				return errors.ErrUpdateError.WithArgs(file, err.Error())
 			}
 			if result.Modified {
-				fmt.Printf("✓ %s %s\n", tr.T(messages.Keys.AppAdd.Updated), file)
+				fmt.Printf("✓ %s %s\n", tr.T(messages.Keys.App.Add.Updated), file)
 				updatedCount++
 			}
 		}
 
 		if updatedCount > 0 {
-			fmt.Printf("\n✓ %s %d %s\n", tr.T(messages.Keys.AppExtract.Added), len(translations), tr.T(messages.Keys.AppExtract.Keys))
+			fmt.Printf("\n✓ %s %d %s\n", tr.T(messages.Keys.App.Extract.Added), len(translations), tr.T(messages.Keys.App.Extract.Keys))
 		}
 	}
 
@@ -173,6 +171,7 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 	trConfig := util.ToTransformConfig(extractCmd)
 	trConfig.IsUpdateMode = false
 	trConfig.PackagePath = packagePath
+	trConfig.Translator = config.TR
 
 	replacer := ast.NewTransformationReplacer(trConfig)
 
@@ -191,11 +190,11 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 	// Get replacements for reporting
 	replacements := replacer.GetReplacements()
 	if len(replacements) == 0 {
-		fmt.Println(tr.T(messages.Keys.AppExtract.NoReplacements))
+		fmt.Println(tr.T(messages.Keys.App.Extract.NoReplacements))
 		return nil
 	}
 
-	fmt.Printf(tr.T(messages.Keys.AppExtract.FoundComments, len(replacements)))
+	fmt.Printf(tr.T(messages.Keys.App.Extract.FoundComments, len(replacements)))
 
 	if config.Verbose {
 		for _, r := range replacements {
@@ -204,14 +203,14 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 	}
 
 	// Apply replacements (add comments)
-	fmt.Println("\n" + tr.T(messages.Keys.AppExtract.ApplyingReplacements))
+	fmt.Println("\n" + tr.T(messages.Keys.App.Extract.ApplyingReplacements))
 	if err := replacer.ApplyReplacements(); err != nil {
 		return err
 	}
 
-	fmt.Printf("✓ %s\n", tr.T(messages.Keys.AppExtract.UpdateComplete))
+	fmt.Printf("✓ %s\n", tr.T(messages.Keys.App.Extract.UpdateComplete))
 	if extractCmd.BackupDir != "" {
-		fmt.Printf(tr.T(messages.Keys.AppExtract.BackupLocation, extractCmd.BackupDir))
+		fmt.Printf(tr.T(messages.Keys.App.Extract.BackupLocation, extractCmd.BackupDir))
 	}
 
 	return nil
@@ -219,62 +218,7 @@ func addCommentsToFiles(config *options.AppConfig, translations map[string]strin
 
 // generateKey generates a translation key from a string value
 func generateKey(prefix, value string) string {
-	// Count and replace format specifiers with numbered placeholders
-	formatCounts := make(map[string]int)
-
-	// Simple format specifier patterns - just the common ones
-	formatPatterns := []struct {
-		pattern string
-		name    string
-	}{
-		{`%s`, "s"},
-		{`%d`, "d"},
-		{`%v`, "v"},
-		{`%f`, "f"},
-		{`%t`, "t"},
-		{`%q`, "q"},
-		{`%x`, "x"},
-		{`%w`, "w"},
-		{`%%`, "percent"}, // Escaped percent
-	}
-
-	key := value
-
-	// Replace format specifiers with readable placeholders
-	for _, fp := range formatPatterns {
-		count := strings.Count(key, fp.pattern)
-		if count > 0 {
-			// Replace each occurrence with a numbered placeholder
-			for i := 1; i <= count; i++ {
-				old := fp.pattern
-				new := fmt.Sprintf("_%s", fp.name)
-				if i > 1 {
-					new = fmt.Sprintf("_%s%d", fp.name, i)
-				}
-				// Replace first occurrence
-				key = strings.Replace(key, old, new, 1)
-			}
-			formatCounts[fp.name] += count
-		}
-	}
-
-	// Now apply the regex to remove other non-word chars
-	key = regexp.MustCompile(`[^\w\s]+`).ReplaceAllString(key, " ")
-	key = strings.TrimSpace(key)
-	key = strings.ToLower(key)
-
-	// Convert to snake_case
-	key = strcase.ToSnake(key)
-
-	// Limit length
-	if len(key) > 50 {
-		key = key[:50]
-	}
-
-	// Remove trailing underscores
-	key = strings.TrimRight(key, "_")
-
-	return fmt.Sprintf("%s.%s", prefix, key)
+	return util.GenerateKeyFromString(prefix, value)
 }
 
 // handleAutoUpdate handles the auto-update functionality
@@ -282,7 +226,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 	tr := config.TR
 	extractCmd := config.Extract
 
-	fmt.Println("\n" + tr.T(messages.Keys.AppExtract.AutoUpdateMode))
+	fmt.Println("\n" + tr.T(messages.Keys.App.Extract.AutoUpdateMode))
 
 	// Create a string replacer
 	// Use TransformationReplacer for both comment mode and direct replacement mode
@@ -302,6 +246,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 
 	trConfig := util.ToTransformConfig(extractCmd)
 	trConfig.PackagePath = packagePath
+	trConfig.Translator = config.TR
 	replacer = ast.NewTransformationReplacer(trConfig)
 
 	// Build key map (reverse of translations map)
@@ -321,7 +266,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		// For direct transformation mode
 		// Check if we have strings to transform
 		if len(translations) == 0 {
-			fmt.Println(tr.T(messages.Keys.AppExtract.NoReplacements))
+			fmt.Println(tr.T(messages.Keys.App.Extract.NoReplacements))
 			return nil
 		}
 
@@ -335,11 +280,11 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		// For comment mode, use the regular flow
 		replacements := replacer.GetReplacements()
 		if len(replacements) == 0 {
-			fmt.Println(tr.T(messages.Keys.AppExtract.NoReplacements))
+			fmt.Println(tr.T(messages.Keys.App.Extract.NoReplacements))
 			return nil
 		}
 
-		fmt.Printf(tr.T(messages.Keys.AppExtract.FoundComments, len(replacements)))
+		fmt.Printf(tr.T(messages.Keys.App.Extract.FoundComments, len(replacements)))
 
 		if config.Verbose || dryRun {
 			for _, r := range replacements {
@@ -354,7 +299,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 	}
 
 	// Apply replacements
-	fmt.Println("\n" + tr.T(messages.Keys.AppExtract.ApplyingReplacements))
+	fmt.Println("\n" + tr.T(messages.Keys.App.Extract.ApplyingReplacements))
 	if err := replacer.ApplyReplacements(); err != nil {
 		return err
 	}
@@ -368,6 +313,7 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		trConfig.CleanComments = true
 		trConfig.IsUpdateMode = false
 		trConfig.PackagePath = packagePath
+		trConfig.Translator = config.TR
 		cleanReplacer := ast.NewTransformationReplacer(trConfig)
 		if err := cleanReplacer.ProcessFiles(files); err != nil {
 			return err
@@ -377,9 +323,9 @@ func handleAutoUpdate(config *options.AppConfig, translations map[string]string,
 		}
 	}
 
-	fmt.Printf("✓ %s\n", tr.T(messages.Keys.AppExtract.UpdateComplete))
+	fmt.Printf("✓ %s\n", tr.T(messages.Keys.App.Extract.UpdateComplete))
 	if extractCmd.BackupDir != "" {
-		fmt.Printf(tr.T(messages.Keys.AppExtract.BackupLocation, extractCmd.BackupDir))
+		fmt.Printf(tr.T(messages.Keys.App.Extract.BackupLocation, extractCmd.BackupDir))
 	}
 
 	return nil
@@ -389,7 +335,7 @@ func cleanI18nComments(config *options.AppConfig) error {
 	tr := config.TR
 	extractCmd := config.Extract
 
-	fmt.Println(tr.T(messages.Keys.AppExtract.CleaningComments))
+	fmt.Println(tr.T(messages.Keys.App.Extract.CleaningComments))
 
 	// Find files to process using our utility that supports **
 	patterns := strings.Split(extractCmd.Files, ",")
@@ -407,6 +353,7 @@ func cleanI18nComments(config *options.AppConfig) error {
 
 	trConfig := util.ToTransformConfig(extractCmd)
 	trConfig.PackagePath = packagePath
+	trConfig.Translator = config.TR
 	replacer := ast.NewTransformationReplacer(trConfig)
 
 	if err := replacer.ProcessFiles(filesToProcess); err != nil {
@@ -415,11 +362,11 @@ func cleanI18nComments(config *options.AppConfig) error {
 
 	replacements := replacer.GetReplacements()
 	if len(replacements) == 0 {
-		fmt.Println(tr.T(messages.Keys.AppExtract.NoCommentsFound))
+		fmt.Println(tr.T(messages.Keys.App.Extract.NoCommentsFound))
 		return nil
 	}
 
-	fmt.Printf(tr.T(messages.Keys.AppExtract.FoundCommentsToClean, len(replacements)))
+	fmt.Printf(tr.T(messages.Keys.App.Extract.FoundCommentsToClean, len(replacements)))
 
 	if extractCmd.DryRun {
 		for _, r := range replacements {
@@ -433,6 +380,6 @@ func cleanI18nComments(config *options.AppConfig) error {
 		return err
 	}
 
-	fmt.Printf("✓ %s\n", tr.T(messages.Keys.AppExtract.CleanComplete))
+	fmt.Printf("✓ %s\n", tr.T(messages.Keys.App.Extract.CleanComplete))
 	return nil
 }

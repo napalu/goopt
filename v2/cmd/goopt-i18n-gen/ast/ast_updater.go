@@ -31,7 +31,7 @@ func (u *Updater) UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, genera
 	// Create backup directory with timestamp
 	sessionDir := filepath.Join(backupDir, fmt.Sprintf("session_%s", time.Now().Format("20060102_150405")))
 	if err := os.MkdirAll(sessionDir, 0755); err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateBackupDir), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedCreateBackupDir), err)
 	}
 
 	// Group fields by file
@@ -44,22 +44,22 @@ func (u *Updater) UpdateSourceFiles(fieldsToUpdate []FieldWithoutDescKey, genera
 	var updateErrors []error
 	for filename, fields := range fileUpdates {
 		if err := u.updateFile(filename, fields, generatedKeys, sessionDir); err != nil {
-			updateErrors = append(updateErrors, fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdateFile), filename, err))
+			updateErrors = append(updateErrors, fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedUpdateFile), filename, err))
 		}
 	}
 
 	// If all updates succeeded, we can optionally remove the backup directory
 	if len(updateErrors) == 0 {
 		fmt.Println()
-		fmt.Println(u.tr.T(messages.Keys.AppAst.AllFilesUpdated, sessionDir))
-		fmt.Println(u.tr.T(messages.Keys.AppAst.RestoreHint, sessionDir))
+		fmt.Println(u.tr.T(messages.Keys.App.Ast.AllFilesUpdated, sessionDir))
+		fmt.Println(u.tr.T(messages.Keys.App.Ast.RestoreHint, sessionDir))
 	} else {
 		fmt.Println()
-		fmt.Println(u.tr.T(messages.Keys.AppAst.SomeFilesFailed, sessionDir))
+		fmt.Println(u.tr.T(messages.Keys.App.Ast.SomeFilesFailed, sessionDir))
 		for _, err := range updateErrors {
 			fmt.Println(u.tr.T("  - %v", err))
 		}
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdateCount), len(updateErrors))
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedUpdateCount), len(updateErrors))
 	}
 
 	return nil
@@ -69,14 +69,14 @@ func (u *Updater) updateFile(filename string, fields []FieldWithoutDescKey, gene
 	// Create backup
 	backupPath := filepath.Join(backupDir, filepath.Base(filename))
 	if err := copyFile(filename, backupPath); err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateBackup), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedCreateBackup), err)
 	}
 
 	// Parse the file
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedParseFile), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedParseFile), err)
 	}
 
 	// Create a map of line numbers to fields for quick lookup
@@ -104,7 +104,7 @@ func (u *Updater) updateFile(filename string, fields []FieldWithoutDescKey, gene
 	// Write the modified AST to a temporary file
 	tempFile, err := os.CreateTemp(filepath.Dir(filename), ".goopt-i18n-*.tmp")
 	if err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedCreateTemp), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedCreateTemp), err)
 	}
 	tempPath := tempFile.Name()
 	defer tempFile.Close()
@@ -112,22 +112,22 @@ func (u *Updater) updateFile(filename string, fields []FieldWithoutDescKey, gene
 
 	// Use go/format to ensure proper formatting
 	if err := format.Node(tempFile, fset, file); err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedWriteFormatted), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedWriteFormatted), err)
 	}
 
 	if err := tempFile.Sync(); err != nil {
-		return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedSyncTemp), err)
+		return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedSyncTemp), err)
 	}
 
 	// Atomic rename (or copy if cross-device)
 	if err := os.Rename(tempPath, filename); err != nil {
 		// Fallback to copy if rename fails (e.g., cross-device)
 		if err := copyFile(tempPath, filename); err != nil {
-			return fmt.Errorf(u.tr.T(messages.Keys.AppAst.FailedUpdate), err)
+			return fmt.Errorf(u.tr.T(messages.Keys.App.Ast.FailedUpdate), err)
 		}
 	}
 
-	fmt.Println(u.tr.T(messages.Keys.AppAst.FileUpdated, filename))
+	fmt.Println(u.tr.T(messages.Keys.App.Ast.FileUpdated, filename))
 	return nil
 }
 

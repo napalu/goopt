@@ -47,13 +47,13 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, pattern := range cfg.Validate.Scan {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			log.Fatalf(messages.Keys.AppError.FailedToExpandPattern, pattern, err)
+			log.Fatalf(messages.Keys.App.Error.FailedToExpandPattern, pattern, err)
 		}
 		files = append(files, matches...)
 	}
 
 	if len(files) == 0 {
-		fmt.Println(cfg.TR.T(messages.Keys.AppError.NoFiles))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Error.NoFiles))
 		return errors.ErrNoFiles
 	}
 
@@ -65,7 +65,7 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	if cfg.Verbose {
-		fmt.Println(cfg.TR.T(messages.Keys.AppValidate.FoundReferences, len(refs), len(files)))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Validate.FoundReferences, len(refs), len(files)))
 	}
 
 	// Validate references against each locale file
@@ -76,17 +76,17 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 
 		if len(missing) > 0 {
 			fmt.Printf("\n%s: ", inputFile)
-			fmt.Println(cfg.TR.T(messages.Keys.AppValidate.MissingTranslations, len(missing)) + ":")
+			fmt.Println(cfg.TR.T(messages.Keys.App.Validate.MissingTranslations, len(missing)) + ":")
 			for _, ref := range missing {
 				fmt.Printf("  %s ", ref.Key)
-				fmt.Println(cfg.TR.T(messages.Keys.AppValidate.UsedInFile, ref.File, ref.Line, ref.FieldName))
+				fmt.Println(cfg.TR.T(messages.Keys.App.Validate.UsedInFile, ref.File, ref.Line, ref.FieldName))
 			}
 
 			// Generate missing keys if requested
 			if cfg.Validate.GenerateMissing {
 				stubs := scanner.GenerateMissingKeys(missing)
 				fmt.Printf("\n")
-				fmt.Println(cfg.TR.T(messages.Keys.AppValidate.GeneratingStubs, inputFile) + ":")
+				fmt.Println(cfg.TR.T(messages.Keys.App.Validate.GeneratingStubs, inputFile) + ":")
 				for key, value := range stubs {
 					fmt.Printf("  \"%s\": \"%s\"\n", key, value)
 					translations[key] = value
@@ -101,13 +101,13 @@ func Validate(parser *goopt.Parser, _ *goopt.Command) error {
 				if err := os.WriteFile(inputFile, updatedData, 0644); err != nil {
 					return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 				}
-				fmt.Println(cfg.TR.T(messages.Keys.AppValidate.UpdatedFile, inputFile))
+				fmt.Println(cfg.TR.T(messages.Keys.App.Validate.UpdatedFile, inputFile))
 			}
 
 			hasErrors = true
 		} else {
 			fmt.Printf("\n%s: ", inputFile)
-			fmt.Println(cfg.TR.T(messages.Keys.AppValidate.AllKeysValid))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Validate.AllKeysValid))
 		}
 	}
 

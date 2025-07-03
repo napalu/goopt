@@ -27,7 +27,7 @@ func Init(parser *goopt.Parser, _ *goopt.Command) error {
 	for _, inputFile := range cfg.Input {
 		// Check if file exists
 		if _, err := os.Stat(inputFile); err == nil && !cfg.Init.Force {
-			fmt.Println(cfg.TR.T(messages.Keys.AppInit.FileExists, inputFile))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Init.FileExists, inputFile))
 			continue
 		}
 
@@ -53,15 +53,15 @@ func Init(parser *goopt.Parser, _ *goopt.Command) error {
 			return errors.ErrFailedToCreateFile.WithArgs(inputFile, err)
 		}
 
-		fmt.Println(cfg.TR.T(messages.Keys.AppInit.CreatedFile, inputFile))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Init.CreatedFile, inputFile))
 	}
 
 	if len(cfg.Input) > 0 {
 		fmt.Println()
-		fmt.Println(cfg.TR.T(messages.Keys.AppInit.NextSteps))
-		fmt.Printf("1. %s\n", cfg.TR.T(messages.Keys.AppInit.Step1, strings.Join(cfg.Input, ", ")))
-		fmt.Printf("2. %s\n", cfg.TR.T(messages.Keys.AppInit.Step2, strings.Join(cfg.Input, ",")))
-		fmt.Println("3. " + cfg.TR.T(messages.Keys.AppInit.Step3))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Init.NextSteps))
+		fmt.Printf("1. %s\n", cfg.TR.T(messages.Keys.App.Init.Step1, strings.Join(cfg.Input, ", ")))
+		fmt.Printf("2. %s\n", cfg.TR.T(messages.Keys.App.Init.Step2, strings.Join(cfg.Input, ",")))
+		fmt.Println("3. " + cfg.TR.T(messages.Keys.App.Init.Step3))
 	}
 
 	return nil

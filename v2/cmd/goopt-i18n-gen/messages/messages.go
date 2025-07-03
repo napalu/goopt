@@ -2,1469 +2,576 @@
 
 package messages
 
-// Keys provides compile-time safe access to translation keys
-var Keys = struct {
-	AppAdd struct {
-		AddingKey string
-
-		AddingKeyTodo string
-
-		BothSingleAndFile string
-
-		DryRunSummary string
-
-		DryRunWouldAdd string
-
-		DryRunWouldReplace string
-
-		DryRunWouldSkip string
-
-		FailedParseKeysFile string
-
-		FailedReadKeysFile string
-
-		FoundKeysInFile string
-
-		GlobError string
-
-		InvalidMode string
-
-		KeyExistsError string
-
-		KeyExistsReplace string
-
-		KeyExistsSkip string
-
-		MissingValue string
-
-		NoKeys string
-
-		ProcessingLocale string
-
-		ReadingKeysFile string
-
-		Summary string
-
-		Updated string
-
-		UpdatedFile string
-	}
-
-	AppAddCmd struct {
-		DryRunDesc string
-
-		FromFileDesc string
-
-		KeyDesc string
-
-		ModeDesc string
-
-		ValueDesc string
-	}
-
-	AppAppConfig struct {
-		AddDesc string
-
-		AuditDesc string
-
-		ExtractDesc string
-
-		GenerateDesc string
-
-		GenerateLocalesDesc string
-
-		HelpDesc string
-
-		InitDesc string
-
-		InputDesc string
-
-		LanguageDesc string
-
-		SyncDesc string
-
-		ValidateDesc string
-
-		VerboseDesc string
-	}
-
-	AppAst struct {
-		AllFilesUpdated string
-
-		BackupCreated string
-
-		FailedCreateBackup string
-
-		FailedCreateBackupDir string
-
-		FailedCreateTemp string
-
-		FailedParseFile string
-
-		FailedScanFile string
-
-		FailedSyncTemp string
-
-		FailedUpdate string
-
-		FailedUpdateCount string
-
-		FailedUpdateFile string
-
-		FailedWriteFormatted string
-
-		FileUpdated string
-
-		RestoreCommand string
-
-		RestoreHint string
-
-		SomeFilesFailed string
-
-		TodoPrefix string
-
-		UpdateError string
-	}
-
-	AppAudit struct {
-		AllFieldsHaveKeys string
-
-		AllHaveKeys string
-
-		AutoUpdating string
-
-		DescLabel string
-
-		FieldDesc string
-
-		FieldInfo string
-
-		FoundFieldsWithoutKeys string
-
-		FoundWithoutKeys string
-
-		GeneratedKey string
-
-		GeneratedKeys string
-
-		GeneratedKeysHeader string
-
-		GeneratedTranslation string
-
-		InFileUpdateTag string
-
-		ManualInstructions string
-
-		TipAutoUpdate string
-
-		TipGenerateKeys string
-
-		TranslationLabel string
-
-		UpdatedFile string
-
-		UpdatedJsonFile string
-
-		UpdatingFiles string
-	}
-
-	AppAuditCmd struct {
-		AutoUpdateDesc string
-
-		BackupDirDesc string
-
-		FilesDesc string
-
-		GenerateDescKeysDesc string
-
-		GenerateMissingDesc string
-
-		KeyPrefixDesc string
-	}
-
-	App struct {
-		Description string
-
-		Name string
-
-		Version string
-	}
-
-	AppError struct {
-		BaseFileNotFound string
-
-		CommandFailed string
-
-		ErrorProcessingFile string
-
-		FailedToCreateDir string
-
-		FailedToCreateDirectory string
-
-		FailedToCreateFile string
-
-		FailedToCreateOutputDir string
-
-		FailedToExecuteTemplate string
-
-		FailedToExpandFilePatterns string
-
-		FailedToExpandInput string
-
-		FailedToExpandPattern string
-
-		FailedToExpandReferencePatterns string
-
-		FailedToExpandTargetPatterns string
-
-		FailedToGeneratePackage string
-
-		FailedToGetConfig string
-
-		FailedToLoadFile string
-
-		FailedToLoadReferenceFile string
-
-		FailedToLoadTargetFile string
-
-		FailedToMarshal string
-
-		FailedToMarshalJson string
-
-		FailedToParseFile string
-
-		FailedToParseJson string
-
-		FailedToParseJsonSimple string
-
-		FailedToParseTemplate string
-
-		FailedToPrepareInput string
-
-		FailedToReadFile string
-
-		FailedToReadInput string
-
-		FailedToSaveFile string
-
-		FailedToTransformFile string
-
-		FailedToUpdateFile string
-
-		FailedToWriteFile string
-
-		FailedToWriteJson string
-
-		FailedToWriteOutput string
-
-		GoModNotFound string
-
-		InvalidPattern string
-
-		KeyAlreadyExists string
-
-		ModuleDirectiveNotFound string
-
-		NoFiles string
-
-		NoReferenceFiles string
-
-		NoTargetFiles string
-
-		ParseError string
-
-		SyncRequiresAtLeastTwoFiles string
-
-		UnknownLanguageCode string
-
-		ValidationFailed string
-	}
-
-	AppExtract struct {
-		Added string
-
-		AddingI18nTodoComments string
-
-		ApplyingReplacements string
-
-		AutoUpdateMode string
-
-		BackupLocation string
-
-		CleanComplete string
-
-		CleaningComments string
-
-		DryRunMode string
-
-		FailedToGetConfigFromParser string
-
-		FileError string
-
-		FoundDStringsToReplaceN string
-
-		FoundComments string
-
-		FoundCommentsToClean string
-
-		FoundReplacements string
-
-		FoundStrings string
-
-		GlobError string
-
-		InFunction string
-
-		InvalidRegex string
-
-		Key string
-
-		Keys string
-
-		NoCommentsFound string
-
-		NoReplacements string
-
-		NoStringsFound string
-
-		Occurrences string
-
-		ScanningFiles string
-
-		TodoS string
-
-		UniqueStrings string
-
-		UpdateComplete string
-
-		UpdateError string
-
-		UpdatingFiles string
-
-		WS string
-	}
-
-	AppExtractCmd struct {
-		AutoUpdateDesc string
-
-		BackupDirDesc string
-
-		CleanCommentsDesc string
-
-		DryRunDesc string
-
-		FilesDesc string
-
-		FormatFunctionRegexDesc string
-
-		KeepCommentsDesc string
-
-		KeyPrefixDesc string
-
-		MatchOnlyDesc string
-
-		MinLengthDesc string
-
-		PackageDesc string
-
-		SkipMatchDesc string
-
-		TrPatternDesc string
-
-		TransformModeDesc string
-
-		UserFacingRegexDesc string
-	}
-
-	AppGenerate struct {
-		FoundKeys string
-
-		FoundKeysInFile string
-
-		Success string
-
-		SuccessVerbose string
-	}
-
-	AppGenerateCmd struct {
-		OutputDesc string
-
-		PackageDesc string
-
-		PrefixDesc string
-	}
-
-	AppGenerateLocalesCmd struct {
-		DryRunDesc string
-
-		OutputDesc string
-
-		PackageBaseDesc string
-	}
-
-	AppGlobal struct {
-		HelpDesc string
-
-		InputDesc string
-
-		LanguageDesc string
-
-		VerboseDesc string
-	}
-
-	AppInit struct {
-		CreatedFile string
-
-		FileExists string
-
-		NextStep1 string
-
-		NextStep2 string
-
-		NextStep3 string
-
-		NextSteps string
-
-		Step1 string
-
-		Step2 string
-
-		Step3 string
-	}
-
-	AppInitCmd struct {
-		ForceDesc string
-	}
-
-	AppSync struct {
-		AllInSync string
-
-		Summary string
-
-		TotalChanges string
-	}
-
-	AppSyncCmd struct {
-		DryRunDesc string
-
-		RemoveExtraDesc string
-
-		TargetDesc string
-
-		TodoPrefixDesc string
-	}
-
-	AppTest struct {
-		FieldDesc string
-	}
-
-	AppValidate struct {
-		AllKeysValid string
-
-		AllValid string
-
-		AllValidInFile string
-
-		FoundReferences string
-
-		GeneratingStubs string
-
-		MissingInFile string
-
-		MissingKey string
-
-		MissingTranslations string
-
-		NoFiles string
-
-		StubEntry string
-
-		UpdatedFile string
-
-		UsedInFile string
-	}
-
-	AppValidateCmd struct {
-		GenerateMissingDesc string
-
-		ScanDesc string
-
-		StrictDesc string
-	}
-
-	AppWarning struct {
-		FailedToFormat string
-
-		UpdateFailed string
-	}
-}{
-
-	AppAdd: struct {
-		AddingKey string
-
-		AddingKeyTodo string
-
-		BothSingleAndFile string
-
-		DryRunSummary string
-
-		DryRunWouldAdd string
-
-		DryRunWouldReplace string
-
-		DryRunWouldSkip string
-
-		FailedParseKeysFile string
-
-		FailedReadKeysFile string
-
-		FoundKeysInFile string
-
-		GlobError string
-
-		InvalidMode string
-
-		KeyExistsError string
-
-		KeyExistsReplace string
-
-		KeyExistsSkip string
-
-		MissingValue string
-
-		NoKeys string
-
-		ProcessingLocale string
-
-		ReadingKeysFile string
-
-		Summary string
-
-		Updated string
-
-		UpdatedFile string
-	}{
-
-		AddingKey: "app.add.adding_key",
-
-		AddingKeyTodo: "app.add.adding_key_todo",
-
-		BothSingleAndFile: "app.add.both_single_and_file",
-
-		DryRunSummary: "app.add.dry_run_summary",
-
-		DryRunWouldAdd: "app.add.dry_run_would_add",
-
-		DryRunWouldReplace: "app.add.dry_run_would_replace",
-
-		DryRunWouldSkip: "app.add.dry_run_would_skip",
-
-		FailedParseKeysFile: "app.add.failed_parse_keys_file",
-
-		FailedReadKeysFile: "app.add.failed_read_keys_file",
-
-		FoundKeysInFile: "app.add.found_keys_in_file",
-
-		GlobError: "app.add.glob_error",
-
-		InvalidMode: "app.add.invalid_mode",
-
-		KeyExistsError: "app.add.key_exists_error",
-
-		KeyExistsReplace: "app.add.key_exists_replace",
-
-		KeyExistsSkip: "app.add.key_exists_skip",
-
-		MissingValue: "app.add.missing_value",
-
-		NoKeys: "app.add.no_keys",
-
-		ProcessingLocale: "app.add.processing_locale",
-
-		ReadingKeysFile: "app.add.reading_keys_file",
-
-		Summary: "app.add.summary",
-
-		Updated: "app.add.updated",
-
-		UpdatedFile: "app.add.updated_file",
-	},
-
-	AppAddCmd: struct {
-		DryRunDesc string
-
-		FromFileDesc string
-
-		KeyDesc string
-
-		ModeDesc string
-
-		ValueDesc string
-	}{
-
-		DryRunDesc: "app.add_cmd.dry_run_desc",
-
-		FromFileDesc: "app.add_cmd.from_file_desc",
-
-		KeyDesc: "app.add_cmd.key_desc",
-
-		ModeDesc: "app.add_cmd.mode_desc",
-
-		ValueDesc: "app.add_cmd.value_desc",
-	},
-
-	AppAppConfig: struct {
-		AddDesc string
-
-		AuditDesc string
-
-		ExtractDesc string
-
-		GenerateDesc string
-
-		GenerateLocalesDesc string
-
-		HelpDesc string
-
-		InitDesc string
-
-		InputDesc string
-
-		LanguageDesc string
-
-		SyncDesc string
-
-		ValidateDesc string
-
-		VerboseDesc string
-	}{
-
-		AddDesc: "app.app_config.add_desc",
-
-		AuditDesc: "app.app_config.audit_desc",
-
-		ExtractDesc: "app.app_config.extract_desc",
-
-		GenerateDesc: "app.app_config.generate_desc",
-
-		GenerateLocalesDesc: "app.app_config.generate_locales_desc",
-
-		HelpDesc: "app.app_config.help_desc",
-
-		InitDesc: "app.app_config.init_desc",
-
-		InputDesc: "app.app_config.input_desc",
-
-		LanguageDesc: "app.app_config.language_desc",
-
-		SyncDesc: "app.app_config.sync_desc",
-
-		ValidateDesc: "app.app_config.validate_desc",
-
-		VerboseDesc: "app.app_config.verbose_desc",
-	},
-
-	AppAst: struct {
-		AllFilesUpdated string
-
-		BackupCreated string
-
-		FailedCreateBackup string
-
-		FailedCreateBackupDir string
-
-		FailedCreateTemp string
-
-		FailedParseFile string
-
-		FailedScanFile string
-
-		FailedSyncTemp string
-
-		FailedUpdate string
-
-		FailedUpdateCount string
-
-		FailedUpdateFile string
-
-		FailedWriteFormatted string
-
-		FileUpdated string
-
-		RestoreCommand string
-
-		RestoreHint string
-
-		SomeFilesFailed string
-
-		TodoPrefix string
-
-		UpdateError string
-	}{
-
-		AllFilesUpdated: "app.ast.all_files_updated",
-
-		BackupCreated: "app.ast.backup_created",
-
-		FailedCreateBackup: "app.ast.failed_create_backup",
-
-		FailedCreateBackupDir: "app.ast.failed_create_backup_dir",
-
-		FailedCreateTemp: "app.ast.failed_create_temp",
-
-		FailedParseFile: "app.ast.failed_parse_file",
-
-		FailedScanFile: "app.ast.failed_scan_file",
-
-		FailedSyncTemp: "app.ast.failed_sync_temp",
-
-		FailedUpdate: "app.ast.failed_update",
-
-		FailedUpdateCount: "app.ast.failed_update_count",
-
-		FailedUpdateFile: "app.ast.failed_update_file",
-
-		FailedWriteFormatted: "app.ast.failed_write_formatted",
-
-		FileUpdated: "app.ast.file_updated",
-
-		RestoreCommand: "app.ast.restore_command",
-
-		RestoreHint: "app.ast.restore_hint",
-
-		SomeFilesFailed: "app.ast.some_files_failed",
-
-		TodoPrefix: "app.ast.todo_prefix",
-
-		UpdateError: "app.ast.update_error",
-	},
-
-	AppAudit: struct {
-		AllFieldsHaveKeys string
-
-		AllHaveKeys string
-
-		AutoUpdating string
-
-		DescLabel string
-
-		FieldDesc string
-
-		FieldInfo string
-
-		FoundFieldsWithoutKeys string
-
-		FoundWithoutKeys string
-
-		GeneratedKey string
-
-		GeneratedKeys string
-
-		GeneratedKeysHeader string
-
-		GeneratedTranslation string
-
-		InFileUpdateTag string
-
-		ManualInstructions string
-
-		TipAutoUpdate string
-
-		TipGenerateKeys string
-
-		TranslationLabel string
-
-		UpdatedFile string
-
-		UpdatedJsonFile string
-
-		UpdatingFiles string
-	}{
-
-		AllFieldsHaveKeys: "app.audit.all_fields_have_keys",
-
-		AllHaveKeys: "app.audit.all_have_keys",
-
-		AutoUpdating: "app.audit.auto_updating",
-
-		DescLabel: "app.audit.desc_label",
-
-		FieldDesc: "app.audit.field_desc",
-
-		FieldInfo: "app.audit.field_info",
-
-		FoundFieldsWithoutKeys: "app.audit.found_fields_without_keys",
-
-		FoundWithoutKeys: "app.audit.found_without_keys",
-
-		GeneratedKey: "app.audit.generated_key",
-
-		GeneratedKeys: "app.audit.generated_keys",
-
-		GeneratedKeysHeader: "app.audit.generated_keys_header",
-
-		GeneratedTranslation: "app.audit.generated_translation",
-
-		InFileUpdateTag: "app.audit.in_file_update_tag",
-
-		ManualInstructions: "app.audit.manual_instructions",
-
-		TipAutoUpdate: "app.audit.tip_auto_update",
-
-		TipGenerateKeys: "app.audit.tip_generate_keys",
-
-		TranslationLabel: "app.audit.translation_label",
-
-		UpdatedFile: "app.audit.updated_file",
-
-		UpdatedJsonFile: "app.audit.updated_json_file",
-
-		UpdatingFiles: "app.audit.updating_files",
-	},
-
-	AppAuditCmd: struct {
-		AutoUpdateDesc string
-
-		BackupDirDesc string
-
-		FilesDesc string
-
-		GenerateDescKeysDesc string
-
-		GenerateMissingDesc string
-
-		KeyPrefixDesc string
-	}{
-
-		AutoUpdateDesc: "app.audit_cmd.auto_update_desc",
-
-		BackupDirDesc: "app.audit_cmd.backup_dir_desc",
-
-		FilesDesc: "app.audit_cmd.files_desc",
-
-		GenerateDescKeysDesc: "app.audit_cmd.generate_desc_keys_desc",
-
-		GenerateMissingDesc: "app.audit_cmd.generate_missing_desc",
-
-		KeyPrefixDesc: "app.audit_cmd.key_prefix_desc",
-	},
-
-	App: struct {
-		Description string
-
-		Name string
-
-		Version string
-	}{
-
-		Description: "app.description",
-
-		Name: "app.name",
-
-		Version: "app.version",
-	},
-
-	AppError: struct {
-		BaseFileNotFound string
-
-		CommandFailed string
-
-		ErrorProcessingFile string
-
-		FailedToCreateDir string
-
-		FailedToCreateDirectory string
-
-		FailedToCreateFile string
-
-		FailedToCreateOutputDir string
-
-		FailedToExecuteTemplate string
-
-		FailedToExpandFilePatterns string
-
-		FailedToExpandInput string
-
-		FailedToExpandPattern string
-
-		FailedToExpandReferencePatterns string
-
-		FailedToExpandTargetPatterns string
-
-		FailedToGeneratePackage string
-
-		FailedToGetConfig string
-
-		FailedToLoadFile string
-
-		FailedToLoadReferenceFile string
-
-		FailedToLoadTargetFile string
-
-		FailedToMarshal string
-
-		FailedToMarshalJson string
-
-		FailedToParseFile string
-
-		FailedToParseJson string
-
-		FailedToParseJsonSimple string
-
-		FailedToParseTemplate string
-
-		FailedToPrepareInput string
-
-		FailedToReadFile string
-
-		FailedToReadInput string
-
-		FailedToSaveFile string
-
-		FailedToTransformFile string
-
-		FailedToUpdateFile string
-
-		FailedToWriteFile string
-
-		FailedToWriteJson string
-
-		FailedToWriteOutput string
-
-		GoModNotFound string
-
-		InvalidPattern string
-
-		KeyAlreadyExists string
-
-		ModuleDirectiveNotFound string
-
-		NoFiles string
-
-		NoReferenceFiles string
-
-		NoTargetFiles string
-
-		ParseError string
-
-		SyncRequiresAtLeastTwoFiles string
-
-		UnknownLanguageCode string
-
-		ValidationFailed string
-	}{
-
-		BaseFileNotFound: "app.error.base_file_not_found",
-
-		CommandFailed: "app.error.command_failed",
-
-		ErrorProcessingFile: "app.error.error_processing_file",
-
-		FailedToCreateDir: "app.error.failed_to_create_dir",
-
-		FailedToCreateDirectory: "app.error.failed_to_create_directory",
-
-		FailedToCreateFile: "app.error.failed_to_create_file",
-
-		FailedToCreateOutputDir: "app.error.failed_to_create_output_dir",
-
-		FailedToExecuteTemplate: "app.error.failed_to_execute_template",
-
-		FailedToExpandFilePatterns: "app.error.failed_to_expand_file_patterns",
-
-		FailedToExpandInput: "app.error.failed_to_expand_input",
-
-		FailedToExpandPattern: "app.error.failed_to_expand_pattern",
-
-		FailedToExpandReferencePatterns: "app.error.failed_to_expand_reference_patterns",
-
-		FailedToExpandTargetPatterns: "app.error.failed_to_expand_target_patterns",
-
-		FailedToGeneratePackage: "app.error.failed_to_generate_package",
-
-		FailedToGetConfig: "app.error.failed_to_get_config",
-
-		FailedToLoadFile: "app.error.failed_to_load_file",
-
-		FailedToLoadReferenceFile: "app.error.failed_to_load_reference_file",
-
-		FailedToLoadTargetFile: "app.error.failed_to_load_target_file",
-
-		FailedToMarshal: "app.error.failed_to_marshal",
-
-		FailedToMarshalJson: "app.error.failed_to_marshal_json",
-
-		FailedToParseFile: "app.error.failed_to_parse_file",
-
-		FailedToParseJson: "app.error.failed_to_parse_json",
-
-		FailedToParseJsonSimple: "app.error.failed_to_parse_json_simple",
-
-		FailedToParseTemplate: "app.error.failed_to_parse_template",
-
-		FailedToPrepareInput: "app.error.failed_to_prepare_input",
-
-		FailedToReadFile: "app.error.failed_to_read_file",
-
-		FailedToReadInput: "app.error.failed_to_read_input",
-
-		FailedToSaveFile: "app.error.failed_to_save_file",
-
-		FailedToTransformFile: "app.error.failed_to_transform_file",
-
-		FailedToUpdateFile: "app.error.failed_to_update_file",
-
-		FailedToWriteFile: "app.error.failed_to_write_file",
-
-		FailedToWriteJson: "app.error.failed_to_write_json",
-
-		FailedToWriteOutput: "app.error.failed_to_write_output",
-
-		GoModNotFound: "app.error.go_mod_not_found",
-
-		InvalidPattern: "app.error.invalid_pattern",
-
-		KeyAlreadyExists: "app.error.key_already_exists",
-
-		ModuleDirectiveNotFound: "app.error.module_directive_not_found",
-
-		NoFiles: "app.error.no_files",
-
-		NoReferenceFiles: "app.error.no_reference_files",
-
-		NoTargetFiles: "app.error.no_target_files",
-
-		ParseError: "app.error.parse_error",
-
-		SyncRequiresAtLeastTwoFiles: "app.error.sync_requires_at_least_two_files",
-
-		UnknownLanguageCode: "app.error.unknown_language_code",
-
-		ValidationFailed: "app.error.validation_failed",
-	},
-
-	AppExtract: struct {
-		Added string
-
-		AddingI18nTodoComments string
-
-		ApplyingReplacements string
-
-		AutoUpdateMode string
-
-		BackupLocation string
-
-		CleanComplete string
-
-		CleaningComments string
-
-		DryRunMode string
-
-		FailedToGetConfigFromParser string
-
-		FileError string
-
-		FoundDStringsToReplaceN string
-
-		FoundComments string
-
-		FoundCommentsToClean string
-
-		FoundReplacements string
-
-		FoundStrings string
-
-		GlobError string
-
-		InFunction string
-
-		InvalidRegex string
-
-		Key string
-
-		Keys string
-
-		NoCommentsFound string
-
-		NoReplacements string
-
-		NoStringsFound string
-
-		Occurrences string
-
-		ScanningFiles string
-
-		TodoS string
-
-		UniqueStrings string
-
-		UpdateComplete string
-
-		UpdateError string
-
-		UpdatingFiles string
-
-		WS string
-	}{
-
-		Added: "app.extract.added",
-
-		AddingI18nTodoComments: "app.extract.adding_i18n_todo_comments",
-
-		ApplyingReplacements: "app.extract.applying_replacements",
-
-		AutoUpdateMode: "app.extract.auto_update_mode",
-
-		BackupLocation: "app.extract.backup_location",
-
-		CleanComplete: "app.extract.clean_complete",
-
-		CleaningComments: "app.extract.cleaning_comments",
-
-		DryRunMode: "app.extract.dry_run_mode",
-
-		FailedToGetConfigFromParser: "app.extract.failed_to_get_config_from_parser",
-
-		FileError: "app.extract.file_error",
-
-		FoundDStringsToReplaceN: "app.extract.found__d_strings_to_replace_n",
-
-		FoundComments: "app.extract.found_comments",
-
-		FoundCommentsToClean: "app.extract.found_comments_to_clean",
-
-		FoundReplacements: "app.extract.found_replacements",
-
-		FoundStrings: "app.extract.found_strings",
-
-		GlobError: "app.extract.glob_error",
-
-		InFunction: "app.extract.in_function",
-
-		InvalidRegex: "app.extract.invalid_regex",
-
-		Key: "app.extract.key",
-
-		Keys: "app.extract.keys",
-
-		NoCommentsFound: "app.extract.no_comments_found",
-
-		NoReplacements: "app.extract.no_replacements",
-
-		NoStringsFound: "app.extract.no_strings_found",
-
-		Occurrences: "app.extract.occurrences",
-
-		ScanningFiles: "app.extract.scanning_files",
-
-		TodoS: "app.extract.todo___s",
-
-		UniqueStrings: "app.extract.unique_strings",
-
-		UpdateComplete: "app.extract.update_complete",
-
-		UpdateError: "app.extract.update_error",
-
-		UpdatingFiles: "app.extract.updating_files",
-
-		WS: "app.extract.w_s",
-	},
-
-	AppExtractCmd: struct {
-		AutoUpdateDesc string
-
-		BackupDirDesc string
-
-		CleanCommentsDesc string
-
-		DryRunDesc string
-
-		FilesDesc string
-
-		FormatFunctionRegexDesc string
-
-		KeepCommentsDesc string
-
-		KeyPrefixDesc string
-
-		MatchOnlyDesc string
-
-		MinLengthDesc string
-
-		PackageDesc string
-
-		SkipMatchDesc string
-
-		TrPatternDesc string
-
-		TransformModeDesc string
-
-		UserFacingRegexDesc string
-	}{
-
-		AutoUpdateDesc: "app.extract_cmd.auto_update_desc",
-
-		BackupDirDesc: "app.extract_cmd.backup_dir_desc",
-
-		CleanCommentsDesc: "app.extract_cmd.clean_comments_desc",
-
-		DryRunDesc: "app.extract_cmd.dry_run_desc",
-
-		FilesDesc: "app.extract_cmd.files_desc",
-
-		FormatFunctionRegexDesc: "app.extract_cmd.format_function_regex_desc",
-
-		KeepCommentsDesc: "app.extract_cmd.keep_comments_desc",
-
-		KeyPrefixDesc: "app.extract_cmd.key_prefix_desc",
-
-		MatchOnlyDesc: "app.extract_cmd.match_only_desc",
-
-		MinLengthDesc: "app.extract_cmd.min_length_desc",
-
-		PackageDesc: "app.extract_cmd.package_desc",
-
-		SkipMatchDesc: "app.extract_cmd.skip_match_desc",
-
-		TrPatternDesc: "app.extract_cmd.tr_pattern_desc",
-
-		TransformModeDesc: "app.extract_cmd.transform_mode_desc",
-
-		UserFacingRegexDesc: "app.extract_cmd.user_facing_regex_desc",
-	},
-
-	AppGenerate: struct {
-		FoundKeys string
-
-		FoundKeysInFile string
-
-		Success string
-
-		SuccessVerbose string
-	}{
-
-		FoundKeys: "app.generate.found_keys",
-
-		FoundKeysInFile: "app.generate.found_keys_in_file",
-
-		Success: "app.generate.success",
-
-		SuccessVerbose: "app.generate.success_verbose",
-	},
-
-	AppGenerateCmd: struct {
-		OutputDesc string
-
-		PackageDesc string
-
-		PrefixDesc string
-	}{
-
-		OutputDesc: "app.generate_cmd.output_desc",
-
-		PackageDesc: "app.generate_cmd.package_desc",
-
-		PrefixDesc: "app.generate_cmd.prefix_desc",
-	},
-
-	AppGenerateLocalesCmd: struct {
-		DryRunDesc string
-
-		OutputDesc string
-
-		PackageBaseDesc string
-	}{
-
-		DryRunDesc: "app.generate_locales_cmd.dry_run_desc",
-
-		OutputDesc: "app.generate_locales_cmd.output_desc",
-
-		PackageBaseDesc: "app.generate_locales_cmd.package_base_desc",
-	},
-
-	AppGlobal: struct {
-		HelpDesc string
-
-		InputDesc string
-
-		LanguageDesc string
-
-		VerboseDesc string
-	}{
-
-		HelpDesc: "app.global.help_desc",
-
-		InputDesc: "app.global.input_desc",
-
-		LanguageDesc: "app.global.language_desc",
-
-		VerboseDesc: "app.global.verbose_desc",
-	},
-
-	AppInit: struct {
-		CreatedFile string
-
-		FileExists string
-
-		NextStep1 string
-
-		NextStep2 string
-
-		NextStep3 string
-
-		NextSteps string
-
-		Step1 string
-
-		Step2 string
-
-		Step3 string
-	}{
-
-		CreatedFile: "app.init.created_file",
-
-		FileExists: "app.init.file_exists",
-
-		NextStep1: "app.init.next_step_1",
-
-		NextStep2: "app.init.next_step_2",
-
-		NextStep3: "app.init.next_step_3",
-
-		NextSteps: "app.init.next_steps",
-
-		Step1: "app.init.step1",
-
-		Step2: "app.init.step2",
-
-		Step3: "app.init.step3",
-	},
-
-	AppInitCmd: struct {
-		ForceDesc string
-	}{
-
-		ForceDesc: "app.init_cmd.force_desc",
-	},
-
-	AppSync: struct {
-		AllInSync string
-
-		Summary string
-
-		TotalChanges string
-	}{
-
-		AllInSync: "app.sync.all_in_sync",
-
-		Summary: "app.sync.summary",
-
-		TotalChanges: "app.sync.total_changes",
-	},
-
-	AppSyncCmd: struct {
-		DryRunDesc string
-
-		RemoveExtraDesc string
-
-		TargetDesc string
-
-		TodoPrefixDesc string
-	}{
-
-		DryRunDesc: "app.sync_cmd.dry_run_desc",
-
-		RemoveExtraDesc: "app.sync_cmd.remove_extra_desc",
-
-		TargetDesc: "app.sync_cmd.target_desc",
-
-		TodoPrefixDesc: "app.sync_cmd.todo_prefix_desc",
-	},
-
-	AppTest: struct {
-		FieldDesc string
-	}{
-
-		FieldDesc: "app.test.field_desc",
-	},
-
-	AppValidate: struct {
-		AllKeysValid string
-
-		AllValid string
-
-		AllValidInFile string
-
-		FoundReferences string
-
-		GeneratingStubs string
-
-		MissingInFile string
-
-		MissingKey string
-
-		MissingTranslations string
-
-		NoFiles string
-
-		StubEntry string
-
-		UpdatedFile string
-
-		UsedInFile string
-	}{
-
-		AllKeysValid: "app.validate.all_keys_valid",
-
-		AllValid: "app.validate.all_valid",
-
-		AllValidInFile: "app.validate.all_valid_in_file",
-
-		FoundReferences: "app.validate.found_references",
-
-		GeneratingStubs: "app.validate.generating_stubs",
-
-		MissingInFile: "app.validate.missing_in_file",
-
-		MissingKey: "app.validate.missing_key",
-
-		MissingTranslations: "app.validate.missing_translations",
-
-		NoFiles: "app.validate.no_files",
-
-		StubEntry: "app.validate.stub_entry",
-
-		UpdatedFile: "app.validate.updated_file",
-
-		UsedInFile: "app.validate.used_in_file",
-	},
-
-	AppValidateCmd: struct {
-		GenerateMissingDesc string
-
-		ScanDesc string
-
-		StrictDesc string
-	}{
-
-		GenerateMissingDesc: "app.validate_cmd.generate_missing_desc",
-
-		ScanDesc: "app.validate_cmd.scan_desc",
-
-		StrictDesc: "app.validate_cmd.strict_desc",
-	},
-
-	AppWarning: struct {
-		FailedToFormat string
-
-		UpdateFailed string
-	}{
-
-		FailedToFormat: "app.warning.failed_to_format",
-
-		UpdateFailed: "app.warning.update_failed",
-	},
+type Ast struct {
+	AllFilesUpdated       string
+	BackupCreated         string
+	FailedCreateBackup    string
+	FailedCreateBackupDir string
+	FailedCreateTemp      string
+	FailedParseFile       string
+	FailedScanFile        string
+	FailedSyncTemp        string
+	FailedUpdate          string
+	FailedUpdateCount     string
+	FailedUpdateFile      string
+	FailedWriteFormatted  string
+	FileUpdated           string
+	RestoreCommand        string
+	RestoreHint           string
+	SomeFilesFailed       string
+	TodoPrefix            string
+	UpdateError           string
 }
 
-// K is a shorthand for Keys
-var K = Keys
+type AddCmd struct {
+	DryRunDesc   string
+	FromFileDesc string
+	KeyDesc      string
+	ModeDesc     string
+	ValueDesc    string
+}
+
+type Error struct {
+	BaseFileNotFound                string
+	CommandFailed                   string
+	ErrorProcessingFile             string
+	FailedToCreateDir               string
+	FailedToCreateDirectory         string
+	FailedToCreateFile              string
+	FailedToCreateOutputDir         string
+	FailedToExecuteTemplate         string
+	FailedToExpandFilePatterns      string
+	FailedToExpandInput             string
+	FailedToExpandPattern           string
+	FailedToExpandReferencePatterns string
+	FailedToExpandTargetPatterns    string
+	FailedToGeneratePackage         string
+	FailedToGetConfig               string
+	FailedToLoadFile                string
+	FailedToLoadReferenceFile       string
+	FailedToLoadTargetFile          string
+	FailedToMarshal                 string
+	FailedToMarshalJson             string
+	FailedToParseFile               string
+	FailedToParseJson               string
+	FailedToParseJsonSimple         string
+	FailedToParseTemplate           string
+	FailedToPrepareInput            string
+	FailedToReadFile                string
+	FailedToReadInput               string
+	FailedToSaveFile                string
+	FailedToTransformFile           string
+	FailedToUpdateFile              string
+	FailedToWriteFile               string
+	FailedToWriteJson               string
+	FailedToWriteOutput             string
+	GoModNotFound                   string
+	InvalidPattern                  string
+	KeyAlreadyExists                string
+	ModuleDirectiveNotFound         string
+	NoFiles                         string
+	NoReferenceFiles                string
+	NoTargetFiles                   string
+	ParseError                      string
+	SyncRequiresAtLeastTwoFiles     string
+	UnknownLanguageCode             string
+	ValidationFailed                string
+}
+
+type Generate struct {
+	FoundKeys       string
+	FoundKeysInFile string
+	Success         string
+	SuccessVerbose  string
+}
+
+type GenerateCmd struct {
+	OutputDesc  string
+	PackageDesc string
+	PrefixDesc  string
+}
+type Sync struct {
+	AllInSync    string
+	Summary      string
+	TotalChanges string
+}
+type Test struct {
+	FieldDesc string
+}
+type Global struct {
+	HelpDesc     string
+	InputDesc    string
+	LanguageDesc string
+	VerboseDesc  string
+}
+type InitCmd struct {
+	ForceDesc string
+}
+type Validate struct {
+	AllKeysValid        string
+	AllValid            string
+	AllValidInFile      string
+	FoundReferences     string
+	GeneratingStubs     string
+	MissingInFile       string
+	MissingKey          string
+	MissingTranslations string
+	NoFiles             string
+	StubEntry           string
+	UpdatedFile         string
+	UsedInFile          string
+}
+type Warning struct {
+	FailedToFormat string
+	UpdateFailed   string
+}
+type Extract struct {
+	Added                       string
+	AddingI18nTodoComments      string
+	ApplyingReplacements        string
+	AutoUpdateMode              string
+	BackupLocation              string
+	CleanComplete               string
+	CleaningComments            string
+	DryRunMode                  string
+	FailedToGetConfigFromParser string
+	FileError                   string
+	FoundDStringsToReplaceN     string
+	FoundComments               string
+	FoundCommentsToClean        string
+	FoundReplacements           string
+	FoundStrings                string
+	GlobError                   string
+	InFunction                  string
+	InvalidRegex                string
+	Key                         string
+	Keys                        string
+	NoCommentsFound             string
+	NoReplacements              string
+	NoStringsFound              string
+	Occurrences                 string
+	ScanningFiles               string
+	TodoS                       string
+	UniqueStrings               string
+	UpdateComplete              string
+	UpdateError                 string
+	UpdatingFiles               string
+	WS                          string
+}
+type GenerateLocalesCmd struct {
+	DryRunDesc      string
+	OutputDesc      string
+	PackageBaseDesc string
+}
+type Init struct {
+	CreatedFile string
+	FileExists  string
+	NextStepN1  string
+	NextStepN2  string
+	NextStepN3  string
+	NextSteps   string
+	Step1       string
+	Step2       string
+	Step3       string
+}
+type ValidateCmd struct {
+	GenerateMissingDesc string
+	ScanDesc            string
+	StrictDesc          string
+}
+type Add struct {
+	AddingKey           string
+	AddingKeyTodo       string
+	BothSingleAndFile   string
+	DryRunSummary       string
+	DryRunWouldAdd      string
+	DryRunWouldReplace  string
+	DryRunWouldSkip     string
+	FailedParseKeysFile string
+	FailedReadKeysFile  string
+	FoundKeysInFile     string
+	GlobError           string
+	InvalidMode         string
+	KeyExistsError      string
+	KeyExistsReplace    string
+	KeyExistsSkip       string
+	MissingValue        string
+	NoKeys              string
+	ProcessingLocale    string
+	ReadingKeysFile     string
+	Summary             string
+	Updated             string
+	UpdatedFile         string
+}
+type AppConfig struct {
+	AddDesc             string
+	AuditDesc           string
+	ExtractDesc         string
+	GenerateDesc        string
+	GenerateLocalesDesc string
+	HelpDesc            string
+	InitDesc            string
+	InputDesc           string
+	LanguageDesc        string
+	SyncDesc            string
+	ValidateDesc        string
+	VerboseDesc         string
+}
+type Audit struct {
+	AllFieldsHaveKeys      string
+	AllHaveKeys            string
+	AutoUpdating           string
+	DescLabel              string
+	FieldDesc              string
+	FieldInfo              string
+	FoundFieldsWithoutKeys string
+	FoundWithoutKeys       string
+	GeneratedKey           string
+	GeneratedKeys          string
+	GeneratedKeysHeader    string
+	GeneratedTranslation   string
+	InFileUpdateTag        string
+	ManualInstructions     string
+	TipAutoUpdate          string
+	TipGenerateKeys        string
+	TranslationLabel       string
+	UpdatedFile            string
+	UpdatedJsonFile        string
+	UpdatingFiles          string
+}
+type AuditCmd struct {
+	AutoUpdateDesc       string
+	BackupDirDesc        string
+	FilesDesc            string
+	GenerateDescKeysDesc string
+	GenerateMissingDesc  string
+	KeyPrefixDesc        string
+}
+type ExtractCmd struct {
+	AutoUpdateDesc          string
+	BackupDirDesc           string
+	CleanCommentsDesc       string
+	DryRunDesc              string
+	FilesDesc               string
+	FormatFunctionRegexDesc string
+	KeepCommentsDesc        string
+	KeyPrefixDesc           string
+	MatchOnlyDesc           string
+	MinLengthDesc           string
+	PackageDesc             string
+	SkipMatchDesc           string
+	TrPatternDesc           string
+	TransformModeDesc       string
+	UserFacingRegexDesc     string
+}
+type SyncCmd struct {
+	DryRunDesc      string
+	RemoveExtraDesc string
+	TargetDesc      string
+	TodoPrefixDesc  string
+}
+
+type App struct {
+	Description        string
+	Name               string
+	Version            string
+	Ast                Ast
+	AddCmd             AddCmd
+	Error              Error
+	Generate           Generate
+	GenerateCmd        GenerateCmd
+	Sync               Sync
+	Test               Test
+	Global             Global
+	InitCmd            InitCmd
+	ValidateCmd        ValidateCmd
+	Add                Add
+	AppConfig          AppConfig
+	Audit              Audit
+	AuditCmd           AuditCmd
+	ExtractCmd         ExtractCmd
+	Extract            Extract
+	GenerateLocalesCmd GenerateLocalesCmd
+	Init               Init
+	Validate           Validate
+	Warning            Warning
+	SyncCmd            SyncCmd
+}
+
+// Keys provides compile-time safe access to translation key
+// Keys provides compile-time safe access to translation keys
+var Keys struct {
+	App App
+} = struct {
+	App App
+}{
+	App: App{
+		Description: "app.description",
+		Name:        "app.name",
+		Version:     "app.version",
+		Ast: Ast{
+			AllFilesUpdated:       "app.ast.all_files_updated",
+			BackupCreated:         "app.ast.backup_created",
+			FailedCreateBackup:    "app.ast.failed_create_backup",
+			FailedCreateBackupDir: "app.ast.failed_create_backup_dir",
+			FailedCreateTemp:      "app.ast.failed_create_temp",
+			FailedParseFile:       "app.ast.failed_parse_file",
+			FailedScanFile:        "app.ast.failed_scan_file",
+			FailedSyncTemp:        "app.ast.failed_sync_temp",
+			FailedUpdate:          "app.ast.failed_update",
+			FailedUpdateCount:     "app.ast.failed_update_count",
+			FailedUpdateFile:      "app.ast.failed_update_file",
+			FailedWriteFormatted:  "app.ast.failed_write_formatted",
+			FileUpdated:           "app.ast.file_updated",
+			RestoreCommand:        "app.ast.restore_command",
+			RestoreHint:           "app.ast.restore_hint",
+			SomeFilesFailed:       "app.ast.some_files_failed",
+			TodoPrefix:            "app.ast.todo_prefix",
+			UpdateError:           "app.ast.update_error",
+		},
+		AddCmd: AddCmd{
+			DryRunDesc:   "app.add_cmd.dry_run_desc",
+			FromFileDesc: "app.add_cmd.from_file_desc",
+			KeyDesc:      "app.add_cmd.key_desc",
+			ModeDesc:     "app.add_cmd.mode_desc",
+			ValueDesc:    "app.add_cmd.value_desc",
+		},
+		Error: Error{
+			BaseFileNotFound:                "app.error.base_file_not_found",
+			CommandFailed:                   "app.error.command_failed",
+			ErrorProcessingFile:             "app.error.error_processing_file",
+			FailedToCreateDir:               "app.error.failed_to_create_dir",
+			FailedToCreateDirectory:         "app.error.failed_to_create_directory",
+			FailedToCreateFile:              "app.error.failed_to_create_file",
+			FailedToCreateOutputDir:         "app.error.failed_to_create_output_dir",
+			FailedToExecuteTemplate:         "app.error.failed_to_execute_template",
+			FailedToExpandFilePatterns:      "app.error.failed_to_expand_file_patterns",
+			FailedToExpandInput:             "app.error.failed_to_expand_input",
+			FailedToExpandPattern:           "app.error.failed_to_expand_pattern",
+			FailedToExpandReferencePatterns: "app.error.failed_to_expand_reference_patterns",
+			FailedToExpandTargetPatterns:    "app.error.failed_to_expand_target_patterns",
+			FailedToGeneratePackage:         "app.error.failed_to_generate_package",
+			FailedToGetConfig:               "app.error.failed_to_get_config",
+			FailedToLoadFile:                "app.error.failed_to_load_file",
+			FailedToLoadReferenceFile:       "app.error.failed_to_load_reference_file",
+			FailedToLoadTargetFile:          "app.error.failed_to_load_target_file",
+			FailedToMarshal:                 "app.error.failed_to_marshal",
+			FailedToMarshalJson:             "app.error.failed_to_marshal_json",
+			FailedToParseFile:               "app.error.failed_to_parse_file",
+			FailedToParseJson:               "app.error.failed_to_parse_json",
+			FailedToParseJsonSimple:         "app.error.failed_to_parse_json_simple",
+			FailedToParseTemplate:           "app.error.failed_to_parse_template",
+			FailedToPrepareInput:            "app.error.failed_to_prepare_input",
+			FailedToReadFile:                "app.error.failed_to_read_file",
+			FailedToReadInput:               "app.error.failed_to_read_input",
+			FailedToSaveFile:                "app.error.failed_to_save_file",
+			FailedToTransformFile:           "app.error.failed_to_transform_file",
+			FailedToUpdateFile:              "app.error.failed_to_update_file",
+			FailedToWriteFile:               "app.error.failed_to_write_file",
+			FailedToWriteJson:               "app.error.failed_to_write_json",
+			FailedToWriteOutput:             "app.error.failed_to_write_output",
+			GoModNotFound:                   "app.error.go_mod_not_found",
+			InvalidPattern:                  "app.error.invalid_pattern",
+			KeyAlreadyExists:                "app.error.key_already_exists",
+			ModuleDirectiveNotFound:         "app.error.module_directive_not_found",
+			NoFiles:                         "app.error.no_files",
+			NoReferenceFiles:                "app.error.no_reference_files",
+			NoTargetFiles:                   "app.error.no_target_files",
+			ParseError:                      "app.error.parse_error",
+			SyncRequiresAtLeastTwoFiles:     "app.error.sync_requires_at_least_two_files",
+			UnknownLanguageCode:             "app.error.unknown_language_code",
+			ValidationFailed:                "app.error.validation_failed",
+		},
+		Generate: Generate{
+			FoundKeys:       "app.generate.found_keys",
+			FoundKeysInFile: "app.generate.found_keys_in_file",
+			Success:         "app.generate.success",
+			SuccessVerbose:  "app.generate.success_verbose",
+		},
+		GenerateCmd: GenerateCmd{
+			OutputDesc:  "app.generate_cmd.output_desc",
+			PackageDesc: "app.generate_cmd.package_desc",
+			PrefixDesc:  "app.generate_cmd.prefix_desc",
+		},
+		Sync: Sync{
+			AllInSync:    "app.sync.all_in_sync",
+			Summary:      "app.sync.summary",
+			TotalChanges: "app.sync.total_changes",
+		},
+		Test: Test{
+			FieldDesc: "app.test.field_desc",
+		},
+		Global: Global{
+			HelpDesc:     "app.global.help_desc",
+			InputDesc:    "app.global.input_desc",
+			LanguageDesc: "app.global.language_desc",
+			VerboseDesc:  "app.global.verbose_desc",
+		},
+		InitCmd: InitCmd{
+			ForceDesc: "app.init_cmd.force_desc",
+		},
+		ValidateCmd: ValidateCmd{
+			GenerateMissingDesc: "app.validate_cmd.generate_missing_desc",
+			ScanDesc:            "app.validate_cmd.scan_desc",
+			StrictDesc:          "app.validate_cmd.strict_desc",
+		},
+		Add: Add{
+			AddingKey:           "app.add.adding_key",
+			AddingKeyTodo:       "app.add.adding_key_todo",
+			BothSingleAndFile:   "app.add.both_single_and_file",
+			DryRunSummary:       "app.add.dry_run_summary",
+			DryRunWouldAdd:      "app.add.dry_run_would_add",
+			DryRunWouldReplace:  "app.add.dry_run_would_replace",
+			DryRunWouldSkip:     "app.add.dry_run_would_skip",
+			FailedParseKeysFile: "app.add.failed_parse_keys_file",
+			FailedReadKeysFile:  "app.add.failed_read_keys_file",
+			FoundKeysInFile:     "app.add.found_keys_in_file",
+			GlobError:           "app.add.glob_error",
+			InvalidMode:         "app.add.invalid_mode",
+			KeyExistsError:      "app.add.key_exists_error",
+			KeyExistsReplace:    "app.add.key_exists_replace",
+			KeyExistsSkip:       "app.add.key_exists_skip",
+			MissingValue:        "app.add.missing_value",
+			NoKeys:              "app.add.no_keys",
+			ProcessingLocale:    "app.add.processing_locale",
+			ReadingKeysFile:     "app.add.reading_keys_file",
+			Summary:             "app.add.summary",
+			Updated:             "app.add.updated",
+			UpdatedFile:         "app.add.updated_file",
+		},
+		AppConfig: AppConfig{
+			AddDesc:             "app.app_config.add_desc",
+			AuditDesc:           "app.app_config.audit_desc",
+			ExtractDesc:         "app.app_config.extract_desc",
+			GenerateDesc:        "app.app_config.generate_desc",
+			GenerateLocalesDesc: "app.app_config.generate_locales_desc",
+			HelpDesc:            "app.app_config.help_desc",
+			InitDesc:            "app.app_config.init_desc",
+			InputDesc:           "app.app_config.input_desc",
+			LanguageDesc:        "app.app_config.language_desc",
+			SyncDesc:            "app.app_config.sync_desc",
+			ValidateDesc:        "app.app_config.validate_desc",
+			VerboseDesc:         "app.app_config.verbose_desc",
+		},
+		Audit: Audit{
+			AllFieldsHaveKeys:      "app.audit.all_fields_have_keys",
+			AllHaveKeys:            "app.audit.all_have_keys",
+			AutoUpdating:           "app.audit.auto_updating",
+			DescLabel:              "app.audit.desc_label",
+			FieldDesc:              "app.audit.field_desc",
+			FieldInfo:              "app.audit.field_info",
+			FoundFieldsWithoutKeys: "app.audit.found_fields_without_keys",
+			FoundWithoutKeys:       "app.audit.found_without_keys",
+			GeneratedKey:           "app.audit.generated_key",
+			GeneratedKeys:          "app.audit.generated_keys",
+			GeneratedKeysHeader:    "app.audit.generated_keys_header",
+			GeneratedTranslation:   "app.audit.generated_translation",
+			InFileUpdateTag:        "app.audit.in_file_update_tag",
+			ManualInstructions:     "app.audit.manual_instructions",
+			TipAutoUpdate:          "app.audit.tip_auto_update",
+			TipGenerateKeys:        "app.audit.tip_generate_keys",
+			TranslationLabel:       "app.audit.translation_label",
+			UpdatedFile:            "app.audit.updated_file",
+			UpdatedJsonFile:        "app.audit.updated_json_file",
+			UpdatingFiles:          "app.audit.updating_files",
+		},
+		AuditCmd: AuditCmd{
+			AutoUpdateDesc:       "app.audit_cmd.auto_update_desc",
+			BackupDirDesc:        "app.audit_cmd.backup_dir_desc",
+			FilesDesc:            "app.audit_cmd.files_desc",
+			GenerateDescKeysDesc: "app.audit_cmd.generate_desc_keys_desc",
+			GenerateMissingDesc:  "app.audit_cmd.generate_missing_desc",
+			KeyPrefixDesc:        "app.audit_cmd.key_prefix_desc",
+		},
+		ExtractCmd: ExtractCmd{
+			AutoUpdateDesc:          "app.extract_cmd.auto_update_desc",
+			BackupDirDesc:           "app.extract_cmd.backup_dir_desc",
+			CleanCommentsDesc:       "app.extract_cmd.clean_comments_desc",
+			DryRunDesc:              "app.extract_cmd.dry_run_desc",
+			FilesDesc:               "app.extract_cmd.files_desc",
+			FormatFunctionRegexDesc: "app.extract_cmd.format_function_regex_desc",
+			KeepCommentsDesc:        "app.extract_cmd.keep_comments_desc",
+			KeyPrefixDesc:           "app.extract_cmd.key_prefix_desc",
+			MatchOnlyDesc:           "app.extract_cmd.match_only_desc",
+			MinLengthDesc:           "app.extract_cmd.min_length_desc",
+			PackageDesc:             "app.extract_cmd.package_desc",
+			SkipMatchDesc:           "app.extract_cmd.skip_match_desc",
+			TrPatternDesc:           "app.extract_cmd.tr_pattern_desc",
+			TransformModeDesc:       "app.extract_cmd.transform_mode_desc",
+			UserFacingRegexDesc:     "app.extract_cmd.user_facing_regex_desc",
+		},
+		Extract: Extract{
+			Added:                       "app.extract.added",
+			AddingI18nTodoComments:      "app.extract.adding_i18n_todo_comments",
+			ApplyingReplacements:        "app.extract.applying_replacements",
+			AutoUpdateMode:              "app.extract.auto_update_mode",
+			BackupLocation:              "app.extract.backup_location",
+			CleanComplete:               "app.extract.clean_complete",
+			CleaningComments:            "app.extract.cleaning_comments",
+			DryRunMode:                  "app.extract.dry_run_mode",
+			FailedToGetConfigFromParser: "app.extract.failed_to_get_config_from_parser",
+			FileError:                   "app.extract.file_error",
+			FoundDStringsToReplaceN:     "app.extract.found__d_strings_to_replace_n",
+			FoundComments:               "app.extract.found_comments",
+			FoundCommentsToClean:        "app.extract.found_comments_to_clean",
+			FoundReplacements:           "app.extract.found_replacements",
+			FoundStrings:                "app.extract.found_strings",
+			GlobError:                   "app.extract.glob_error",
+			InFunction:                  "app.extract.in_function",
+			InvalidRegex:                "app.extract.invalid_regex",
+			Key:                         "app.extract.key",
+			Keys:                        "app.extract.keys",
+			NoCommentsFound:             "app.extract.no_comments_found",
+			NoReplacements:              "app.extract.no_replacements",
+			NoStringsFound:              "app.extract.no_strings_found",
+			Occurrences:                 "app.extract.occurrences",
+			ScanningFiles:               "app.extract.scanning_files",
+			TodoS:                       "app.extract.todo___s",
+			UniqueStrings:               "app.extract.unique_strings",
+			UpdateComplete:              "app.extract.update_complete",
+			UpdateError:                 "app.extract.update_error",
+			UpdatingFiles:               "app.extract.updating_files",
+			WS:                          "app.extract.w_s",
+		},
+		GenerateLocalesCmd: GenerateLocalesCmd{
+			DryRunDesc:      "app.generate_locales_cmd.dry_run_desc",
+			OutputDesc:      "app.generate_locales_cmd.output_desc",
+			PackageBaseDesc: "app.generate_locales_cmd.package_base_desc",
+		},
+		Init: Init{
+			CreatedFile: "app.init.created_file",
+			FileExists:  "app.init.file_exists",
+			NextStepN1:  "app.init.next_step_1",
+			NextStepN2:  "app.init.next_step_2",
+			NextStepN3:  "app.init.next_step_3",
+			NextSteps:   "app.init.next_steps",
+			Step1:       "app.init.step1",
+			Step2:       "app.init.step2",
+			Step3:       "app.init.step3",
+		},
+		Validate: Validate{
+			AllKeysValid:        "app.validate.all_keys_valid",
+			AllValid:            "app.validate.all_valid",
+			AllValidInFile:      "app.validate.all_valid_in_file",
+			FoundReferences:     "app.validate.found_references",
+			GeneratingStubs:     "app.validate.generating_stubs",
+			MissingInFile:       "app.validate.missing_in_file",
+			MissingKey:          "app.validate.missing_key",
+			MissingTranslations: "app.validate.missing_translations",
+			NoFiles:             "app.validate.no_files",
+			StubEntry:           "app.validate.stub_entry",
+			UpdatedFile:         "app.validate.updated_file",
+			UsedInFile:          "app.validate.used_in_file",
+		},
+		Warning: Warning{
+			FailedToFormat: "app.warning.failed_to_format",
+			UpdateFailed:   "app.warning.update_failed",
+		},
+		SyncCmd: SyncCmd{
+			DryRunDesc:      "app.sync_cmd.dry_run_desc",
+			RemoveExtraDesc: "app.sync_cmd.remove_extra_desc",
+			TargetDesc:      "app.sync_cmd.target_desc",
+			TodoPrefixDesc:  "app.sync_cmd.todo_prefix_desc",
+		},
+	},
+}

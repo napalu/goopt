@@ -60,8 +60,7 @@ func main() {
 		lang := parseLanguage(cfg.Language)
 		if lang != language.Und {
 			bundle.SetDefaultLanguage(lang)
-			// Don't modify global default bundle - it's now immutable
-			// Parser language settings should be used instead
+
 		}
 	}
 
@@ -72,7 +71,7 @@ func main() {
 
 	if !success {
 		for _, err := range parser.GetErrors() {
-			fmt.Fprintln(os.Stderr, cfg.TR.T(messages.Keys.AppError.ParseError, err))
+			fmt.Fprintln(os.Stderr, cfg.TR.T(messages.Keys.App.Error.ParseError, err))
 			fmt.Fprintln(os.Stderr)
 		}
 		parser.PrintUsageWithGroups(os.Stderr)
@@ -83,7 +82,7 @@ func main() {
 	errCount := parser.ExecuteCommands()
 	if errCount > 0 {
 		for _, cmdErr := range parser.GetCommandExecutionErrors() {
-			fmt.Fprintln(os.Stderr, cfg.TR.T(messages.Keys.AppError.CommandFailed, cmdErr.Key, cmdErr.Value))
+			fmt.Fprintln(os.Stderr, cfg.TR.T(messages.Keys.App.Error.CommandFailed, cmdErr.Key, cmdErr.Value))
 			fmt.Fprintln(os.Stderr)
 		}
 		os.Exit(1)

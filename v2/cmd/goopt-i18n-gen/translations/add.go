@@ -48,7 +48,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 	// Load keys
 	if hasFromFile {
 		if cfg.Verbose {
-			fmt.Println(cfg.TR.T(messages.Keys.AppAdd.ReadingKeysFile, cfg.Add.FromFile))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Add.ReadingKeysFile, cfg.Add.FromFile))
 		}
 
 		data, err := os.ReadFile(cfg.Add.FromFile)
@@ -61,7 +61,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 		}
 
 		if cfg.Verbose {
-			fmt.Println(cfg.TR.T(messages.Keys.AppAdd.FoundKeysInFile, len(keysToAdd), cfg.Add.FromFile))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Add.FoundKeysInFile, len(keysToAdd), cfg.Add.FromFile))
 			fmt.Println()
 		}
 	} else {
@@ -97,7 +97,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 		lang := strings.TrimSuffix(filepath.Base(inputFile), ".json")
 		isDefaultLang := lang == defaultLang
 
-		fmt.Println(cfg.TR.T(messages.Keys.AppAdd.ProcessingLocale, inputFile))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Add.ProcessingLocale, inputFile))
 
 		// Read existing translations
 		var translations map[string]string
@@ -116,7 +116,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 		fileReplaced := 0
 
 		if cfg.Add.DryRun {
-			fmt.Println(cfg.TR.T(messages.Keys.AppAdd.DryRunWouldAdd, inputFile))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Add.DryRunWouldAdd, inputFile))
 		}
 
 		for key, value := range keysToAdd {
@@ -128,31 +128,31 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 					return errors.ErrKeyExistsError.WithArgs(key, inputFile)
 				case "skip":
 					if cfg.Add.DryRun {
-						fmt.Println(cfg.TR.T(messages.Keys.AppAdd.DryRunWouldSkip, key))
+						fmt.Println(cfg.TR.T(messages.Keys.App.Add.DryRunWouldSkip, key))
 						fileSkipped++
 					} else if cfg.Verbose {
-						fmt.Println(cfg.TR.T(messages.Keys.AppAdd.KeyExistsSkip, key))
+						fmt.Println(cfg.TR.T(messages.Keys.App.Add.KeyExistsSkip, key))
 						fileSkipped++
 					} else {
 						fileSkipped++
 					}
 				case "replace":
 					if cfg.Add.DryRun {
-						fmt.Printf(cfg.TR.T(messages.Keys.AppAdd.DryRunWouldReplace, key))
+						fmt.Printf(cfg.TR.T(messages.Keys.App.Add.DryRunWouldReplace, key))
 						displayValue := value
 						if !isDefaultLang {
-							displayValue = cfg.TR.T(messages.Keys.AppAst.TodoPrefix, value)
+							displayValue = cfg.TR.T(messages.Keys.App.Ast.TodoPrefix, value)
 						}
 						fmt.Printf(" %s -> %s\n", existingValue, displayValue)
 						fileReplaced++
 					} else {
 						if cfg.Verbose {
-							fmt.Println(cfg.TR.T(messages.Keys.AppAdd.KeyExistsReplace, key))
+							fmt.Println(cfg.TR.T(messages.Keys.App.Add.KeyExistsReplace, key))
 						}
 						if isDefaultLang {
 							translations[key] = value
 						} else {
-							translations[key] = cfg.TR.T(messages.Keys.AppAst.TodoPrefix, value)
+							translations[key] = cfg.TR.T(messages.Keys.App.Ast.TodoPrefix, value)
 						}
 						fileReplaced++
 					}
@@ -161,7 +161,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 				displayValue := value
 				actualValue := value
 				if !isDefaultLang {
-					actualValue = cfg.TR.T(messages.Keys.AppAst.TodoPrefix, value)
+					actualValue = cfg.TR.T(messages.Keys.App.Ast.TodoPrefix, value)
 					displayValue = actualValue
 				}
 
@@ -171,11 +171,11 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 				} else {
 					if isDefaultLang {
 						if cfg.Verbose {
-							fmt.Println(cfg.TR.T(messages.Keys.AppAdd.AddingKey, key, displayValue))
+							fmt.Println(cfg.TR.T(messages.Keys.App.Add.AddingKey, key, displayValue))
 						}
 					} else {
 						if cfg.Verbose {
-							fmt.Println(cfg.TR.T(messages.Keys.AppAdd.AddingKeyTodo, key, value))
+							fmt.Println(cfg.TR.T(messages.Keys.App.Add.AddingKeyTodo, key, value))
 						}
 					}
 					translations[key] = actualValue
@@ -196,7 +196,7 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 				return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 			}
 
-			fmt.Println(cfg.TR.T(messages.Keys.AppAdd.UpdatedFile, inputFile, fileAdded, fileSkipped, fileReplaced))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Add.UpdatedFile, inputFile, fileAdded, fileSkipped, fileReplaced))
 		}
 
 		totalAdded += fileAdded
@@ -212,9 +212,9 @@ func Add(parser *goopt.Parser, _ *goopt.Command) error {
 	// Print summary
 	fmt.Println()
 	if cfg.Add.DryRun {
-		fmt.Println(cfg.TR.T(messages.Keys.AppAdd.DryRunSummary, totalAdded, totalSkipped, totalReplaced, filesProcessed))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Add.DryRunSummary, totalAdded, totalSkipped, totalReplaced, filesProcessed))
 	} else {
-		fmt.Println(cfg.TR.T(messages.Keys.AppAdd.Summary, totalAdded, totalSkipped, totalReplaced, filesProcessed))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Add.Summary, totalAdded, totalSkipped, totalReplaced, filesProcessed))
 	}
 
 	return nil

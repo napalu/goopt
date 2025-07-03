@@ -103,7 +103,7 @@ func (sr *TransformationReplacer) ProcessFiles(files []string) error {
 
 	for _, file := range files {
 		if err := sr.processFile(file); err != nil {
-			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.ErrorProcessingFile, file, err))
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.App.Error.ErrorProcessingFile, file, err))
 		}
 	}
 	return nil
@@ -318,7 +318,7 @@ func (sr *TransformationReplacer) isChainedLoggingCall(call *ast.CallExpr, lit *
 func (sr *TransformationReplacer) ApplyReplacements() error {
 	// Create backup directory
 	if err := os.MkdirAll(sr.config.BackupDir, 0755); err != nil {
-		return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToCreateDirectory, err))
+		return fmt.Errorf(sr.config.Translator.T(messages.Keys.App.Error.FailedToCreateDirectory, err))
 	}
 
 	if sr.config.IsUpdateMode {
@@ -355,7 +355,7 @@ func (sr *TransformationReplacer) applyFormatTransformations() error {
 		// Transform using format transformer
 		transformed, err := sr.formatTransformer.TransformFile(file, src)
 		if err != nil {
-			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToTransformFile, file, err))
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.App.Error.FailedToTransformFile, file, err))
 		}
 
 		// Format the result
@@ -385,7 +385,7 @@ func (sr *TransformationReplacer) applySimpleReplacements() error {
 	// Process each file
 	for filename, replacements := range fileReplacements {
 		if err := sr.applySimpleToFile(filename, replacements); err != nil {
-			return fmt.Errorf(sr.config.Translator.T(messages.Keys.AppError.FailedToUpdateFile, filename, err))
+			return fmt.Errorf(sr.config.Translator.T(messages.Keys.App.Error.FailedToUpdateFile, filename, err))
 		}
 	}
 
@@ -538,7 +538,8 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 func (sr *TransformationReplacer) findI18nComments(fset *token.FileSet, filename string, node *ast.File) {
 	for _, cg := range node.Comments {
 		for _, c := range cg.List {
-			if strings.Contains(c.Text, "i18n-") {
+			// Only remove i18n-todo comments, preserve i18n-skip comments
+			if strings.Contains(c.Text, "i18n-todo") {
 				sr.simpleReplacements = append(sr.simpleReplacements, Replacement{
 					File:        filename,
 					Pos:         c.Pos(),

@@ -44,23 +44,23 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	}
 
 	if len(fieldsWithoutKeys) == 0 {
-		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.AllFieldsHaveKeys))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Audit.AllFieldsHaveKeys))
 		return nil
 	}
 
-	fmt.Println(cfg.TR.T(messages.Keys.AppAudit.FoundFieldsWithoutKeys, len(fieldsWithoutKeys)) + ":")
+	fmt.Println(cfg.TR.T(messages.Keys.App.Audit.FoundFieldsWithoutKeys, len(fieldsWithoutKeys)) + ":")
 	for _, field := range fieldsWithoutKeys {
 		fmt.Printf("  %s.%s (%s:%d) - %s %s",
 			field.StructName, field.FieldName, field.File, field.Line, field.Kind, field.Name)
 		if field.Desc != "" {
-			fmt.Printf(" [%s]", cfg.TR.T(messages.Keys.AppAudit.DescLabel, field.Desc))
+			fmt.Printf(" [%s]", cfg.TR.T(messages.Keys.App.Audit.DescLabel, field.Desc))
 		}
 		fmt.Println()
 	}
 
 	if !cfg.Audit.GenerateDescKeys {
 		fmt.Println()
-		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.TipGenerateKeys))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Audit.TipGenerateKeys))
 		return nil
 	}
 
@@ -68,11 +68,11 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	generatedKeys, generatedTranslations := ast.GenerateDescKeysAndTranslations(fieldsWithoutKeys, cfg.Audit.KeyPrefix)
 
 	fmt.Println()
-	fmt.Println(cfg.TR.T(messages.Keys.AppAudit.GeneratedKeysHeader))
+	fmt.Println(cfg.TR.T(messages.Keys.App.Audit.GeneratedKeysHeader))
 	for fieldPath, descKey := range generatedKeys {
 		fmt.Printf("  %s -> descKey:%s\n", fieldPath, descKey)
 		translation := generatedTranslations[descKey]
-		fmt.Printf("    %s\n", cfg.TR.T(messages.Keys.AppAudit.TranslationLabel, translation))
+		fmt.Printf("    %s\n", cfg.TR.T(messages.Keys.App.Audit.TranslationLabel, translation))
 	}
 
 	// Update JSON files when generating descKeys or when explicitly requested
@@ -121,7 +121,7 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 					return errors.ErrFailedToWriteJson.WithArgs(inputFile, err)
 				}
 				fmt.Println()
-				fmt.Println(cfg.TR.T(messages.Keys.AppAudit.UpdatedJsonFile, inputFile))
+				fmt.Println(cfg.TR.T(messages.Keys.App.Audit.UpdatedJsonFile, inputFile))
 			}
 		}
 	}
@@ -129,22 +129,22 @@ func Audit(parser *goopt.Parser, _ *goopt.Command) error {
 	// Update source files if requested
 	if cfg.Audit.AutoUpdate {
 		fmt.Println()
-		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.AutoUpdating))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Audit.AutoUpdating))
 		updater := ast.NewUpdater(cfg.TR)
 		if err := updater.UpdateSourceFiles(fieldsWithoutKeys, generatedKeys, cfg.Audit.BackupDir); err != nil {
-			fmt.Println(cfg.TR.T(messages.Keys.AppWarning.UpdateFailed, err))
+			fmt.Println(cfg.TR.T(messages.Keys.App.Warning.UpdateFailed, err))
 		}
 	} else {
 		fmt.Println()
-		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.ManualInstructions))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Audit.ManualInstructions))
 		for _, field := range fieldsWithoutKeys {
 			descKey := generatedKeys[field.FieldPath]
 			fmt.Println()
-			fmt.Printf("  %s:\n", cfg.TR.T(messages.Keys.AppAudit.InFileUpdateTag, field.File, field.Line))
+			fmt.Printf("  %s:\n", cfg.TR.T(messages.Keys.App.Audit.InFileUpdateTag, field.File, field.Line))
 			fmt.Printf("    descKey:%s\n", descKey)
 		}
 		fmt.Println()
-		fmt.Println(cfg.TR.T(messages.Keys.AppAudit.TipAutoUpdate))
+		fmt.Println(cfg.TR.T(messages.Keys.App.Audit.TipAutoUpdate))
 	}
 
 	return nil

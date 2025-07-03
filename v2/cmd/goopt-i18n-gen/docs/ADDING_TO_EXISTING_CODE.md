@@ -128,7 +128,7 @@ When renaming commands or making structural changes to goopt-i18n-gen itself, yo
 #### Example: Renaming a command (like scan → audit)
 
 1. **The Problem**:
-    - Your code uses `messages.Keys.AppAudit.SomeField`
+    - Your code uses `messages.Keys.App.Audit.SomeField`
     - But the messages file still has `AppScan` because it hasn't been regenerated
     - You can't build to regenerate because the code won't compile
 
@@ -136,13 +136,13 @@ When renaming commands or making structural changes to goopt-i18n-gen itself, yo
    ```bash
    # Step 1: Temporarily revert code to use old keys
    cd /<src_path>/goopt/v2/cmd/goopt-i18n-gen
-   sed -i '' 's/messages\.Keys\.AppAudit/messages.Keys.AppScan/g' main.go
+   sed -i '' 's/messages\.Keys\.App.Audit/messages.Keys.AppScan/g' main.go
    
    # Step 2: Regenerate messages with the new locale keys
    go run . -i "locales/*.json" generate -o messages/messages.go -p messages
    
    # Step 3: Change code back to use new keys
-   sed -i '' 's/messages\.Keys\.AppScan/messages.Keys.AppAudit/g' main.go
+   sed -i '' 's/messages\.Keys\.AppScan/messages.Keys.App.Audit/g' main.go
    
    # Step 4: Build and test
    go build
