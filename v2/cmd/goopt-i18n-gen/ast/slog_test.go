@@ -126,13 +126,13 @@ func TestSlogTransformation(t *testing.T) {
 		{
 			name:     "slog.Info transformation",
 			input:    `slog.Info("Starting server", "port", 8080)`,
-			expected: `slog.Info(tr.T(messages.Keys.AppExtracted.StartingServer), "port", 8080)`,
+			expected: `slog.Info(tr.T(messages.Keys.App.Extracted.StartingServer), "port", 8080)`,
 			skip:     false,
 		},
 		{
 			name:     "logger.Error transformation",
 			input:    `logger.Error("Connection failed", "error", err)`,
-			expected: `logger.Error(tr.T(messages.Keys.AppExtracted.ConnectionFailed), "error", err)`,
+			expected: `logger.Error(tr.T(messages.Keys.App.Extracted.ConnectionFailed), "error", err)`,
 			skip:     false,
 		},
 		{

@@ -41,7 +41,7 @@ const (
 func GenerateLocales(parser *goopt.Parser, cmd *goopt.Command) error {
 	cfg, ok := goopt.GetStructCtxAs[*options.AppConfig](parser)
 	if !ok {
-		parser.GetUserBundle().T(messages.Keys.AppError.FailedToGetConfig)
+		parser.GetUserBundle().T(messages.Keys.App.Error.FailedToGetConfig)
 	}
 
 	tr := cfg.TR

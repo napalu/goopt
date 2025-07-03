@@ -64,7 +64,7 @@
   "app.audit.field_info": "  %s.%s (%s:%d) - %s %s",
   "app.audit.found_fields_without_keys": "%d Felder ohne descKey-Tags gefunden",
   "app.audit.found_without_keys": "%d Felder ohne descKey-Tags gefunden:",
-  "app.audit.generated_key": "  %s -\u003e descKey:%s",
+  "app.audit.generated_key": "  %s -> descKey:%s",
   "app.audit.generated_keys": "Generierte descKeys und Übersetzungen:",
   "app.audit.generated_keys_header": "Generierte descKeys und Übersetzungen:",
   "app.audit.generated_translation": "    Übersetzung: \"%s\"",

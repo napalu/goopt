@@ -193,22 +193,22 @@ The extract command intelligently transforms format functions:
 // Printf-style → Print with tr.T
 fmt.Printf("User %s logged in", name)
 // becomes:
-fmt.Print(tr.T(messages.Keys.AppExtracted.UserSLoggedIn, name))
+fmt.Print(tr.T(messages.Keys.App.Extracted.UserSLoggedIn, name))
 
 // Sprintf → Direct tr.T call
 msg := fmt.Sprintf("Welcome %s!", name)
 // becomes:
-msg := tr.T(messages.Keys.AppExtracted.WelcomeS, name)
+msg := tr.T(messages.Keys.App.Extracted.WelcomeS, name)
 
 // Errorf → errors.New with tr.T
 return fmt.Errorf("failed to connect: %v", err)
 // becomes:
-return errors.New(tr.T(messages.Keys.AppExtracted.FailedToConnectV, err))
+return errors.New(tr.T(messages.Keys.App.Extracted.FailedToConnectV, err))
 
 // Errorf with %w → fmt.Errorf with tr.T (preserves error wrapping)
 return fmt.Errorf("connection failed: %w", err)
 // becomes:
-return fmt.Errorf(tr.T(messages.Keys.AppExtracted.ConnectionFailedW), err)
+return fmt.Errorf(tr.T(messages.Keys.App.Extracted.ConnectionFailedW), err)
 ```
 
 ### String Concatenation
@@ -220,7 +220,7 @@ The extractor detects concatenated strings in format functions:
 fmt.Printf("User: %s" + " Status: %s", user, status)
 // Extracted as: "User: %s Status: %s"
 // Transformed to:
-fmt.Print(tr.T(messages.Keys.AppExtracted.UserSStatusS, user, status))
+fmt.Print(tr.T(messages.Keys.App.Extracted.UserSStatusS, user, status))
 ```
 
 ## Package-by-Package Migration

@@ -8,34 +8,12 @@ import (
 	"strings"
 
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/errors"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
 )
 
 // toGoName converts a string to a valid Go identifier
 func toGoName(s string) string {
-	// Split by dots first to preserve hierarchy
-	dotParts := strings.Split(s, ".")
-	var result []string
-
-	for _, part := range dotParts {
-		// Replace common separators with underscores
-		part = strings.ReplaceAll(part, "-", "_")
-		part = strings.ReplaceAll(part, " ", "_")
-
-		// Split on underscores and capitalize each part
-		subParts := strings.Split(part, "_")
-		var pascalPart []string
-		for _, subPart := range subParts {
-			if subPart != "" {
-				pascalPart = append(pascalPart, strings.ToUpper(subPart[:1])+subPart[1:])
-			}
-		}
-
-		if len(pascalPart) > 0 {
-			result = append(result, strings.Join(pascalPart, ""))
-		}
-	}
-
-	return strings.Join(result, ".")
+	return util.KeyToGoName(s)
 }
 
 // ensureInputFile creates the directory and file if they don't exist

@@ -54,7 +54,7 @@ func (s *Scanner) ScanGoFiles(files []string) ([]DescKeyReference, error) {
 	for _, file := range files {
 		fileRefs, err := scanFile(file)
 		if err != nil {
-			return nil, fmt.Errorf(s.tr.T(messages.Keys.AppAst.FailedScanFile), file, err)
+			return nil, fmt.Errorf(s.tr.T(messages.Keys.App.Ast.FailedScanFile), file, err)
 		}
 		refs = append(refs, fileRefs...)
 	}
@@ -193,7 +193,7 @@ func (s *Scanner) GenerateMissingKeys(missing []DescKeyReference) map[string]str
 		defaultText := strcase.ToDelimited(lastPart, ' ')
 		defaultText = caser.String(defaultText)
 
-		stubs[ref.Key] = s.tr.T(messages.Keys.AppAst.TodoPrefix, defaultText)
+		stubs[ref.Key] = s.tr.T(messages.Keys.App.Ast.TodoPrefix, defaultText)
 	}
 
 	return stubs
@@ -206,7 +206,7 @@ func (s *Scanner) ScanForMissingDescKeys(files []string) ([]FieldWithoutDescKey,
 	for _, file := range files {
 		fileFields, err := scanFileForMissingDescKeys(file)
 		if err != nil {
-			return nil, fmt.Errorf(s.tr.T(messages.Keys.AppAst.FailedScanFile), file, err)
+			return nil, fmt.Errorf(s.tr.T(messages.Keys.App.Ast.FailedScanFile), file, err)
 		}
 		fields = append(fields, fileFields...)
 	}
