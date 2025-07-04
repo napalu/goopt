@@ -102,9 +102,9 @@ For example, in a command like `myapp --verbose service start`, the `--verbose` 
 
 Finally, `goopt` is designed to reduce boilerplate by providing powerful features out of the box.
 
-*   **Auto-Help:** A rich, adaptive help system is enabled by default. It automatically generates help text and handles the `--help` flag. See the [Help System Guide](./built-in-features/01-help-system.md) for more.
-*   **Auto-Version:** You can easily add version information to your CLI with a single line of configuration. See the [Version Support Guide](./built-in-features/02-version-support.md).
-*   **Internationalization (i18n):** All system messages are pre-translated, and the library provides powerful tools to make your entire application multilingual. See the [Internationalization Guide](./internationalization/index.md).
+*   **Auto-Help:** A rich, adaptive help system is enabled by default. It automatically generates help text and handles the `--help` flag. See the [Help System Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/01-help-system/) for more.
+*   **Auto-Version:** You can easily add version information to your CLI with a single line of configuration. See the [Version Support Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/02-version-support/).
+*   **Internationalization (i18n):** All system messages are pre-translated, and the library provides powerful tools to make your entire application multilingual. See the [Internationalization Guide]({{ site.baseurl }}/v2/guides/06-internationalization/index/).
 
 ## Next Steps
 
