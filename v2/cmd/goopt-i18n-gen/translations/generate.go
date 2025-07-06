@@ -117,11 +117,16 @@ func buildNestedStructure(keys []string, prefix string) *templates.NestedGroup {
 	// Track field names to detect duplicates
 	fieldNameCount := make(map[string]int)
 
+	// Default prefix if not specified
+	if prefix == "" {
+		prefix = "app"
+	}
+
 	for _, key := range keys {
+		// If the key doesn't start with the prefix, prepend it
 		processedKey := key
-		if prefix != "" && strings.HasPrefix(key, prefix) {
-			processedKey = strings.TrimPrefix(key, prefix)
-			processedKey = strings.TrimPrefix(processedKey, ".")
+		if !strings.HasPrefix(key, prefix+".") {
+			processedKey = prefix + "." + key
 		}
 
 		parts := strings.Split(processedKey, ".")
@@ -184,70 +189,181 @@ func getGroupPath(group *templates.NestedGroup) string {
 
 // generateStruct generates a struct type with values initialized inline
 func generateStruct(buf *strings.Builder, group *templates.NestedGroup, indent string) {
-	// Collect all types from the App subgroup
-	if appGroup, hasApp := group.SubGroups["App"]; !hasApp {
-		return
-	} else {
-		// First generate all the type definitions
-		for name, subGroup := range appGroup.SubGroups {
-			if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
-				continue
-			}
-
-			// Generate type definition
-			buf.WriteString(fmt.Sprintf("type %s struct {\n", name))
-			for _, field := range subGroup.Fields {
-				buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
-			}
-			buf.WriteString("}\n\n")
+	// Check if we have exactly one top-level group (e.g., "App" when using default prefix)
+	// This is the common case when using a prefix like "app"
+	if len(group.Fields) == 0 && len(group.SubGroups) == 1 {
+		// Get the single top-level group
+		var topLevelName string
+		var topLevelGroup *templates.NestedGroup
+		for name, subGroup := range group.SubGroups {
+			topLevelName = name
+			topLevelGroup = subGroup
+			break
 		}
 
-		// Generate the App type
-		buf.WriteString("type App struct {\n")
+		// Generate all nested type definitions first
+		generateNestedTypes(buf, topLevelGroup)
 
-		// Add top-level fields
-		for _, field := range appGroup.Fields {
+		// Generate the top-level type (e.g., App)
+		buf.WriteString(fmt.Sprintf("type %s struct {\n", topLevelName))
+
+		// Add fields
+		for _, field := range topLevelGroup.Fields {
+			buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
+		}
+
+		// Add sub-structs (sorted for deterministic output)
+		var subGroupNames []string
+		for name := range topLevelGroup.SubGroups {
+			if len(topLevelGroup.SubGroups[name].Fields) > 0 || len(topLevelGroup.SubGroups[name].SubGroups) > 0 {
+				subGroupNames = append(subGroupNames, name)
+			}
+		}
+		sort.Strings(subGroupNames)
+
+		for _, name := range subGroupNames {
+			buf.WriteString(fmt.Sprintf("\t%s %s\n", name, name))
+		}
+
+		buf.WriteString("}\n\n")
+
+		// Generate the Keys variable with the single top-level struct
+		buf.WriteString("// Keys provides compile-time safe access to translation keys\n")
+		buf.WriteString(fmt.Sprintf("var Keys struct {\n\t%s %s\n} = struct {\n\t%s %s\n}{\n",
+			topLevelName, topLevelName, topLevelName, topLevelName))
+
+		// Initialize the top-level struct
+		buf.WriteString(fmt.Sprintf("\t%s: %s{\n", topLevelName, topLevelName))
+		generateInitializer(buf, topLevelGroup, "\t\t")
+		buf.WriteString("\t},\n")
+		buf.WriteString("}\n")
+
+		return
+	}
+
+	// Handle the case where we have multiple top-level groups or fields
+	// This happens when there's no common prefix or mixed top-level elements
+
+	// First generate all the type definitions for nested structures
+	var typeNames []string
+	for name, subGroup := range group.SubGroups {
+		if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
+			continue
+		}
+		typeNames = append(typeNames, name)
+
+		// Generate nested types first (depth-first)
+		generateNestedTypes(buf, subGroup)
+
+		// Generate type definition for this group
+		buf.WriteString(fmt.Sprintf("type %s struct {\n", name))
+
+		// Add fields
+		for _, field := range subGroup.Fields {
 			buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
 		}
 
 		// Add sub-structs
-		for name, subGroup := range appGroup.SubGroups {
-			if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
+		for subName, subSubGroup := range subGroup.SubGroups {
+			if len(subSubGroup.Fields) == 0 && len(subSubGroup.SubGroups) == 0 {
 				continue
 			}
-			buf.WriteString(fmt.Sprintf("\t%s %s\n", name, name))
+			buf.WriteString(fmt.Sprintf("\t%s %s\n", subName, subName))
 		}
 
-		buf.WriteString("}\n")
+		buf.WriteString("}\n\n")
+	}
 
-		// Generate the Keys variable
-		buf.WriteString("// Keys provides compile-time safe access to translation keys\n")
-		buf.WriteString("var Keys struct {\n")
-		buf.WriteString("\tApp App\n")
-		buf.WriteString("} = struct {\n")
-		buf.WriteString("\tApp App\n")
-		buf.WriteString("}{\n")
-		buf.WriteString("\tApp: App{\n")
+	// Sort type names for deterministic output
+	sort.Strings(typeNames)
 
-		// Initialize top-level fields
-		for _, field := range appGroup.Fields {
-			buf.WriteString(fmt.Sprintf("\t\t%s: \"%s\",\n", field.Name, field.Key))
-		}
+	// Generate the Keys variable
+	buf.WriteString("// Keys provides compile-time safe access to translation keys\n")
+	buf.WriteString("var Keys struct {\n")
 
-		// Initialize sub-structs
-		for name, subGroup := range appGroup.SubGroups {
-			if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
-				continue
-			}
+	// Add top-level fields
+	for _, field := range group.Fields {
+		buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
+	}
 
-			buf.WriteString(fmt.Sprintf("\t\t%s: %s{\n", name, name))
-			for _, field := range subGroup.Fields {
-				buf.WriteString(fmt.Sprintf("\t\t\t%s: \"%s\",\n", field.Name, field.Key))
-			}
-			buf.WriteString("\t\t},\n")
-		}
+	// Add top-level groups
+	for _, name := range typeNames {
+		buf.WriteString(fmt.Sprintf("\t%s %s\n", name, name))
+	}
 
+	buf.WriteString("} = struct {\n")
+
+	// Repeat structure for initialization
+	for _, field := range group.Fields {
+		buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
+	}
+	for _, name := range typeNames {
+		buf.WriteString(fmt.Sprintf("\t%s %s\n", name, name))
+	}
+
+	buf.WriteString("}{\n")
+
+	// Initialize top-level fields
+	for _, field := range group.Fields {
+		buf.WriteString(fmt.Sprintf("\t%s: \"%s\",\n", field.Name, field.Key))
+	}
+
+	// Initialize top-level groups
+	for _, name := range typeNames {
+		subGroup := group.SubGroups[name]
+		buf.WriteString(fmt.Sprintf("\t%s: %s{\n", name, name))
+		generateInitializer(buf, subGroup, "\t\t")
 		buf.WriteString("\t},\n")
-		buf.WriteString("}\n")
+	}
+
+	buf.WriteString("}\n")
+}
+
+// generateNestedTypes generates type definitions for nested structures
+func generateNestedTypes(buf *strings.Builder, group *templates.NestedGroup) {
+	for name, subGroup := range group.SubGroups {
+		if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
+			continue
+		}
+
+		// Recursively generate nested types first
+		generateNestedTypes(buf, subGroup)
+
+		// Generate type definition
+		buf.WriteString(fmt.Sprintf("type %s struct {\n", name))
+
+		// Add fields
+		for _, field := range subGroup.Fields {
+			buf.WriteString(fmt.Sprintf("\t%s string\n", field.Name))
+		}
+
+		// Add sub-structs
+		for subName, subSubGroup := range subGroup.SubGroups {
+			if len(subSubGroup.Fields) == 0 && len(subSubGroup.SubGroups) == 0 {
+				continue
+			}
+			buf.WriteString(fmt.Sprintf("\t%s %s\n", subName, subName))
+		}
+
+		buf.WriteString("}\n\n")
+	}
+}
+
+// generateInitializer generates the initialization code for a group
+func generateInitializer(buf *strings.Builder, group *templates.NestedGroup, indent string) {
+	// Initialize fields
+	for _, field := range group.Fields {
+		buf.WriteString(fmt.Sprintf("%s%s: \"%s\",\n", indent, field.Name, field.Key))
+	}
+
+	// Initialize sub-groups
+	for name, subGroup := range group.SubGroups {
+		if len(subGroup.Fields) == 0 && len(subGroup.SubGroups) == 0 {
+			continue
+		}
+
+		buf.WriteString(fmt.Sprintf("%s%s: %s{\n", indent, name, name))
+		generateInitializer(buf, subGroup, indent+"\t")
+		buf.WriteString(fmt.Sprintf("%s},\n", indent))
 	}
 }

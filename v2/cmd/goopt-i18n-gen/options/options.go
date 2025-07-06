@@ -9,7 +9,7 @@ import (
 type GenerateCmd struct {
 	Output  string `goopt:"short:o;desc:Output Go file;required:true;descKey:app.generate_cmd.output_desc"`
 	Package string `goopt:"short:p;desc:Package name;default:messages;descKey:app.generate_cmd.package_desc"`
-	Prefix  string `goopt:"desc:Optional prefix to strip from keys;descKey:app.generate_cmd.prefix_desc"`
+	Prefix  string `goopt:"desc:Optional prefix to strip from keys;descKey:app.generate_cmd.prefix_desc;default:app"`
 	Exec    goopt.CommandFunc
 }
 
@@ -26,7 +26,7 @@ type AuditCmd struct {
 	Files            []string `goopt:"desc:Go source files to scan (default: **/*.go);default:**/*.go;descKey:app.audit_cmd.files_desc"`
 	GenerateDescKeys bool     `goopt:"short:d;desc:Generate descKey tags for fields that don't have them;descKey:app.audit_cmd.generate_desc_keys_desc"`
 	GenerateMissing  bool     `goopt:"short:g;desc:Generate stub entries for missing translation keys;descKey:app.audit_cmd.generate_missing_desc"`
-	KeyPrefix        string   `goopt:"desc:Prefix for generated descKeys;default:app;descKey:app.audit_cmd.key_prefix_desc"`
+	KeyPrefix        string   `goopt:"desc:Prefix for generated descKeys;default:app;descKey:app.audit_cmd.key_prefix_desc;default:app"`
 	AutoUpdate       bool     `goopt:"short:u;desc:Automatically update source files with generated descKeys;descKey:app.audit_cmd.auto_update_desc"`
 	BackupDir        string   `goopt:"desc:Directory for backup files;default:.goopt-i18n-backup;descKey:app.audit_cmd.backup_dir_desc"`
 	Exec             goopt.CommandFunc
@@ -50,7 +50,7 @@ type AddCmd struct {
 
 // ExtractCmd handles the extract command configuration
 type ExtractCmd struct {
-	Files               string   `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.extract_cmd.files_desc"`
+	Files               []string `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.extract_cmd.files_desc"`
 	MatchOnly           string   `goopt:"short:M;desc:Regex to match strings for inclusion;descKey:app.extract_cmd.match_only_desc"`
 	SkipMatch           string   `goopt:"short:S;desc:Regex to match strings for exclusion;descKey:app.extract_cmd.skip_match_desc"`
 	KeyPrefix           string   `goopt:"short:P;desc:Prefix for generated keys;default:app.extracted;descKey:app.extract_cmd.key_prefix_desc"`

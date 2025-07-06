@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -28,10 +29,10 @@ func TestGenerate(t *testing.T) {
 				// Create test locale file
 				localeFile := filepath.Join(tempDir, "en.json")
 				localeData := map[string]string{
-					"app.name":        "Test App",
-					"app.description": "Test Description",
-					"error.not_found": "Not Found",
-					"error.forbidden": "Forbidden",
+					"app.name":            "Test App",
+					"app.description":     "Test Description",
+					"app.error.not_found": "Not Found",
+					"app.error.forbidden": "Forbidden",
 				}
 				data, _ := json.Marshal(localeData)
 				os.WriteFile(localeFile, data, 0644)
@@ -63,19 +64,23 @@ func TestGenerate(t *testing.T) {
 					t.Error("output should contain package declaration")
 				}
 
-				// Check generated keys structure
-				expectedKeys := []string{
-					"App struct",         // Group
-					"Name string",        // Field in App
-					"Description string", // Field in App
-					"Error struct",       // Group
-					"NotFound string",    // Field in Error
-					"Forbidden string",   // Field in Error
+				// Check generated keys structure using regex to ignore formatting
+				expectedPatterns := []struct {
+					pattern string
+					desc    string
+				}{
+					{`type\s+App\s+struct`, "App struct declaration"},
+					{`type\s+Error\s+struct`, "Error struct declaration"},
+					{`Name\s+string`, "Name field in App"},
+					{`Description\s+string`, "Description field in App"},
+					{`NotFound\s+string`, "NotFound field in Error"},
+					{`Forbidden\s+string`, "Forbidden field in Error"},
 				}
 
-				for _, key := range expectedKeys {
-					if !strings.Contains(string(content), key) {
-						t.Errorf("output should contain key %q", key)
+				for _, exp := range expectedPatterns {
+					matched, _ := regexp.MatchString(exp.pattern, string(content))
+					if !matched {
+						t.Errorf("output should contain %s (pattern: %s)", exp.desc, exp.pattern)
 					}
 				}
 			},
@@ -114,20 +119,24 @@ func TestGenerate(t *testing.T) {
 					t.Fatalf("failed to read output file: %v", err)
 				}
 
-				// Keys with prefix should have it stripped and be grouped
-				if !strings.Contains(string(content), "Feature struct") {
-					t.Error("output should contain Feature struct (prefix stripped)")
-				}
-				if !strings.Contains(string(content), "Enable string") {
-					t.Error("output should contain Enable field")
+				// Check using regex patterns
+				patterns := []struct {
+					pattern string
+					desc    string
+				}{
+					{`type\s+Feature\s+struct`, "Feature struct"},
+					{`type\s+Other\s+struct`, "Other struct"},
+					{`type\s+Myapp\s+struct`, "Myapp struct (from prefix)"},
+					{`Enable\s+string`, "Enable field"},
+					{`Disable\s+string`, "Disable field"},
+					{`Key\s+string`, "Key field"},
 				}
 
-				// Keys without prefix should remain in root
-				if !strings.Contains(string(content), "Other struct") {
-					t.Error("output should contain Other struct")
-				}
-				if !strings.Contains(string(content), "Key string") {
-					t.Error("output should contain Key field")
+				for _, p := range patterns {
+					matched, _ := regexp.MatchString(p.pattern, string(content))
+					if !matched {
+						t.Errorf("output should contain %s", p.desc)
+					}
 				}
 			},
 		},
@@ -152,6 +161,7 @@ func TestGenerate(t *testing.T) {
 					Generate: options.GenerateCmd{
 						Output:  outputFile,
 						Package: "messages",
+						Prefix:  "common",
 					},
 					TR: bundle,
 				}
@@ -167,13 +177,20 @@ func TestGenerate(t *testing.T) {
 				}
 
 				// Should have all unique keys from both files in Common struct
-				if !strings.Contains(string(content), "Common struct") {
-					t.Error("output should contain Common struct")
+				patterns := []struct {
+					pattern string
+					desc    string
+				}{
+					{`type\s+Common\s+struct`, "Common struct (prefix is 'common')"},
+					{`Yes\s+string`, "Yes field"},
+					{`No\s+string`, "No field"},
+					{`Cancel\s+string`, "Cancel field"},
 				}
-				expectedFields := []string{"Yes string", "No string", "Cancel string"}
-				for _, field := range expectedFields {
-					if !strings.Contains(string(content), field) {
-						t.Errorf("output should contain field %q", field)
+
+				for _, p := range patterns {
+					matched, _ := regexp.MatchString(p.pattern, string(content))
+					if !matched {
+						t.Errorf("output should contain %s", p.desc)
 					}
 				}
 			},
@@ -258,8 +275,8 @@ func TestGenerate(t *testing.T) {
 			validate: func(t *testing.T, outputPath string) {
 				// Should generate empty structure
 				content, _ := os.ReadFile(outputPath)
-				if !strings.Contains(string(content), "var Keys = struct") {
-					t.Error("should generate empty Keys structure")
+				if !strings.Contains(string(content), "var Keys struct") {
+					t.Error("should generate Keys structure")
 				}
 			},
 		},
@@ -284,11 +301,14 @@ func TestGenerate(t *testing.T) {
 					Generate: options.GenerateCmd{
 						Output:  outputFile,
 						Package: "messages",
+						Prefix:  "root",
 					},
 					TR: bundle,
 				}
 
 				parser, _ := goopt.NewParserFromStruct(cfg)
+				// Parse with generate command and prefix argument
+				parser.Parse([]string{"generate", "-i", filepath.Join(tempDir, "wildcard_*.json"), "-o", outputFile, "--prefix", "root"})
 				return parser, cfg
 			},
 			wantError: false,
@@ -298,15 +318,26 @@ func TestGenerate(t *testing.T) {
 					t.Fatalf("failed to read output file: %v", err)
 				}
 
-				// Should have deduplicated keys in Root struct
-				if !strings.Contains(string(content), "Root struct") {
-					t.Error("output should contain Root struct for top-level keys")
+				// Debug: print first 500 chars of content
+				if testing.Verbose() {
+					t.Logf("Generated content preview: %.500s", string(content))
 				}
-				if !strings.Contains(string(content), "Greeting string") {
-					t.Error("output should contain Greeting field")
+
+				// Should have deduplicated keys in Root struct (since prefix is "root")
+				patterns := []struct {
+					pattern string
+					desc    string
+				}{
+					{`type\s+Root\s+struct`, "Root struct (prefix is 'root')"},
+					{`Greeting\s+string`, "Greeting field"},
+					{`Common\s+string`, "Common field"},
 				}
-				if !strings.Contains(string(content), "Common string") {
-					t.Error("output should contain Common field")
+
+				for _, p := range patterns {
+					matched, _ := regexp.MatchString(p.pattern, string(content))
+					if !matched {
+						t.Errorf("output should contain %s", p.desc)
+					}
 				}
 			},
 		},
@@ -373,14 +404,25 @@ func TestGenerateKeyGrouping(t *testing.T) {
 	contentStr := string(content)
 
 	// Should have nested structs
-	if !strings.Contains(contentStr, "UserProfile struct") {
-		t.Error("should have UserProfile nested struct")
+	if !strings.Contains(contentStr, "Profile struct") {
+		t.Error("should have Profile nested struct")
 	}
-	if !strings.Contains(contentStr, "UserSettings struct") {
-		t.Error("should have UserSettings nested struct")
+	if !strings.Contains(contentStr, "Settings struct") {
+		t.Error("should have Settings nested struct")
 	}
-	if !strings.Contains(contentStr, "AdminUsers struct") {
-		t.Error("should have AdminUsers nested struct")
+	if !strings.Contains(contentStr, "Users struct") {
+		t.Error("should have Users nested struct")
+	}
+	if !strings.Contains(contentStr, "User struct") {
+		t.Error("should have User struct")
+	}
+	if !strings.Contains(contentStr, "Admin struct") {
+		t.Error("should have Admin struct")
+	}
+
+	// Should have App struct with default prefix
+	if !strings.Contains(contentStr, "App struct") {
+		t.Error("should have App struct")
 	}
 
 	// Check standalone key

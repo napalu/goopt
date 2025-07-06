@@ -213,10 +213,12 @@ func test() {
 	}
 
 	// Check that non-skip strings ARE transformed
-	translateStrings := []string{`"translate1"`, `"translate2 %s"`}
-	for _, trans := range translateStrings {
-		if strings.Contains(resultStr, trans) {
-			t.Errorf("String %s was not transformed but should have been", trans)
-		}
+	if !strings.Contains(resultStr, "tr.T(messages.Keys.Trans1)") {
+		t.Error("translate1 was not transformed but should have been")
+		t.Logf("Result:\n%s", resultStr)
+	}
+	if !strings.Contains(resultStr, "tr.T(messages.Keys.Trans2") {
+		t.Error("translate2 with format specifier was not transformed but should have been")
+		t.Logf("Result:\n%s", resultStr)
 	}
 }

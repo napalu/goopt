@@ -41,6 +41,8 @@ var (
 			name: "preserve multiple skip comments",
 			input: `package main
 
+import "fmt"
+
 func process() {
 	endpoint := "https://api.example.com" // i18n-skip
 	fmt.Println("Connecting to endpoint")

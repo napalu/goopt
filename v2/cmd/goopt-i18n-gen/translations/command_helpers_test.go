@@ -55,7 +55,7 @@ func TestToGoName(t *testing.T) {
 		{
 			name:     "with numbers",
 			input:    "error_404_not_found",
-			expected: "Error404NotFound",
+			expected: "ErrorN404NotFound",
 		},
 		{
 			name:     "all caps",

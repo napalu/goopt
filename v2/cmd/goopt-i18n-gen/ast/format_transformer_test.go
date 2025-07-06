@@ -25,9 +25,10 @@ func TestFormatTransformer(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name      string
+		input     string
+		expected  string
+		expected2 string // optional second expected string for tests with multiple transformations
 	}{
 		{
 			name: "simple Printf",
@@ -109,8 +110,8 @@ func example() {
 	fmt.Printf("Hello world")
 	log.Printf("Error code: %d", 500)
 }`,
-			expected: `fmt.Print(tr.T(messages.Keys.App.Extracted.HelloWorld))
-	log.Print(tr.T(messages.Keys.App.Extracted.ErrorCodeD, 500))`,
+			expected:  `fmt.Print(tr.T(messages.Keys.App.Extracted.HelloWorld))`,
+			expected2: `log.Print(tr.T(messages.Keys.App.Extracted.ErrorCodeD, 500))`,
 		},
 		{
 			name: "should not transform strings not in translation map",
@@ -149,6 +150,11 @@ func example() {
 			resultStr := string(result)
 			if !strings.Contains(resultStr, tt.expected) {
 				t.Errorf("Expected output to contain:\n%s\n\nGot:\n%s", tt.expected, resultStr)
+			}
+
+			// Check second expected string if provided
+			if tt.expected2 != "" && !strings.Contains(resultStr, tt.expected2) {
+				t.Errorf("Expected output to also contain:\n%s\n\nGot:\n%s", tt.expected2, resultStr)
 			}
 		})
 	}
