@@ -523,8 +523,8 @@ func main() {
 					t.Error("i18n-todo comments should have been removed")
 				}
 
-				if strings.Contains(string(content), "i18n-skip") {
-					t.Error("i18n-skip comments should have been removed")
+				if !strings.Contains(string(content), "i18n-skip") {
+					t.Error("i18n-skip comments should be preserved")
 				}
 			},
 		},

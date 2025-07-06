@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/common"
 	"github.com/napalu/goopt/v2/i18n"
 )
 
@@ -79,7 +80,7 @@ func main() {
 
 	// Create replacer
 	bundle := i18n.NewEmptyBundle()
-	config := &TransformationConfig{
+	config := &common.TransformationConfig{
 		Translator:    bundle,
 		TransformMode: "user-facing",
 	}
@@ -213,7 +214,7 @@ func test() {
 
 			// Create replacer
 			bundle := i18n.NewEmptyBundle()
-			config := &TransformationConfig{
+			config := &common.TransformationConfig{
 				Translator:    bundle,
 				TransformMode: "user-facing",
 			}
@@ -271,7 +272,7 @@ func outer() {
 	}
 
 	bundle := i18n.NewEmptyBundle()
-	config := &TransformationConfig{
+	config := &common.TransformationConfig{
 		Translator:    bundle,
 		TransformMode: "user-facing",
 	}
@@ -302,7 +303,7 @@ func outer() {
 // BenchmarkIsInUserFacingFunction tests performance
 func BenchmarkIsInUserFacingFunction(b *testing.B) {
 	bundle := i18n.NewEmptyBundle()
-	config := &TransformationConfig{
+	config := &common.TransformationConfig{
 		Translator:    bundle,
 		TransformMode: "user-facing",
 	}
@@ -331,5 +332,188 @@ func BenchmarkIsInUserFacingFunction(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = tr.isInUserFacingFunction(lit)
+	}
+}
+
+func TestConvertKeyToASTFormat(t *testing.T) {
+	tests := []struct {
+		name        string
+		key         string
+		packagePath string
+		expected    string
+	}{
+		// Basic cases
+		{
+			name:        "simple key",
+			key:         "app.extracted.hello_world",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.HelloWorld",
+		},
+		{
+			name:        "with package path",
+			key:         "app.extracted.error_message",
+			packagePath: "./messages",
+			expected:    "messages.Keys.App.Extracted.ErrorMessage",
+		},
+		{
+			name:        "full module path",
+			key:         "app.test.sample",
+			packagePath: "github.com/user/project/messages",
+			expected:    "messages.Keys.App.Test.Sample",
+		},
+
+		// Numeric cases - critical for our fix
+		{
+			name:        "all numeric key",
+			key:         "app.extracted.n0000_00_00_00_00_00",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.N00000000000000",
+		},
+		{
+			name:        "date format numeric",
+			key:         "app.extracted.n2023_12_25_00_00_00",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.N20231225000000",
+		},
+		{
+			name:        "simple numeric",
+			key:         "app.extracted.n12345",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.N12345",
+		},
+		{
+			name:        "mixed numeric",
+			key:         "app.extracted.error_404__not_found",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.ErrorN404NotFound",
+		},
+		{
+			name:        "numeric in middle",
+			key:         "app.extracted.order__12345_processed",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.OrderN12345Processed",
+		},
+		{
+			name:        "leading number",
+			key:         "app.extracted.n123_items_found",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.N123ItemsFound",
+		},
+
+		// Format string cases
+		{
+			name:        "format string single",
+			key:         "app.extracted.hello__s",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.HelloS",
+		},
+		{
+			name:        "format string multiple",
+			key:         "app.extracted.removed_child_group__s_from_group__s2",
+			packagePath: "messages",
+			expected:    "messages.Keys.App.Extracted.RemovedChildGroupSFromGroupS2",
+		},
+
+		// Edge cases
+		{
+			name:        "empty key part",
+			key:         "app..test",
+			packagePath: "messages",
+			expected:    "messages.Keys.App..Test",
+		},
+		{
+			name:        "single part key",
+			key:         "simple",
+			packagePath: "messages",
+			expected:    "messages.Keys.Simple",
+		},
+		{
+			name:        "relative package path",
+			key:         "app.test.key",
+			packagePath: "../messages",
+			expected:    "messages.Keys.App.Test.Key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sr := &TransformationReplacer{
+				config: &common.TransformationConfig{
+					PackagePath: tt.packagePath,
+				},
+			}
+
+			result := sr.convertKeyToASTFormat(tt.key)
+			if result != tt.expected {
+				t.Errorf("convertKeyToASTFormat(%q) = %q, want %q", tt.key, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConvertKeyToASTFormatNumericConsistency verifies that numeric keys are
+// converted consistently with the generate command
+func TestConvertKeyToASTFormatNumericConsistency(t *testing.T) {
+	// These are the actual keys from our test case
+	numericKeys := []struct {
+		key      string
+		expected string
+	}{
+		{
+			key:      "app.extracted.n0000_00_00_00_00_00",
+			expected: "messages.Keys.App.Extracted.N00000000000000",
+		},
+		{
+			key:      "app.extracted.n2023_12_25_00_00_00",
+			expected: "messages.Keys.App.Extracted.N20231225000000",
+		},
+		{
+			key:      "app.extracted.n12345",
+			expected: "messages.Keys.App.Extracted.N12345",
+		},
+		{
+			key:      "app.extracted.n123_items_found",
+			expected: "messages.Keys.App.Extracted.N123ItemsFound",
+		},
+		{
+			key:      "app.extracted.error_404__not_found",
+			expected: "messages.Keys.App.Extracted.ErrorN404NotFound",
+		},
+		{
+			key:      "app.extracted.order__12345_processed",
+			expected: "messages.Keys.App.Extracted.OrderN12345Processed",
+		},
+	}
+
+	sr := &TransformationReplacer{
+		config: &common.TransformationConfig{
+			PackagePath: "messages",
+		},
+	}
+
+	for _, tt := range numericKeys {
+		t.Run(tt.key, func(t *testing.T) {
+			result := sr.convertKeyToASTFormat(tt.key)
+			if result != tt.expected {
+				t.Errorf("convertKeyToASTFormat(%q) = %q, want %q", tt.key, result, tt.expected)
+			}
+
+			// Verify that the last part (after the last dot) starts with a capital letter
+			// This is required for Go exported identifiers
+			lastDotIdx := len(result) - 1
+			for i := len(result) - 1; i >= 0; i-- {
+				if result[i] == '.' {
+					lastDotIdx = i
+					break
+				}
+			}
+
+			if lastDotIdx < len(result)-1 {
+				lastPart := result[lastDotIdx+1:]
+				if len(lastPart) > 0 && (lastPart[0] < 'A' || lastPart[0] > 'Z') {
+					t.Errorf("Last part of %q doesn't start with capital letter: %q", result, lastPart)
+				}
+			}
+		})
 	}
 }

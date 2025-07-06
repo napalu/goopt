@@ -7,36 +7,45 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"golang.org/x/tools/go/ast/astutil"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 // FormatTransformer handles AST transformation of format function calls
 type FormatTransformer struct {
-	fset              *token.FileSet
-	stringMap         map[string]string    // maps string literals to translation keys
-	requiredImports   map[string]bool      // tracks imports needed
-	transformed       bool                 // tracks if any transformations were made
-	detector          *FormatDetector      // generic format function detector
-	packagePath       string               // path to the messages package
-	transformMode     string               // "user-facing", "with-comments", "all-marked", "all"
-	i18nTodoMap       map[token.Pos]string // maps string literal positions to i18n-todo message keys
-	userFacingRegexes []*regexp.Regexp     // regex patterns to identify user-facing functions
-	skipPositions     map[token.Pos]bool   // positions of strings that should be skipped due to i18n-skip comments
+	fset               *token.FileSet
+	stringMap          map[string]string    // maps string literals to translation keys
+	requiredImports    map[string]bool      // tracks imports needed
+	transformed        bool                 // tracks if any transformations were made
+	detector           *FormatDetector      // generic format function detector
+	packagePath        string               // path to the messages package
+	transformMode      string               // "user-facing", "with-comments", "all-marked", "all"
+	i18nTodoMap        map[token.Pos]string // maps string literal positions to i18n-todo message keys
+	userFacingRegexes  []*regexp.Regexp     // regex patterns to identify user-facing functions
+	skipPositions      map[token.Pos]bool   // positions of strings that should be skipped due to i18n-skip comments
+	trPattern          string               // translator pattern (e.g., "tr.T")
+	currentFilename    string               // current filename being processed
+	trDeclaredInPkg    bool                 // whether TR is already declared in another file in the package
+	transformedStrings map[string]string    // tracks which strings were actually transformed (string value -> key)
 }
 
 // NewFormatTransformer creates a new format transformer
 func NewFormatTransformer(stringMap map[string]string) *FormatTransformer {
 	return &FormatTransformer{
-		fset:            token.NewFileSet(),
-		stringMap:       stringMap,
-		requiredImports: make(map[string]bool),
-		transformed:     false,
-		detector:        NewFormatDetector(),
-		packagePath:     "messages",    // default value (will be resolved to full module path)
-		transformMode:   "user-facing", // default to only transforming known user-facing functions
-		i18nTodoMap:     make(map[token.Pos]string),
-		skipPositions:   make(map[token.Pos]bool),
+		fset:               token.NewFileSet(),
+		stringMap:          stringMap,
+		requiredImports:    make(map[string]bool),
+		transformed:        false,
+		detector:           NewFormatDetector(),
+		packagePath:        "messages",    // default value (will be resolved to full module path)
+		transformMode:      "user-facing", // default to only transforming known user-facing functions
+		i18nTodoMap:        make(map[token.Pos]string),
+		skipPositions:      make(map[token.Pos]bool),
+		trPattern:          "tr.T", // default translator pattern
+		transformedStrings: make(map[string]string),
 	}
 }
 
@@ -48,6 +57,11 @@ func (ft *FormatTransformer) SetMessagePackagePath(path string) {
 // SetTransformMode sets the transformation mode
 func (ft *FormatTransformer) SetTransformMode(mode string) {
 	ft.transformMode = mode
+}
+
+// SetTranslatorPattern sets the translator pattern (e.g., "tr.T")
+func (ft *FormatTransformer) SetTranslatorPattern(pattern string) {
+	ft.trPattern = pattern
 }
 
 // SetUserFacingRegexes sets the regex patterns to identify user-facing functions
@@ -92,98 +106,9 @@ func (ft *FormatTransformer) SetFormatFunctionPatterns(patterns []string) error 
 	return nil
 }
 
-// preprocessMultilineCalls converts multi-line function calls with i18n-todo comments to single-line
-// This is necessary because the AST transformation can break multi-line formatting
-func (ft *FormatTransformer) preprocessMultilineCalls(src []byte) []byte {
-	lines := strings.Split(string(src), "\n")
-	var result []string
-	i := 0
-
-	for i < len(lines) {
-		// Check if current line starts a function call
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-
-		// Skip comments and empty lines
-		if strings.HasPrefix(trimmed, "//") || trimmed == "" {
-			result = append(result, line)
-			i++
-			continue
-		}
-
-		// Check if this line contains a function call opening
-		if strings.Contains(line, "(") && !strings.Contains(line, ")") {
-			// Potential multi-line call - scan ahead to find if it contains i18n-todo
-			callLines := []string{line}
-			parenCount := strings.Count(line, "(") - strings.Count(line, ")")
-			hasI18nTodo := strings.Contains(line, "i18n-todo:")
-			j := i + 1
-
-			// Collect all lines of the function call
-			for j < len(lines) && parenCount > 0 {
-				nextLine := lines[j]
-				callLines = append(callLines, nextLine)
-				parenCount += strings.Count(nextLine, "(") - strings.Count(nextLine, ")")
-				if strings.Contains(nextLine, "i18n-todo:") {
-					hasI18nTodo = true
-				}
-				j++
-			}
-
-			// If this multi-line call has i18n-todo, convert to single line
-			if hasI18nTodo && len(callLines) > 1 {
-				singleLine := ft.joinMultilineCall(callLines)
-				result = append(result, singleLine)
-				i = j // Skip all the lines we just processed
-			} else {
-				// Keep as multi-line
-				result = append(result, callLines...)
-				i = j
-			}
-		} else {
-			// Not a multi-line call or doesn't need processing
-			result = append(result, line)
-			i++
-		}
-	}
-
-	return []byte(strings.Join(result, "\n"))
-}
-
-// joinMultilineCall joins a multi-line function call into a single line
-func (ft *FormatTransformer) joinMultilineCall(lines []string) string {
-	if len(lines) == 0 {
-		return ""
-	}
-
-	// Get leading whitespace from first line
-	leadingSpace := ""
-	for i, ch := range lines[0] {
-		if ch != ' ' && ch != '\t' {
-			leadingSpace = lines[0][:i]
-			break
-		}
-	}
-
-	// Join all lines and clean up
-	parts := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			parts = append(parts, trimmed)
-		}
-	}
-
-	joined := strings.Join(parts, " ")
-
-	// Clean up extra spaces around punctuation
-	joined = regexp.MustCompile(`\s*,\s*`).ReplaceAllString(joined, ", ")
-	joined = regexp.MustCompile(`\s*\(\s*`).ReplaceAllString(joined, "(")
-	joined = regexp.MustCompile(`\s*\)\s*`).ReplaceAllString(joined, ")")
-	joined = regexp.MustCompile(`\s+/\*`).ReplaceAllString(joined, " /*")
-	joined = regexp.MustCompile(`\*/\s+`).ReplaceAllString(joined, "*/ ")
-
-	return leadingSpace + joined
+// GetTransformedStrings returns the map of strings that were actually transformed (string value -> key)
+func (ft *FormatTransformer) GetTransformedStrings() map[string]string {
+	return ft.transformedStrings
 }
 
 // buildSkipPositions scans the AST to find string literals with i18n-skip comments
@@ -224,15 +149,38 @@ func (ft *FormatTransformer) buildSkipPositions(file *ast.File) {
 				for _, comment := range comments {
 					commentPos := ft.fset.Position(comment.Pos())
 					// Ensure comment is after the string literal on the same line
+					// AND before the next argument (if any)
 					if commentPos.Column > litEndPos.Column {
-						ft.skipPositions[lit.Pos()] = true
+						// Check if this is really for this string literal
+						// by verifying there's no other string literal between this one and the comment
+						isForThisLiteral := true
 
-						// Find the parent node to attach the comment to
-						parentNode := ft.findParentNode(file, lit)
-						if parentNode != nil {
-							nodesToAttachComments[parentNode] = append(nodesToAttachComments[parentNode], comment)
+						// Walk all nodes to find if there's another string between this literal and the comment
+						ast.Inspect(file, func(n ast.Node) bool {
+							if otherLit, ok := n.(*ast.BasicLit); ok && otherLit.Kind == token.STRING && otherLit != lit {
+								otherPos := ft.fset.Position(otherLit.Pos())
+								otherEndPos := ft.fset.Position(otherLit.End())
+								// Check if the other literal is on the same line and between our literal and the comment
+								if otherPos.Line == litPos.Line &&
+									otherEndPos.Column > litEndPos.Column &&
+									otherPos.Column < commentPos.Column {
+									isForThisLiteral = false
+									return false
+								}
+							}
+							return true
+						})
+
+						if isForThisLiteral {
+							ft.skipPositions[lit.Pos()] = true
+
+							// Find the parent node to attach the comment to
+							parentNode := ft.findParentNode(file, lit)
+							if parentNode != nil {
+								nodesToAttachComments[parentNode] = append(nodesToAttachComments[parentNode], comment)
+							}
+							break
 						}
-						break
 					}
 				}
 			}
@@ -240,32 +188,69 @@ func (ft *FormatTransformer) buildSkipPositions(file *ast.File) {
 			// 2. Previous line comment (comment on the line before)
 			// This handles cases like:
 			// // i18n-skip
-			// const value = "string"
+			// msg := "string"
 			if litPos.Line > 1 {
+				// Check comments on the immediate previous line
 				if comments, exists := skipCommentsByLine[litPos.Line-1]; exists {
-					// Check if this is likely a comment for the next line
-					// by checking if the string literal is at or near the beginning of its line
-					// (this helps avoid false positives from unrelated comments)
-					isLikelyPreviousLineComment := false
+					// Only apply if the comment is a standalone line comment (not inline)
+					for _, comment := range comments {
+						commentPos := ft.fset.Position(comment.Pos())
+						// Check if this is a standalone comment (typically starts near beginning of line)
+						// Inline comments would have been handled in case 1 above
+						isStandaloneComment := false
 
-					// Find the parent statement/declaration
-					parentStmt := ft.findParentStatement(file, lit)
-					if parentStmt != nil {
-						stmtPos := ft.fset.Position(parentStmt.Pos())
-						// If the statement starts on the same line as the literal,
-						// and there's a comment on the previous line, it's likely for this statement
-						if stmtPos.Line == litPos.Line {
-							isLikelyPreviousLineComment = true
+						// If it's a line comment starting with //, check if it's at the beginning
+						if strings.HasPrefix(comment.Text, "//") && commentPos.Column < 20 {
+							isStandaloneComment = true
+						}
+						// Block comments at line start are also standalone
+						if strings.HasPrefix(comment.Text, "/*") && commentPos.Column < 10 {
+							isStandaloneComment = true
+						}
+
+						if isStandaloneComment {
+							ft.skipPositions[lit.Pos()] = true
+
+							// Find the parent node to attach the comment to
+							parentNode := ft.findParentNode(file, lit)
+							if parentNode != nil {
+								nodesToAttachComments[parentNode] = append(nodesToAttachComments[parentNode], comment)
+							}
+							break
 						}
 					}
+				}
+			}
+			// 3. Check for skip comments in multi-line contexts
+			// For example, in a function call that spans multiple lines:
+			// // i18n-skip
+			// fmt.Println(
+			//     "string to skip"
+			// )
+			if parentCall := ft.findParentCall(file, lit); parentCall != nil {
+				callPos := ft.fset.Position(parentCall.Pos())
+				// Check if there's a skip comment on the line before the call
+				if callPos.Line > 1 {
+					if comments, exists := skipCommentsByLine[callPos.Line-1]; exists {
+						for _, comment := range comments {
+							commentPos := ft.fset.Position(comment.Pos())
+							// Only apply if it's a standalone comment, not an inline comment
+							isStandaloneComment := false
 
-					if isLikelyPreviousLineComment {
-						ft.skipPositions[lit.Pos()] = true
+							// If it's a line comment starting with //, check if it's at the beginning
+							if strings.HasPrefix(comment.Text, "//") && commentPos.Column < 20 {
+								isStandaloneComment = true
+							}
+							// Block comments at line start are also standalone
+							if strings.HasPrefix(comment.Text, "/*") && commentPos.Column < 10 {
+								isStandaloneComment = true
+							}
 
-						// Find the parent node to attach the comment to
-						parentNode := ft.findParentNode(file, lit)
-						if parentNode != nil {
-							nodesToAttachComments[parentNode] = append(nodesToAttachComments[parentNode], comments...)
+							if isStandaloneComment {
+								ft.skipPositions[lit.Pos()] = true
+								nodesToAttachComments[parentCall] = append(nodesToAttachComments[parentCall], comment)
+								break
+							}
 						}
 					}
 				}
@@ -278,63 +263,53 @@ func (ft *FormatTransformer) buildSkipPositions(file *ast.File) {
 	ft.attachCommentsToNodes(file, nodesToAttachComments)
 }
 
-// buildI18nTodoMap scans the AST to find string literals with i18n-todo comments
-func (ft *FormatTransformer) buildI18nTodoMap(file *ast.File) {
-	// Clear the map
-	ft.i18nTodoMap = make(map[token.Pos]string)
+// RemoveI18nTodoCommentsFromSource removes i18n-todo comments from source code
+// This is done before AST parsing to avoid issues with embedded comments
+func (ft *FormatTransformer) RemoveI18nTodoCommentsFromSource(src []byte) []byte {
+	// We need to track which strings had i18n-todo comments for later transformation
+	lines := strings.Split(string(src), "\n")
+	var result []string
 
-	// First, collect all i18n-todo comments and their positions
-	todoComments := make(map[token.Pos]string)
-	for _, cg := range file.Comments {
-		for _, c := range cg.List {
-			// Check if this is an i18n-todo comment
-			if strings.Contains(c.Text, "i18n-todo:") {
-				// Extract the message key from the comment
-				// Format: // i18n-todo: tr.T(messages.Keys.Hello)
-				parts := strings.Split(c.Text, "i18n-todo:")
-				if len(parts) < 2 {
-					continue
-				}
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
 
-				todoText := strings.TrimSpace(parts[1])
-				// Extract the key from tr.T(messages.Keys.XXX) or similar patterns
-				if keyStart := strings.Index(todoText, "("); keyStart != -1 {
-					if keyEnd := strings.LastIndex(todoText, ")"); keyEnd != -1 {
-						keyExpr := todoText[keyStart+1 : keyEnd]
-						// Remove any quotes if present
-						keyExpr = strings.Trim(keyExpr, `"'`)
-						// Store by comment position
-						todoComments[c.Pos()] = keyExpr
-					}
-				}
+		// Remove block comments /* i18n-todo: ... */
+		for {
+			startIdx := strings.Index(line, "/"+"* i18n-todo:")
+			if startIdx < 0 {
+				break
 			}
+			endIdx := strings.Index(line[startIdx:], "*"+"/")
+			if endIdx < 0 {
+				// Malformed comment, skip
+				break
+			}
+			// Remove the comment
+			line = line[:startIdx] + line[startIdx+endIdx+2:]
 		}
+
+		// Remove line comments // i18n-todo: ...
+		if idx := strings.Index(line, "// i18n-todo:"); idx >= 0 {
+			line = strings.TrimRight(line[:idx], " \t")
+		}
+
+		result = append(result, line)
 	}
 
-	// Now walk the AST to find string literals that are on the same line as i18n-todo comments
-	ast.Inspect(file, func(n ast.Node) bool {
-		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-			litPos := ft.fset.Position(lit.Pos())
-
-			// Check if there's an i18n-todo comment on the same line
-			for commentPos, keyExpr := range todoComments {
-				cPos := ft.fset.Position(commentPos)
-				if cPos.Line == litPos.Line {
-					// Found a match - map the string literal position to the key
-					ft.i18nTodoMap[lit.Pos()] = keyExpr
-					break
-				}
-			}
-		}
-		return true
-	})
+	return []byte(strings.Join(result, "\n"))
 }
 
 // TransformFile transforms format functions in a file
 func (ft *FormatTransformer) TransformFile(filename string, src []byte) ([]byte, error) {
-	// Pre-process source to handle multi-line function calls with i18n-todo comments
+	// Store the current filename
+	ft.currentFilename = filename
+	// Reset the package-level TR declaration flag for each file
+	ft.trDeclaredInPkg = false
+
+	// First pass: Remove i18n-todo comments from the source before parsing
+	// This prevents AST parsing issues with embedded comments
 	if ft.transformMode == "with-comments" || ft.transformMode == "all-marked" {
-		src = ft.preprocessMultilineCalls(src)
+		src = ft.RemoveI18nTodoCommentsFromSource(src)
 	}
 
 	// Parse the file
@@ -346,27 +321,19 @@ func (ft *FormatTransformer) TransformFile(filename string, src []byte) ([]byte,
 	// Build skip positions map - needed for all transform modes
 	ft.buildSkipPositions(file)
 
-	// Build i18n-todo map if needed for certain transform modes
-	if ft.transformMode == "with-comments" || ft.transformMode == "all-marked" {
-		ft.buildI18nTodoMap(file)
-	}
-
 	// Transform the AST based on mode
 	switch ft.transformMode {
 	case "user-facing":
 		// Only transform user-facing functions
 		ast.Inspect(file, ft.transformNode)
 	case "with-comments":
-		// Only transform strings with i18n-todo comments
-		if len(ft.i18nTodoMap) > 0 {
-			ft.applyI18nTodoTransformations(file)
-		}
+		// In this mode, only transform strings that have translation keys
+		// The caller should have filtered the stringMap to only include strings with i18n-todo comments
+		ft.transformAllStrings(file)
 	case "all-marked":
-		// Transform both user-facing AND i18n-todo comments
+		// Transform both user-facing AND all strings (since i18n-todo comments are removed)
 		ast.Inspect(file, ft.transformNode)
-		if len(ft.i18nTodoMap) > 0 {
-			ft.applyI18nTodoTransformations(file)
-		}
+		ft.transformAllStrings(file)
 	case "all":
 		// Transform all strings that have keys
 		ft.transformAllStrings(file)
@@ -381,7 +348,12 @@ func (ft *FormatTransformer) TransformFile(filename string, src []byte) ([]byte,
 	}
 
 	// Convert back to source
-	return formatNode(ft.fset, file)
+	result, err := ft.formatNode(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // transformAllStrings transforms all string literals that have translation keys
@@ -403,7 +375,7 @@ func (ft *FormatTransformer) transformAllStrings(file *ast.File) {
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.CallExpr:
-			// First handle format functions as usual
+			// Handle format functions and regular function calls
 			ft.transformNode(x)
 		case *ast.AssignStmt:
 			// Handle assignments
@@ -421,6 +393,9 @@ func (ft *FormatTransformer) transformAllStrings(file *ast.File) {
 								ft.transformed = true
 								ft.requiredImports["messages"] = true
 								ft.requiredImports["i18n"] = true
+								// Track the transformed string (unquoted value)
+								unquotedStr := strings.Trim(quotedStr, "`\"")
+								ft.transformedStrings[unquotedStr] = key
 							}
 							break
 						}
@@ -454,124 +429,78 @@ func (ft *FormatTransformer) transformAllStrings(file *ast.File) {
 					}
 				}
 			}
-		}
-		return true
-	})
-}
-
-// applyI18nTodoTransformations applies transformations based on i18n-todo comments
-func (ft *FormatTransformer) applyI18nTodoTransformations(file *ast.File) {
-	// Walk the AST and transform string literals that have i18n-todo comments
-	ast.Inspect(file, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.CallExpr:
-			// Handle function calls with string literals
-			for i, arg := range x.Args {
-				if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
-						// Check if we have a key for this string
-						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
-						for quotedStr, key := range ft.stringMap {
-							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
-								// Found a match - create tr.T call
-								trCall := ft.createTrCall(key, nil)
-								if trCall != nil {
-									x.Args[i] = trCall
-									ft.transformed = true
-									ft.requiredImports["messages"] = true
-									ft.requiredImports["i18n"] = true
-								}
-								break
-							}
-						}
+		case *ast.ReturnStmt:
+			// Handle return statements
+			for i, result := range x.Results {
+				if lit, ok := result.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					// Check if this string has an i18n-skip comment
+					if ft.skipPositions[lit.Pos()] {
+						continue // Skip transformation
 					}
-				}
-			}
-		case *ast.AssignStmt:
-			// Handle assignments like: msg := "World" // i18n-todo: tr.T(messages.Keys.World)
-			for i, rhs := range x.Rhs {
-				if lit, ok := rhs.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
-						// Check if the key exists in our string map
-						// We need to check if we have a transformation for this string
-						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
-						for quotedStr, key := range ft.stringMap {
-							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
-								// Found a match - create tr.T call
-								trCall := ft.createTrCall(key, nil)
-								if trCall != nil {
-									x.Rhs[i] = trCall
-									ft.transformed = true
-									ft.requiredImports["messages"] = true
-									ft.requiredImports["i18n"] = true
-								}
-								break
+					for quotedStr, key := range ft.stringMap {
+						if lit.Value == quotedStr {
+							trCall := ft.createTrCall(key, nil)
+							if trCall != nil {
+								x.Results[i] = trCall
+								ft.transformed = true
+								ft.requiredImports["messages"] = true
+								ft.requiredImports["i18n"] = true
+								// Track the transformed string (unquoted value)
+								unquotedStr := strings.Trim(quotedStr, "`\"")
+								ft.transformedStrings[unquotedStr] = key
 							}
-						}
-					}
-				}
-			}
-		case *ast.ValueSpec:
-			// Handle var/const declarations
-			for i, val := range x.Values {
-				if lit, ok := val.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
-						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
-						for quotedStr, key := range ft.stringMap {
-							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
-								// Found a match - create tr.T call
-								trCall := ft.createTrCall(key, nil)
-								if trCall != nil {
-									x.Values[i] = trCall
-									ft.transformed = true
-									ft.requiredImports["messages"] = true
-									ft.requiredImports["i18n"] = true
-								}
-								break
-							}
+							break
 						}
 					}
 				}
 			}
 		case *ast.CompositeLit:
-			// Handle composite literals (arrays, slices, maps, structs)
+			// Handle composite literals (struct/slice/map initialization)
 			for i, elt := range x.Elts {
-				// Handle direct string literals in composite literals
-				if lit, ok := elt.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					if _, found := ft.i18nTodoMap[lit.Pos()]; found {
-						unquotedStr := strings.Trim(lit.Value, `"'`+"`")
+				switch e := elt.(type) {
+				case *ast.KeyValueExpr:
+					// Handle key-value pairs in structs/maps
+					if lit, ok := e.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						// Check if this string has an i18n-skip comment
+						if ft.skipPositions[lit.Pos()] {
+							continue // Skip transformation
+						}
 						for quotedStr, key := range ft.stringMap {
-							if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
-								// Found a match - create tr.T call
+							if lit.Value == quotedStr {
+								trCall := ft.createTrCall(key, nil)
+								if trCall != nil {
+									e.Value = trCall
+									ft.transformed = true
+									ft.requiredImports["messages"] = true
+									ft.requiredImports["i18n"] = true
+									// Track the transformed string (unquoted value)
+									unquotedStr := strings.Trim(quotedStr, "`\"")
+									ft.transformedStrings[unquotedStr] = key
+								}
+								break
+							}
+						}
+					}
+				case *ast.BasicLit:
+					// Handle array/slice elements
+					if e.Kind == token.STRING {
+						// Check if this string has an i18n-skip comment
+						if ft.skipPositions[e.Pos()] {
+							continue // Skip transformation
+						}
+						for quotedStr, key := range ft.stringMap {
+							if e.Value == quotedStr {
 								trCall := ft.createTrCall(key, nil)
 								if trCall != nil {
 									x.Elts[i] = trCall
 									ft.transformed = true
 									ft.requiredImports["messages"] = true
 									ft.requiredImports["i18n"] = true
+									// Track the transformed string (unquoted value)
+									unquotedStr := strings.Trim(quotedStr, "`\"")
+									ft.transformedStrings[unquotedStr] = key
 								}
 								break
-							}
-						}
-					}
-				}
-				// Also handle KeyValueExpr for maps
-				if kv, ok := elt.(*ast.KeyValueExpr); ok {
-					if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-						if _, found := ft.i18nTodoMap[lit.Pos()]; found {
-							unquotedStr := strings.Trim(lit.Value, `"'`+"`")
-							for quotedStr, key := range ft.stringMap {
-								if strings.Trim(quotedStr, `"'`+"`") == unquotedStr {
-									// Found a match - create tr.T call
-									trCall := ft.createTrCall(key, nil)
-									if trCall != nil {
-										kv.Value = trCall
-										ft.transformed = true
-										ft.requiredImports["messages"] = true
-										ft.requiredImports["i18n"] = true
-									}
-									break
-								}
 							}
 						}
 					}
@@ -627,6 +556,9 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 
 		ft.transformed = true
 		ft.requiredImports["messages"] = true
+		// Track the transformed string (unquoted value)
+		unquotedStr := strings.Trim(quotedStr, "`\"")
+		ft.transformedStrings[unquotedStr] = key
 		return true
 	}
 
@@ -638,12 +570,55 @@ func (ft *FormatTransformer) transformNode(n ast.Node) bool {
 
 // createTrCall creates a tr.T function call expression
 func (ft *FormatTransformer) createTrCall(key string, args []ast.Expr) *ast.CallExpr {
+	// Parse the translator pattern to build the correct AST
+	// Examples: "tr.T", "CGG.TR().T", "i18n.Translate", etc.
+	fun := ft.parseTranslatorPattern()
+
 	return &ast.CallExpr{
-		Fun: &ast.SelectorExpr{
+		Fun:  fun,
+		Args: ft.createTrCallArgs(key, args),
+	}
+}
+
+// parseTranslatorPattern parses the translator pattern string into an AST expression
+func (ft *FormatTransformer) parseTranslatorPattern() ast.Expr {
+	// Parse the pattern as a Go expression
+	expr, err := parser.ParseExpr(ft.trPattern)
+	if err != nil {
+		// Fallback to default if pattern is invalid
+		return &ast.SelectorExpr{
 			X:   ast.NewIdent("tr"),
 			Sel: ast.NewIdent("T"),
-		},
-		Args: ft.createTrCallArgs(key, args),
+		}
+	}
+
+	// Return the parsed expression as-is to preserve the pattern exactly
+	// Examples:
+	// - "tr.T" → SelectorExpr
+	// - "TR().t" → SelectorExpr with CallExpr as X
+	// - "CGG.TR().T" → SelectorExpr with nested calls
+	return expr
+}
+
+// removeTrailingCalls removes any trailing empty call expressions from the AST
+// For example, "CGG.TR().T" would have TR() as a call, but we want just the selector
+func removeTrailingCalls(expr ast.Expr) ast.Expr {
+	switch e := expr.(type) {
+	case *ast.CallExpr:
+		// If it's a call with no arguments, check if the Fun is what we want
+		if len(e.Args) == 0 {
+			return removeTrailingCalls(e.Fun)
+		}
+		// Otherwise, keep the call but process its Fun
+		e.Fun = removeTrailingCalls(e.Fun)
+		return e
+	case *ast.SelectorExpr:
+		// Process the X part in case it has calls
+		e.X = removeTrailingCalls(e.X)
+		return e
+	default:
+		// For other expression types, return as-is
+		return expr
 	}
 }
 
@@ -683,63 +658,87 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 	// Check which imports we need to add
 	needMessages := ft.requiredImports["messages"]
 	needErrors := ft.requiredImports["errors"]
-	needI18n := needMessages // If we need messages, we need i18n for tr
 
 	if !needMessages && !needErrors {
 		return
 	}
 
-	// Find or create import declaration
-	var importDecl *ast.GenDecl
-	for _, decl := range file.Decls {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-			importDecl = genDecl
-			break
+	// First, check if we'll need TR initialization
+	// This is needed to determine if we should add i18n import
+	needI18n := false
+
+	if needMessages {
+		// Parse the pattern to see if we need TR
+		if expr, err := parser.ParseExpr(ft.trPattern); err == nil {
+			var rootIdent string
+			switch e := expr.(type) {
+			case *ast.SelectorExpr:
+				switch x := e.X.(type) {
+				case *ast.Ident:
+					rootIdent = x.Name
+				case *ast.CallExpr:
+					if ident, ok := x.Fun.(*ast.Ident); ok {
+						rootIdent = ident.Name
+					}
+				}
+			}
+
+			if rootIdent != "" {
+				// Check if TR is already declared in this file or another file
+				hasInFile := false
+				for _, decl := range file.Decls {
+					switch d := decl.(type) {
+					case *ast.GenDecl:
+						if d.Tok == token.VAR || d.Tok == token.CONST {
+							for _, spec := range d.Specs {
+								if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+									for _, name := range valueSpec.Names {
+										if name.Name == rootIdent {
+											hasInFile = true
+											break
+										}
+									}
+								}
+							}
+						}
+					case *ast.FuncDecl:
+						if d.Name.Name == rootIdent {
+							hasInFile = true
+						}
+					}
+				}
+
+				if !hasInFile && !ft.checkTrDeclaredInPackage(rootIdent) {
+					needI18n = true
+				} else if hasInFile || ft.checkTrDeclaredInPackage(rootIdent) {
+					// TR exists somewhere, don't add i18n import
+					needI18n = false
+				}
+			}
 		}
 	}
 
-	// If no import declaration exists, create one after package declaration
-	if importDecl == nil {
-		importDecl = &ast.GenDecl{
-			Tok:   token.IMPORT,
-			Specs: []ast.Spec{},
+	// Use astutil to add imports - it handles all the edge cases correctly
+	if needMessages {
+		// Check if messages package is already imported
+		if !ft.hasImportPath(file, ft.packagePath) {
+			astutil.AddImport(ft.fset, file, ft.packagePath)
 		}
-
-		// Insert after package declaration
-		newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
-		newDecls = append(newDecls, file.Decls[0]) // package decl
-		newDecls = append(newDecls, importDecl)
-		newDecls = append(newDecls, file.Decls[1:]...)
-		file.Decls = newDecls
 	}
 
-	// Add required imports if not already present
-	if needMessages && !ft.hasImport(importDecl, "messages") {
-		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: fmt.Sprintf(`"%s"`, ft.packagePath),
-			},
-		})
+	if needErrors {
+		// Check if errors package is already imported
+		if !ft.hasImportPath(file, "errors") {
+			astutil.AddImport(ft.fset, file, "errors")
+		}
 	}
 
-	if needErrors && !ft.hasImport(importDecl, "errors") {
-		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: `"errors"`,
-			},
-		})
-	}
-
-	// We also need to ensure tr is available
-	if needI18n && !ft.hasImport(importDecl, "github.com/napalu/goopt/v2/i18n") {
-		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: `"github.com/napalu/goopt/v2/i18n"`,
-			},
-		})
+	if needI18n {
+		// Only add i18n import if we'll be adding TR declaration
+		// Check if i18n package is already imported
+		if !ft.hasImportPath(file, "github.com/napalu/goopt/v2/i18n") {
+			astutil.AddImport(ft.fset, file, "github.com/napalu/goopt/v2/i18n")
+		}
 	}
 
 	// Add tr variable initialization if needed
@@ -748,106 +747,265 @@ func (ft *FormatTransformer) addImports(file *ast.File) {
 	}
 }
 
-// hasImport checks if an import already exists
-func (ft *FormatTransformer) hasImport(importDecl *ast.GenDecl, pkg string) bool {
-	for _, spec := range importDecl.Specs {
-		if importSpec, ok := spec.(*ast.ImportSpec); ok {
-			path := strings.Trim(importSpec.Path.Value, `"`)
-			if strings.HasSuffix(path, "/"+pkg) || path == pkg {
-				return true
+// hasImportPath checks if an import path already exists in the file
+func (ft *FormatTransformer) hasImportPath(file *ast.File, path string) bool {
+	for _, decl := range file.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			for _, spec := range genDecl.Specs {
+				if importSpec, ok := spec.(*ast.ImportSpec); ok {
+					importPath := strings.Trim(importSpec.Path.Value, `"`)
+					if importPath == path {
+						return true
+					}
+				}
 			}
 		}
 	}
 	return false
 }
 
-// addTrInitialization adds tr variable declaration/initialization
-func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
-	// Check if tr is already declared
-	hasTr := false
-	for _, decl := range file.Decls {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
-			for _, spec := range genDecl.Specs {
-				if valueSpec, ok := spec.(*ast.ValueSpec); ok {
-					for _, name := range valueSpec.Names {
-						if name.Name == "tr" {
-							hasTr = true
-							break
+// checkTrDeclaredInPackage checks if the TR pattern identifier is already declared in other files in the same package
+func (ft *FormatTransformer) checkTrDeclaredInPackage(rootIdent string) bool {
+	if ft.currentFilename == "" {
+		return false
+	}
+
+	// Get the directory of the current file
+	dir := filepath.Dir(ft.currentFilename)
+
+	// Read all .go files in the directory
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+
+		// Skip test files
+		if strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filename := filepath.Join(dir, entry.Name())
+		// Skip the current file
+		if filename == ft.currentFilename {
+			continue
+		}
+
+		// Read and parse the file
+		content, err := os.ReadFile(filename)
+		if err != nil {
+			continue
+		}
+
+		// Quick check before parsing - look for the identifier
+		if !strings.Contains(string(content), rootIdent) {
+			continue
+		}
+
+		// Parse the file
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, filename, content, 0)
+		if err != nil {
+			continue
+		}
+
+		// Check if the identifier is declared
+		for _, decl := range file.Decls {
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if d.Tok == token.VAR || d.Tok == token.CONST {
+					for _, spec := range d.Specs {
+						if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+							for _, name := range valueSpec.Names {
+								if name.Name == rootIdent {
+									return true
+								}
+							}
 						}
 					}
+				}
+			case *ast.FuncDecl:
+				if d.Name.Name == rootIdent {
+					return true
 				}
 			}
 		}
 	}
 
-	if hasTr {
+	return false
+}
+
+// addTrInitialization adds tr variable declaration/initialization
+func (ft *FormatTransformer) addTrInitialization(file *ast.File) {
+	// Parse the pattern to determine what needs to be declared
+	expr, err := parser.ParseExpr(ft.trPattern)
+	if err != nil {
+		return // Invalid pattern, skip initialization
+	}
+
+	// Extract the root identifier from the pattern
+	var rootIdent string
+	var needsFunc bool
+
+	switch e := expr.(type) {
+	case *ast.SelectorExpr:
+		// Pattern like "tr.T" or "TR().T"
+		switch x := e.X.(type) {
+		case *ast.Ident:
+			// Simple case: tr.T
+			rootIdent = x.Name
+			needsFunc = false
+		case *ast.CallExpr:
+			// Function call case: TR().T
+			if ident, ok := x.Fun.(*ast.Ident); ok {
+				rootIdent = ident.Name
+				needsFunc = true
+			}
+		}
+	case *ast.CallExpr:
+		// Pattern like "TR()"
+		if ident, ok := e.Fun.(*ast.Ident); ok {
+			rootIdent = ident.Name
+			needsFunc = true
+		}
+	}
+
+	if rootIdent == "" {
+		return // Couldn't determine what to declare
+	}
+
+	// Check if already declared (both vars and funcs)
+	hasDecl := false
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			if d.Tok == token.VAR {
+				for _, spec := range d.Specs {
+					if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+						for _, name := range valueSpec.Names {
+							if name.Name == rootIdent {
+								hasDecl = true
+								break
+							}
+						}
+					}
+				}
+			}
+		case *ast.FuncDecl:
+			if d.Name.Name == rootIdent {
+				hasDecl = true
+			}
+		}
+	}
+
+	if hasDecl {
 		return
 	}
 
-	// Create tr variable declaration
-	trDecl := &ast.GenDecl{
-		Tok: token.VAR,
-		Specs: []ast.Spec{
-			&ast.ValueSpec{
-				Names: []*ast.Ident{ast.NewIdent("tr")},
-				Type: &ast.SelectorExpr{
-					X:   ast.NewIdent("i18n"),
-					Sel: ast.NewIdent("Translator"),
-				},
-				Comment: &ast.CommentGroup{
-					List: []*ast.Comment{
-						{Text: "// TODO: Initialize with your translator instance"},
+	// Check if it's declared in another file in the same package
+	if ft.checkTrDeclaredInPackage(rootIdent) {
+		ft.trDeclaredInPkg = true
+		return
+	}
+
+	// Create appropriate declaration based on pattern type
+	var decl ast.Decl
+	if needsFunc {
+		// Create function declaration: var TR = func() i18n.Translator { ... }
+		decl = &ast.GenDecl{
+			Tok: token.VAR,
+			Specs: []ast.Spec{
+				&ast.ValueSpec{
+					Names: []*ast.Ident{ast.NewIdent(rootIdent)},
+					Values: []ast.Expr{
+						&ast.FuncLit{
+							Type: &ast.FuncType{
+								Params: &ast.FieldList{},
+								Results: &ast.FieldList{
+									List: []*ast.Field{
+										{
+											Type: &ast.SelectorExpr{
+												X:   ast.NewIdent("i18n"),
+												Sel: ast.NewIdent("Translator"),
+											},
+										},
+									},
+								},
+							},
+							Body: &ast.BlockStmt{
+								List: []ast.Stmt{
+									// Use panic to make it very clear this needs implementation
+									&ast.ExprStmt{
+										X: &ast.CallExpr{
+											Fun: ast.NewIdent("panic"),
+											Args: []ast.Expr{
+												&ast.BasicLit{
+													Kind:  token.STRING,
+													Value: `"TODO: Implement TR() - return your i18n.Translator instance"`,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
-		},
-	}
-
-	// Find position after imports
-	importIndex := -1
-	for i, decl := range file.Decls {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-			importIndex = i
+		}
+	} else {
+		// Create variable declaration: var tr i18n.Translator
+		decl = &ast.GenDecl{
+			Tok: token.VAR,
+			Specs: []ast.Spec{
+				&ast.ValueSpec{
+					Names: []*ast.Ident{ast.NewIdent(rootIdent)},
+					Type: &ast.SelectorExpr{
+						X:   ast.NewIdent("i18n"),
+						Sel: ast.NewIdent("Translator"),
+					},
+				},
+			},
 		}
 	}
 
-	// Insert after imports, but be careful about //go: directives
-	if importIndex >= 0 {
-		insertPos := importIndex + 1
+	// Find a safe position to insert the declaration
+	// Simple strategy: insert right after imports
+	insertPos := -1
 
-		// Skip past any declarations that have //go: directives
-		// These directives must be immediately followed by their target declaration
-		for insertPos < len(file.Decls) {
-			// Check if this declaration has any //go: directive comments
-			if genDecl, ok := file.Decls[insertPos].(*ast.GenDecl); ok {
-				hasGoDirective := false
-
-				// Check the declaration's doc comments for //go: directives
-				if genDecl.Doc != nil {
-					for _, comment := range genDecl.Doc.List {
-						if strings.HasPrefix(strings.TrimSpace(comment.Text), "//go:") {
-							hasGoDirective = true
-							break
-						}
-					}
-				}
-
-				// If this declaration has a //go: directive, skip it
-				if hasGoDirective {
-					insertPos++
-					continue
-				}
-			}
+	// Find the last import declaration
+	for i := len(file.Decls) - 1; i >= 0; i-- {
+		if genDecl, ok := file.Decls[i].(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			insertPos = i + 1
 			break
 		}
-
-		// Now insert the tr declaration at the safe position
-		newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
-		newDecls = append(newDecls, file.Decls[:insertPos]...)
-		newDecls = append(newDecls, trDecl)
-		newDecls = append(newDecls, file.Decls[insertPos:]...)
-		file.Decls = newDecls
 	}
+
+	// If no imports found, insert after package
+	if insertPos == -1 {
+		for i, d := range file.Decls {
+			if genDecl, ok := d.(*ast.GenDecl); ok && genDecl.Tok == token.PACKAGE {
+				insertPos = i + 1
+				break
+			}
+		}
+	}
+
+	// If still not found, just insert at position 1
+	if insertPos == -1 {
+		insertPos = 1
+	}
+
+	// Insert the declaration
+	newDecls := make([]ast.Decl, 0, len(file.Decls)+1)
+	newDecls = append(newDecls, file.Decls[:insertPos]...)
+	newDecls = append(newDecls, decl)
+	newDecls = append(newDecls, file.Decls[insertPos:]...)
+	file.Decls = newDecls
 }
 
 // Generic transformation methods that work with FormatCallInfo
@@ -907,6 +1065,10 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{trCall}
 
+		// Clear the Lparen/Rparen positions to let the formatter recreate them
+		call.Lparen = 0
+		call.Rparen = 0
+
 	} else if isWriterBased {
 		// Writer-based: keep writer, remove 'f', replace format+args
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
@@ -919,6 +1081,10 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 		args := ft.extractFormatArgs(call, info)
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{writer, trCall}
+
+		// Clear the Lparen/Rparen positions to let the formatter recreate them
+		call.Lparen = 0
+		call.Rparen = 0
 
 	} else if hasArgsAfterFormat {
 		// Custom format function with variadic args after format string
@@ -1054,6 +1220,10 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 		trCall := ft.createTrCall(key, args)
 		call.Args = []ast.Expr{trCall}
 
+		// Clear the Lparen/Rparen positions to let the formatter recreate them
+		call.Lparen = 0
+		call.Rparen = 0
+
 		ft.requiredImports["errors"] = true
 	}
 }
@@ -1133,8 +1303,8 @@ func (ft *FormatTransformer) transformRegularFunctionCall(call *ast.CallExpr) {
 					continue
 				}
 			case "with-comments":
-				// Skip - only i18n-todo comments are transformed in this mode
-				continue
+				// In with-comments mode, the stringMap already contains only strings with i18n-todo comments
+				// So we transform all strings that have keys
 			case "all":
 				// Transform all functions with string literals
 			}
@@ -1144,6 +1314,13 @@ func (ft *FormatTransformer) transformRegularFunctionCall(call *ast.CallExpr) {
 			ft.transformed = true
 			ft.requiredImports["messages"] = true
 			ft.requiredImports["i18n"] = true
+			// Track the transformed string (unquoted value)
+			unquotedStr := strings.Trim(lit.Value, "`\"")
+			ft.transformedStrings[unquotedStr] = key
+
+			// Clear the Lparen/Rparen positions to let the formatter recreate them
+			call.Lparen = 0
+			call.Rparen = 0
 		}
 	}
 }
@@ -1284,73 +1461,160 @@ func (ft *FormatTransformer) buildSelectorPath(sel *ast.SelectorExpr) string {
 }
 
 // formatNode converts an AST node back to source code
-func formatNode(fset *token.FileSet, node ast.Node) ([]byte, error) {
+func (ft *FormatTransformer) formatNode(node ast.Node) ([]byte, error) {
 	// Before formatting, ensure all comments are properly sorted by position
 	if file, ok := node.(*ast.File); ok {
-		sortComments(fset, file)
+		sortComments(ft.fset, file)
 	}
 
 	var buf bytes.Buffer
-	err := format.Node(&buf, fset, node)
+	err := format.Node(&buf, ft.fset, node)
 	if err != nil {
 		return nil, err
 	}
 
 	// Post-process to fix multiline key issues
 	result := buf.Bytes()
-	result = fixMultilineKeys(result)
+	result = ft.fixMultilineKeys(result)
 
 	return result, nil
 }
 
-// fixMultilineKeys fixes issues where message keys are split across lines
-func fixMultilineKeys(src []byte) []byte {
+// COMMENTED OUT - No longer needed with new approach
+/*
+// removeTransformedI18nTodoComments removes i18n-todo comments that appear after transformed strings
+func (ft *FormatTransformer) removeTransformedI18nTodoComments(src []byte) []byte {
 	lines := strings.Split(string(src), "\n")
-	var fixed []string
-	var inMessageKey bool
-	var keyBuffer []string
+	var result []string
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		trimmed := strings.TrimSpace(line)
 
-		// Check if we're starting a messages.Keys reference
-		if strings.Contains(line, "messages.Keys.") && !strings.Contains(line, ")") {
-			inMessageKey = true
-			keyBuffer = []string{line}
-			continue
+		// Check if this line contains both a translator call and an i18n-todo comment
+		if strings.Contains(line, ft.trPattern+"(messages.Keys.") && strings.Contains(line, "i18n-todo:") {
+			// Find and remove the i18n-todo comment (both block and line styles)
+
+			// Handle block comments
+			if idx := strings.Index(line, "/"+"* i18n-todo:"); idx >= 0 {
+				// Find the closing part
+				if endIdx := strings.Index(line[idx:], "*"+"/"); endIdx >= 0 {
+					// Remove the entire comment block
+					line = line[:idx] + line[idx+endIdx+2:]
+					// Clean up extra spaces
+					line = strings.TrimRight(line, " \t")
+				}
+			}
+
+			// Handle line comments // i18n-todo: ...
+			if idx := strings.Index(line, "// i18n-todo:"); idx >= 0 {
+				// Keep everything before the comment
+				line = strings.TrimRight(line[:idx], " \t")
+			}
 		}
 
-		// If we're in a message key, accumulate lines
-		if inMessageKey {
-			// Check if this line ends the key
-			if strings.Contains(trimmed, ")") || strings.Contains(trimmed, ",") {
-				// Combine all parts on one line
-				keyParts := append(keyBuffer, trimmed)
-				combined := strings.Join(keyParts, "")
-				// Clean up extra whitespace
-				combined = strings.ReplaceAll(combined, "\t", " ")
-				combined = strings.ReplaceAll(combined, "  ", " ")
-				fixed = append(fixed, combined)
-				inMessageKey = false
-				keyBuffer = nil
-			} else {
-				// Continue accumulating
-				keyBuffer = append(keyBuffer, trimmed)
+		// Also check if this is a standalone i18n-todo comment line that should be removed
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "// i18n-todo:") || strings.HasPrefix(trimmed, "/"+"* i18n-todo:") {
+			// Check if the previous line was transformed (contains tr.T call)
+			if i > 0 && strings.Contains(result[len(result)-1], ft.trPattern+"(messages.Keys.") {
+				// Skip this comment line
+				continue
 			}
-			continue
+		}
+
+		result = append(result, line)
+	}
+
+	return []byte(strings.Join(result, "\n"))
+}
+*/
+
+// fixMultilineKeys fixes issues where message keys are split across lines
+func (ft *FormatTransformer) fixMultilineKeys(src []byte) []byte {
+	lines := strings.Split(string(src), "\n")
+	var fixed []string
+
+	// Build a pattern to match the translator call
+	// We need to match the pattern with "(messages.Keys." or "(messages."
+	trCallPrefix := ft.trPattern + "(messages."
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Check if this line contains a translator call that might be split
+		if strings.Contains(line, trCallPrefix) {
+			// Find the complete expression
+			combined := line
+			j := i
+			openParens := strings.Count(line, "(") - strings.Count(line, ")")
+
+			// Keep accumulating lines until we balance parentheses
+			for openParens > 0 && j+1 < len(lines) {
+				j++
+				nextLine := lines[j]
+				combined += " " + strings.TrimSpace(nextLine)
+				openParens += strings.Count(nextLine, "(") - strings.Count(nextLine, ")")
+			}
+
+			// Now we have the complete expression, clean it up
+			if j > i {
+				// Extract indentation from original line
+				indent := ""
+				for _, ch := range line {
+					if ch == ' ' || ch == '\t' {
+						indent += string(ch)
+					} else {
+						break
+					}
+				}
+
+				// Clean up the combined line
+				combined = ft.cleanupTrCall(combined, indent)
+				fixed = append(fixed, combined)
+				i = j // Skip the lines we just processed
+				continue
+			}
 		}
 
 		// Normal line
 		fixed = append(fixed, line)
 	}
 
-	// Handle any remaining buffer
-	if len(keyBuffer) > 0 {
-		fixed = append(fixed, strings.Join(keyBuffer, ""))
+	return []byte(strings.Join(fixed, "\n"))
+}
+
+// cleanupTrCall cleans up a tr.T call that was spread across multiple lines
+func (ft *FormatTransformer) cleanupTrCall(combined string, indent string) string {
+	// Remove extra whitespace and newlines within the expression
+	cleaned := regexp.MustCompile(`\s+`).ReplaceAllString(combined, " ")
+
+	// Fix spacing around dots in message keys
+	cleaned = regexp.MustCompile(`\.\s+`).ReplaceAllString(cleaned, ".")
+	cleaned = regexp.MustCompile(`\s+\.`).ReplaceAllString(cleaned, ".")
+
+	// Fix spacing around parentheses
+	cleaned = regexp.MustCompile(`\(\s+`).ReplaceAllString(cleaned, "(")
+	cleaned = regexp.MustCompile(`\s+\)`).ReplaceAllString(cleaned, ")")
+
+	// Fix spacing around commas
+	cleaned = regexp.MustCompile(`\s*,\s*`).ReplaceAllString(cleaned, ", ")
+
+	// The translator pattern is exactly as provided by the user
+	// We just need to ensure there's no extra whitespace between the pattern and the opening parenthesis
+	patternEscaped := regexp.QuoteMeta(ft.trPattern)
+	cleaned = regexp.MustCompile(patternEscaped+`\s*\(`).ReplaceAllString(cleaned, ft.trPattern+"(")
+
+	// Validation: ensure the cleaned line contains the exact pattern we expect
+	expectedPattern := ft.trPattern + "(messages.Keys."
+	if !strings.Contains(cleaned, expectedPattern) {
+		// If our cleanup didn't produce the expected pattern, log a warning
+		// This helps us debug issues with complex translator patterns
+		fmt.Fprintf(os.Stderr, "Warning: cleaned line doesn't contain expected pattern '%s'\n", expectedPattern)
+		fmt.Fprintf(os.Stderr, "Cleaned line: %s\n", cleaned)
 	}
 
-	return []byte(strings.Join(fixed, "\n"))
+	// Trim and add back the indent
+	return strings.TrimSpace(cleaned)
 }
 
 // sortComments ensures comments are properly sorted by position
@@ -1395,46 +1659,6 @@ func (ft *FormatTransformer) findParentNode(file *ast.File, target ast.Node) ast
 	})
 
 	return parent
-}
-
-// findParentStatement finds the enclosing statement or declaration for a node
-func (ft *FormatTransformer) findParentStatement(file *ast.File, target ast.Node) ast.Node {
-	var parentStmt ast.Node
-
-	// Walk the AST to find the enclosing statement
-	ast.Inspect(file, func(n ast.Node) bool {
-		if n == nil {
-			return false
-		}
-
-		// Check if this is a statement or declaration node
-		switch n.(type) {
-		case *ast.AssignStmt, *ast.ExprStmt, *ast.DeclStmt,
-			*ast.IfStmt, *ast.ForStmt, *ast.RangeStmt,
-			*ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt,
-			*ast.BlockStmt, *ast.ReturnStmt, *ast.BranchStmt,
-			*ast.ValueSpec, *ast.GenDecl, *ast.FuncDecl:
-			// Check if this statement contains our target
-			var containsTarget bool
-			ast.Inspect(n, func(child ast.Node) bool {
-				if child == target {
-					containsTarget = true
-					return false
-				}
-				return true
-			})
-
-			if containsTarget {
-				// This is a statement/declaration containing our target
-				parentStmt = n
-				return false
-			}
-		}
-
-		return true
-	})
-
-	return parentStmt
 }
 
 // findParentCall finds the enclosing CallExpr for a node

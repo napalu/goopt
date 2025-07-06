@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/common"
 	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/messages"
-	"github.com/napalu/goopt/v2/i18n"
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/util"
 )
 
 // Replacement represents a string replacement to be made
@@ -26,23 +27,9 @@ type Replacement struct {
 	IsComment   bool
 }
 
-// TransformationConfig holds configuration for the TransformationReplacer
-type TransformationConfig struct {
-	Translator          i18n.Translator
-	TrPattern           string
-	KeepComments        bool
-	CleanComments       bool
-	IsUpdateMode        bool
-	TransformMode       string // "user-facing", "with-comments", "all-marked", "all"
-	BackupDir           string
-	PackagePath         string
-	UserFacingRegex     []string // regex patterns to identify user-facing functions
-	FormatFunctionRegex []string // regex patterns with format arg index (pattern:index)
-}
-
 // TransformationReplacer handles replacing strings with translation calls using AST transformation
 type TransformationReplacer struct {
-	config             *TransformationConfig
+	config             *common.TransformationConfig
 	keyMap             map[string]string // maps strings to keys
 	formatTransformer  *FormatTransformer
 	simpleReplacements []Replacement // for non-format strings
@@ -51,7 +38,7 @@ type TransformationReplacer struct {
 }
 
 // NewTransformationReplacer creates a new string replacer with AST-based format transformation
-func NewTransformationReplacer(config *TransformationConfig) *TransformationReplacer {
+func NewTransformationReplacer(config *common.TransformationConfig) *TransformationReplacer {
 	if config.PackagePath == "" {
 		config.PackagePath = "messages" // default (will be resolved to full module path)
 	}
@@ -79,6 +66,7 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
 	sr.formatTransformer.SetMessagePackagePath(sr.config.PackagePath)
 	sr.formatTransformer.SetTransformMode(sr.config.TransformMode)
+	sr.formatTransformer.SetTranslatorPattern(sr.config.TrPattern)
 
 	// Set user-facing regex patterns
 	if len(sr.config.UserFacingRegex) > 0 {
@@ -103,6 +91,7 @@ func (sr *TransformationReplacer) ProcessFiles(files []string) error {
 
 	for _, file := range files {
 		if err := sr.processFile(file); err != nil {
+			//lint:ignore SA1006 Translator.T returns a fully formatted string, not a format string
 			return fmt.Errorf(sr.config.Translator.T(messages.Keys.App.Error.ErrorProcessingFile, file, err))
 		}
 	}
@@ -490,33 +479,15 @@ func (sr *TransformationReplacer) createBackup(filename string, content []byte) 
 	return os.WriteFile(backupPath, content, 0644)
 }
 
-// createTranslationCall creates a translation function call string
-func (sr *TransformationReplacer) createTranslationCall(key, value string) string {
-	// Convert key to Go constant path
-	astKey := sr.convertKeyToASTFormat(key)
-
-	pattern := sr.config.TrPattern
-	if pattern == "" {
-		pattern = "tr.T"
-	}
-
-	// For comment mode, indicate format strings need arguments
-	if sr.config.TrPattern == "" && strings.Contains(value, "%") {
-		return fmt.Sprintf("%s(%s, ...)", pattern, astKey)
-	}
-
-	return fmt.Sprintf("%s(%s)", pattern, astKey)
-}
-
 // convertKeyToASTFormat converts a key like "app.extracted.hello_world" to "messages.Keys.App.Extracted.HelloWorld"
 func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 	parts := strings.Split(key, ".")
 	var astParts []string
 
 	for _, part := range parts {
-		// Convert snake_case to PascalCase
-		pascalCase := toPascalCaseV2(part)
-		astParts = append(astParts, pascalCase)
+		// Use the same conversion as the generate command
+		goName := util.KeyToGoName(part)
+		astParts = append(astParts, goName)
 	}
 
 	// Extract package name from path
@@ -556,17 +527,6 @@ func (sr *TransformationReplacer) findI18nComments(fset *token.FileSet, filename
 // GetReplacements returns all collected replacements (for reporting)
 func (sr *TransformationReplacer) GetReplacements() []Replacement {
 	return sr.simpleReplacements
-}
-
-// toPascalCaseV2 converts snake_case to PascalCase
-func toPascalCaseV2(s string) string {
-	parts := strings.Split(s, "_")
-	for i, part := range parts {
-		if part != "" {
-			parts[i] = strings.ToUpper(part[:1]) + part[1:]
-		}
-	}
-	return strings.Join(parts, "")
 }
 
 // walkASTWithParents walks the AST while tracking parent nodes
@@ -928,4 +888,12 @@ func (sr *TransformationReplacer) getNonFormatFunctionName(formatFunc string) st
 	}
 
 	return formatFunc
+}
+
+// GetTransformedStrings returns the map of strings that were actually transformed
+func (sr *TransformationReplacer) GetTransformedStrings() map[string]string {
+	if sr.formatTransformer != nil {
+		return sr.formatTransformer.GetTransformedStrings()
+	}
+	return make(map[string]string)
 }

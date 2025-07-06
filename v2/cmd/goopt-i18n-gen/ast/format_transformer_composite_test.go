@@ -134,7 +134,7 @@ func main() {
 }`,
 			shouldContain: []string{
 				`Title: tr.T(messages.Keys.App.Extracted.Hello)`,
-				`Body:  tr.T(messages.Keys.App.Extracted.Welcome)`,
+				`Body: tr.T(messages.Keys.App.Extracted.Welcome)`,
 			},
 		},
 		{

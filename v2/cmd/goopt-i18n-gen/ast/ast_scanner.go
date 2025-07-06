@@ -224,8 +224,7 @@ func scanFileForMissingDescKeys(filename string) ([]FieldWithoutDescKey, error) 
 	var fields []FieldWithoutDescKey
 
 	// Track current struct path for nested structs
-	var scanStruct func(ast.Node, []string) bool
-	scanStruct = func(n ast.Node, structPath []string) bool {
+	var scanStruct func(ast.Node, []string) bool = func(n ast.Node, structPath []string) bool {
 		switch x := n.(type) {
 		case *ast.TypeSpec:
 			if st, ok := x.Type.(*ast.StructType); ok {

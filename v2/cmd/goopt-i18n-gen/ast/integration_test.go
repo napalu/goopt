@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/v2/cmd/goopt-i18n-gen/common"
 	"github.com/napalu/goopt/v2/i18n"
 )
 
@@ -67,7 +68,7 @@ func main() {
 		}
 
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TrPattern:     "",
 			KeepComments:  false,
@@ -144,7 +145,7 @@ func main() {
 		}
 
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TrPattern:     "tr.T",
 			KeepComments:  false,
@@ -235,7 +236,7 @@ func main() {
 		}
 
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TrPattern:     "",
 			KeepComments:  false,
@@ -280,7 +281,7 @@ func main() {
 		}
 
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TrPattern:     "tr.T",
 			KeepComments:  false,
@@ -333,7 +334,7 @@ func main() {
 func TestEdgeCasesAndErrorHandling(t *testing.T) {
 	t.Run("nil literal handling", func(t *testing.T) {
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TransformMode: "user-facing",
 		}
@@ -351,7 +352,7 @@ func TestEdgeCasesAndErrorHandling(t *testing.T) {
 
 	t.Run("empty parent stack", func(t *testing.T) {
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TransformMode: "user-facing",
 		}
@@ -374,7 +375,7 @@ func TestEdgeCasesAndErrorHandling(t *testing.T) {
 
 	t.Run("nil AST walking", func(t *testing.T) {
 		bundle := i18n.NewEmptyBundle()
-		config := &TransformationConfig{
+		config := &common.TransformationConfig{
 			Translator:    bundle,
 			TransformMode: "user-facing",
 		}
@@ -417,7 +418,7 @@ func TestEdgeCasesAndErrorHandling(t *testing.T) {
 // Benchmark tests to ensure performance
 func BenchmarkIsInFormatFunctionIntegration(b *testing.B) {
 	bundle := i18n.NewEmptyBundle()
-	config := &TransformationConfig{
+	config := &common.TransformationConfig{
 		Translator:    bundle,
 		TransformMode: "user-facing",
 	}
