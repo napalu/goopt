@@ -62,45 +62,39 @@ func (gd *GlobalDeduplicator) loadFile(filename string) error {
 		return nil // Empty file
 	}
 
-	var translations map[string]interface{}
+	// Parse JSON - expecting flat structure
+	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
 		return err
 	}
 
-	// Process all key-value pairs
-	gd.processMap(translations, "", filename)
-	return nil
-}
-
-// processMap recursively processes a map of translations
-func (gd *GlobalDeduplicator) processMap(data map[string]interface{}, prefix string, filename string) {
-	for key, value := range data {
-		fullKey := key
-		if prefix != "" {
-			fullKey = prefix + "." + key
+	// Process all key-value pairs (flat structure)
+	for key, value := range translations {
+		// Clean the key - remove any "messages.Keys." prefix that shouldn't be in locale files
+		cleanKey := key
+		if strings.HasPrefix(cleanKey, "messages.Keys.") {
+			cleanKey = strings.TrimPrefix(cleanKey, "messages.Keys.")
+			// Convert from Go naming back to key format: App.Extracted.HelloWorld -> app.extracted.hello_world
+			cleanKey = gd.convertFromGoFormat(cleanKey)
 		}
 
-		switch v := value.(type) {
-		case string:
-			// Store the mapping
-			gd.keyToValue[fullKey] = v
+		// Store the mapping with clean key
+		gd.keyToValue[cleanKey] = value
 
-			// For deduplication, we normalize the string
-			normalizedValue := gd.normalizeValue(v)
+		// For deduplication, we normalize the string
+		normalizedValue := gd.normalizeValue(value)
 
-			// Only store the first occurrence of each value
-			if _, exists := gd.valueToKey[normalizedValue]; !exists {
-				gd.valueToKey[normalizedValue] = &DeduplicationResult{
-					ExistingKey:   fullKey,
-					ExistingValue: v,
-					ExistingFile:  filename,
-				}
+		// Only store the first occurrence of each value
+		if _, exists := gd.valueToKey[normalizedValue]; !exists {
+			gd.valueToKey[normalizedValue] = &DeduplicationResult{
+				ExistingKey:   cleanKey,
+				ExistingValue: value,
+				ExistingFile:  filename,
 			}
-		case map[string]interface{}:
-			// Recurse into nested structure
-			gd.processMap(v, fullKey, filename)
 		}
 	}
+
+	return nil
 }
 
 // normalizeValue normalizes a string value for deduplication comparison
@@ -118,6 +112,27 @@ func (gd *GlobalDeduplicator) normalizeValue(value string) string {
 	}
 
 	return normalized
+}
+
+// convertFromGoFormat converts Go naming back to key format
+// e.g. "App.Extracted.HelloWorld" -> "app.extracted.hello_world"
+func (gd *GlobalDeduplicator) convertFromGoFormat(goFormat string) string {
+	parts := strings.Split(goFormat, ".")
+	var keyParts []string
+
+	for _, part := range parts {
+		// Convert from PascalCase to snake_case
+		snakeCase := ""
+		for i, r := range part {
+			if i > 0 && r >= 'A' && r <= 'Z' {
+				snakeCase += "_"
+			}
+			snakeCase += strings.ToLower(string(r))
+		}
+		keyParts = append(keyParts, snakeCase)
+	}
+
+	return strings.Join(keyParts, ".")
 }
 
 // CheckDuplicate checks if a value already exists

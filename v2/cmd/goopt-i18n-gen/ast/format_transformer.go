@@ -637,7 +637,13 @@ func (ft *FormatTransformer) createTrCallArgs(key string, formatArgs []ast.Expr)
 
 // createKeyExpr creates the AST expression for a message key
 func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
-	parts := strings.Split(key, ".")
+	// The input key is in clean format (e.g., "app.extracted.failed_to_disable")
+	// We need to convert it to AST format (e.g., "messages.Keys.App.Extracted.FailedToDisable")
+
+	// First, convert the key to Go naming convention
+	goKey := ft.keyToGoName(key)
+	astKey := "messages.Keys." + goKey
+	parts := strings.Split(astKey, ".")
 
 	// Start with the first part
 	expr := ast.Expr(ast.NewIdent(parts[0]))
@@ -651,6 +657,55 @@ func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
 	}
 
 	return expr
+}
+
+// keyToGoName converts a translation key to a valid Go identifier
+// This mirrors the logic in util.KeyToGoName
+func (ft *FormatTransformer) keyToGoName(key string) string {
+	// Handle the full key path (e.g., "app.extracted.failed_to_disable")
+	parts := strings.Split(key, ".")
+
+	var result []string
+	for _, part := range parts {
+		result = append(result, ft.partToGoName(part))
+	}
+
+	return strings.Join(result, ".")
+}
+
+// partToGoName converts a single part of a key to a valid Go identifier
+func (ft *FormatTransformer) partToGoName(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// Replace common separators with underscores
+	s = strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, " ", "_")
+
+	// Split by underscores and capitalize
+	parts := strings.Split(s, "_")
+	var result []string
+
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+
+		// Ensure it doesn't start with a number
+		if len(part) > 0 && part[0] >= '0' && part[0] <= '9' {
+			part = "N" + part // Prefix with 'N' for "Number"
+		}
+
+		// Capitalize first letter
+		if len(part) > 0 {
+			part = strings.ToUpper(part[:1]) + part[1:]
+		}
+
+		result = append(result, part)
+	}
+
+	return strings.Join(result, "")
 }
 
 // addImports adds required imports to the file

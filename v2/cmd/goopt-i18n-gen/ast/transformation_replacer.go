@@ -58,9 +58,9 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 		// Add quotes to match AST BasicLit format
 		quotedStr := fmt.Sprintf("%q", str)
 
-		// Convert key format for AST usage
-		// app.extracted.hello_world -> packageName.Keys.App.Extracted.HelloWorld
-		quotedKeyMap[quotedStr] = sr.convertKeyToASTFormat(key)
+		// Pass the clean key to FormatTransformer
+		// The FormatTransformer will convert to AST format when needed for Go code
+		quotedKeyMap[quotedStr] = key
 	}
 
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
