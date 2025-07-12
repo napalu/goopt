@@ -190,24 +190,24 @@ var errorTestCases = []TestCase{
 func TestFormatTransformation(t *testing.T) {
 	// Create a string map based on the test cases
 	stringMap := map[string]string{
-		`"User %s logged in"`:               "messages.Keys.App.Extracted.UserSLoggedIn",
-		`"User %s logged in at %v from %s"`: "messages.Keys.App.Extracted.UserSLoggedInAtVFromS",
-		`"Error code: %d"`:                  "messages.Keys.App.Extracted.ErrorCodeD",
-		`"Welcome %s!"`:                     "messages.Keys.App.Extracted.WelcomeS",
-		`"Response: %s"`:                    "messages.Keys.App.Extracted.ResponseS",
-		`"failed to connect"`:               "messages.Keys.App.Extracted.FailedToConnect",
-		`"failed to connect to %s"`:         "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"failed to connect to %s: %w"`:     "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"connection failed: %w"`:           "messages.Keys.App.Extracted.ConnectionFailed",
-		`"Server started on port %d"`:       "messages.Keys.App.Extracted.ServerStartedOnPortD",
-		`"Authentication failed for %s"`:    "messages.Keys.App.Extracted.AuthenticationFailedForS",
-		`"Hello world"`:                     "messages.Keys.App.Extracted.HelloWorld",
-		`"Result: %v"`:                      "messages.Keys.App.Extracted.ResultV",
-		`"User: %s"`:                        "messages.Keys.App.Extracted.UserS",
-		`"Time: %v"`:                        "messages.Keys.App.Extracted.TimeV",
-		`"Progress: %d%%"`:                  "messages.Keys.App.Extracted.ProgressD",
-		`"Critical error: %v"`:              "messages.Keys.App.Extracted.CriticalErrorV",
-		`"Panic: %s"`:                       "messages.Keys.App.Extracted.PanicS",
+		`"User %s logged in"`:               "app.extracted.user_s_logged_in",
+		`"User %s logged in at %v from %s"`: "app.extracted.user_s_logged_in_at_v_from_s",
+		`"Error code: %d"`:                  "app.extracted.error_code_d",
+		`"Welcome %s!"`:                     "app.extracted.welcome_s",
+		`"Response: %s"`:                    "app.extracted.response_s",
+		`"failed to connect"`:               "app.extracted.failed_to_connect",
+		`"failed to connect to %s"`:         "app.extracted.failed_to_connect_to_s",
+		`"failed to connect to %s: %w"`:     "app.extracted.failed_to_connect_to_s",
+		`"connection failed: %w"`:           "app.extracted.connection_failed",
+		`"Server started on port %d"`:       "app.extracted.server_started_on_port_d",
+		`"Authentication failed for %s"`:    "app.extracted.authentication_failed_for_s",
+		`"Hello world"`:                     "app.extracted.hello_world",
+		`"Result: %v"`:                      "app.extracted.result_v",
+		`"User: %s"`:                        "app.extracted.user_s",
+		`"Time: %v"`:                        "app.extracted.time_v",
+		`"Progress: %d%%"`:                  "app.extracted.progress_d",
+		`"Critical error: %v"`:              "app.extracted.critical_error_v",
+		`"Panic: %s"`:                       "app.extracted.panic_s",
 	}
 
 	// Create the transformer with the string map
@@ -369,9 +369,9 @@ func example() error {
 `
 	// For now, just verify we can transform it without errors
 	stringMap := map[string]string{
-		`"User %s logged in"`:    "messages.Keys.App.Extracted.UserSLoggedIn",
-		`"operation failed: %w"`: "messages.Keys.App.Extracted.OperationFailedW",
-		`"Success for user %s"`:  "messages.Keys.App.Extracted.SuccessForUserS",
+		`"User %s logged in"`:    "app.extracted.user_s_logged_in",
+		`"operation failed: %w"`: "app.extracted.operation_failed_w",
+		`"Success for user %s"`:  "app.extracted.success_for_user_s",
 	}
 
 	transformer := NewFormatTransformer(stringMap)

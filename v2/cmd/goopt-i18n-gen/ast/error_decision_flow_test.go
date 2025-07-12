@@ -9,16 +9,16 @@ import (
 func TestErrorHandlingDecisionFlow(t *testing.T) {
 	stringMap := map[string]string{
 		// Error scenarios
-		`"database connection failed: %w"`: "messages.Keys.DatabaseConnectionFailedW",
-		`"validation failed"`:              "messages.Keys.ValidationFailed",
-		`"timeout occurred: %v"`:           "messages.Keys.TimeoutOccurredV",
-		`"failed to process %s: %w"`:       "messages.Keys.FailedToProcessSW",
-		`"context info: %s"`:               "messages.Keys.ContextInfoS",
+		`"database connection failed: %w"`: "app.extracted.database_connection_failed_w",
+		`"validation failed"`:              "app.extracted.validation_failed",
+		`"timeout occurred: %v"`:           "app.extracted.timeout_occurred_v",
+		`"failed to process %s: %w"`:       "app.extracted.failed_to_process_s_w",
+		`"context info: %s"`:               "app.extracted.context_info_s",
 
 		// Non-error scenarios
-		`"user logged in: %s"`: "messages.Keys.UserLoggedInS",
-		`"processing item %d"`: "messages.Keys.ProcessingItemD",
-		`"result: %v"`:         "messages.Keys.ResultV",
+		`"user logged in: %s"`: "app.extracted.user_logged_in_s",
+		`"processing item %d"`: "app.extracted.processing_item_d",
+		`"result: %v"`:         "app.extracted.result_v",
 	}
 
 	tests := []struct {
@@ -37,7 +37,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: true,
 			expectErrorWrap:     true,
 			expectFuncChange:    false, // Keep fmt.Errorf
-			expectedOutput:      []string{`fmt.Errorf("%s: %w"`, "tr.T(messages.Keys.DatabaseConnectionFailedW)", "dbErr"},
+			expectedOutput:      []string{`fmt.Errorf("%s: %w"`, "tr.T(messages.Keys.App.Extracted.DatabaseConnectionFailedW)", "dbErr"},
 			forbiddenOutput:     []string{"errors.New", "fmt.Print"},
 			description:         "Error with %w should preserve fmt.Errorf and error wrapping",
 		},
@@ -47,7 +47,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: true,
 			expectErrorWrap:     false,
 			expectFuncChange:    true, // Change to errors.New
-			expectedOutput:      []string{"errors.New", "tr.T(messages.Keys.ValidationFailed)"},
+			expectedOutput:      []string{"errors.New", "tr.T(messages.Keys.App.Extracted.ValidationFailed)"},
 			forbiddenOutput:     []string{"fmt.Errorf", "%w", "fmt.Print"},
 			description:         "Error without %w should convert to errors.New",
 		},
@@ -57,7 +57,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: true,
 			expectErrorWrap:     false,
 			expectFuncChange:    true,
-			expectedOutput:      []string{"errors.New", "tr.T(messages.Keys.TimeoutOccurredV", "duration"},
+			expectedOutput:      []string{"errors.New", "tr.T(messages.Keys.App.Extracted.TimeoutOccurredV", "duration"},
 			forbiddenOutput:     []string{"fmt.Errorf", "%w"},
 			description:         "Error with format specifiers but no %w should convert to errors.New",
 		},
@@ -67,7 +67,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: true,
 			expectErrorWrap:     false, // Wrapf doesn't use %w, it wraps by design
 			expectFuncChange:    false, // Keep errors.Wrapf
-			expectedOutput:      []string{`errors.Wrapf(originalErr, "%s"`, "tr.T(messages.Keys.ContextInfoS", "ctx"},
+			expectedOutput:      []string{`errors.Wrapf(originalErr, "%s"`, "tr.T(messages.Keys.App.Extracted.ContextInfoS", "ctx"},
 			forbiddenOutput:     []string{"errors.New", "errors.Wrap(", "%w"},
 			description:         "errors.Wrapf should preserve function and maintain wrapping",
 		},
@@ -77,7 +77,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: true,
 			expectErrorWrap:     true,
 			expectFuncChange:    false,
-			expectedOutput:      []string{`fmt.Errorf("%s: %w"`, "tr.T(messages.Keys.FailedToProcessSW", "filename", "ioErr"},
+			expectedOutput:      []string{`fmt.Errorf("%s: %w"`, "tr.T(messages.Keys.App.Extracted.FailedToProcessSW", "filename", "ioErr"},
 			forbiddenOutput:     []string{"errors.New"},
 			description:         "Complex error with format args and %w should handle correctly",
 		},
@@ -87,7 +87,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: false,
 			expectErrorWrap:     false,
 			expectFuncChange:    true, // Printf -> Print
-			expectedOutput:      []string{"fmt.Print", "tr.T(messages.Keys.UserLoggedInS", "username"},
+			expectedOutput:      []string{"fmt.Print", "tr.T(messages.Keys.App.Extracted.UserLoggedInS", "username"},
 			forbiddenOutput:     []string{"errors.New", "fmt.Errorf", "%w"},
 			description:         "Printf should use regular print transformation",
 		},
@@ -97,7 +97,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: false,
 			expectErrorWrap:     false,
 			expectFuncChange:    true, // Fatalf -> Fatal
-			expectedOutput:      []string{"log.Fatal", "tr.T(messages.Keys.ProcessingItemD", "itemNum"},
+			expectedOutput:      []string{"log.Fatal", "tr.T(messages.Keys.App.Extracted.ProcessingItemD", "itemNum"},
 			forbiddenOutput:     []string{"errors.New", "fmt.Errorf", "%w"},
 			description:         "log.Fatalf should use regular print transformation",
 		},
@@ -107,7 +107,7 @@ func TestErrorHandlingDecisionFlow(t *testing.T) {
 			expectErrorHandling: false,
 			expectErrorWrap:     false,
 			expectFuncChange:    true, // Becomes tr.T directly
-			expectedOutput:      []string{"tr.T(messages.Keys.ResultV", "value"},
+			expectedOutput:      []string{"tr.T(messages.Keys.App.Extracted.ResultV", "value"},
 			forbiddenOutput:     []string{"errors.New", "fmt.Errorf", "fmt.Sprintf", "fmt.Print"},
 			description:         "Sprintf should be replaced directly with tr.T",
 		},

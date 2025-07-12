@@ -73,12 +73,12 @@ const (
 		t.Run(tt.name, func(t *testing.T) {
 			// Create string map
 			stringMap := map[string]string{
-				`"User query executed"`:    "messages.Keys.App.UserQueryExecuted",
-				`"Welcome!"`:               "messages.Keys.App.Welcome",
-				`"Connecting to endpoint"`: "messages.Keys.App.ConnectingToEndpoint",
-				`"Authentication ready"`:   "messages.Keys.App.AuthenticationReady",
-				`"My Application"`:         "messages.Keys.App.Name",
-				`"1.0.0"`:                  "messages.Keys.App.Version",
+				`"User query executed"`:    "app.extracted.user_query_executed",
+				`"Welcome!"`:               "app.extracted.welcome",
+				`"Connecting to endpoint"`: "app.extracted.connecting_to_endpoint",
+				`"Authentication ready"`:   "app.extracted.authentication_ready",
+				`"My Application"`:         "app.extracted.name",
+				`"1.0.0"`:                  "app.extracted.version",
 			}
 
 			transformer := NewFormatTransformer(stringMap)
@@ -135,8 +135,8 @@ func main() {
 }`
 
 	stringMap := map[string]string{
-		`"Hello"`: "messages.Keys.App.Hello",
-		`"World"`: "messages.Keys.App.World",
+		`"Hello"`: "app.extracted.hello",
+		`"World"`: "app.extracted.world",
 	}
 
 	transformer := NewFormatTransformer(stringMap)

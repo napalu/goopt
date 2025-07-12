@@ -188,10 +188,10 @@ func test() {
 // TestErrorTransformationDecisionLogic tests the decision logic for error transformations
 func TestErrorTransformationDecisionLogic(t *testing.T) {
 	stringMap := map[string]string{
-		`"connection failed: %w"`: "messages.Keys.ConnectionFailedW",
-		`"simple error"`:          "messages.Keys.SimpleError",
-		`"context: %s"`:           "messages.Keys.ContextS",
-		`"hello: %s"`:             "messages.Keys.HelloS",
+		`"connection failed: %w"`: "app.extracted.connection_failed_w",
+		`"simple error"`:          "app.extracted.simple_error",
+		`"context: %s"`:           "app.extracted.context_s",
+		`"hello: %s"`:             "app.extracted.hello_s",
 	}
 
 	tests := []struct {
@@ -212,21 +212,21 @@ func TestErrorTransformationDecisionLogic(t *testing.T) {
 			name:             "fmt.Errorf without %w converts to errors.New",
 			input:            `fmt.Errorf("simple error")`,
 			shouldTransform:  true,
-			expectedPattern:  `errors.New(tr.T(messages.Keys.SimpleError))`,
+			expectedPattern:  `errors.New(tr.T(messages.Keys.App.Extracted.SimpleError))`,
 			shouldNotContain: []string{"fmt.Errorf", "%w"},
 		},
 		{
 			name:             "errors.Wrapf preserves function name",
 			input:            `errors.Wrapf(err, "context: %s", ctx)`,
 			shouldTransform:  true,
-			expectedPattern:  `errors.Wrapf(err, "%s", tr.T(messages.Keys.ContextS, ctx))`,
+			expectedPattern:  `errors.Wrapf(err, "%s", tr.T(messages.Keys.App.Extracted.ContextS, ctx))`,
 			shouldNotContain: []string{"errors.Wrap(", "errors.New"},
 		},
 		{
 			name:             "fmt.Printf is not error handling",
 			input:            `fmt.Printf("hello: %s", name)`,
 			shouldTransform:  true,
-			expectedPattern:  `fmt.Print(tr.T(messages.Keys.HelloS, name))`,
+			expectedPattern:  `fmt.Print(tr.T(messages.Keys.App.Extracted.HelloS, name))`,
 			shouldNotContain: []string{"errors.New", "%w", "fmt.Errorf"},
 		},
 	}

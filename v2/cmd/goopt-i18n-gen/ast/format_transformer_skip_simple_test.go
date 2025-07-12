@@ -134,7 +134,7 @@ func test() {
 
 			// Create string map
 			stringMap := map[string]string{
-				stringLiteral: "messages.Keys.Test",
+				stringLiteral: "app.extracted.test",
 			}
 
 			// Create transformer
@@ -151,7 +151,7 @@ func test() {
 
 			// Check result
 			containsOriginal := strings.Contains(resultStr, stringLiteral)
-			containsTransformed := strings.Contains(resultStr, "tr.T(messages.Keys.Test")
+			containsTransformed := strings.Contains(resultStr, "tr.T(messages.Keys.App.Extracted.Test")
 
 			if tt.expectSkipped {
 				if !containsOriginal || containsTransformed {
@@ -187,11 +187,11 @@ func test() {
 }`
 
 	stringMap := map[string]string{
-		`"translate1"`:    "messages.Keys.Trans1",
-		`"translate2 %s"`: "messages.Keys.Trans2",
-		`"skip1"`:         "messages.Keys.Skip1",
-		`"skip2"`:         "messages.Keys.Skip2",
-		`"skip3"`:         "messages.Keys.Skip3",
+		`"translate1"`:    "app.extracted.trans1",
+		`"translate2 %s"`: "app.extracted.trans2",
+		`"skip1"`:         "app.extracted.skip1",
+		`"skip2"`:         "app.extracted.skip2",
+		`"skip3"`:         "app.extracted.skip3",
 	}
 
 	transformer := NewFormatTransformer(stringMap)
@@ -213,11 +213,11 @@ func test() {
 	}
 
 	// Check that non-skip strings ARE transformed
-	if !strings.Contains(resultStr, "tr.T(messages.Keys.Trans1)") {
+	if !strings.Contains(resultStr, "tr.T(messages.Keys.App.Extracted.Trans1)") {
 		t.Error("translate1 was not transformed but should have been")
 		t.Logf("Result:\n%s", resultStr)
 	}
-	if !strings.Contains(resultStr, "tr.T(messages.Keys.Trans2") {
+	if !strings.Contains(resultStr, "tr.T(messages.Keys.App.Extracted.Trans2") {
 		t.Error("translate2 with format specifier was not transformed but should have been")
 		t.Logf("Result:\n%s", resultStr)
 	}

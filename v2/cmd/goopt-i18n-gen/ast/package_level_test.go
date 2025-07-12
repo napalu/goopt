@@ -45,7 +45,7 @@ func function2() {
 
 	// Test transforming file2 - it should NOT add TR declaration
 	stringMap := map[string]string{
-		`"Hello from file2"`: "messages.Keys.Hello2",
+		`"Hello from file2"`: "app.extracted.hello2",
 	}
 
 	ft := NewFormatTransformer(stringMap)
@@ -73,7 +73,7 @@ func function2() {
 	}
 
 	// Check that the transformation still happened
-	if !strings.Contains(resultStr, "TR().T(messages.Keys.Hello2)") {
+	if !strings.Contains(resultStr, "TR().T(messages.Keys.App.Extracted.Hello2)") {
 		t.Errorf("String transformation should still occur")
 	}
 
@@ -99,7 +99,7 @@ func function3() {
 
 	// Transform file3 - it SHOULD add TR declaration (different package)
 	stringMap3 := map[string]string{
-		`"Hello from file3"`: "messages.Keys.Hello3",
+		`"Hello from file3"`: "app.extracted.hello3",
 	}
 
 	ft3 := NewFormatTransformer(stringMap3)
@@ -146,7 +146,7 @@ func function4() {
 
 	// Transform file4 - it should NOT add another TR declaration
 	stringMap4 := map[string]string{
-		`"Hello from file4"`: "messages.Keys.Hello4",
+		`"Hello from file4"`: "app.extracted.hello4",
 	}
 
 	ft4 := NewFormatTransformer(stringMap4)

@@ -9,13 +9,13 @@ import (
 func TestErrorWrappingHandling(t *testing.T) {
 	// String map for testing
 	stringMap := map[string]string{
-		`"connection failed: %w"`:      "messages.Keys.ConnectionFailedW",
-		`"failed to read file %s: %w"`: "messages.Keys.FailedToReadFileSW",
-		`"database error"`:             "messages.Keys.DatabaseError",
-		`"invalid input: %v"`:          "messages.Keys.InvalidInputV",
-		`"operation failed on %s: %w"`: "messages.Keys.OperationFailedOnSW",
-		`"multiple errors: %w, %w"`:    "messages.Keys.MultipleErrorsWW",
-		`"failed to read file %s"`:     "messages.Keys.FailedToReadFileS",
+		`"connection failed: %w"`:      "app.extracted.connection_failed_w",
+		`"failed to read file %s: %w"`: "app.extracted.failed_to_read_file_s_w",
+		`"database error"`:             "app.extracted.database_error",
+		`"invalid input: %v"`:          "app.extracted.invalid_input_v",
+		`"operation failed on %s: %w"`: "app.extracted.operation_failed_on_s_w",
+		`"multiple errors: %w, %w"`:    "app.extracted.multiple_errors_w_w",
+		`"failed to read file %s"`:     "app.extracted.failed_to_read_file_s",
 	}
 
 	tests := []struct {
@@ -26,32 +26,32 @@ func TestErrorWrappingHandling(t *testing.T) {
 		{
 			name:     "simple error wrapping",
 			input:    `fmt.Errorf("connection failed: %w", err)`,
-			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.ConnectionFailedW), err)`,
+			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.App.Extracted.ConnectionFailedW), err)`,
 		},
 		{
 			name:     "error wrap with other format specifier",
 			input:    `fmt.Errorf("failed to read file %s: %w", filename, err)`,
-			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.FailedToReadFileSW, filename), err)`,
+			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.App.Extracted.FailedToReadFileSW, filename), err)`,
 		},
 		{
 			name:     "errorf without wrap converts to errors.New",
 			input:    `fmt.Errorf("database error")`,
-			expected: `errors.New(tr.T(messages.Keys.DatabaseError))`,
+			expected: `errors.New(tr.T(messages.Keys.App.Extracted.DatabaseError))`,
 		},
 		{
 			name:     "errorf with %v but no %w",
 			input:    `fmt.Errorf("invalid input: %v", input)`,
-			expected: `errors.New(tr.T(messages.Keys.InvalidInputV, input))`,
+			expected: `errors.New(tr.T(messages.Keys.App.Extracted.InvalidInputV, input))`,
 		},
 		{
 			name:     "complex format with wrap at end",
 			input:    `fmt.Errorf("operation failed on %s: %w", server, originalErr)`,
-			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.OperationFailedOnSW, server), originalErr)`,
+			expected: `fmt.Errorf("%s: %w", tr.T(messages.Keys.App.Extracted.OperationFailedOnSW, server), originalErr)`,
 		},
 		{
 			name:     "errors.Wrapf from errors package",
 			input:    `errors.Wrapf(err, "failed to read file %s", filename)`,
-			expected: `errors.Wrapf(err, "%s", tr.T(messages.Keys.FailedToReadFileS, filename))`,
+			expected: `errors.Wrapf(err, "%s", tr.T(messages.Keys.App.Extracted.FailedToReadFileS, filename))`,
 		},
 	}
 
@@ -102,9 +102,9 @@ func test() error {
 // TestErrorWrappingEdgeCases tests edge cases for error wrapping
 func TestErrorWrappingEdgeCases(t *testing.T) {
 	stringMap := map[string]string{
-		`"error: %w at position %d"`: "messages.Keys.ErrorWAtPositionD",
-		`"wrap1: %w"`:                "messages.Keys.Wrap1W",
-		`"wrap2: %w"`:                "messages.Keys.Wrap2W",
+		`"error: %w at position %d"`: "app.extracted.error_w_at_position_d",
+		`"wrap1: %w"`:                "app.extracted.wrap1_w",
+		`"wrap2: %w"`:                "app.extracted.wrap2_w",
 	}
 
 	tests := []struct {
@@ -120,7 +120,7 @@ func TestErrorWrappingEdgeCases(t *testing.T) {
 			contains: []string{
 				"fmt.Errorf",
 				`"%s: %w"`,
-				"tr.T(messages.Keys.ErrorWAtPositionD",
+				"tr.T(messages.Keys.App.Extracted.ErrorWAtPositionD",
 			},
 			notContains: []string{
 				"errors.New",
@@ -139,8 +139,8 @@ func TestErrorWrappingEdgeCases(t *testing.T) {
 			input: `fmt.Errorf("wrap1: %w", fmt.Errorf("wrap2: %w", baseErr))`,
 			contains: []string{
 				"fmt.Errorf",
-				"tr.T(messages.Keys.Wrap1W)",
-				"tr.T(messages.Keys.Wrap2W)",
+				"tr.T(messages.Keys.App.Extracted.Wrap1W)",
+				"tr.T(messages.Keys.App.Extracted.Wrap2W)",
 			},
 		},
 	}

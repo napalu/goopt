@@ -278,7 +278,7 @@ func main() {
 					if endIdx := strings.Index(line[idx+1:], `"`); endIdx >= 0 {
 						str := line[idx : idx+endIdx+2]
 						// Generate a valid key
-						key := generateValidKey("messages.Keys.App.Extracted.", str)
+						key := generateValidKey("app.extracted.", str)
 						stringMap[str] = key
 					}
 				}

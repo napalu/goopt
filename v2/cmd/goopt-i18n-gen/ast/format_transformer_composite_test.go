@@ -8,12 +8,12 @@ import (
 func TestFormatTransformerCompositeLiterals(t *testing.T) {
 	// Test cases for composite literals with inline i18n-todo comments
 	stringMap := map[string]string{
-		`"Hello"`:     "messages.Keys.App.Extracted.Hello",
-		`"World"`:     "messages.Keys.App.Extracted.World",
-		`"Goodbye"`:   "messages.Keys.App.Extracted.Goodbye",
-		`"Welcome"`:   "messages.Keys.App.Extracted.Welcome",
-		`"Item %d"`:   "messages.Keys.App.Extracted.ItemD",
-		`"Error: %s"`: "messages.Keys.App.Extracted.ErrorS",
+		`"Hello"`:     "app.extracted.hello",
+		`"World"`:     "app.extracted.world",
+		`"Goodbye"`:   "app.extracted.goodbye",
+		`"Welcome"`:   "app.extracted.welcome",
+		`"Item %d"`:   "app.extracted.item_d",
+		`"Error: %s"`: "app.extracted.error_s",
 	}
 
 	tests := []struct {
@@ -220,7 +220,7 @@ func main() {
 // Test edge cases with composite literals
 func TestFormatTransformerCompositeLiteralEdgeCases(t *testing.T) {
 	stringMap := map[string]string{
-		`"Test"`: "messages.Keys.App.Extracted.Test",
+		`"Test"`: "app.extracted.test",
 	}
 
 	tests := []struct {

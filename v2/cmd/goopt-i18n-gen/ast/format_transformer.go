@@ -642,7 +642,21 @@ func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
 
 	// First, convert the key to Go naming convention
 	goKey := ft.keyToGoName(key)
-	astKey := "messages.Keys." + goKey
+
+	// Then prepend the package path and "Keys."
+	packageName := ft.packagePath
+	if packageName == "" {
+		packageName = "messages"
+	}
+
+	// Extract just the package name from the path
+	// For paths like "github.com/user/project/messages", use just "messages"
+	if strings.Contains(packageName, "/") {
+		pathParts := strings.Split(packageName, "/")
+		packageName = pathParts[len(pathParts)-1]
+	}
+
+	astKey := packageName + ".Keys." + goKey
 	parts := strings.Split(astKey, ".")
 
 	// Start with the first part

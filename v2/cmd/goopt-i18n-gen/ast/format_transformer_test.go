@@ -8,20 +8,20 @@ import (
 func TestFormatTransformer(t *testing.T) {
 	// Create a string map for testing
 	stringMap := map[string]string{
-		`"User %s logged in"`:            "messages.Keys.App.Extracted.UserSLoggedIn",
-		`"Error code: %d"`:               "messages.Keys.App.Extracted.ErrorCodeD",
-		`"Welcome %s!"`:                  "messages.Keys.App.Extracted.WelcomeS",
-		`"failed to connect to %s"`:      "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"Server started on port %d"`:    "messages.Keys.App.Extracted.ServerStartedOnPortD",
-		`"Authentication failed for %s"`: "messages.Keys.App.Extracted.AuthenticationFailedForS",
-		`"connection failed: %w"`:        "messages.Keys.App.Extracted.ConnectionFailed",
-		`"Hello world"`:                  "messages.Keys.App.Extracted.HelloWorld",
-		`"Result: %v"`:                   "messages.Keys.App.Extracted.ResultV",
-		`"Progress: %d%%"`:               "messages.Keys.App.Extracted.ProgressD",
-		`"Critical error: %v"`:           "messages.Keys.App.Extracted.CriticalErrorV",
-		`"Panic: %s"`:                    "messages.Keys.App.Extracted.PanicS",
-		`"failed to connect"`:            "messages.Keys.App.Extracted.FailedToConnect",
-		`"Response: %s"`:                 "messages.Keys.App.Extracted.ResponseS",
+		`"User %s logged in"`:            "app.extracted.user_s_logged_in",
+		`"Error code: %d"`:               "app.extracted.error_code_d",
+		`"Welcome %s!"`:                  "app.extracted.welcome_s",
+		`"failed to connect to %s"`:      "app.extracted.failed_to_connect_to_s",
+		`"Server started on port %d"`:    "app.extracted.server_started_on_port_d",
+		`"Authentication failed for %s"`: "app.extracted.authentication_failed_for_s",
+		`"connection failed: %w"`:        "app.extracted.connection_failed",
+		`"Hello world"`:                  "app.extracted.hello_world",
+		`"Result: %v"`:                   "app.extracted.result_v",
+		`"Progress: %d%%"`:               "app.extracted.progress_d",
+		`"Critical error: %v"`:           "app.extracted.critical_error_v",
+		`"Panic: %s"`:                    "app.extracted.panic_s",
+		`"failed to connect"`:            "app.extracted.failed_to_connect",
+		`"Response: %s"`:                 "app.extracted.response_s",
 	}
 
 	tests := []struct {
@@ -163,8 +163,8 @@ func example() {
 // Test specific edge cases
 func TestFormatTransformerEdgeCases(t *testing.T) {
 	stringMap := map[string]string{
-		`"Operation %s failed: %w"`: "messages.Keys.App.Extracted.OperationSFailedW",
-		`"Status: %s"`:              "messages.Keys.App.Extracted.StatusS",
+		`"Operation %s failed: %w"`: "app.extracted.operation_s_failed_w",
+		`"Status: %s"`:              "app.extracted.status_s",
 	}
 
 	tests := []struct {
@@ -225,8 +225,8 @@ func test(op string, err error) error {
 // Test that the transformer preserves valid Go syntax
 func TestTransformerPreservesSyntax(t *testing.T) {
 	stringMap := map[string]string{
-		`"Processing %d items"`: "messages.Keys.App.Extracted.ProcessingDItems",
-		`"Done"`:                "messages.Keys.App.Extracted.Done",
+		`"Processing %d items"`: "app.extracted.processing_d_items",
+		`"Done"`:                "app.extracted.done",
 	}
 
 	input := `package main

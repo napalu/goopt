@@ -67,11 +67,11 @@ const query2 = "UPDATE users SET active = true" // i18n-skip
 			// Create a string map with quoted strings as keys (matching AST BasicLit format)
 			// and properly formatted message keys as values
 			stringMap := map[string]string{
-				`"Hello, World!"`:       "messages.Keys.App.Greeting",
-				`"Welcome"`:             "messages.Keys.App.Welcome",
-				`"Query executed"`:      "messages.Keys.App.QueryExecuted",
-				`"Operation completed"`: "messages.Keys.App.OperationCompleted",
-				`"Found users"`:         "messages.Keys.App.FoundUsers",
+				`"Hello, World!"`:       "app.extracted.greeting",
+				`"Welcome"`:             "app.extracted.welcome",
+				`"Query executed"`:      "app.extracted.query_executed",
+				`"Operation completed"`: "app.extracted.operation_completed",
+				`"Found users"`:         "app.extracted.found_users",
 			}
 
 			// Create transformer
@@ -158,9 +158,9 @@ func main() {
 
 	// Create properly formatted string map
 	stringMap := map[string]string{
-		`"Welcome to our application"`: "messages.Keys.App.WelcomeMessage",
-		`"Starting application"`:       "messages.Keys.App.Starting",
-		`"Connecting to %s"`:           "messages.Keys.App.ConnectingTo",
+		`"Welcome to our application"`: "app.extracted.welcome_message",
+		`"Starting application"`:       "app.extracted.starting",
+		`"Connecting to %s"`:           "app.extracted.connecting_to",
 	}
 
 	transformer := NewFormatTransformer(stringMap)
@@ -209,9 +209,9 @@ func main() {
 		key      string
 		inConst  bool
 	}{
-		{"Welcome to our application", "App.WelcomeMessage", true}, // in const - won't transform
-		{"Starting application", "App.Starting", false},            // in fmt.Println - will transform
-		{"Connecting to %s", "App.ConnectingTo", false},            // in log.Printf - will transform
+		{"Welcome to our application", "WelcomeMessage", true}, // in const - won't transform
+		{"Starting application", "Starting", false},            // in fmt.Println - will transform
+		{"Connecting to %s", "ConnectingTo", false},            // in log.Printf - will transform
 	}
 
 	for _, ts := range transformedStrings {
@@ -225,7 +225,7 @@ func main() {
 			if strings.Contains(output, `"`+ts.original+`"`) && !strings.Contains(input, ts.original+`" // i18n-skip`) {
 				t.Errorf("string was not transformed: %s", ts.original)
 			}
-			if !strings.Contains(output, "tr.T(messages.Keys."+ts.key) {
+			if !strings.Contains(output, "tr.T(messages.Keys.App.Extracted."+ts.key) {
 				t.Errorf("expected transformation not found for: %s", ts.original)
 			}
 		}

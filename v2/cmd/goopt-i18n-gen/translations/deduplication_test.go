@@ -72,19 +72,13 @@ func TestGlobalDeduplicatorLoadFromFiles(t *testing.T) {
 	// Create temp directory with test locale files
 	tmpDir := t.TempDir()
 
-	// Create test locale files
+	// Create test locale files with flat structure
 	enFile := filepath.Join(tmpDir, "en.json")
 	enContent := `{
-		"app": {
-			"existing": {
-				"user_logged_in": "User logged in successfully"
-			},
-			"extracted": {
-				"hello_world": "Hello World",
-				"error_404__not_found": "Error 404: Not found",
-				"n0000_00_00_00_00_00": "0000_00_00_00_00_00"
-			}
-		}
+		"app.existing.user_logged_in": "User logged in successfully",
+		"app.extracted.hello_world": "Hello World",
+		"app.extracted.error_404__not_found": "Error 404: Not found",
+		"app.extracted.n0000_00_00_00_00_00": "0000_00_00_00_00_00"
 	}`
 	if err := os.WriteFile(enFile, []byte(enContent), 0644); err != nil {
 		t.Fatalf("Failed to write en.json: %v", err)
@@ -92,16 +86,10 @@ func TestGlobalDeduplicatorLoadFromFiles(t *testing.T) {
 
 	deFile := filepath.Join(tmpDir, "de.json")
 	deContent := `{
-		"app": {
-			"existing": {
-				"user_logged_in": "[TODO] User logged in successfully"
-			},
-			"extracted": {
-				"hello_world": "Hallo Welt",
-				"error_404__not_found": "[TODO] Error 404: Not found",
-				"n0000_00_00_00_00_00": "[TODO] 0000_00_00_00_00_00"
-			}
-		}
+		"app.existing.user_logged_in": "[TODO] User logged in successfully",
+		"app.extracted.hello_world": "Hallo Welt",
+		"app.extracted.error_404__not_found": "[TODO] Error 404: Not found",
+		"app.extracted.n0000_00_00_00_00_00": "[TODO] 0000_00_00_00_00_00"
 	}`
 	if err := os.WriteFile(deFile, []byte(deContent), 0644); err != nil {
 		t.Fatalf("Failed to write de.json: %v", err)

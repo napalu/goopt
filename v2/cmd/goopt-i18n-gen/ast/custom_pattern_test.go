@@ -95,7 +95,7 @@ func main() {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create string map
 			stringMap := map[string]string{
-				`"Hello"`: "messages.Keys.App.Extracted.Hello",
+				`"Hello"`: "app.extracted.hello",
 			}
 
 			// Create transformer with custom pattern

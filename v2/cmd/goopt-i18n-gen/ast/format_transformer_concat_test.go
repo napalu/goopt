@@ -177,10 +177,10 @@ func extractConcatenatedString(expr ast.Expr) string {
 func TestComplexFormatCases(t *testing.T) {
 	// Test with actual format transformer
 	stringMap := map[string]string{
-		`"User: %s Role: %s"`:                        "messages.Keys.App.Extracted.UserSRoleS",
-		`"Failed to connect to %s"`:                  "messages.Keys.App.Extracted.FailedToConnectToS",
-		`"This is a message with %s and another %s"`: "messages.Keys.App.Extracted.ThisIsAMessageWithSAndAnotherS",
-		`"Line 1: %s\nLine 2: %s\n"`:                 "messages.Keys.App.Extracted.Line1SLine2S",
+		`"User: %s Role: %s"`:                        "app.extracted.user_s_role_s",
+		`"Failed to connect to %s"`:                  "app.extracted.failed_to_connect_to_s",
+		`"This is a message with %s and another %s"`: "app.extracted.this_is_a_message_with_s_and_another_s",
+		`"Line 1: %s\nLine 2: %s\n"`:                 "app.extracted.line1_s_line2_s",
 	}
 
 	tests := []struct {

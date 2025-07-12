@@ -53,14 +53,14 @@ func main() {
 
 	// Create string map for translatable strings
 	stringMap := map[string]string{
-		`"My Application"`:                  "messages.Keys.App.Title",
-		`"1.0.0"`:                           "messages.Keys.App.Version",
-		`"Welcome to our service!"`:         "messages.Keys.App.Welcome",
-		`"An error occurred"`:               "messages.Keys.App.Error",
-		`"Starting application..."`:         "messages.Keys.App.Starting",
-		`"Connecting to database at %s:%s"`: "messages.Keys.App.ConnectingDb",
-		`"Database query failed"`:           "messages.Keys.App.DbQueryFailed",
-		`"API endpoint: %s"`:                "messages.Keys.App.ApiEndpoint",
+		`"My Application"`:                  "app.extracted.title",
+		`"1.0.0"`:                           "app.extracted.version",
+		`"Welcome to our service!"`:         "app.extracted.welcome",
+		`"An error occurred"`:               "app.extracted.error",
+		`"Starting application..."`:         "app.extracted.starting",
+		`"Connecting to database at %s:%s"`: "app.extracted.connecting_db",
+		`"Database query failed"`:           "app.extracted.db_query_failed",
+		`"API endpoint: %s"`:                "app.extracted.api_endpoint",
 	}
 
 	transformer := NewFormatTransformer(stringMap)

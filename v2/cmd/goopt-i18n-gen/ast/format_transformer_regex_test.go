@@ -65,7 +65,7 @@ func TestUserFacingRegex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a minimal string map
 			stringMap := map[string]string{
-				`"test message"`: "messages.Keys.TestMessage",
+				`"test message"`: "app.extracted.test_message",
 			}
 
 			transformer := NewFormatTransformer(stringMap)
@@ -104,7 +104,7 @@ func TestUserFacingRegexInvalidPattern(t *testing.T) {
 func TestUserFacingRegexIntegration(t *testing.T) {
 	// Test that regex works alongside built-in patterns
 	stringMap := map[string]string{
-		`"test message"`: "messages.Keys.TestMessage",
+		`"test message"`: "app.extracted.test_message",
 	}
 
 	transformer := NewFormatTransformer(stringMap)

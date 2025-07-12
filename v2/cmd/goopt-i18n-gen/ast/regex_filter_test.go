@@ -164,12 +164,12 @@ func api() {
 func TestTransformMode(t *testing.T) {
 	// String map for testing
 	stringMap := map[string]string{
-		`"Processing data"`:  "messages.Keys.ProcessingData",
-		`"Error occurred"`:   "messages.Keys.ErrorOccurred",
-		`"Debug info"`:       "messages.Keys.DebugInfo",
-		`"Internal state"`:   "messages.Keys.InternalState",
-		`"User logged in"`:   "messages.Keys.UserLoggedIn",
-		`"Calculate result"`: "messages.Keys.CalculateResult",
+		`"Processing data"`:  "app.extracted.processing_data",
+		`"Error occurred"`:   "app.extracted.error_occurred",
+		`"Debug info"`:       "app.extracted.debug_info",
+		`"Internal state"`:   "app.extracted.internal_state",
+		`"User logged in"`:   "app.extracted.user_logged_in",
+		`"Calculate result"`: "app.extracted.calculate_result",
 	}
 
 	tests := []struct {
@@ -315,7 +315,7 @@ func main() {
 	for str := range extractor.GetExtractedStrings() {
 		// Create quoted version for AST matching
 		quotedStr := `"` + str + `"`
-		stringMap[quotedStr] = "messages.Keys.Test"
+		stringMap[quotedStr] = "app.extracted.test"
 	}
 
 	// Transform with the filtered string map
