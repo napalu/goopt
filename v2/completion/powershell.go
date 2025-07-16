@@ -10,20 +10,52 @@ type PowerShellGenerator struct{}
 
 func (g *PowerShellGenerator) Generate(programName string, data CompletionData) string {
 	var script strings.Builder
+	
+	// Add i18n comment if translations are present
+	hasTranslations := len(data.TranslatedCommands) > 0 || len(data.TranslatedFlags) > 0
+	if hasTranslations {
+		script.WriteString(fmt.Sprintf(`# PowerShell completion for %s with i18n support
 
-	script.WriteString(fmt.Sprintf(`
-Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
+`, programName))
+	}
+
+	script.WriteString(fmt.Sprintf(`Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     
     $tokens = $commandAst.CommandElements
-    $currentToken = $tokens | Where-Object { $_.Extent.StartOffset -le $cursorPosition } | Select-Object -Last 1
+    $currentToken = $tokens | Where-Object { $_.Extent.StartOffset -le $cursorPosition } | Select-Object -Last 1`, programName))
+	
+	// Add helper function for i18n if translations are present
+	if hasTranslations {
+		script.WriteString(`
+    
+    # Helper function to create completion with i18n info
+    function New-I18nCompletion {
+        param($Value, $Description, $CanonicalForm, $Type = 'ParameterValue')
+        
+        if ($CanonicalForm -and $Value -ne $CanonicalForm) {
+            if ($Description) {
+                $Description = "$Description (canonical: $CanonicalForm)"
+            } else {
+                $Description = "(canonical: $CanonicalForm)"
+            }
+        }
+        
+        [CompletionResult]::new($Value, $Value, [CompletionResultType]::$Type, $Description)
+    }`)
+	}
+
+	script.WriteString(`
 
     # Handle parameter value completion
     if ($currentToken -is [System.Management.Automation.Language.CommandParameterAst]) {
-        switch ($currentToken.ParameterName) {`, programName))
+        switch ($currentToken.ParameterName) {`)
 
-	// Add flag value completions
+	// Add flag value completions with i18n support
 	for flagName, values := range data.FlagValues {
+		// Get all forms of this flag
+		allForms := getAllFlagForms(data, flagName)
+		
 		// Find the corresponding flag to get its short form
 		var shortForm string
 		for _, flag := range data.Flags {
@@ -32,15 +64,19 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
 				break
 			}
 		}
-
-		// Handle both long and short forms
-		if shortForm != "" {
-			script.WriteString(fmt.Sprintf(`
-            '%s' { # --%s or -%s`, flagName, flagName, shortForm))
-		} else {
-			script.WriteString(fmt.Sprintf(`
-            '%s' { # --%s`, flagName, flagName))
+		
+		// Add patterns for all long forms
+		patterns := []string{}
+		for _, form := range allForms {
+			patterns = append(patterns, fmt.Sprintf("'%s'", form))
 		}
+		if shortForm != "" {
+			patterns = append(patterns, fmt.Sprintf("'%s'", shortForm))
+		}
+		
+		script.WriteString(fmt.Sprintf(`
+            {$_ -in %s} {`, strings.Join(patterns, ", ")))
+		
 		for _, val := range values {
 			script.WriteString(fmt.Sprintf(`
                 [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
@@ -48,18 +84,6 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
 		}
 		script.WriteString(`
             }`)
-
-		if shortForm != "" {
-			script.WriteString(fmt.Sprintf(`
-            '%s' { # Short form`, shortForm))
-			for _, val := range values {
-				script.WriteString(fmt.Sprintf(`
-                [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
-					escapePatternPowershell(val.Pattern), escapePatternPowershell(val.Pattern), escapePowerShell(val.Description)))
-			}
-			script.WriteString(`
-            }`)
-		}
 	}
 
 	script.WriteString(`
@@ -71,13 +95,36 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
     if ($tokens.Count -eq 1) {
         @(`)
 
-	// Add top-level commands
+	// Add top-level commands with i18n support
+	processedCommands := make(map[string]bool)
 	for _, cmd := range data.Commands {
-		if !strings.Contains(cmd, " ") {
+		if !strings.Contains(cmd, " ") && !processedCommands[cmd] {
+			processedCommands[cmd] = true
+			
+			preferredForm := getPreferredCommandForm(data, cmd)
 			desc := data.CommandDescriptions[cmd]
-			script.WriteString(fmt.Sprintf(`
+			
+			if hasTranslations {
+				canonicalNote := ""
+				if preferredForm != cmd {
+					canonicalNote = cmd
+				}
+				script.WriteString(fmt.Sprintf(`
+            New-I18nCompletion '%s' '%s' '%s' 'Command'`,
+					preferredForm, escapePowerShell(desc), canonicalNote))
+				
+				// Add canonical form if different
+				if preferredForm != cmd {
+					canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
+					script.WriteString(fmt.Sprintf(`
             [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
-				cmd, cmd, escapePowerShell(desc)))
+						cmd, cmd, escapePowerShell(canonicalDesc)))
+				}
+			} else {
+				script.WriteString(fmt.Sprintf(`
+            [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
+					cmd, cmd, escapePowerShell(desc)))
+			}
 		}
 	}
 
@@ -101,43 +148,160 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
 		}
 	}
 
-	// Add subcommand completions
+	// Add subcommand completions with i18n support
+	processedParents := make(map[string]bool)
 	for parentCmd, subCmds := range commandGroups {
-		script.WriteString(fmt.Sprintf(`
+		if !processedParents[parentCmd] {
+			processedParents[parentCmd] = true
+			
+			// Get all forms of the parent command
+			allParentForms := getAllCommandForms(data, parentCmd)
+			for _, parentForm := range allParentForms {
+				script.WriteString(fmt.Sprintf(`
             '%s' {
-                @(`, parentCmd))
-		for _, subCmd := range subCmds {
-			fullCmd := parentCmd + " " + subCmd
-			desc := data.CommandDescriptions[fullCmd]
-			script.WriteString(fmt.Sprintf(`
+                @(`, parentForm))
+				
+				// Process each subcommand
+				processedSubs := make(map[string]bool)
+				for _, subCmd := range subCmds {
+					fullCmd := parentCmd + " " + subCmd
+					if !processedSubs[fullCmd] {
+						processedSubs[fullCmd] = true
+						
+						// Get preferred form of subcommand
+						preferredFullForm := getPreferredCommandForm(data, fullCmd)
+						preferredSubCmd := subCmd
+						// Try to extract from translated form
+						// First get the preferred parent form
+						preferredParent := getPreferredCommandForm(data, parentCmd)
+						if strings.HasPrefix(preferredFullForm, preferredParent+" ") {
+							preferredSubCmd = strings.TrimPrefix(preferredFullForm, preferredParent+" ")
+						} else if strings.HasPrefix(preferredFullForm, parentCmd+" ") {
+							preferredSubCmd = strings.TrimPrefix(preferredFullForm, parentCmd+" ")
+						}
+						
+						desc := data.CommandDescriptions[fullCmd]
+						
+						if hasTranslations {
+							canonicalNote := ""
+							if preferredSubCmd != subCmd {
+								canonicalNote = subCmd
+							}
+							script.WriteString(fmt.Sprintf(`
+                    New-I18nCompletion '%s' '%s' '%s' 'Command'`,
+								preferredSubCmd, escapePowerShell(desc), canonicalNote))
+							
+							// Add canonical form if different
+							if preferredSubCmd != subCmd {
+								canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
+								script.WriteString(fmt.Sprintf(`
                     [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
-				subCmd, subCmd, escapePowerShell(desc)))
-		}
-		script.WriteString(`
+									subCmd, subCmd, escapePowerShell(canonicalDesc)))
+							}
+						} else {
+							script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('%s', '%s', [CompletionResultType]::Command, '%s')`,
+								subCmd, subCmd, escapePowerShell(desc)))
+						}
+					}
+				}
+				
+				script.WriteString(`
                 )
                 return
             }`)
-	}
-
-	// Add command-specific flags
-	for cmd, flags := range data.CommandFlags {
-		script.WriteString(fmt.Sprintf(`
-            '%s' {
-                @(`, cmd))
-		for _, flag := range flags {
-			script.WriteString(fmt.Sprintf(`
-                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-				flag.Long, flag.Long, escapePowerShell(flag.Description)))
-			if flag.Short != "" {
-				script.WriteString(fmt.Sprintf(`
-                    [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-					flag.Short, flag.Short, escapePowerShell(flag.Description)))
 			}
 		}
-		script.WriteString(`
+	}
+
+	// Add command-specific flags with i18n support
+	processedCmds := make(map[string]bool)
+	for cmd, flags := range data.CommandFlags {
+		if !processedCmds[cmd] {
+			processedCmds[cmd] = true
+			
+			// Get all forms of the command
+			allCmdForms := getAllCommandForms(data, cmd)
+			
+			// Build patterns for all forms
+			patterns := strings.Join(allCmdForms, "|")
+			
+			script.WriteString(fmt.Sprintf(`
+            %s) {
+                @(`, patterns))
+			
+			// Add command-specific flags with i18n
+			for _, flag := range flags {
+				preferredLong := getPreferredFlagForm(data, flag.Long)
+				desc := flag.Description
+				
+				if hasTranslations {
+					canonicalNote := ""
+					if preferredLong != flag.Long {
+						canonicalNote = flag.Long
+					}
+					script.WriteString(fmt.Sprintf(`
+                    New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
+						preferredLong, escapePowerShell(desc), canonicalNote))
+					
+					// Add canonical form if different
+					if preferredLong != flag.Long {
+						canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
+						script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+							flag.Long, flag.Long, escapePowerShell(canonicalDesc)))
+					}
+				} else {
+					script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+						flag.Long, flag.Long, escapePowerShell(flag.Description)))
+				}
+				
+				if flag.Short != "" {
+					script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+						flag.Short, flag.Short, escapePowerShell(desc)))
+				}
+			}
+			
+			// Also include global flags
+			for _, flag := range data.Flags {
+				preferredLong := getPreferredFlagForm(data, flag.Long)
+				desc := flag.Description
+				
+				if hasTranslations {
+					canonicalNote := ""
+					if preferredLong != flag.Long {
+						canonicalNote = flag.Long
+					}
+					script.WriteString(fmt.Sprintf(`
+                    New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
+						preferredLong, escapePowerShell(desc), canonicalNote))
+					
+					if preferredLong != flag.Long {
+						canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
+						script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+							flag.Long, flag.Long, escapePowerShell(canonicalDesc)))
+					}
+				} else {
+					script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+						flag.Long, flag.Long, escapePowerShell(flag.Description)))
+				}
+				
+				if flag.Short != "" {
+					script.WriteString(fmt.Sprintf(`
+                    [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+						flag.Short, flag.Short, escapePowerShell(desc)))
+				}
+			}
+			
+			script.WriteString(`
                 )
                 return
             }`)
+		}
 	}
 
 	script.WriteString(`
@@ -147,15 +311,37 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
     # Handle global flags
     @(`)
 
-	// Add global flags
+	// Add global flags with i18n support
 	for _, flag := range data.Flags {
-		script.WriteString(fmt.Sprintf(`
+		preferredLong := getPreferredFlagForm(data, flag.Long)
+		desc := flag.Description
+		
+		if hasTranslations {
+			canonicalNote := ""
+			if preferredLong != flag.Long {
+				canonicalNote = flag.Long
+			}
+			script.WriteString(fmt.Sprintf(`
+        New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
+				preferredLong, escapePowerShell(desc), canonicalNote))
+			
+			// Add canonical form if different
+			if preferredLong != flag.Long {
+				canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
+				script.WriteString(fmt.Sprintf(`
         [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-			flag.Long, flag.Long, escapePowerShell(flag.Description)))
+					flag.Long, flag.Long, escapePowerShell(canonicalDesc)))
+			}
+		} else {
+			script.WriteString(fmt.Sprintf(`
+        [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
+				flag.Long, flag.Long, escapePowerShell(flag.Description)))
+		}
+		
 		if flag.Short != "" {
 			script.WriteString(fmt.Sprintf(`
         [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
-				flag.Short, flag.Short, escapePowerShell(flag.Description)))
+				flag.Short, flag.Short, escapePowerShell(desc)))
 		}
 	}
 

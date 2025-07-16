@@ -111,7 +111,7 @@ func TestBashCompletionSpecific(t *testing.T) {
 				},
 			},
 			expected: []string{
-				`-l|--log-level)`,
+				`--log-level|-l)`,
 				`COMPREPLY=( $(compgen -W "debug info error" -- "$cur") )`,
 			},
 		},
@@ -510,11 +510,7 @@ func TestPowerShellCompletionSpecific(t *testing.T) {
 			},
 			expected: []string{
 				"switch ($currentToken.ParameterName) {",
-				"'log-level' { # --log-level or -l",
-				"[CompletionResult]::new('debug', 'debug', [CompletionResultType]::ParameterValue, 'Debug logging')",
-				"[CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Info logging')",
-				"}",
-				"'l' { # Short form",
+				"{$_ -in 'log-level', 'l'} {",
 				"[CompletionResult]::new('debug', 'debug', [CompletionResultType]::ParameterValue, 'Debug logging')",
 				"[CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Info logging')",
 				"}",
@@ -532,7 +528,7 @@ func TestPowerShellCompletionSpecific(t *testing.T) {
 			},
 			expected: []string{
 				"switch ($tokens[1].Value) {",
-				"'test' {",
+				"test) {",
 				"[CompletionResult]::new('--test-flag', 'test-flag', [CompletionResultType]::ParameterName, 'Test flag')",
 				"[CompletionResult]::new('-t', 't', [CompletionResultType]::ParameterName, 'Test flag')",
 			},
@@ -642,7 +638,7 @@ func TestShellGenerators(t *testing.T) {
 			data: testData,
 			expected: []string{
 				"_filedir",    // File completion
-				"-v|--value)", // Flag with short and long form
+				"--value|-v)", // Flag with short and long form
 				"COMPREPLY=( $(compgen -W \"val1 val2\" -- \"$cur\") )", // Value completion
 				"commands=\"$commands test\\ sub\"",                     // Space-escaped subcommand
 			},

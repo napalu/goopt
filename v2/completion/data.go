@@ -36,6 +36,14 @@ type CompletionData struct {
 	CommandFlags        map[string][]FlagPair
 	FlagValues          map[string][]CompletionValue
 	CommandDescriptions map[string]string
+	
+	// I18n support - maps canonical names to translated names
+	TranslatedCommands  map[string]string  // canonical -> translated
+	TranslatedFlags     map[string]string  // canonical -> translated
+	
+	// I18n support for descriptions (for testing)
+	TranslatedCommandDescriptions map[string]string  // canonical -> translated description
+	TranslatedFlagDescriptions    map[string]string  // canonical -> translated description
 }
 
 // CompletionPaths holds information about completion script locations
