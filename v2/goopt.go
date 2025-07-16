@@ -18,14 +18,6 @@ package goopt
 import (
 	"errors"
 	"fmt"
-	"github.com/napalu/goopt/v2/env"
-	"sync"
-
-	"github.com/napalu/goopt/v2/input"
-	"github.com/napalu/goopt/v2/internal/messages"
-	"github.com/napalu/goopt/v2/validation"
-	"golang.org/x/text/language"
-
 	"io"
 	"os"
 	"path/filepath"
@@ -34,15 +26,22 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/napalu/goopt/v2/completion"
+	"github.com/napalu/goopt/v2/env"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
+	"github.com/napalu/goopt/v2/input"
+	"github.com/napalu/goopt/v2/internal/messages"
 	"github.com/napalu/goopt/v2/internal/parse"
 	"github.com/napalu/goopt/v2/internal/util"
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/napalu/goopt/v2/types/queue"
+	"github.com/napalu/goopt/v2/validation"
+
+	"golang.org/x/text/language"
 )
 
 // NewParser convenience initialization method. Use NewCmdLine to

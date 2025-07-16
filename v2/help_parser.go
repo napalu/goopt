@@ -534,12 +534,6 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 	return finalSuggestions, hasTranslated
 }
 
-// findSimilarCommands finds commands similar to the input
-func (h *HelpParser) findSimilarCommands(input string) []string {
-	suggestions, _ := h.findSimilarCommandsWithContext(input)
-	return suggestions
-}
-
 // findSimilarSubcommands finds subcommands similar to the input from a specific command's subcommands
 func (h *HelpParser) findSimilarSubcommands(subcommands []Command, input string) []string {
 	var suggestions []string
@@ -641,31 +635,6 @@ func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, comman
 		// Check subcommands
 		if len(cmd.Subcommands) > 0 {
 			h.findSimilarCommandsInSliceWithContext(commandPath, cmd.Subcommands, input, suggestions, currentLang)
-		}
-	}
-}
-
-// findSimilarCommandsInSlice recursively searches for similar commands in a slice
-func (h *HelpParser) findSimilarCommandsInSlice(prefix string, commands []Command, input string, threshold int, suggestions *[]string) {
-	for i := range commands {
-		cmd := &commands[i]
-		distance := util.LevenshteinDistance(input, cmd.Name)
-		// Skip exact matches (distance 0) and only suggest similar commands
-		if distance > 0 && distance <= threshold {
-			fullPath := cmd.Name
-			if prefix != "" {
-				fullPath = prefix + " " + cmd.Name
-			}
-			*suggestions = append(*suggestions, fullPath)
-		}
-
-		// Check subcommands
-		if len(cmd.Subcommands) > 0 {
-			newPrefix := cmd.Name
-			if prefix != "" {
-				newPrefix = prefix + " " + cmd.Name
-			}
-			h.findSimilarCommandsInSlice(newPrefix, cmd.Subcommands, input, threshold, suggestions)
 		}
 	}
 }
