@@ -173,7 +173,7 @@ func (h *HelpParser) Parse(args []string) error {
 	case HelpModeFlags:
 		return h.showFlagsOnly(writer, commandPath)
 	case HelpModeExamples:
-		return h.showExamples(writer, commandPath)
+		return h.showExamples(writer)
 	case HelpModeSearch:
 		return h.showSearchResults(writer, h.options.Search)
 	case HelpModeAll:
@@ -699,7 +699,7 @@ func (h *HelpParser) showFlagsOnly(writer io.Writer, commandPath string) error {
 }
 
 // showExamples shows usage examples
-func (h *HelpParser) showExamples(writer io.Writer, commandPath string) error {
+func (h *HelpParser) showExamples(writer io.Writer) error {
 	h.showVersionHeader(writer)
 	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
 
@@ -985,7 +985,7 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		fmt.Fprintln(writer)
 
 		// Show examples
-		err = h.showExamples(writer, "")
+		err = h.showExamples(writer)
 	} else {
 		// Show detailed command help
 		err = h.renderCommandHelp(writer, commandPath)
@@ -995,7 +995,7 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		fmt.Fprintln(writer)
 
 		// Show command-specific examples
-		err = h.showExamples(writer, commandPath)
+		err = h.showExamples(writer)
 	}
 
 	return err

@@ -21,7 +21,7 @@ type TestOutput struct {
 }
 
 // setupTestParser creates a parser with test output capture
-func setupTestParser(t *testing.T) (*Parser, *TestOutput) {
+func setupTestParser() (*Parser, *TestOutput) {
 	p := NewParser()
 
 	// Set smart help behavior so error context goes to stderr
@@ -83,7 +83,7 @@ func TestHelpParser_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 
 			// Add some test commands
 			_ = p.AddCommand(&Command{
@@ -177,7 +177,7 @@ func TestHelpParser_HelpModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 
 			// Add test data
 			_ = p.AddFlag("verbose", &Argument{
@@ -260,7 +260,7 @@ func TestHelpParser_RuntimeOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 
 			// Add test flags
 			_ = p.AddFlag("verbose", &Argument{
@@ -292,7 +292,7 @@ func TestHelpParser_RuntimeOptions(t *testing.T) {
 }
 
 func TestHelpParser_SimilarCommands(t *testing.T) {
-	p, output := setupTestParser(t)
+	p, output := setupTestParser()
 
 	// Add commands with similar names
 	_ = p.AddCommand(&Command{Name: "serve", Description: "Start server"})
@@ -462,7 +462,7 @@ func TestHelpBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 			p.SetHelpBehavior(tt.behavior)
 
 			// Add a flag for content
@@ -483,7 +483,7 @@ func TestHelpBehavior(t *testing.T) {
 }
 
 func TestHelpParser_CommandHierarchy(t *testing.T) {
-	p, output := setupTestParser(t)
+	p, output := setupTestParser()
 
 	// Create command hierarchy
 	k8s := &Command{
@@ -530,7 +530,7 @@ func TestHelpParser_CommandHierarchy(t *testing.T) {
 }
 
 func TestHelpParser_DepthControl(t *testing.T) {
-	p, output := setupTestParser(t)
+	p, output := setupTestParser()
 
 	// Create deep command hierarchy
 	_ = p.AddCommand(&Command{
@@ -586,7 +586,7 @@ func TestHelpParser_Styles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 
 			// Add test data
 			_ = p.AddFlag("verbose", &Argument{
@@ -667,7 +667,7 @@ func TestHelpParser_HelpModes_Extended(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, output := setupTestParser(t)
+			p, output := setupTestParser()
 
 			// Add test data
 			_ = p.AddFlag("verbose", &Argument{

@@ -1080,11 +1080,6 @@ func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, boo
 	return finalSuggestions, hasTranslated
 }
 
-func (p *Parser) findSimilarRootCommands(input string) []string {
-	suggestions, _ := p.findSimilarRootCommandsWithContext(input)
-	return suggestions
-}
-
 // generateFlagError generates an error for an unknown flag with suggestions
 func (p *Parser) generateFlagError(flagName string, commandPath string) {
 	suggestions, _ := p.findSimilarFlagsWithContext(flagName, commandPath)
