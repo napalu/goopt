@@ -6,7 +6,7 @@ func LevenshteinDistance(s1, s2 string) int {
 	// Convert strings to rune slices to handle Unicode properly
 	r1 := []rune(s1)
 	r2 := []rune(s2)
-	
+
 	if len(r1) == 0 {
 		return len(r2)
 	}

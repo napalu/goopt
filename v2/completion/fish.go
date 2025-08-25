@@ -9,7 +9,7 @@ type FishGenerator struct{}
 
 func (g *FishGenerator) Generate(programName string, data CompletionData) string {
 	var script strings.Builder
-	
+
 	// Add i18n comment if translations are present
 	hasTranslations := len(data.TranslatedCommands) > 0 || len(data.TranslatedFlags) > 0
 	if hasTranslations {
@@ -22,7 +22,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 	for _, flag := range data.Flags {
 		// Get preferred form
 		preferredLong := getPreferredFlagForm(data, flag.Long)
-		
+
 		// Build description that includes canonical form if different
 		desc := flag.Description
 		if preferredLong != flag.Long && hasTranslations {
@@ -32,7 +32,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 				desc = fmt.Sprintf("(canonical: --%s)", flag.Long)
 			}
 		}
-		
+
 		// Preferred form completion
 		cmd := fmt.Sprintf("complete -c %s", programName)
 		if flag.Type != FlagTypeFile {
@@ -50,7 +50,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		}
 		cmd = fmt.Sprintf("%s -d '%s'", cmd, escapeFish(desc))
 		script.WriteString(cmd + "\n")
-		
+
 		// Add canonical form as separate completion if different
 		if preferredLong != flag.Long {
 			canonicalDesc := fmt.Sprintf("(canonical form) %s", escapeFish(flag.Description))
@@ -81,7 +81,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 				valueCmd = fmt.Sprintf("%s -a '%s' -d '%s'",
 					valueCmd, val.Pattern, escapeFish(val.Description))
 				script.WriteString(valueCmd + "\n")
-				
+
 				// For canonical form if different
 				if preferredLong != flag.Long {
 					valueCmd = fmt.Sprintf("complete -c %s -f -l %s -n '__fish_seen_argument -l %s' -a '%s' -d '%s'",
@@ -97,11 +97,11 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 	for _, cmd := range data.Commands {
 		if !strings.Contains(cmd, " ") && !processedCommands[cmd] {
 			processedCommands[cmd] = true
-			
+
 			// Get preferred form and description
 			preferredForm := getPreferredCommandForm(data, cmd)
 			desc := data.CommandDescriptions[cmd]
-			
+
 			// Add note about canonical form if different
 			if preferredForm != cmd && hasTranslations {
 				if desc != "" {
@@ -110,11 +110,11 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 					desc = fmt.Sprintf("(canonical: %s)", cmd)
 				}
 			}
-			
+
 			script.WriteString(fmt.Sprintf(
 				"complete -c %s -f -n '__fish_use_subcommand' -a '%s' -d '%s'\n",
 				programName, preferredForm, escapeFish(desc)))
-			
+
 			// Add canonical form if different
 			if preferredForm != cmd {
 				canonicalDesc := fmt.Sprintf("(canonical form) %s", data.CommandDescriptions[cmd])
@@ -130,7 +130,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		if strings.Contains(cmd, " ") {
 			parts := strings.SplitN(cmd, " ", 2)
 			mainCmd, subCmd := parts[0], parts[1]
-			
+
 			// Get preferred forms
 			preferredFullForm := getPreferredCommandForm(data, cmd)
 			preferredSubCmd := subCmd
@@ -142,9 +142,9 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 			} else if strings.HasPrefix(preferredFullForm, mainCmd+" ") {
 				preferredSubCmd = strings.TrimPrefix(preferredFullForm, mainCmd+" ")
 			}
-			
+
 			desc := data.CommandDescriptions[cmd]
-			
+
 			// Add note about canonical form if different
 			if preferredSubCmd != subCmd && hasTranslations {
 				if desc != "" {
@@ -153,15 +153,15 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 					desc = fmt.Sprintf("(canonical: %s)", subCmd)
 				}
 			}
-			
+
 			// Get all forms of the main command for the condition
 			allMainForms := getAllCommandForms(data, mainCmd)
 			mainFormsStr := strings.Join(allMainForms, " ")
-			
+
 			script.WriteString(fmt.Sprintf(
 				"complete -c %s -f -n '__fish_seen_subcommand_from %s' -a '%s' -d '%s'\n",
 				programName, mainFormsStr, preferredSubCmd, escapeFish(desc)))
-			
+
 			// Add canonical form if different
 			if preferredSubCmd != subCmd {
 				canonicalDesc := fmt.Sprintf("(canonical form) %s", data.CommandDescriptions[cmd])
@@ -177,11 +177,11 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 		// Get all forms of the command
 		allCmdForms := getAllCommandForms(data, cmd)
 		cmdFormsStr := strings.Join(allCmdForms, " ")
-		
+
 		for _, flag := range flags {
 			// Get preferred form
 			preferredLong := getPreferredFlagForm(data, flag.Long)
-			
+
 			// Build description
 			desc := flag.Description
 			if preferredLong != flag.Long && hasTranslations {
@@ -191,7 +191,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 					desc = fmt.Sprintf("(canonical: --%s)", flag.Long)
 				}
 			}
-			
+
 			// Preferred form
 			cmdFlag := fmt.Sprintf("complete -c %s", programName)
 			if flag.Type != FlagTypeFile {
@@ -212,7 +212,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 			}
 			cmdFlag = fmt.Sprintf("%s -d '%s'", cmdFlag, escapeFish(desc))
 			script.WriteString(cmdFlag + "\n")
-			
+
 			// Canonical form if different
 			if preferredLong != flag.Long {
 				canonicalDesc := fmt.Sprintf("(canonical form) %s", escapeFish(flag.Description))
@@ -245,7 +245,7 @@ func (g *FishGenerator) Generate(programName string, data CompletionData) string
 					valueCmd = fmt.Sprintf("%s -a '%s' -d '%s'",
 						valueCmd, val.Pattern, escapeFish(val.Description))
 					script.WriteString(valueCmd + "\n")
-					
+
 					// For canonical form if different
 					if preferredLong != flag.Long {
 						valueCmd = fmt.Sprintf("complete -c %s -f -n '__fish_seen_subcommand_from %s' -l %s -n '__fish_seen_argument -l %s' -a '%s' -d '%s'",

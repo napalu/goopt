@@ -1670,7 +1670,7 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 		return commandEnvVars
 	}
 	for _, env := range p.envResolver.Environ() {
-		kv := strings.Split(env, "=")
+		kv := strings.SplitN(env, "=", 2)
 		v := p.envNameConverter(kv[0])
 		if v == "" {
 			continue

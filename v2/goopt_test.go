@@ -714,6 +714,141 @@ func TestParser_PosixFlagsWithEnvVars(t *testing.T) {
 	assert.Equal(t, "2", opts.GetOrDefault("opt", "", "build"), "optimization should be '2' from env var")
 }
 
+// mockEnvResolver implements env.Resolver for testing
+type mockEnvResolver struct {
+	envVars map[string]string
+}
+
+func (m *mockEnvResolver) Get(key string) string {
+	return m.envVars[key]
+}
+
+func (m *mockEnvResolver) Set(key, value string) error {
+	if m.envVars == nil {
+		m.envVars = make(map[string]string)
+	}
+	m.envVars[key] = value
+	return nil
+}
+
+func (m *mockEnvResolver) Environ() []string {
+	result := make([]string, 0, len(m.envVars))
+	for k, v := range m.envVars {
+		result = append(result, k+"="+v)
+	}
+	return result
+}
+
+func TestParser_EnvVarsWithComplexValues(t *testing.T) {
+	// Test case for bug where environment variable values containing '=' were truncated
+	// in groupEnvVarsByCommand() due to incorrect string splitting
+	// Bug: DB_URL=postgres://user:pass@localhost:5432/db?sslmode=disable would be truncated
+
+	testCases := []struct {
+		name     string
+		envVar   string
+		envValue string
+		flag     string
+		command  string
+		expected string
+	}{
+		{
+			name:     "PostgreSQL URL with query params",
+			envVar:   "DB_URL",
+			envValue: "postgres://user:pass@localhost:5432/db?sslmode=disable",
+			flag:     "dbUrl",
+			command:  "",
+			expected: "postgres://user:pass@localhost:5432/db?sslmode=disable",
+		},
+		{
+			name:     "MySQL URL with multiple params",
+			envVar:   "DB_URL",
+			envValue: "mysql://root:password@127.0.0.1:3306/test?charset=utf8mb4&parseTime=True&loc=Local",
+			flag:     "dbUrl",
+			command:  "",
+			expected: "mysql://root:password@127.0.0.1:3306/test?charset=utf8mb4&parseTime=True&loc=Local",
+		},
+		{
+			name:     "API key with base64 encoding containing =",
+			envVar:   "API_KEY",
+			envValue: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0=",
+			flag:     "apiKey",
+			command:  "connect",
+			expected: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0=",
+		},
+		{
+			name:     "Config with multiple key=value pairs",
+			envVar:   "CONFIG",
+			envValue: "host=localhost;port=8080;ssl=true;timeout=30",
+			flag:     "config",
+			command:  "connect",
+			expected: "host=localhost;port=8080;ssl=true;timeout=30",
+		},
+		{
+			name:     "URL with encoded characters and equals",
+			envVar:   "DB_URL",
+			envValue: "mongodb://user:p%40ss%3Dword@host:27017/db?authSource=admin&replicaSet=rs0",
+			flag:     "dbUrl",
+			command:  "",
+			expected: "mongodb://user:p%40ss%3Dword@host:27017/db?authSource=admin&replicaSet=rs0",
+		},
+		{
+			name:     "Redis URL with auth",
+			envVar:   "REDIS_URL",
+			envValue: "redis://:p4ssw0rd@10.0.1.1:6380/0?ssl=true&db=0",
+			flag:     "redisUrl",
+			command:  "",
+			expected: "redis://:p4ssw0rd@10.0.1.1:6380/0?ssl=true&db=0",
+		},
+		{
+			name:     "Multiple equals in value",
+			envVar:   "EQUATION",
+			envValue: "x=5;y=10;result=x*y=50",
+			flag:     "equation",
+			command:  "",
+			expected: "x=5;y=10;result=x*y=50",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := NewParser()
+
+			// Use mock env resolver to avoid affecting other tests
+			mockEnv := &mockEnvResolver{
+				envVars: map[string]string{
+					tc.envVar: tc.envValue,
+				},
+			}
+			err := opts.SetEnvResolver(mockEnv)
+			assert.Nil(t, err, "should set env resolver")
+
+			// Define commands and flags based on test case
+			if tc.command != "" {
+				_ = opts.AddCommand(&Command{Name: tc.command})
+				_ = opts.AddFlag(tc.flag, &Argument{Description: "Test flag", TypeOf: types.Single}, tc.command)
+			} else {
+				_ = opts.AddFlag(tc.flag, &Argument{Description: "Test flag", TypeOf: types.Single})
+			}
+
+			_ = opts.SetEnvNameConverter(upperSnakeToCamelCase)
+
+			// Parse command
+			if tc.command != "" {
+				assert.True(t, opts.ParseString(tc.command), "should parse command")
+				actual := opts.GetOrDefault(tc.flag+"@"+tc.command, "")
+				assert.Equal(t, tc.expected, actual,
+					fmt.Sprintf("%s: value should not be truncated at '=' character", tc.name))
+			} else {
+				assert.True(t, opts.ParseString(""), "should parse with env vars")
+				actual := opts.GetOrDefault(tc.flag, "")
+				assert.Equal(t, tc.expected, actual,
+					fmt.Sprintf("%s: value should not be truncated at '=' character", tc.name))
+			}
+		})
+	}
+}
+
 func TestParser_VarInFileFlag(t *testing.T) {
 	uname := fmt.Sprintf("%x", md5.Sum([]byte(time.Now().Format(time.RFC3339Nano))))
 	var s string

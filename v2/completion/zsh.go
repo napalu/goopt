@@ -34,11 +34,11 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 	for _, cmd := range data.Commands {
 		if !strings.Contains(cmd, " ") && !processedCommands[cmd] {
 			processedCommands[cmd] = true
-			
+
 			// Get preferred form and description
 			preferredForm := getPreferredCommandForm(data, cmd)
 			desc := data.CommandDescriptions[cmd]
-			
+
 			// If translated form differs, show canonical in description
 			if preferredForm != cmd && hasTranslations {
 				if desc != "" {
@@ -47,10 +47,10 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 					desc = fmt.Sprintf("(canonical: %s)", cmd)
 				}
 			}
-			
+
 			script.WriteString(fmt.Sprintf(`
         "%s:%s"`, preferredForm, escapeZsh(desc)))
-			
+
 			// Add canonical form as hidden alternative if different
 			if preferredForm != cmd {
 				script.WriteString(fmt.Sprintf(`
@@ -72,11 +72,11 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 		if len(parts) > 1 {
 			parent := parts[0]
 			sub := strings.Join(parts[1:], " ")
-			
+
 			// Get preferred forms
 			fullCmd := cmd
 			preferredFullForm := getPreferredCommandForm(data, fullCmd)
-			
+
 			// Extract just the subcommand part
 			preferredSub := sub
 			// Try to extract from translated form
@@ -87,9 +87,9 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 			} else if strings.HasPrefix(preferredFullForm, parent+" ") {
 				preferredSub = strings.TrimPrefix(preferredFullForm, parent+" ")
 			}
-			
+
 			desc := data.CommandDescriptions[cmd]
-			
+
 			// Show canonical form in description if different
 			if preferredSub != sub && hasTranslations {
 				if desc != "" {
@@ -98,12 +98,12 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 					desc = fmt.Sprintf("(canonical: %s)", sub)
 				}
 			}
-			
+
 			if _, ok := commandGroups[parent]; !ok {
 				commandGroups[parent] = make([]string, 0)
 			}
 			commandGroups[parent] = append(commandGroups[parent], fmt.Sprintf("%s:%s", preferredSub, desc))
-			
+
 			// Also add canonical form if different
 			if preferredSub != sub {
 				commandGroups[parent] = append(commandGroups[parent], fmt.Sprintf("%s:%s", sub, data.CommandDescriptions[cmd]))
@@ -116,7 +116,7 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 	for parent, subs := range commandGroups {
 		if !processedParents[parent] {
 			processedParents[parent] = true
-			
+
 			// Get all forms of the parent command
 			allParentForms := getAllCommandForms(data, parent)
 			for _, parentForm := range allParentForms {
@@ -136,7 +136,7 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 	for _, flag := range data.Flags {
 		// Get preferred form
 		preferredLong := getPreferredFlagForm(data, flag.Long)
-		
+
 		// Build description that includes canonical form if different
 		desc := flag.Description
 		if preferredLong != flag.Long && hasTranslations {
@@ -146,7 +146,7 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 				desc = fmt.Sprintf("(canonical: --%s)", flag.Long)
 			}
 		}
-		
+
 		if flag.Short != "" {
 			// Flag with both short and long forms - short form first
 			script.WriteString(fmt.Sprintf(`
@@ -170,12 +170,12 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 		} else if flag.Type == FlagTypeFile {
 			script.WriteString(":_files")
 		}
-		
+
 		// Add canonical form as hidden alternative if different
 		if preferredLong != flag.Long {
 			script.WriteString(fmt.Sprintf(`
         "--{}%s[%s]"`, flag.Long, escapeZsh(flag.Description)))
-			
+
 			// Add value completion for canonical form too
 			if values, ok := data.FlagValues[flag.Long]; ok {
 				var valueStrs []string
@@ -218,22 +218,22 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 	for cmd, flags := range data.CommandFlags {
 		if !processedCmds[cmd] {
 			processedCmds[cmd] = true
-			
+
 			// Get all forms of the command
 			allCmdForms := getAllCommandForms(data, cmd)
-			
+
 			// Build patterns for all forms
 			patterns := strings.Join(allCmdForms, "|")
-			
+
 			script.WriteString(fmt.Sprintf(`
                 %s)
                     local -a cmd_flags=(`, patterns))
-			
+
 			// Add command-specific flags with i18n
 			for _, flag := range flags {
 				preferredLong := getPreferredFlagForm(data, flag.Long)
 				desc := flag.Description
-				
+
 				if preferredLong != flag.Long && hasTranslations {
 					if desc != "" {
 						desc = fmt.Sprintf("%s (canonical: --%s)", desc, flag.Long)
@@ -241,7 +241,7 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 						desc = fmt.Sprintf("(canonical: --%s)", flag.Long)
 					}
 				}
-				
+
 				if flag.Short != "" {
 					script.WriteString(fmt.Sprintf(`
                         "(-%s --%s)"{-%s,--%s}"[%s]"`,
@@ -252,19 +252,19 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 					script.WriteString(fmt.Sprintf(`
                         "--%s[%s]"`, preferredLong, escapeZsh(desc)))
 				}
-				
+
 				// Add canonical as hidden alternative
 				if preferredLong != flag.Long {
 					script.WriteString(fmt.Sprintf(`
                         "--{}%s[%s]"`, flag.Long, escapeZsh(flag.Description)))
 				}
 			}
-			
+
 			// Also include global flags
 			for _, flag := range data.Flags {
 				preferredLong := getPreferredFlagForm(data, flag.Long)
 				desc := flag.Description
-				
+
 				if preferredLong != flag.Long && hasTranslations {
 					if desc != "" {
 						desc = fmt.Sprintf("%s (canonical: --%s)", desc, flag.Long)
@@ -272,7 +272,7 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 						desc = fmt.Sprintf("(canonical: --%s)", flag.Long)
 					}
 				}
-				
+
 				if flag.Short != "" {
 					script.WriteString(fmt.Sprintf(`
                         "(-%s --%s)"{-%s,--%s}"[%s]"`,
@@ -283,13 +283,13 @@ func (g *ZshGenerator) Generate(programName string, data CompletionData) string 
 					script.WriteString(fmt.Sprintf(`
                         "--%s[%s]"`, preferredLong, escapeZsh(desc)))
 				}
-				
+
 				if preferredLong != flag.Long {
 					script.WriteString(fmt.Sprintf(`
                         "--{}%s[%s]"`, flag.Long, escapeZsh(flag.Description)))
 				}
 			}
-			
+
 			script.WriteString(`
                     )
                     _arguments $cmd_flags

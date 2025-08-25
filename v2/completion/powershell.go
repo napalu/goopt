@@ -10,7 +10,7 @@ type PowerShellGenerator struct{}
 
 func (g *PowerShellGenerator) Generate(programName string, data CompletionData) string {
 	var script strings.Builder
-	
+
 	// Add i18n comment if translations are present
 	hasTranslations := len(data.TranslatedCommands) > 0 || len(data.TranslatedFlags) > 0
 	if hasTranslations {
@@ -24,7 +24,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
     
     $tokens = $commandAst.CommandElements
     $currentToken = $tokens | Where-Object { $_.Extent.StartOffset -le $cursorPosition } | Select-Object -Last 1`, programName))
-	
+
 	// Add helper function for i18n if translations are present
 	if hasTranslations {
 		script.WriteString(`
@@ -55,7 +55,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	for flagName, values := range data.FlagValues {
 		// Get all forms of this flag
 		allForms := getAllFlagForms(data, flagName)
-		
+
 		// Find the corresponding flag to get its short form
 		var shortForm string
 		for _, flag := range data.Flags {
@@ -64,7 +64,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 				break
 			}
 		}
-		
+
 		// Add patterns for all long forms
 		patterns := []string{}
 		for _, form := range allForms {
@@ -73,10 +73,10 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 		if shortForm != "" {
 			patterns = append(patterns, fmt.Sprintf("'%s'", shortForm))
 		}
-		
+
 		script.WriteString(fmt.Sprintf(`
             {$_ -in %s} {`, strings.Join(patterns, ", ")))
-		
+
 		for _, val := range values {
 			script.WriteString(fmt.Sprintf(`
                 [CompletionResult]::new('%s', '%s', [CompletionResultType]::ParameterValue, '%s')`,
@@ -100,10 +100,10 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	for _, cmd := range data.Commands {
 		if !strings.Contains(cmd, " ") && !processedCommands[cmd] {
 			processedCommands[cmd] = true
-			
+
 			preferredForm := getPreferredCommandForm(data, cmd)
 			desc := data.CommandDescriptions[cmd]
-			
+
 			if hasTranslations {
 				canonicalNote := ""
 				if preferredForm != cmd {
@@ -112,7 +112,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 				script.WriteString(fmt.Sprintf(`
             New-I18nCompletion '%s' '%s' '%s' 'Command'`,
 					preferredForm, escapePowerShell(desc), canonicalNote))
-				
+
 				// Add canonical form if different
 				if preferredForm != cmd {
 					canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
@@ -153,21 +153,21 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	for parentCmd, subCmds := range commandGroups {
 		if !processedParents[parentCmd] {
 			processedParents[parentCmd] = true
-			
+
 			// Get all forms of the parent command
 			allParentForms := getAllCommandForms(data, parentCmd)
 			for _, parentForm := range allParentForms {
 				script.WriteString(fmt.Sprintf(`
             '%s' {
                 @(`, parentForm))
-				
+
 				// Process each subcommand
 				processedSubs := make(map[string]bool)
 				for _, subCmd := range subCmds {
 					fullCmd := parentCmd + " " + subCmd
 					if !processedSubs[fullCmd] {
 						processedSubs[fullCmd] = true
-						
+
 						// Get preferred form of subcommand
 						preferredFullForm := getPreferredCommandForm(data, fullCmd)
 						preferredSubCmd := subCmd
@@ -179,9 +179,9 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 						} else if strings.HasPrefix(preferredFullForm, parentCmd+" ") {
 							preferredSubCmd = strings.TrimPrefix(preferredFullForm, parentCmd+" ")
 						}
-						
+
 						desc := data.CommandDescriptions[fullCmd]
-						
+
 						if hasTranslations {
 							canonicalNote := ""
 							if preferredSubCmd != subCmd {
@@ -190,7 +190,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 							script.WriteString(fmt.Sprintf(`
                     New-I18nCompletion '%s' '%s' '%s' 'Command'`,
 								preferredSubCmd, escapePowerShell(desc), canonicalNote))
-							
+
 							// Add canonical form if different
 							if preferredSubCmd != subCmd {
 								canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
@@ -205,7 +205,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 						}
 					}
 				}
-				
+
 				script.WriteString(`
                 )
                 return
@@ -219,22 +219,22 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	for cmd, flags := range data.CommandFlags {
 		if !processedCmds[cmd] {
 			processedCmds[cmd] = true
-			
+
 			// Get all forms of the command
 			allCmdForms := getAllCommandForms(data, cmd)
-			
+
 			// Build patterns for all forms
 			patterns := strings.Join(allCmdForms, "|")
-			
+
 			script.WriteString(fmt.Sprintf(`
             %s) {
                 @(`, patterns))
-			
+
 			// Add command-specific flags with i18n
 			for _, flag := range flags {
 				preferredLong := getPreferredFlagForm(data, flag.Long)
 				desc := flag.Description
-				
+
 				if hasTranslations {
 					canonicalNote := ""
 					if preferredLong != flag.Long {
@@ -243,7 +243,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 					script.WriteString(fmt.Sprintf(`
                     New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
 						preferredLong, escapePowerShell(desc), canonicalNote))
-					
+
 					// Add canonical form if different
 					if preferredLong != flag.Long {
 						canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
@@ -256,19 +256,19 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
                     [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
 						flag.Long, flag.Long, escapePowerShell(flag.Description)))
 				}
-				
+
 				if flag.Short != "" {
 					script.WriteString(fmt.Sprintf(`
                     [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
 						flag.Short, flag.Short, escapePowerShell(desc)))
 				}
 			}
-			
+
 			// Also include global flags
 			for _, flag := range data.Flags {
 				preferredLong := getPreferredFlagForm(data, flag.Long)
 				desc := flag.Description
-				
+
 				if hasTranslations {
 					canonicalNote := ""
 					if preferredLong != flag.Long {
@@ -277,7 +277,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 					script.WriteString(fmt.Sprintf(`
                     New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
 						preferredLong, escapePowerShell(desc), canonicalNote))
-					
+
 					if preferredLong != flag.Long {
 						canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
 						script.WriteString(fmt.Sprintf(`
@@ -289,14 +289,14 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
                     [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
 						flag.Long, flag.Long, escapePowerShell(flag.Description)))
 				}
-				
+
 				if flag.Short != "" {
 					script.WriteString(fmt.Sprintf(`
                     [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
 						flag.Short, flag.Short, escapePowerShell(desc)))
 				}
 			}
-			
+
 			script.WriteString(`
                 )
                 return
@@ -315,7 +315,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 	for _, flag := range data.Flags {
 		preferredLong := getPreferredFlagForm(data, flag.Long)
 		desc := flag.Description
-		
+
 		if hasTranslations {
 			canonicalNote := ""
 			if preferredLong != flag.Long {
@@ -324,7 +324,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
 			script.WriteString(fmt.Sprintf(`
         New-I18nCompletion '--%s' '%s' '--%s' 'ParameterName'`,
 				preferredLong, escapePowerShell(desc), canonicalNote))
-			
+
 			// Add canonical form if different
 			if preferredLong != flag.Long {
 				canonicalDesc := fmt.Sprintf("(canonical form) %s", desc)
@@ -337,7 +337,7 @@ func (g *PowerShellGenerator) Generate(programName string, data CompletionData) 
         [CompletionResult]::new('--%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
 				flag.Long, flag.Long, escapePowerShell(flag.Description)))
 		}
-		
+
 		if flag.Short != "" {
 			script.WriteString(fmt.Sprintf(`
         [CompletionResult]::new('-%s', '%s', [CompletionResultType]::ParameterName, '%s')`,
