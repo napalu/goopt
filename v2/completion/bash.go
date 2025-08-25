@@ -45,7 +45,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 	// Add flag value completions (including translated forms)
 	for _, flag := range data.Flags {
 		allLongForms := getAllFlagForms(data, flag.Long)
-		
+
 		if flag.Type == FlagTypeFile {
 			// Handle file completion
 			patterns := []string{}
@@ -55,7 +55,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 			if flag.Short != "" {
 				patterns = append(patterns, "-"+flag.Short)
 			}
-			
+
 			script.WriteString(fmt.Sprintf(`
         %s)
             _filedir
@@ -70,7 +70,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 			if flag.Short != "" {
 				patterns = append(patterns, "-"+flag.Short)
 			}
-			
+
 			script.WriteString(fmt.Sprintf(`
         %s)
             COMPREPLY=( $(compgen -W "%s" -- "$cur") )
@@ -78,12 +78,12 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
             ;;`, strings.Join(patterns, "|"), strings.Join(getValueStrings(values), " ")))
 		}
 	}
-	
+
 	// Add command-specific flag value completions
 	for _, cmdFlags := range data.CommandFlags {
 		for _, flag := range cmdFlags {
 			allLongForms := getAllFlagForms(data, flag.Long)
-			
+
 			if flag.Type == FlagTypeFile {
 				patterns := []string{}
 				for _, form := range allLongForms {
@@ -92,7 +92,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 				if flag.Short != "" {
 					patterns = append(patterns, "-"+flag.Short)
 				}
-				
+
 				script.WriteString(fmt.Sprintf(`
         %s)
             _filedir
@@ -106,7 +106,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 				if flag.Short != "" {
 					patterns = append(patterns, "-"+flag.Short)
 				}
-				
+
 				script.WriteString(fmt.Sprintf(`
         %s)
             COMPREPLY=( $(compgen -W "%s" -- "$cur") )
@@ -128,7 +128,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 	// Add nested command completions with i18n support
 	seenBaseCommands := make(map[string][]string)
 	canonicalToBase := make(map[string]string)
-	
+
 	for _, cmd := range data.Commands {
 		parts := strings.Split(cmd, " ")
 		if len(parts) > 1 {
@@ -155,7 +155,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 				allSubCmds = append(allSubCmds, subCmd)
 			}
 		}
-		
+
 		script.WriteString(fmt.Sprintf(`
             %s)
                 COMPREPLY=( $(compgen -W "%s" -- "$sub_cmd") )
@@ -195,7 +195,7 @@ func (g *BashGenerator) Generate(programName string, data CompletionData) string
 		if len(flags) > 0 {
 			// Get all forms of the command
 			allCmdForms := getAllCommandForms(data, cmdName)
-			
+
 			for _, cmdForm := range allCmdForms {
 				script.WriteString(fmt.Sprintf(`
             %s)

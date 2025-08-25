@@ -9,10 +9,10 @@ func getTestI18nCompletionData() CompletionData {
 	return CompletionData{
 		Commands: []string{"server", "deploy", "server start", "server stop", "deploy production"},
 		CommandDescriptions: map[string]string{
-			"server":           "Server management",
-			"deploy":           "Deploy application",
-			"server start":     "Start the server",
-			"server stop":      "Stop the server",
+			"server":            "Server management",
+			"deploy":            "Deploy application",
+			"server start":      "Start the server",
+			"server stop":       "Stop the server",
 			"deploy production": "Deploy to production",
 		},
 		Flags: []FlagPair{
@@ -43,10 +43,10 @@ func getTestI18nCompletionData() CompletionData {
 		},
 		// I18n translations
 		TranslatedCommands: map[string]string{
-			"server":           "serveur",
-			"deploy":           "déployer",
-			"server start":     "serveur démarrer",
-			"server stop":      "serveur arrêter",
+			"server":            "serveur",
+			"deploy":            "déployer",
+			"server start":      "serveur démarrer",
+			"server stop":       "serveur arrêter",
 			"deploy production": "déployer production",
 		},
 		TranslatedFlags: map[string]string{
@@ -89,7 +89,7 @@ func prepareI18nTestData(data CompletionData) CompletionData {
 			}
 		}
 	}
-	
+
 	// Update flag descriptions with translations
 	if data.TranslatedFlagDescriptions != nil {
 		// Update global flags
@@ -98,7 +98,7 @@ func prepareI18nTestData(data CompletionData) CompletionData {
 				data.Flags[i].Description = translatedDesc
 			}
 		}
-		
+
 		// Update command-specific flags
 		for cmd, flags := range data.CommandFlags {
 			for i, flag := range flags {
@@ -108,7 +108,7 @@ func prepareI18nTestData(data CompletionData) CompletionData {
 			}
 		}
 	}
-	
+
 	return data
 }
 
@@ -368,7 +368,6 @@ func TestPowerShellI18nCompletion(t *testing.T) {
 		})
 	}
 }
-
 
 func TestI18nEdgeCases(t *testing.T) {
 	t.Run("empty translations", func(t *testing.T) {

@@ -1696,7 +1696,7 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 		}
 
 		addFlagToCompletionData(&data, cmd, flagName, flagInfo, p.renderer)
-		
+
 		// Add translation mapping for flags
 		if p.translationRegistry != nil {
 			if translated, ok := p.translationRegistry.GetFlagTranslation(flagName, p.GetLanguage()); ok && translated != flagName {
@@ -1711,7 +1711,7 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 		if cmd != nil {
 			data.Commands = append(data.Commands, cmd.path)
 			data.CommandDescriptions[cmd.path] = p.renderer.CommandDescription(cmd)
-			
+
 			// Add translation mapping for commands
 			if p.translationRegistry != nil {
 				if translated, ok := p.translationRegistry.GetCommandTranslation(cmd.path, p.GetLanguage()); ok && translated != cmd.path {
@@ -1729,7 +1729,6 @@ func (p *Parser) GenerateCompletion(shell, programName string) string {
 	generator := completion.GetGenerator(shell)
 	return generator.Generate(programName, p.GetCompletionData())
 }
-
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
 func (p *Parser) PrintUsage(writer io.Writer) {
