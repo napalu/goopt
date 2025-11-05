@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/napalu/goopt/v2/i18n"
@@ -276,8 +277,12 @@ func (se *StringExtractor) extractFromFunction(fset *token.FileSet, filename, fu
 			}
 		case *ast.BasicLit:
 			if node.Kind == token.STRING {
-				// Get the actual string value (remove quotes)
-				value := strings.Trim(node.Value, "`\"")
+				// Get the actual string value (decode Go literal)
+				value, err := strconv.Unquote(node.Value)
+				if err != nil {
+					// Fallback: trim quotes in case of unexpected literal forms
+					value = strings.Trim(node.Value, "`\"")
+				}
 
 				// Apply filters
 				if !se.shouldExtract(value) {
@@ -457,7 +462,10 @@ func (se *StringExtractor) extractFromNode(fset *token.FileSet, filename, contex
 						if funcName == "errors.New" && len(x.Args) > 0 {
 							// Extract string from first argument
 							if lit, ok := x.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-								value := strings.Trim(lit.Value, "`\"")
+								value, err := strconv.Unquote(lit.Value)
+								if err != nil {
+									value = strings.Trim(lit.Value, "`\"")
+								}
 								if se.shouldExtract(value) {
 									pos := fset.Position(lit.Pos())
 									location := StringLocation{
@@ -485,7 +493,10 @@ func (se *StringExtractor) extractFromNode(fset *token.FileSet, filename, contex
 		case *ast.BasicLit:
 			if x.Kind == token.STRING {
 				// Extract raw string literals not in function calls
-				value := strings.Trim(x.Value, "`\"")
+				value, err := strconv.Unquote(x.Value)
+				if err != nil {
+					value = strings.Trim(x.Value, "`\"")
+				}
 				if se.shouldExtract(value) {
 					pos := fset.Position(x.Pos())
 					location := StringLocation{

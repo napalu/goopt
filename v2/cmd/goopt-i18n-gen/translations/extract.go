@@ -458,7 +458,7 @@ func cleanI18nComments(config *options.AppConfig) error {
 	}
 
 	// Resolve package path based on module context
-	packagePath, err := resolvePackagePath(extractCmd.Package, ".")
+	packagePath, err := resolvePackagePath(extractCmd.Shared.Package, ".")
 	if err != nil {
 		// If we can't resolve, use the package name as-is
 		packagePath = extractCmd.Package

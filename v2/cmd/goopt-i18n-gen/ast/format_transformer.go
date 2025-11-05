@@ -22,6 +22,7 @@ type FormatTransformer struct {
 	transformed        bool                 // tracks if any transformations were made
 	detector           *FormatDetector      // generic format function detector
 	packagePath        string               // path to the messages package
+	varName            string               // variable name for generated constants (default: "Keys")
 	transformMode      string               // "user-facing", "with-comments", "all-marked", "all"
 	i18nTodoMap        map[token.Pos]string // maps string literal positions to i18n-todo message keys
 	userFacingRegexes  []*regexp.Regexp     // regex patterns to identify user-facing functions
@@ -41,6 +42,7 @@ func NewFormatTransformer(stringMap map[string]string) *FormatTransformer {
 		transformed:        false,
 		detector:           NewFormatDetector(),
 		packagePath:        "messages",    // default value (will be resolved to full module path)
+		varName:            "Keys",        // default variable name
 		transformMode:      "user-facing", // default to only transforming known user-facing functions
 		i18nTodoMap:        make(map[token.Pos]string),
 		skipPositions:      make(map[token.Pos]bool),
@@ -52,6 +54,13 @@ func NewFormatTransformer(stringMap map[string]string) *FormatTransformer {
 // SetMessagePackagePath sets the path to the messages package
 func (ft *FormatTransformer) SetMessagePackagePath(path string) {
 	ft.packagePath = path
+}
+
+// SetVarName sets the variable name for generated constants
+func (ft *FormatTransformer) SetVarName(varName string) {
+	if varName != "" {
+		ft.varName = varName
+	}
 }
 
 // SetTransformMode sets the transformation mode
@@ -656,7 +665,11 @@ func (ft *FormatTransformer) createKeyExpr(key string) ast.Expr {
 		packageName = pathParts[len(pathParts)-1]
 	}
 
-	astKey := packageName + ".Keys." + goKey
+	varName := ft.varName
+	if varName == "" {
+		varName = "Keys"
+	}
+	astKey := packageName + "." + varName + "." + goKey
 	parts := strings.Split(astKey, ".")
 
 	// Start with the first part

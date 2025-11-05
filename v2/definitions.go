@@ -221,10 +221,12 @@ type Parser struct {
 	envResolver             env.Resolver
 	hookOrder               HookOrder
 	validationHook          ValidationHookFunc
-	translationRegistry     *JITTranslationRegistry
-	flagSuggestionThreshold int // Maximum Levenshtein distance for flag suggestions (default: 2)
-	cmdSuggestionThreshold  int // Maximum Levenshtein distance for command suggestions (default: 2)
-	mu                      sync.Mutex
+	translationRegistry       *JITTranslationRegistry
+	flagSuggestionThreshold   int  // Maximum Levenshtein distance for flag suggestions (default: 2)
+	cmdSuggestionThreshold    int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	allowUnknownFlags         bool // If true, don't generate errors for unknown flags
+	treatUnknownAsPositionals bool // If true, treat unknown flags and their values as positionals
+	mu                        sync.Mutex
 }
 
 // CompletionData is used to store information for command line completion

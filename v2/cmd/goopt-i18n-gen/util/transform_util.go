@@ -6,6 +6,10 @@ import (
 )
 
 func ToTransformConfig(cmdOpt options.ExtractCmd) *common.TransformationConfig {
+	varName := "Keys" // default
+	if cmdOpt.Shared != nil && cmdOpt.Shared.VarName != "" {
+		varName = cmdOpt.Shared.VarName
+	}
 	return &common.TransformationConfig{
 		TrPattern:           cmdOpt.TrPattern,
 		KeepComments:        cmdOpt.KeepComments,
@@ -14,6 +18,7 @@ func ToTransformConfig(cmdOpt options.ExtractCmd) *common.TransformationConfig {
 		TransformMode:       cmdOpt.TransformMode,
 		BackupDir:           cmdOpt.BackupDir,
 		PackagePath:         cmdOpt.Package,
+		VarName:             varName,
 		UserFacingRegex:     cmdOpt.UserFacingRegex,
 		FormatFunctionRegex: cmdOpt.FormatFunctionRegex,
 	}

@@ -56,18 +56,26 @@ func FuzzParseFlags(f *testing.F) {
 		if ok {
 
 			state := parse.NewState(args)
-			// Retrieved values match input
+			// Retrieved values match input - but only for registered flags
+			// Note: Unknown flags may exist in args but not be retrievable
 			for _, arg := range state.Args() {
 				if p.isFlag(arg) {
 					name := strings.TrimLeftFunc(arg, p.prefixFunc)
 					if len(name) == 0 {
 						continue
 					}
-					_, exists := p.Get(name)
-					if !exists {
-						t.Logf("not found %s", name)
+					// Handle --flag=value syntax by stripping the value part
+					if idx := strings.Index(name, "="); idx > 0 {
+						name = name[:idx]
 					}
-					assert.True(t, exists, "Flag %s not found", name)
+					// Only check registered flags - unknown flags may be in positionals
+					if p.HasFlag(name) {
+						_, exists := p.Get(name)
+						if !exists {
+							t.Logf("registered flag %s not found in parsed results", name)
+						}
+						assert.True(t, exists, "Registered flag %s not found", name)
+					}
 				}
 			}
 		} else {

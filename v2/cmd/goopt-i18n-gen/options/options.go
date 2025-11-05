@@ -7,9 +7,11 @@ import (
 
 // GenerateCmd command configuration
 type GenerateCmd struct {
-	Output  string `goopt:"short:o;desc:Output Go file;required:true;descKey:app.generate_cmd.output_desc"`
-	Package string `goopt:"short:p;desc:Package name;default:messages;descKey:app.generate_cmd.package_desc"`
-	Prefix  string `goopt:"desc:Optional prefix to strip from keys;descKey:app.generate_cmd.prefix_desc;default:app"`
+	Shared  *Config `ignore:"true"`
+	Output  string  `goopt:"short:o;desc:Output Go file;required:true;descKey:app.generate_cmd.output_desc"`
+	Package string  `goopt:"short:p;desc:Package name;default:messages;descKey:app.generate_cmd.package_desc"`
+	Prefix  string  `goopt:"desc:Optional prefix to strip from keys;descKey:app.generate_cmd.prefix_desc;default:app"`
+	VarName string  `goopt:"desc:Variable name for generated constants;descKey:app.generate_cmd.var_name_desc;default:Keys"`
 	Exec    goopt.CommandFunc
 }
 
@@ -23,6 +25,7 @@ type ValidateCmd struct {
 
 // AuditCmd command configuration
 type AuditCmd struct {
+	Shared           *Config  `ignore:"true"`
 	Files            []string `goopt:"desc:Go source files to scan (default: **/*.go);default:**/*.go;descKey:app.audit_cmd.files_desc"`
 	GenerateDescKeys bool     `goopt:"short:d;desc:Generate descKey tags for fields that don't have them;descKey:app.audit_cmd.generate_desc_keys_desc"`
 	GenerateMissing  bool     `goopt:"short:g;desc:Generate stub entries for missing translation keys;descKey:app.audit_cmd.generate_missing_desc"`
@@ -50,6 +53,7 @@ type AddCmd struct {
 
 // ExtractCmd handles the extract command configuration
 type ExtractCmd struct {
+	Shared              *Config  `ignore:"true"`
 	Files               []string `goopt:"short:s;desc:Go files to scan;default:**/*.go;descKey:app.extract_cmd.files_desc"`
 	MatchOnly           string   `goopt:"short:M;desc:Regex to match strings for inclusion;descKey:app.extract_cmd.match_only_desc"`
 	SkipMatch           string   `goopt:"short:S;desc:Regex to match strings for exclusion;descKey:app.extract_cmd.skip_match_desc"`
@@ -87,6 +91,7 @@ type GenerateLocalesCmd struct {
 
 // AppConfig main application configuration
 type AppConfig struct {
+	Config          *Config
 	Input           []string           `goopt:"short:i;desc:Input JSON files (supports wildcards);required:true;descKey:app.app_config.input_desc"`
 	Verbose         bool               `goopt:"short:v;desc:Enable verbose output;descKey:app.app_config.verbose_desc"`
 	Language        string             `goopt:"short:l;desc:Language for output (en, de, fr);descKey:app.app_config.language_desc"`
@@ -100,4 +105,10 @@ type AppConfig struct {
 	Sync            SyncCmd            `goopt:"kind:command;name:sync;desc:Synchronize keys across locale files;descKey:app.app_config.sync_desc"`
 	GenerateLocales GenerateLocalesCmd `goopt:"kind:command;name:generate-locales;desc:Generate Go packages from locale JSON files;descKey:app.app_config.generate_locales_desc"`
 	TR              i18n.Translator    `ignore:"true"` // Translator for messages
+}
+
+type Config struct {
+	KeyPrefix string `goopt:"desc:Prefix for generated descKeys;default:app"`
+	VarName   string `goopt:"desc:Variable name for generated constants;default:Keys"`
+	Package   string `goopt:"desc:Package name for imports;default:messages"`
 }

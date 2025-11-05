@@ -183,6 +183,7 @@
   "app.generate_locales_cmd.dry_run_desc": "Vorschau was generiert würde",
   "app.generate_locales_cmd.output_desc": "Ausgabeverzeichnis für Locale-Pakete",
   "app.generate_locales_cmd.package_base_desc": "Basis-Paketpfad",
+  "app.generate_cmd.var_name_desc": "Variablenname für generierte Konstanten",
   "app.global.help_desc": "Hilfe anzeigen",
   "app.global.input_desc": "Eingabe-JSON-Dateien (unterstützt Wildcards)",
   "app.global.language_desc": "Sprache für Ausgabe (en, de, fr)",

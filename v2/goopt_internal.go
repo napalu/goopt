@@ -27,21 +27,35 @@ import (
 	"golang.org/x/text/language"
 )
 
+// splitFlagValue splits a flag argument on the first '=' to support --flag=value syntax.
+// Returns the flag name (without prefix) and the embedded value (if any).
+// If no '=' is present, returns the flag name and empty string.
+func splitFlagValue(flagArg string) (flagName string, embeddedValue string, hasEmbeddedValue bool) {
+	if idx := strings.Index(flagArg, "="); idx > 0 {
+		return flagArg[:idx], flagArg[idx+1:], true
+	}
+	return flagArg, "", false
+}
+
 func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 	stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
-	flag := p.flagOrShortFlag(stripped, currentCommandPath)
+
+	// Check for --flag=value syntax
+	flagName, embeddedValue, hasEmbeddedValue := splitFlagValue(stripped)
+
+	flag := p.flagOrShortFlag(flagName, currentCommandPath)
 	flagInfo, found := p.acceptedFlags.Get(flag)
 
 	if !found {
-		flagInfo, found = p.acceptedFlags.Get(stripped)
+		flagInfo, found = p.acceptedFlags.Get(flagName)
 		if found {
-			flag = stripped
+			flag = flagName
 		}
 	}
 
 	// If not found, try translation lookup
 	if !found {
-		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
 			// The canonical name might already include command context (e.g., "flag@command")
 			// Try it as-is first
 			flag = canonical
@@ -57,7 +71,11 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 	}
 
 	if found {
-		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		if hasEmbeddedValue {
+			p.processFlagArgWithValue(state, flagInfo.Argument, flag, embeddedValue, currentCommandPath)
+		} else {
+			p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		}
 		return true
 	} else {
 		// Don't add error here - return false to indicate not processed
@@ -66,25 +84,36 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 }
 
 func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) bool {
-	flag := p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
+	stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
+
+	// Check for -flag=value syntax
+	flagName, embeddedValue, hasEmbeddedValue := splitFlagValue(stripped)
+
+	flag := p.flagOrShortFlag(flagName)
 	flagInfo, found := p.getFlagInCommandPath(flag, currentCommandPath)
 	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-		p.normalizePosixArgs(state, flag, currentCommandPath)
-		flag = p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
-		flagInfo, found = p.getFlagInCommandPath(flag, currentCommandPath)
+		// Note: Don't normalize if we have an embedded value with =
+		if !hasEmbeddedValue {
+			p.normalizePosixArgs(state, flag, currentCommandPath)
+			flag = p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
+			flagInfo, found = p.getFlagInCommandPath(flag, currentCommandPath)
+		}
 	}
 
 	// If not found, try translation lookup
 	if !found {
-		stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
-		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
 			flagInfo, found = p.getFlagInCommandPath(canonical, currentCommandPath)
 		}
 	}
 
 	if found {
-		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		if hasEmbeddedValue {
+			p.processFlagArgWithValue(state, flagInfo.Argument, flag, embeddedValue, currentCommandPath)
+		} else {
+			p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		}
 		return true
 	} else {
 		// Don't add error here - return false to indicate not processed
@@ -170,6 +199,49 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 		}
 	case types.Single, types.Chained, types.File:
 		p.processFlag(argument, state, lookup)
+	}
+}
+
+// processFlagArgWithValue handles flag processing when an embedded value is provided via --flag=value syntax
+func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, currentArg string, embeddedValue string, currentCommandPath ...string) {
+	lookup := buildPathFlag(currentArg, currentCommandPath...)
+
+	if isNestedSlicePath(currentArg) {
+		if err := p.validateSlicePath(lookup); err != nil {
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingField, lookup))
+			return
+		}
+	}
+
+	switch argument.TypeOf {
+	case types.Standalone:
+		if argument.Secure.IsSecure {
+			p.queueSecureArgument(lookup, argument)
+		} else {
+			boolVal := embeddedValue
+			if boolVal == "" {
+				boolVal = "true"
+			}
+
+			// Run validators on standalone flag value
+			if len(argument.Validators) > 0 {
+				for _, validator := range argument.Validators {
+					if err := validator(boolVal); err != nil {
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+						return
+					}
+				}
+			}
+
+			p.registerFlagValue(lookup, boolVal, currentArg)
+			p.options[lookup] = boolVal
+			err := p.setBoundVariable(boolVal, lookup)
+			if err != nil {
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+			}
+		}
+	case types.Single, types.Chained, types.File:
+		p.processFlagWithValue(argument, embeddedValue, lookup)
 	}
 }
 
@@ -647,6 +719,33 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+				}
+			}
+		}
+	}
+}
+
+// processFlagWithValue processes a flag with an embedded value from --flag=value syntax
+func (p *Parser) processFlagWithValue(argument *Argument, embeddedValue string, flag string) {
+	var err error
+	if argument.Secure.IsSecure {
+		// For secure arguments with embedded values, we just queue them
+		p.queueSecureArgument(flag, argument)
+	} else {
+		// Use the embedded value directly
+		value := embeddedValue
+		if len(value) == 0 && len(argument.DefaultValue) > 0 {
+			value = argument.DefaultValue
+		}
+		if len(value) == 0 {
+			p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
+		} else {
+			value, err = p.flagValue(argument, value, flag)
+			if err != nil {
+				p.addError(err)
+			} else {
+				if err = p.processValueFlag(flag, value, argument); err != nil {
 					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
 				}
 			}
