@@ -157,6 +157,14 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 	return p, err
 }
 
+// SetEnvVarPrefix sets the prefix for environment variables.
+func (p *Parser) SetEnvVarPrefix(prefix string) {
+	if !strings.HasSuffix(prefix, "_") {
+		prefix = prefix + "_"
+	}
+	p.envVarPrefix = prefix
+}
+
 // SetExecOnParse executes command callbacks as soon as the command and associated flags have been parsed *during* the
 // Parse call. This is useful for executing commands which may require setting configuration or flag values
 // during command execution.

@@ -1773,10 +1773,12 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 	}
 	for _, env := range p.envResolver.Environ() {
 		kv := strings.SplitN(env, "=", 2)
-		v := p.envNameConverter(kv[0])
+		v := strings.Replace(kv[0], p.envVarPrefix, "", 1)
 		if v == "" {
 			continue
 		}
+
+		v = p.envNameConverter(v)
 		for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 			paths := splitPathFlag(*f.Key)
 			length := len(paths)
@@ -1785,9 +1787,10 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", *f.Key), kv[1])
 			}
 			// Command-specific flag
-			if length > 1 && paths[0] == v || v == f.Value.Argument.Short {
+			if length > 1 && paths[0] == v {
 				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", *f.Key), kv[1])
 			}
+
 		}
 	}
 

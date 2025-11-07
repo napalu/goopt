@@ -386,3 +386,10 @@ func WithTreatUnknownAsPositionals(value bool) ConfigureCmdLineFunc {
 		p.SetTreatUnknownAsPositionals(value)
 	}
 }
+
+// WithEnvVarPrefix sets the default environment variable prefix.
+func WithEnvVarPrefix(prefix string) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetEnvVarPrefix(prefix)
+	}
+}

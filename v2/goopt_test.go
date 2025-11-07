@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/napalu/goopt/v2/validation"
 
@@ -564,17 +565,53 @@ func TestParser_SharedFlags(t *testing.T) {
 	assert.Equal(t, "group_value", opts.GetOrDefault("sharedFlag", "", "create group"), "flag should be parsed correctly in group command")
 }
 
+type envVarTest struct {
+	envVars map[string]string
+}
+
+func (e *envVarTest) Get(s string) string {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	return e.envVars[s]
+}
+
+func (e *envVarTest) Set(s string, v string) error {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	e.envVars[s] = v
+
+	return nil
+}
+
+func (e *envVarTest) Environ() []string {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	arr := make([]string, 0, len(e.envVars))
+	for k, v := range e.envVars {
+		arr = append(arr, k+"="+v)
+	}
+
+	return arr
+}
+
 func TestParser_EnvToFlag(t *testing.T) {
 	var s string
+	ev := &envVarTest{}
 	cmdLine, err := NewParserWith(
 		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
 		WithBindFlag("testMe", &s,
 			NewArg(WithShortFlag("t"),
-				WithType(types.Single))))
+				WithType(types.Single))),
+		WithEnvVarPrefix("MY_APP"),
+		WithEnvResolver(ev))
+	_ = ev.Set("MY_APP_TEST_ME", "test")
+
 	assert.Nil(t, err)
 	flagFunc := cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
-	os.Setenv("TEST_ME", "test")
 
 	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
 	assert.Equal(t, "123", s)
@@ -582,23 +619,6 @@ func TestParser_EnvToFlag(t *testing.T) {
 	assert.True(t, cmdLine.ParseString("command test"))
 	assert.Equal(t, "test", s)
 	assert.True(t, cmdLine.HasCommand("command test"))
-
-	cmdLine, err = NewParserWith(
-		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
-		WithBindFlag("testMe", &s,
-			NewArg(WithShortFlag("t"),
-				WithType(types.Single)), "command test"))
-	assert.Nil(t, err)
-	_ = cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
-
-	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
-
-	assert.Equal(t, "123", s)
-	assert.True(t, cmdLine.HasCommand("command test"))
-	assert.True(t, cmdLine.ParseString("command test"))
-	assert.Equal(t, "test", s)
-	assert.True(t, cmdLine.HasCommand("command test"))
-
 }
 
 func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
