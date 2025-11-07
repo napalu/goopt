@@ -1558,9 +1558,12 @@ func (p *Parser) validateProcessedOptions() {
 }
 
 func (p *Parser) walkFlags() {
+	visited := make(map[string]bool)
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		flagInfo := f.Value
-		visited := make(map[string]bool)
+		if flagInfo.Argument.isPositional() {
+			continue
+		}
 		if flagInfo.Argument.RequiredIf != nil {
 			if required, msg := flagInfo.Argument.RequiredIf(p, *f.Key); required {
 				p.addError(errors.New(msg))
