@@ -27,21 +27,35 @@ import (
 	"golang.org/x/text/language"
 )
 
+// splitFlagValue splits a flag argument on the first '=' to support --flag=value syntax.
+// Returns the flag name (without prefix) and the embedded value (if any).
+// If no '=' is present, returns the flag name and empty string.
+func splitFlagValue(flagArg string) (flagName string, embeddedValue string, hasEmbeddedValue bool) {
+	if idx := strings.Index(flagArg, "="); idx > 0 {
+		return flagArg[:idx], flagArg[idx+1:], true
+	}
+	return flagArg, "", false
+}
+
 func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 	stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
-	flag := p.flagOrShortFlag(stripped, currentCommandPath)
+
+	// Check for --flag=value syntax
+	flagName, embeddedValue, hasEmbeddedValue := splitFlagValue(stripped)
+
+	flag := p.flagOrShortFlag(flagName, currentCommandPath)
 	flagInfo, found := p.acceptedFlags.Get(flag)
 
 	if !found {
-		flagInfo, found = p.acceptedFlags.Get(stripped)
+		flagInfo, found = p.acceptedFlags.Get(flagName)
 		if found {
-			flag = stripped
+			flag = flagName
 		}
 	}
 
 	// If not found, try translation lookup
 	if !found {
-		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
 			// The canonical name might already include command context (e.g., "flag@command")
 			// Try it as-is first
 			flag = canonical
@@ -57,7 +71,11 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 	}
 
 	if found {
-		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		if hasEmbeddedValue {
+			p.processFlagArgWithValue(state, flagInfo.Argument, flag, embeddedValue, currentCommandPath)
+		} else {
+			p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		}
 		return true
 	} else {
 		// Don't add error here - return false to indicate not processed
@@ -66,25 +84,36 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 }
 
 func (p *Parser) parsePosixFlag(state parse.State, currentCommandPath string) bool {
-	flag := p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
+	stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
+
+	// Check for -flag=value syntax
+	flagName, embeddedValue, hasEmbeddedValue := splitFlagValue(stripped)
+
+	flag := p.flagOrShortFlag(flagName)
 	flagInfo, found := p.getFlagInCommandPath(flag, currentCommandPath)
 	if !found {
 		// two-pass process to account for flag values directly adjacent to a flag (e.g. `-f1` instead of `-f 1`)
-		p.normalizePosixArgs(state, flag, currentCommandPath)
-		flag = p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
-		flagInfo, found = p.getFlagInCommandPath(flag, currentCommandPath)
+		// Note: Don't normalize if we have an embedded value with =
+		if !hasEmbeddedValue {
+			p.normalizePosixArgs(state, flag, currentCommandPath)
+			flag = p.flagOrShortFlag(strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc))
+			flagInfo, found = p.getFlagInCommandPath(flag, currentCommandPath)
+		}
 	}
 
 	// If not found, try translation lookup
 	if !found {
-		stripped := strings.TrimLeftFunc(state.CurrentArg(), p.prefixFunc)
-		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(stripped, p.GetLanguage()); ok {
+		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
 			flagInfo, found = p.getFlagInCommandPath(canonical, currentCommandPath)
 		}
 	}
 
 	if found {
-		p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		if hasEmbeddedValue {
+			p.processFlagArgWithValue(state, flagInfo.Argument, flag, embeddedValue, currentCommandPath)
+		} else {
+			p.processFlagArg(state, flagInfo.Argument, flag, currentCommandPath)
+		}
 		return true
 	} else {
 		// Don't add error here - return false to indicate not processed
@@ -155,7 +184,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
 					if err := validator(boolVal); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
 				}
@@ -165,11 +194,54 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 			}
 		}
 	case types.Single, types.Chained, types.File:
 		p.processFlag(argument, state, lookup)
+	}
+}
+
+// processFlagArgWithValue handles flag processing when an embedded value is provided via --flag=value syntax
+func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, currentArg string, embeddedValue string, currentCommandPath ...string) {
+	lookup := buildPathFlag(currentArg, currentCommandPath...)
+
+	if isNestedSlicePath(currentArg) {
+		if err := p.validateSlicePath(lookup); err != nil {
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingField, lookup))
+			return
+		}
+	}
+
+	switch argument.TypeOf {
+	case types.Standalone:
+		if argument.Secure.IsSecure {
+			p.queueSecureArgument(lookup, argument)
+		} else {
+			boolVal := embeddedValue
+			if boolVal == "" {
+				boolVal = "true"
+			}
+
+			// Run validators on standalone flag value
+			if len(argument.Validators) > 0 {
+				for _, validator := range argument.Validators {
+					if err := validator(boolVal); err != nil {
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
+						return
+					}
+				}
+			}
+
+			p.registerFlagValue(lookup, boolVal, currentArg)
+			p.options[lookup] = boolVal
+			err := p.setBoundVariable(boolVal, lookup)
+			if err != nil {
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
+			}
+		}
+	case types.Single, types.Chained, types.File:
+		p.processFlagWithValue(argument, embeddedValue, lookup)
 	}
 }
 
@@ -647,7 +719,34 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
-					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
+				}
+			}
+		}
+	}
+}
+
+// processFlagWithValue processes a flag with an embedded value from --flag=value syntax
+func (p *Parser) processFlagWithValue(argument *Argument, embeddedValue string, flag string) {
+	var err error
+	if argument.Secure.IsSecure {
+		// For secure arguments with embedded values, we just queue them
+		p.queueSecureArgument(flag, argument)
+	} else {
+		// Use the embedded value directly
+		value := embeddedValue
+		if len(value) == 0 && len(argument.DefaultValue) > 0 {
+			value = argument.DefaultValue
+		}
+		if len(value) == 0 {
+			p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
+		} else {
+			value, err = p.flagValue(argument, value, flag)
+			if err != nil {
+				p.addError(err)
+			} else {
+				if err = p.processValueFlag(flag, value, argument); err != nil {
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				}
 			}
 		}
@@ -1297,7 +1396,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 			if len(argInfo.Argument.Validators) > 0 {
 				for _, validator := range argInfo.Argument.Validators {
 					if err = validator(pass); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 						return
 					}
 				}
@@ -1306,7 +1405,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
-			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 		}
 	} else {
 		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, name))
@@ -1379,7 +1478,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
 			if err := validator(value); err != nil {
-				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				return "", false
 			}
 		}
@@ -1435,7 +1534,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
 				if err := validator(args[i]); err != nil {
-					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 					return "", false
 				}
 			}
@@ -1459,9 +1558,12 @@ func (p *Parser) validateProcessedOptions() {
 }
 
 func (p *Parser) walkFlags() {
+	visited := make(map[string]bool)
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		flagInfo := f.Value
-		visited := make(map[string]bool)
+		if flagInfo.Argument.isPositional() {
+			continue
+		}
 		if flagInfo.Argument.RequiredIf != nil {
 			if required, msg := flagInfo.Argument.RequiredIf(p, *f.Key); required {
 				p.addError(errors.New(msg))
@@ -1671,10 +1773,12 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 	}
 	for _, env := range p.envResolver.Environ() {
 		kv := strings.SplitN(env, "=", 2)
-		v := p.envNameConverter(kv[0])
+		v := strings.Replace(kv[0], p.envVarPrefix, "", 1)
 		if v == "" {
 			continue
 		}
+
+		v = p.envNameConverter(v)
 		for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 			paths := splitPathFlag(*f.Key)
 			length := len(paths)
@@ -1683,9 +1787,10 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", *f.Key), kv[1])
 			}
 			// Command-specific flag
-			if length > 1 && paths[0] == v || v == f.Value.Argument.Short {
+			if length > 1 && paths[0] == v {
 				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", *f.Key), kv[1])
 			}
+
 		}
 	}
 
@@ -2630,6 +2735,19 @@ func getFlagPath(flag string) string {
 	return ""
 }
 
+// formatFlagForError formats a flag name for user-facing error messages.
+// Converts "flag@command" to "'flag' (in command 'command')" for clarity.
+func (p *Parser) formatFlagForError(flag string) string {
+	parts := splitPathFlag(flag)
+	if len(parts) == 2 && parts[1] != "" {
+		// Format as: 'flag' (in command 'command')
+		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
+		return fmt.Sprintf("'%s' (%s '%s')", parts[0], inCommandMsg, parts[1])
+	}
+	// No command context, just quote the flag name (use first part to strip any trailing @)
+	return fmt.Sprintf("'%s'", parts[0])
+}
+
 func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {
 	if flagInfo == nil || flagInfo.Argument == nil {
 		return
@@ -2927,9 +3045,27 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 			if cmd.Value.topLevel {
 				flagCount := p.countCommandFlags(cmd.Value.Name)
+				// Use CommandUsage to include positionals
+				cmdName := cmd.Value.Name
+				desc := p.renderer.CommandDescription(cmd.Value)
+
+				// Get positionals to build the full command name with args
+				positionals := p.getPositionalsForCommand(cmd.Value.path)
+				for _, pos := range positionals {
+					flagName := pos.Value
+					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+						flagName = flagName[:idx]
+					}
+					if pos.Argument.Required {
+						cmdName += " <" + flagName + ">"
+					} else {
+						cmdName += " [" + flagName + "]"
+					}
+				}
+
 				fmt.Fprintf(writer, "  %-15s %-40s",
-					cmd.Value.Name,
-					util.Truncate(p.renderer.CommandDescription(cmd.Value), 40))
+					cmdName,
+					util.Truncate(desc, 40))
 				if flagCount > 0 {
 					fmt.Fprintf(writer, " [%d %s]", flagCount, p.layeredProvider.GetMessage(messages.MsgFlagsKey))
 				}
@@ -3124,11 +3260,26 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 		ppConfig := p.DefaultPrettyPrintConfig()
 		if cmd.Value.topLevel {
+			// Build command name with positionals
+			cmdName := cmd.Value.Name
+			positionals := p.getPositionalsForCommand(cmd.Value.path)
+			for _, pos := range positionals {
+				flagName := pos.Value
+				if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+					flagName = flagName[:idx]
+				}
+				if pos.Argument.Required {
+					cmdName += " <" + flagName + ">"
+				} else {
+					cmdName += " [" + flagName + "]"
+				}
+			}
+
 			desc := p.renderer.CommandDescription(cmd.Value)
 			if desc != "" {
-				fmt.Fprintf(writer, "\n%-20s %s\n", cmd.Value.Name, desc)
+				fmt.Fprintf(writer, "\n%-20s %s\n", cmdName, desc)
 			} else {
-				fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
+				fmt.Fprintf(writer, "\n%s\n", cmdName)
 			}
 			for i := range cmd.Value.Subcommands {
 				prefix := ppConfig.DefaultPrefix
@@ -3138,12 +3289,28 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 				sub := &cmd.Value.Subcommands[i]
 				// Look up the actual registered command to get the correct description
 				subPath := cmd.Value.Name + " " + sub.Name
+
+				// Build subcommand name with positionals
+				subName := sub.Name
+				subPositionals := p.getPositionalsForCommand(subPath)
+				for _, pos := range subPositionals {
+					flagName := pos.Value
+					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+						flagName = flagName[:idx]
+					}
+					if pos.Argument.Required {
+						subName += " <" + flagName + ">"
+					} else {
+						subName += " [" + flagName + "]"
+					}
+				}
+
 				if registeredSub, found := p.registeredCommands.Get(subPath); found {
 					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
 				} else {
 					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
 				}
 			}
 		}

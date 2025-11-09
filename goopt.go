@@ -1147,7 +1147,7 @@ func (p *Parser) SetFlag(flag, value string, commandPath ...string) error {
 		p.options[flag] = value
 		key = flag
 	}
-	arg, err := p.GetArgument(key)
+	arg, err := p.GetArgument(key, commandPath...)
 	if err != nil {
 		return err
 	}

@@ -200,6 +200,7 @@ const SystemTranslations = `{
         "goopt.msg.help_options": "सहायता विकल्प",
         "goopt.msg.help_system": "सहायता प्रणाली",
         "goopt.msg.help_system_desc": "यह CLI एक उन्नत सहायता प्रणाली प्रदान करता है जिसमें आवश्यक जानकारी खोजने के लिए कई मोड और विकल्प हैं।",
+        "goopt.msg.in_command": "कमांड में",
         "goopt.msg.language_description": "प्रदर्शन भाषा सेट करें",
         "goopt.msg.more": "अधिक",
         "goopt.msg.no_commands_defined": "कोई कमांड परिभाषित नहीं हैं।",

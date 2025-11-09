@@ -125,6 +125,10 @@ func GenerateKeyFromString(prefix, value string) string {
 		}
 	}
 
+	// Normalize all whitespace (newlines, tabs, etc.) to regular spaces
+	// This prevents newlines/tabs from ending up in keys
+	key = regexp.MustCompile(`\s+`).ReplaceAllString(key, " ")
+
 	// Remove non-alphanumeric characters except spaces and underscores
 	key = regexp.MustCompile(`[^\w\s]+`).ReplaceAllString(key, " ")
 	key = strings.TrimSpace(key)

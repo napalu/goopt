@@ -180,6 +180,7 @@
   "app.generate_cmd.output_desc": "Output Go file",
   "app.generate_cmd.package_desc": "Package name",
   "app.generate_cmd.prefix_desc": "Optional prefix to strip from keys",
+  "app.generate_cmd.var_name_desc": "Variable name for generated constants",
   "app.generate_locales_cmd.dry_run_desc": "Preview what would be generated",
   "app.generate_locales_cmd.output_desc": "Output directory for locale packages",
   "app.generate_locales_cmd.package_base_desc": "Base package path",

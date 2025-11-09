@@ -201,6 +201,7 @@ const SystemTranslations = `{
         "goopt.msg.help_options": "帮助选项",
         "goopt.msg.help_system": "帮助系统",
         "goopt.msg.help_system_desc": "此 CLI 提供了一个高级帮助系统，具有多种模式和选项来查找您需要的信息。",
+        "goopt.msg.in_command": "在命令中",
         "goopt.msg.language_description": "设置显示语言",
         "goopt.msg.more": "更多",
         "goopt.msg.no_commands_defined": "未定义任何命令。",

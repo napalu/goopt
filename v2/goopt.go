@@ -44,8 +44,7 @@ import (
 	"golang.org/x/text/language"
 )
 
-// NewParser convenience initialization method. Use NewCmdLine to
-// configure CmdLineOption using option functions.
+// NewParser convenience initialization method.
 func NewParser() *Parser {
 	defaultBundle := i18n.Default()
 	systemBundle := i18n.NewEmptyBundle()
@@ -158,6 +157,14 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 	return p, err
 }
 
+// SetEnvVarPrefix sets the prefix for environment variables.
+func (p *Parser) SetEnvVarPrefix(prefix string) {
+	if !strings.HasSuffix(prefix, "_") {
+		prefix = prefix + "_"
+	}
+	p.envVarPrefix = prefix
+}
+
 // SetExecOnParse executes command callbacks as soon as the command and associated flags have been parsed *during* the
 // Parse call. This is useful for executing commands which may require setting configuration or flag values
 // during command execution.
@@ -168,6 +175,21 @@ func (p *Parser) SetExecOnParse(value bool) {
 // SetExecOnParseComplete sets whether command callbacks should execute upon successful parsing completion.
 func (p *Parser) SetExecOnParseComplete(value bool) {
 	p.callbackOnParseComplete = value
+}
+
+// SetAllowUnknownFlags configures whether unknown flags should be silently ignored instead of generating errors.
+// When set to true, flags that don't match any registered flag will not produce an error.
+// This is useful for wrapper scripts, plugin systems, or when forwarding arguments to other commands.
+func (p *Parser) SetAllowUnknownFlags(value bool) {
+	p.allowUnknownFlags = value
+}
+
+// SetTreatUnknownAsPositionals configures whether unknown flags should be treated as positional arguments.
+// When set to true, unknown flags and their values (if any) will be added to the positional arguments list.
+// This requires SetAllowUnknownFlags(true) to be effective, as errors would prevent positional processing.
+// Note: This affects how arguments are classified - unknown flags become regular positional values.
+func (p *Parser) SetTreatUnknownAsPositionals(value bool) {
+	p.treatUnknownAsPositionals = value
 }
 
 // SetLanguage sets the parser language to the specified language tag.
@@ -657,14 +679,18 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 					if shouldTryFallback {
 						// No command context, try as global/POSIX flag
 						if !p.evalFlagWithPath(state, "") {
-							// Still not found, generate error
-							flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
-							p.generateFlagError(flagName, currentCommandPath)
+							// Still not found, generate error (unless allowUnknownFlags is enabled)
+							if !p.allowUnknownFlags {
+								flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
+								p.generateFlagError(flagName, currentCommandPath)
+							}
 						}
 					} else {
 						// In command context and flag not found anywhere
-						flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
-						p.generateFlagError(flagName, currentCommandPath)
+						if !p.allowUnknownFlags {
+							flagName := strings.TrimLeftFunc(cur, p.prefixFunc)
+							p.generateFlagError(flagName, currentCommandPath)
+						}
 					}
 				}
 			}
@@ -1520,13 +1546,13 @@ func (p *Parser) SetFlag(flag, value string, commandPath ...string) error {
 	key := ""
 	_, found := p.options[flag]
 	if found {
-		p.options[mainKey] = value
+		p.options[flag] = value
 		key = mainKey
 	} else {
 		p.options[flag] = value
 		key = flag
 	}
-	arg, err := p.GetArgument(key)
+	arg, err := p.GetArgument(key, commandPath...)
 	if err != nil {
 		return err
 	}
@@ -1776,18 +1802,22 @@ func (p *Parser) PrintUsageWithGroups(writer io.Writer, config ...*PrettyPrintCo
 func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 	var args []PositionalArgument
 
-	// Collect all flags marked as positional
+	// Collect only global positional arguments (not command-specific ones)
+	// Command-specific positionals are now shown inline with the command usage
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.Argument != nil && f.Value.Argument.isPositional() {
 			if f.Value.Argument.Position == nil {
 				continue
 			}
 
-			args = append(args, PositionalArgument{
-				Position: *f.Value.Argument.Position,
-				Value:    *f.Key,
-				Argument: f.Value.Argument,
-			})
+			// Only include positionals that are not tied to a specific command
+			if f.Value.CommandPath == "" {
+				args = append(args, PositionalArgument{
+					Position: *f.Value.Argument.Position,
+					Value:    *f.Key,
+					Argument: f.Value.Argument,
+				})
+			}
 		}
 	}
 
@@ -1796,18 +1826,63 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 		return args[i].Position < args[j].Position
 	})
 
-	// Print args with indices
+	// Print args with indices (only if there are global positionals)
 	if len(args) > 0 {
 		_, _ = writer.Write([]byte(fmt.Sprintf("\n%s:\n", p.layeredProvider.GetMessage(messages.MsgPositionalArgumentsKey))))
 		for _, arg := range args {
+			// Extract just the flag name
+			flagName := arg.Value
+			if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+				flagName = flagName[:idx]
+			}
+
+			// Format as <name> or [name] depending on required status
+			var formatted string
+			if arg.Argument.Required {
+				formatted = "<" + flagName + ">"
+			} else {
+				formatted = "[" + flagName + "]"
+			}
+
+			// Display position as 1-based (more user-friendly)
 			_, _ = writer.Write([]byte(fmt.Sprintf(" %s \"%s\" (%s: %d)\n",
-				arg.Value,
+				formatted,
 				p.renderer.FlagDescription(arg.Argument),
 				p.layeredProvider.GetMessage(messages.MsgPositionalKey),
-				arg.Position)))
+				arg.Position+1))) // 1-based index for display
 		}
 		_, _ = writer.Write([]byte("\n"))
 	}
+}
+
+// getPositionalsForCommand returns positional arguments for a specific command path
+func (p *Parser) getPositionalsForCommand(commandPath string) []PositionalArgument {
+	var args []PositionalArgument
+
+	// Collect all flags marked as positional for this command
+	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		if f.Value.Argument != nil && f.Value.Argument.isPositional() {
+			if f.Value.Argument.Position == nil {
+				continue
+			}
+
+			// Check if this positional belongs to the specified command
+			if f.Value.CommandPath == commandPath {
+				args = append(args, PositionalArgument{
+					Position: *f.Value.Argument.Position,
+					Value:    *f.Key,
+					Argument: f.Value.Argument,
+				})
+			}
+		}
+	}
+
+	// Sort by position
+	sort.SliceStable(args, func(i, j int) bool {
+		return args[i].Position < args[j].Position
+	})
+
+	return args
 }
 
 // PrintGlobalFlags prints global (non-command-specific) flags
@@ -1866,13 +1941,8 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 				}
 
 				// Print the command itself with proper indentation
-				commandStr := cmd.path
-				if p.helpConfig.ShowDescription {
-					desc := p.renderer.CommandDescription(cmd)
-					if desc != "" {
-						commandStr += " \"" + desc + "\""
-					}
-				}
+				// Use CommandUsage to get the properly formatted command with positionals
+				commandStr := p.renderer.CommandUsage(cmd)
 				command := fmt.Sprintf("%s%s%s\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), commandStr)
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
@@ -1891,6 +1961,11 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
+			// Skip positional arguments as they're shown inline with the command
+			if f.Value.Argument.isPositional() {
+				continue
+			}
+
 			flag := fmt.Sprintf("%s%s\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), p.renderer.FlagUsage(f.Value.Argument))
 
 			_, _ = writer.Write([]byte(flag))

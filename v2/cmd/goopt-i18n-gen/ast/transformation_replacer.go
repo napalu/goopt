@@ -65,6 +65,7 @@ func (sr *TransformationReplacer) SetKeyMap(keyMap map[string]string) {
 
 	sr.formatTransformer = NewFormatTransformer(quotedKeyMap)
 	sr.formatTransformer.SetMessagePackagePath(sr.config.PackagePath)
+	sr.formatTransformer.SetVarName(sr.config.VarName)
 	sr.formatTransformer.SetTransformMode(sr.config.TransformMode)
 	sr.formatTransformer.SetTranslatorPattern(sr.config.TrPattern)
 
@@ -192,6 +193,8 @@ func (sr *TransformationReplacer) isInUserFacingFunction(lit *ast.BasicLit) bool
 				"fmt.Sprintf":   true,
 				"fmt.Fprintf":   true,
 				"fmt.Errorf":    true,
+				"fmt.Println":   true,
+				"fmt.Print":     true,
 				"log.Printf":    true,
 				"log.Fatalf":    true,
 				"log.Panicf":    true,
@@ -503,7 +506,13 @@ func (sr *TransformationReplacer) convertKeyToASTFormat(key string) string {
 		packageName = parts[len(parts)-1]
 	}
 
-	return packageName + ".Keys." + strings.Join(astParts, ".")
+	// Use configured variable name (default: "Keys")
+	varName := sr.config.VarName
+	if varName == "" {
+		varName = "Keys"
+	}
+
+	return packageName + "." + varName + "." + strings.Join(astParts, ".")
 }
 
 func (sr *TransformationReplacer) findI18nComments(fset *token.FileSet, filename string, node *ast.File) {
@@ -684,7 +693,6 @@ func (sr *TransformationReplacer) walkASTWithParents(node ast.Node, visit func(a
 			if x.Body != nil {
 				walk(x.Body)
 			}
-			// Add more node types as needed
 		}
 
 		return true
@@ -828,7 +836,8 @@ func (sr *TransformationReplacer) createFormatFunctionComment(key, value string,
 	// and the function should change from Msgf to Msg
 	argPlaceholders := make([]string, numArgs)
 	for i := 0; i < numArgs; i++ {
-		argPlaceholders[i] = "arg" + fmt.Sprintf("%d", i+1)
+		argPlaceholders[i] = "arg" +
+			fmt.Sprintf("%d", i+1)
 	}
 
 	comment := fmt.Sprintf("%s(%s, %s)", pattern, astKey, strings.Join(argPlaceholders, ", "))

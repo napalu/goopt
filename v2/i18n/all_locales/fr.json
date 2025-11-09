@@ -141,6 +141,7 @@
   "goopt.error.wrapped": "%[1]s : %[2]v",
   "goopt.msg.all_flags": "Toutes les options :",
   "goopt.msg.all_parent_flags": "toutes les options parentes",
+  "goopt.msg.in_command": "dans la commande",
   "goopt.msg.and": "et",
   "goopt.msg.and_more_flags": "... et %[1]d options supplémentaires",
   "goopt.msg.available_commands": "Commandes disponibles :",

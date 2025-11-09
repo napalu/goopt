@@ -355,11 +355,25 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				canonicalName = canonical
 			}
 
-			// Check if this flag needs a value
-			if p.checkIfFlagNeedsValue(canonicalName, currentCmdPath, cache) {
-				skipNext = true
+			// Check if flag is known (exists in cache)
+			isKnownFlag := false
+			if flagInfo, exists := cache.flags[canonicalName]; exists {
+				cmdPath := strings.Join(currentCmdPath, " ")
+				_, cmdExists := flagInfo[cmdPath]
+				_, globalExists := flagInfo[""]
+				isKnownFlag = cmdExists || globalExists
 			}
-			continue
+
+			// If unknown flag and treatUnknownAsPositionals is enabled, don't skip it
+			if !isKnownFlag && p.treatUnknownAsPositionals {
+				// Treat as positional - fall through to positional handling
+			} else {
+				// Check if this flag needs a value
+				if p.checkIfFlagNeedsValue(canonicalName, currentCmdPath, cache) {
+					skipNext = true
+				}
+				continue
+			}
 		}
 
 		// Handle standalone flags with boolean values

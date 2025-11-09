@@ -583,6 +583,16 @@ func (b *Bundle) processLangFile(fs embed.FS, lang language.Tag, path string) er
 		return err
 	}
 
+	// Normalize escape sequences that may have been double-escaped in source JSON
+	// (e.g., "\\n" -> real newline). We use json.Unmarshal trick to interpret
+	// standard JSON string escapes without inventing our own parser.
+	for k, v := range translations {
+		var unescaped string
+		if err := json.Unmarshal([]byte("\""+v+"\""), &unescaped); err == nil {
+			translations[k] = unescaped
+		}
+	}
+
 	if err := b.AddLanguage(lang, translations); err != nil {
 		return err
 	}

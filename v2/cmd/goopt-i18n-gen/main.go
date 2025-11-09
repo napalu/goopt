@@ -22,7 +22,9 @@ import (
 var localesFS embed.FS
 
 func main() {
-	cfg := &options.AppConfig{}
+	cfg := &options.AppConfig{
+		Config: &options.Config{},
+	}
 
 	// Assign command functions
 	cfg.Generate.Exec = translations.Generate
@@ -33,6 +35,10 @@ func main() {
 	cfg.Extract.Exec = translations.Extract
 	cfg.Sync.Exec = translations.Sync
 	cfg.GenerateLocales.Exec = translations.GenerateLocales
+	// Shared options
+	cfg.Extract.Shared = cfg.Config
+	cfg.Generate.Shared = cfg.Config
+	cfg.Audit.Shared = cfg.Config
 
 	// Create i18n bundle
 	bundle, err := i18n.NewBundleWithFS(localesFS, "locales")

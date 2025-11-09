@@ -141,6 +141,7 @@
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.all_flags": "すべてのフラグ:",
   "goopt.msg.all_parent_flags": "すべての親フラグ",
+  "goopt.msg.in_command": "コマンド内",
   "goopt.msg.and": "および",
   "goopt.msg.and_more_flags": "... 他 %[1]d 件のフラグ",
   "goopt.msg.available_commands": "利用可能なコマンド:",

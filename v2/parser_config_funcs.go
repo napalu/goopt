@@ -370,3 +370,26 @@ func WithAutoLanguage(enabled bool) ConfigureCmdLineFunc {
 		p.SetAutoLanguage(enabled)
 	}
 }
+
+// WithAllowUnknownFlags configures whether unknown flags should be silently ignored instead of generating errors.
+// When true, unknown flags are not reported as errors during parsing.
+func WithAllowUnknownFlags(value bool) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetAllowUnknownFlags(value)
+	}
+}
+
+// WithTreatUnknownAsPositionals configures whether unknown flags and their values should be treated as positional arguments.
+// When true, unknown flags are added to the positionals list instead of being skipped.
+func WithTreatUnknownAsPositionals(value bool) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetTreatUnknownAsPositionals(value)
+	}
+}
+
+// WithEnvVarPrefix sets the default environment variable prefix.
+func WithEnvVarPrefix(prefix string) ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetEnvVarPrefix(prefix)
+	}
+}

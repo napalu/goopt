@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/napalu/goopt/v2/validation"
 
@@ -564,17 +565,53 @@ func TestParser_SharedFlags(t *testing.T) {
 	assert.Equal(t, "group_value", opts.GetOrDefault("sharedFlag", "", "create group"), "flag should be parsed correctly in group command")
 }
 
+type envVarTest struct {
+	envVars map[string]string
+}
+
+func (e *envVarTest) Get(s string) string {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	return e.envVars[s]
+}
+
+func (e *envVarTest) Set(s string, v string) error {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	e.envVars[s] = v
+
+	return nil
+}
+
+func (e *envVarTest) Environ() []string {
+	if e.envVars == nil {
+		e.envVars = make(map[string]string)
+	}
+	arr := make([]string, 0, len(e.envVars))
+	for k, v := range e.envVars {
+		arr = append(arr, k+"="+v)
+	}
+
+	return arr
+}
+
 func TestParser_EnvToFlag(t *testing.T) {
 	var s string
+	ev := &envVarTest{}
 	cmdLine, err := NewParserWith(
 		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
 		WithBindFlag("testMe", &s,
 			NewArg(WithShortFlag("t"),
-				WithType(types.Single))))
+				WithType(types.Single))),
+		WithEnvVarPrefix("MY_APP"),
+		WithEnvResolver(ev))
+	_ = ev.Set("MY_APP_TEST_ME", "test")
+
 	assert.Nil(t, err)
 	flagFunc := cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
 	assert.Nil(t, flagFunc, "flagFunc should be nil when none is set")
-	os.Setenv("TEST_ME", "test")
 
 	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
 	assert.Equal(t, "123", s)
@@ -582,23 +619,6 @@ func TestParser_EnvToFlag(t *testing.T) {
 	assert.True(t, cmdLine.ParseString("command test"))
 	assert.Equal(t, "test", s)
 	assert.True(t, cmdLine.HasCommand("command test"))
-
-	cmdLine, err = NewParserWith(
-		WithCommand(NewCommand(WithName("command"), WithSubcommands(NewCommand(WithName("test"))))),
-		WithBindFlag("testMe", &s,
-			NewArg(WithShortFlag("t"),
-				WithType(types.Single)), "command test"))
-	assert.Nil(t, err)
-	_ = cmdLine.SetEnvNameConverter(upperSnakeToCamelCase)
-
-	assert.True(t, cmdLine.ParseString("command test --testMe 123"))
-
-	assert.Equal(t, "123", s)
-	assert.True(t, cmdLine.HasCommand("command test"))
-	assert.True(t, cmdLine.ParseString("command test"))
-	assert.Equal(t, "test", s)
-	assert.True(t, cmdLine.HasCommand("command test"))
-
 }
 
 func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
@@ -1122,9 +1142,9 @@ func TestParser_PrintUsage(t *testing.T) {
 	opts.PrintCommands(writer)
 
 	assert.Len(t, *writer.data, 22, "PrintCommands in this test should return 22 elements")
-	assert.Contains(t, *writer.data, " └───── wacky8 \"wacky8 expects a user value on the command line\"\n")
-	assert.Contains(t, *writer.data, " │───── wacky9\n")
-	assert.Contains(t, *writer.data, " └────── wacky10\n")
+	assert.Contains(t, *writer.data, " └───── create user alias wacky2 wacky7 wacky8 \"wacky8 expects a user value on the command line\"\n")
+	assert.Contains(t, *writer.data, " │───── create user alias wacky2 wacky7 wacky9\n")
+	assert.Contains(t, *writer.data, " └────── create user alias wacky2 wacky7 wacky9 wacky10\n")
 
 }
 
@@ -5172,9 +5192,9 @@ func TestParser_PrintPositionalArgs(t *testing.T) {
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (positional: 0)
- dest "Destination file" (positional: 1)
- optional "Optional file" (positional: 5)
+ [source] "Source file" (positional: 1)
+ [dest] "Destination file" (positional: 2)
+ [optional] "Optional file" (positional: 6)
 
 `,
 		},
@@ -5195,8 +5215,8 @@ Positional Arguments:
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (positional: 0)
- dest "Destination file" (positional: 1)
+ [source] "Source file" (positional: 1)
+ [dest] "Destination file" (positional: 2)
 
 `,
 		},
@@ -14416,6 +14436,713 @@ func TestParser_MergeCmdLine(t *testing.T) {
 		assert.Equal(t, "cmd.test.new", mergedCmd.NameKey)
 		assert.Equal(t, "New description", mergedCmd.Description)
 		assert.Equal(t, "cmd.test.new.desc", mergedCmd.DescriptionKey)
+	})
+}
+
+func TestParser_AllowUnknownFlags(t *testing.T) {
+	t.Run("default behavior generates error for unknown flags", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+			)),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--unknown", "value"}
+		result := parser.Parse(args)
+
+		assert.False(t, result)
+		errors := parser.GetErrors()
+		assert.Len(t, errors, 1)
+		assert.Contains(t, errors[0].Error(), "unknown")
+	})
+
+	t.Run("WithAllowUnknownFlags prevents error generation", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+			)),
+			WithAllowUnknownFlags(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--unknown", "value"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		errors := parser.GetErrors()
+		assert.Len(t, errors, 0)
+	})
+
+	t.Run("SetAllowUnknownFlags method works", func(t *testing.T) {
+		parser := NewParser()
+		err := parser.AddFlag("name", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+		))
+		require.NoError(t, err)
+
+		parser.SetAllowUnknownFlags(true)
+
+		args := []string{"prog", "--name", "test", "--unknown", "value"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Len(t, parser.GetErrors(), 0)
+	})
+
+	t.Run("multiple unknown flags allowed", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+			WithAllowUnknownFlags(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--verbose", "--unknown1", "--unknown2", "val"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Len(t, parser.GetErrors(), 0)
+		assert.Equal(t, "true", parser.GetOrDefault("verbose", ""))
+	})
+}
+
+func TestParser_TreatUnknownAsPositionals(t *testing.T) {
+	t.Run("unknown flags become positionals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+			)),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--unknown", "value", "positional1"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Len(t, parser.GetErrors(), 0)
+
+		positionals := parser.GetPositionalArgs()
+		// prog, --unknown, value, positional1
+		assert.Equal(t, 4, len(positionals))
+		assert.Equal(t, "prog", positionals[0].Value)
+		assert.Equal(t, "--unknown", positionals[1].Value)
+		assert.Equal(t, "value", positionals[2].Value)
+		assert.Equal(t, "positional1", positionals[3].Value)
+	})
+
+	t.Run("SetTreatUnknownAsPositionals method works", func(t *testing.T) {
+		parser := NewParser()
+		err := parser.AddFlag("name", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+		))
+		require.NoError(t, err)
+
+		parser.SetAllowUnknownFlags(true)
+		parser.SetTreatUnknownAsPositionals(true)
+
+		args := []string{"prog", "--name", "test", "--unknown"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		assert.Equal(t, 2, len(positionals))
+		assert.Equal(t, "--unknown", positionals[1].Value)
+	})
+
+	t.Run("unknown short flags become positionals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithShortFlag("n"),
+			)),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "-n", "test", "-x", "positional"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		assert.Equal(t, 3, len(positionals))
+		assert.Equal(t, "-x", positionals[1].Value)
+		assert.Equal(t, "positional", positionals[2].Value)
+	})
+
+	t.Run("multiple unknown flags as positionals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("config", NewArg(WithType(types.Single))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--config", "file.txt", "--foo", "--bar", "baz"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		// prog, --foo, --bar, baz
+		assert.Equal(t, 4, len(positionals))
+		assert.Equal(t, "--foo", positionals[1].Value)
+		assert.Equal(t, "--bar", positionals[2].Value)
+		assert.Equal(t, "baz", positionals[3].Value)
+	})
+
+	t.Run("mixed known and unknown flags", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--unknown1", "--verbose", "--unknown2", "val"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "test", parser.GetOrDefault("name", ""))
+		assert.Equal(t, "true", parser.GetOrDefault("verbose", ""))
+
+		positionals := parser.GetPositionalArgs()
+		// prog, --unknown1, --unknown2, val
+		assert.Equal(t, 4, len(positionals))
+		assert.Equal(t, "--unknown1", positionals[1].Value)
+		assert.Equal(t, "--unknown2", positionals[2].Value)
+		assert.Equal(t, "val", positionals[3].Value)
+	})
+
+	t.Run("requires AllowUnknownFlags to be enabled", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+			)),
+			// Note: AllowUnknownFlags is false (default)
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--unknown"}
+		result := parser.Parse(args)
+
+		// Should still generate error because AllowUnknownFlags is false
+		assert.False(t, result)
+		errors := parser.GetErrors()
+		assert.Len(t, errors, 1)
+		assert.Contains(t, errors[0].Error(), "unknown")
+
+		// But the flag should still appear in positionals
+		positionals := parser.GetPositionalArgs()
+		found := false
+		for _, p := range positionals {
+			if p.Value == "--unknown" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "unknown flag should still appear in positionals")
+	})
+
+	t.Run("unknown flag at beginning", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--unknown", "value", "--name", "test", "pos"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		// prog, --unknown, value, pos
+		assert.Equal(t, 4, len(positionals))
+		assert.Equal(t, "--unknown", positionals[1].Value)
+		assert.Equal(t, "value", positionals[2].Value)
+		assert.Equal(t, "pos", positionals[3].Value)
+	})
+
+	t.Run("only known flags produces no unknown positionals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--verbose"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		// Only prog
+		assert.Equal(t, 1, len(positionals))
+		assert.Equal(t, "prog", positionals[0].Value)
+	})
+}
+
+func TestParser_UnknownFlagsWithCommands(t *testing.T) {
+	t.Run("unknown flags in command context", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithCommand(NewCommand(
+				WithName("deploy"),
+				WithCallback(func(p *Parser, c *Command) error {
+					return nil
+				}),
+			)),
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		err = parser.AddFlag("env", NewArg(WithType(types.Single)), "deploy")
+		require.NoError(t, err)
+
+		args := []string{"prog", "deploy", "--env", "prod", "--unknown", "value"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		// Command-specific flags use commandPath parameter
+		assert.Equal(t, "prod", parser.GetOrDefault("env", "", "deploy"))
+
+		positionals := parser.GetPositionalArgs()
+		found := false
+		for _, p := range positionals {
+			if p.Value == "--unknown" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "unknown flag should be in positionals")
+	})
+
+	t.Run("unknown flags with nested commands", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithCommand(NewCommand(
+				WithName("git"),
+				WithSubcommands(
+					NewCommand(
+						WithName("commit"),
+					),
+				),
+			)),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		err = parser.AddFlag("message", NewArg(
+			WithType(types.Single),
+			WithShortFlag("m"),
+		), "git", "commit")
+		require.NoError(t, err)
+
+		args := []string{"prog", "git", "commit", "-m", "test", "--unknown-option"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+
+		found := false
+		for _, p := range positionals {
+			if p.Value == "--unknown-option" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "unknown flag should be in positionals with nested commands")
+	})
+}
+
+func TestParser_UnknownFlagsEdgeCases(t *testing.T) {
+	t.Run("double dash stops flag processing", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name", "test", "--", "--unknown"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+
+		// After --, --unknown should be treated as a positional
+		found := false
+		for _, p := range positionals {
+			if p.Value == "--unknown" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "--unknown after -- should be positional")
+	})
+
+	t.Run("empty args with unknown flags enabled", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		assert.Equal(t, 1, len(positionals)) // Just prog
+	})
+
+	t.Run("all unknown flags", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithAllowUnknownFlags(true),
+			WithTreatUnknownAsPositionals(true),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--foo", "--bar", "baz"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		positionals := parser.GetPositionalArgs()
+		assert.Equal(t, 4, len(positionals))
+		assert.Equal(t, "--foo", positionals[1].Value)
+		assert.Equal(t, "--bar", positionals[2].Value)
+		assert.Equal(t, "baz", positionals[3].Value)
+	})
+}
+
+func TestParser_EqualsSyntax(t *testing.T) {
+	t.Run("single flag with equals syntax", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithRequired(true),
+			)),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name=test"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Len(t, parser.GetErrors(), 0)
+		assert.Equal(t, "test", parser.GetOrDefault("name", ""))
+	})
+
+	t.Run("short flag with equals syntax", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithShortFlag("n"),
+			)),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "-n=test"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "test", parser.GetOrDefault("name", ""))
+	})
+
+	t.Run("standalone flag with equals true", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--verbose=true"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "true", parser.GetOrDefault("verbose", ""))
+	})
+
+	t.Run("standalone flag with equals false", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--verbose=false"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "false", parser.GetOrDefault("verbose", ""))
+	})
+
+	t.Run("value with internal equals signs", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("env", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--env=KEY=VALUE"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "KEY=VALUE", parser.GetOrDefault("env", ""))
+	})
+
+	t.Run("multiple equals in value", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("config", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--config=key1=val1,key2=val2"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "key1=val1,key2=val2", parser.GetOrDefault("config", ""))
+	})
+
+	t.Run("path with equals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("path", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--path=/usr/local/file=backup.txt"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "/usr/local/file=backup.txt", parser.GetOrDefault("path", ""))
+	})
+
+	t.Run("empty value with equals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(
+				WithType(types.Single),
+				WithDefaultValue("default"),
+			)),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name="}
+		result := parser.Parse(args)
+
+		// Empty string should use default value
+		assert.True(t, result)
+		assert.Equal(t, "default", parser.GetOrDefault("name", ""))
+	})
+
+	t.Run("mixed syntax - equals and space", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithFlag("age", NewArg(WithType(types.Single))),
+			WithFlag("city", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name=Alice", "--age", "30", "--city=NYC"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "Alice", parser.GetOrDefault("name", ""))
+		assert.Equal(t, "30", parser.GetOrDefault("age", ""))
+		assert.Equal(t, "NYC", parser.GetOrDefault("city", ""))
+	})
+
+	t.Run("equals syntax with positionals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("name", NewArg(WithType(types.Single))),
+			WithFlag("verbose", NewArg(WithType(types.Standalone))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--name=test", "positional1", "--verbose=true", "positional2"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "test", parser.GetOrDefault("name", ""))
+		assert.Equal(t, "true", parser.GetOrDefault("verbose", ""))
+
+		positionals := parser.GetPositionalArgs()
+		assert.Equal(t, 3, len(positionals)) // prog, positional1, positional2
+		assert.Equal(t, "prog", positionals[0].Value)
+		assert.Equal(t, "positional1", positionals[1].Value)
+		assert.Equal(t, "positional2", positionals[2].Value)
+	})
+
+	t.Run("equals syntax with command-specific flag", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithCommand(NewCommand(
+				WithName("deploy"),
+			)),
+		)
+		require.NoError(t, err)
+
+		err = parser.AddFlag("env", NewArg(WithType(types.Single)), "deploy")
+		require.NoError(t, err)
+
+		args := []string{"prog", "deploy", "--env=production"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "production", parser.GetOrDefault("env", "", "deploy"))
+	})
+
+	t.Run("posix mode with equals syntax", func(t *testing.T) {
+		parser := NewParser()
+		parser.SetPosix(true)
+
+		err := parser.AddFlag("file", NewArg(
+			WithType(types.Single),
+			WithShortFlag("f"),
+		))
+		require.NoError(t, err)
+
+		args := []string{"prog", "-f=test.txt"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "test.txt", parser.GetOrDefault("file", ""))
+	})
+
+	t.Run("URL as value with equals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("url", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--url=https://example.com?key=value&foo=bar"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "https://example.com?key=value&foo=bar", parser.GetOrDefault("url", ""))
+	})
+
+	t.Run("negative number with equals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("timeout", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", "--timeout=-1"}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, "-1", parser.GetOrDefault("timeout", ""))
+	})
+
+	t.Run("json string with equals", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithFlag("data", NewArg(WithType(types.Single))),
+		)
+		require.NoError(t, err)
+
+		args := []string{"prog", `--data={"key":"value"}`}
+		result := parser.Parse(args)
+
+		assert.True(t, result)
+		assert.Equal(t, `{"key":"value"}`, parser.GetOrDefault("data", ""))
+	})
+}
+
+func TestParser_FormatFlagForError(t *testing.T) {
+	t.Run("flag with command context", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test flag@command format
+		result := parser.formatFlagForError("admin-email@deploy")
+		assert.Contains(t, result, "admin-email")
+		assert.Contains(t, result, "deploy")
+		assert.Contains(t, result, "in command")
+
+		// Should be formatted as: 'admin-email' (in command 'deploy')
+		expected := "'admin-email' (in command 'deploy')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("flag without command context", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test plain flag name
+		result := parser.formatFlagForError("verbose")
+		assert.Equal(t, "'verbose'", result)
+	})
+
+	t.Run("flag with empty command path", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test flag@ format (empty command)
+		result := parser.formatFlagForError("flag@")
+		assert.Equal(t, "'flag'", result)
+	})
+
+	t.Run("flag with nested command path", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test with space-separated command path
+		result := parser.formatFlagForError("config@create user")
+		expected := "'config' (in command 'create user')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("translated message in different locale", func(t *testing.T) {
+		// Test with German locale
+		bundle := i18n.NewEmptyBundle()
+		bundle.AddLanguage(language.German, map[string]string{
+			"goopt.msg.in_command": "im Befehl",
+		})
+
+		parser := NewParser()
+		err := parser.SetUserBundle(bundle)
+		require.NoError(t, err)
+		parser.SetLanguage(language.German)
+
+		result := parser.formatFlagForError("test@cmd")
+		assert.Contains(t, result, "im Befehl")
+		expected := "'test' (im Befehl 'cmd')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("validation error shows formatted flag name", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a validator that always fails
+		validator := validation.MinLength(10)
+
+		cmd := &Command{Name: "deploy"}
+		parser.AddCommand(cmd)
+
+		err := parser.AddFlag("email", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithValidators(validator),
+		), "deploy")
+		require.NoError(t, err)
+
+		// Parse with a value that will fail validation
+		args := []string{"program", "deploy", "--email", "short"}
+		parser.Parse(args)
+
+		// Check that error contains formatted flag name
+		errors := parser.GetErrors()
+		assert.NotEmpty(t, errors)
+		errorMsg := errors[0].Error()
+
+		// The error should contain the formatted flag name
+		assert.Contains(t, errorMsg, "'email'")
+		assert.Contains(t, errorMsg, "in command")
+		assert.Contains(t, errorMsg, "'deploy'")
 	})
 }
 

@@ -42,6 +42,7 @@ const (
 	MsgVersionDescriptionKey  = MessagePrefixKey + ".version_description"
 	MsgLanguageDescriptionKey = MessagePrefixKey + ".language_description"
 	MsgAllParentFlagsKey      = MessagePrefixKey + ".all_parent_flags"
+	MsgInCommandKey           = MessagePrefixKey + ".in_command"
 
 	// Help parser specific messages
 	MsgErrorPrefixKey           = MessagePrefixKey + ".error_prefix"

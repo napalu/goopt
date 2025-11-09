@@ -76,7 +76,7 @@ func Generate(parser *goopt.Parser, _ *goopt.Command) error {
 	buf.WriteString(fmt.Sprintf("package %s\n\n", cfg.Generate.Package))
 
 	// Generate the struct definition with initialization
-	generateStruct(&buf, root, "")
+	generateStruct(&buf, root, cfg.Generate.VarName, "")
 
 	// Format the generated code
 	formatted, err := format.Source([]byte(buf.String()))
@@ -188,7 +188,7 @@ func getGroupPath(group *templates.NestedGroup) string {
 }
 
 // generateStruct generates a struct type with values initialized inline
-func generateStruct(buf *strings.Builder, group *templates.NestedGroup, indent string) {
+func generateStruct(buf *strings.Builder, group *templates.NestedGroup, varName, indent string) {
 	// Check if we have exactly one top-level group (e.g., "App" when using default prefix)
 	// This is the common case when using a prefix like "app"
 	if len(group.Fields) == 0 && len(group.SubGroups) == 1 {
@@ -228,9 +228,9 @@ func generateStruct(buf *strings.Builder, group *templates.NestedGroup, indent s
 		buf.WriteString("}\n\n")
 
 		// Generate the Keys variable with the single top-level struct
-		buf.WriteString("// Keys provides compile-time safe access to translation keys\n")
-		buf.WriteString(fmt.Sprintf("var Keys struct {\n\t%s %s\n} = struct {\n\t%s %s\n}{\n",
-			topLevelName, topLevelName, topLevelName, topLevelName))
+		buf.WriteString(fmt.Sprintf("// %s provides compile-time safe access to translation keys\n", varName))
+		buf.WriteString(fmt.Sprintf("var %s struct {\n\t%s %s\n} = struct {\n\t%s %s\n}{\n",
+			varName, topLevelName, topLevelName, topLevelName, topLevelName))
 
 		// Initialize the top-level struct
 		buf.WriteString(fmt.Sprintf("\t%s: %s{\n", topLevelName, topLevelName))
@@ -278,8 +278,8 @@ func generateStruct(buf *strings.Builder, group *templates.NestedGroup, indent s
 	sort.Strings(typeNames)
 
 	// Generate the Keys variable
-	buf.WriteString("// Keys provides compile-time safe access to translation keys\n")
-	buf.WriteString("var Keys struct {\n")
+	buf.WriteString(fmt.Sprintf("// %s provides compile-time safe access to translation keys\n", varName))
+	buf.WriteString(fmt.Sprintf("var %s struct {\n", varName))
 
 	// Add top-level fields
 	for _, field := range group.Fields {

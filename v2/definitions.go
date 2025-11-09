@@ -1,12 +1,13 @@
 package goopt
 
 import (
-	"github.com/napalu/goopt/v2/env"
 	"io"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/napalu/goopt/v2/env"
 
 	"github.com/napalu/goopt/v2/input"
 
@@ -161,70 +162,73 @@ var DefaultHelpConfig = HelpConfig{
 
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
-	posixCompatible         bool
-	prefixes                []rune
-	listFunc                types.ListDelimiterFunc
-	acceptedFlags           *orderedmap.OrderedMap[string, *FlagInfo]
-	lookup                  map[string]string
-	options                 map[string]string
-	errors                  []error
-	bind                    map[string]any
-	customBind              map[string]ValueSetFunc
-	registeredCommands      *orderedmap.OrderedMap[string, *Command]
-	commandOptions          *orderedmap.OrderedMap[string, bool]
-	positionalArgs          []PositionalArgument
-	rawArgs                 map[string]string
-	repeatedFlags           map[string]bool
-	callbackQueue           *queue.Q[*Command]
-	callbackResults         map[string]error
-	callbackOnParse         bool // *during* parse process
-	callbackOnParseComplete bool // *after* parse process
-	secureArguments         *orderedmap.OrderedMap[string, *types.Secure]
-	envNameConverter        NameConversionFunc
-	commandNameConverter    NameConversionFunc
-	flagNameConverter       NameConversionFunc
-	terminalReader          input.TerminalReader
-	stderr                  io.Writer
-	stdout                  io.Writer
-	maxDependencyDepth      int
-	defaultBundle           *i18n.Bundle // Immutable default bundle
-	systemBundle            *i18n.Bundle // Parser-specific overrides
-	userI18n                *i18n.Bundle // User-provided bundle
-	layeredProvider         *i18n.LayeredMessageProvider
-	renderer                Renderer
-	structCtx               any
-	suggestionsFormatter    SuggestionsFormatter
-	helpConfig              HelpConfig
-	helpBehavior            HelpBehavior
-	autoHelp                bool
-	helpFlags               []string
-	helpExecuted            bool
-	helpEndFunc             EndShowHelpHookFunc
-	autoRegisteredHelp      map[string]bool
-	version                 string
-	versionFunc             func() string
-	versionFormatter        func(string) string
-	versionFlags            []string
-	autoVersion             bool
-	showVersionInHelp       bool
-	versionExecuted         bool
-	autoRegisteredVersion   map[string]bool
-	autoLanguage            bool
-	checkSystemLocale       bool
-	languageEnvVar          string
-	languageFlags           []string
-	autoRegisteredLanguage  map[string]bool
-	globalPreHooks          []PreHookFunc
-	globalPostHooks         []PostHookFunc
-	commandPreHooks         map[string][]PreHookFunc
-	commandPostHooks        map[string][]PostHookFunc
-	envResolver             env.Resolver
-	hookOrder               HookOrder
-	validationHook          ValidationHookFunc
-	translationRegistry     *JITTranslationRegistry
-	flagSuggestionThreshold int // Maximum Levenshtein distance for flag suggestions (default: 2)
-	cmdSuggestionThreshold  int // Maximum Levenshtein distance for command suggestions (default: 2)
-	mu                      sync.Mutex
+	posixCompatible           bool
+	prefixes                  []rune
+	listFunc                  types.ListDelimiterFunc
+	acceptedFlags             *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup                    map[string]string
+	options                   map[string]string
+	errors                    []error
+	bind                      map[string]any
+	customBind                map[string]ValueSetFunc
+	registeredCommands        *orderedmap.OrderedMap[string, *Command]
+	commandOptions            *orderedmap.OrderedMap[string, bool]
+	positionalArgs            []PositionalArgument
+	rawArgs                   map[string]string
+	repeatedFlags             map[string]bool
+	callbackQueue             *queue.Q[*Command]
+	callbackResults           map[string]error
+	callbackOnParse           bool // *during* parse process
+	callbackOnParseComplete   bool // *after* parse process
+	secureArguments           *orderedmap.OrderedMap[string, *types.Secure]
+	envNameConverter          NameConversionFunc
+	commandNameConverter      NameConversionFunc
+	flagNameConverter         NameConversionFunc
+	terminalReader            input.TerminalReader
+	stderr                    io.Writer
+	stdout                    io.Writer
+	maxDependencyDepth        int
+	defaultBundle             *i18n.Bundle // Immutable default bundle
+	systemBundle              *i18n.Bundle // Parser-specific overrides
+	userI18n                  *i18n.Bundle // User-provided bundle
+	layeredProvider           *i18n.LayeredMessageProvider
+	renderer                  Renderer
+	structCtx                 any
+	suggestionsFormatter      SuggestionsFormatter
+	helpConfig                HelpConfig
+	helpBehavior              HelpBehavior
+	autoHelp                  bool
+	helpFlags                 []string
+	helpExecuted              bool
+	helpEndFunc               EndShowHelpHookFunc
+	autoRegisteredHelp        map[string]bool
+	version                   string
+	versionFunc               func() string
+	versionFormatter          func(string) string
+	versionFlags              []string
+	autoVersion               bool
+	showVersionInHelp         bool
+	versionExecuted           bool
+	autoRegisteredVersion     map[string]bool
+	autoLanguage              bool
+	checkSystemLocale         bool
+	languageEnvVar            string
+	languageFlags             []string
+	autoRegisteredLanguage    map[string]bool
+	globalPreHooks            []PreHookFunc
+	globalPostHooks           []PostHookFunc
+	commandPreHooks           map[string][]PreHookFunc
+	commandPostHooks          map[string][]PostHookFunc
+	envResolver               env.Resolver
+	hookOrder                 HookOrder
+	validationHook            ValidationHookFunc
+	translationRegistry       *JITTranslationRegistry
+	flagSuggestionThreshold   int  // Maximum Levenshtein distance for flag suggestions (default: 2)
+	cmdSuggestionThreshold    int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	allowUnknownFlags         bool // If true, don't generate errors for unknown flags
+	treatUnknownAsPositionals bool // If true, treat unknown flags and their values as positionals
+	mu                        sync.Mutex
+	envVarPrefix              string // Prefix for environment variables
 }
 
 // CompletionData is used to store information for command line completion

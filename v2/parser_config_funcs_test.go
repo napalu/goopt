@@ -1,9 +1,10 @@
 package goopt
 
 import (
-	esLocale "github.com/napalu/goopt/v2/i18n/locales/es"
 	"strings"
 	"testing"
+
+	esLocale "github.com/napalu/goopt/v2/i18n/locales/es"
 
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -663,6 +664,35 @@ func TestWithLanguageEnvVar(t *testing.T) {
 	)
 	assert.NoError(t, err)
 	assert.NotNil(t, parser)
+}
+
+func TestWithEnvVarPrefix(t *testing.T) {
+	parser, err := NewParserWith(
+		WithEnvVarPrefix("MY_"),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+	assert.Equal(t, "MY_", parser.envVarPrefix)
+}
+
+func TestWithAllowUnknownFlags(t *testing.T) {
+	parser, err := NewParserWith(
+		WithAllowUnknownFlags(true),
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+	assert.Equal(t, true, parser.allowUnknownFlags)
+}
+
+func TestWithTreatUnknownAsPositionals(t *testing.T) {
+	parser, err := NewParserWith(
+		WithTreatUnknownAsPositionals(true),
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, parser)
+	assert.Equal(t, true, parser.treatUnknownAsPositionals)
 }
 
 func TestWithSystemLocales(t *testing.T) {
