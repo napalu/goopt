@@ -1142,9 +1142,9 @@ func TestParser_PrintUsage(t *testing.T) {
 	opts.PrintCommands(writer)
 
 	assert.Len(t, *writer.data, 22, "PrintCommands in this test should return 22 elements")
-	assert.Contains(t, *writer.data, " └───── wacky8 \"wacky8 expects a user value on the command line\"\n")
-	assert.Contains(t, *writer.data, " │───── wacky9\n")
-	assert.Contains(t, *writer.data, " └────── wacky10\n")
+	assert.Contains(t, *writer.data, " └───── create user alias wacky2 wacky7 wacky8 \"wacky8 expects a user value on the command line\"\n")
+	assert.Contains(t, *writer.data, " │───── create user alias wacky2 wacky7 wacky9\n")
+	assert.Contains(t, *writer.data, " └────── create user alias wacky2 wacky7 wacky9 wacky10\n")
 
 }
 
@@ -5192,9 +5192,9 @@ func TestParser_PrintPositionalArgs(t *testing.T) {
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (positional: 0)
- dest "Destination file" (positional: 1)
- optional "Optional file" (positional: 5)
+ [source] "Source file" (positional: 1)
+ [dest] "Destination file" (positional: 2)
+ [optional] "Optional file" (positional: 6)
 
 `,
 		},
@@ -5215,8 +5215,8 @@ Positional Arguments:
 			}{},
 			want: `
 Positional Arguments:
- source "Source file" (positional: 0)
- dest "Destination file" (positional: 1)
+ [source] "Source file" (positional: 1)
+ [dest] "Destination file" (positional: 2)
 
 `,
 		},

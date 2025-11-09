@@ -141,6 +141,7 @@
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.all_flags": "כל הדגלים:",
   "goopt.msg.all_parent_flags": "כל דגלי ההורה",
+  "goopt.msg.in_command": "בפקודה",
   "goopt.msg.and": "ו",
   "goopt.msg.and_more_flags": "... ועוד %[1]d דגלים",
   "goopt.msg.available_commands": "פקודות זמינות:",

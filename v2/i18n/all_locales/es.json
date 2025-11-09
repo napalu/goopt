@@ -141,6 +141,7 @@
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.all_flags": "Todas las banderas:",
   "goopt.msg.all_parent_flags": "todas las banderas heredadas",
+  "goopt.msg.in_command": "en comando",
   "goopt.msg.and": "y",
   "goopt.msg.and_more_flags": "... y %[1]d banderas más",
   "goopt.msg.available_commands": "Comandos disponibles:",

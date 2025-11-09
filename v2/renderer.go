@@ -152,7 +152,11 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	config := r.parser.GetHelpConfig()
 	isRTL := i18n.IsRTL(r.parser.GetLanguage())
 
-	cmdName := r.CommandName(c)
+	// Use the full command path for proper hierarchy display, or fall back to name
+	cmdName := c.path
+	if cmdName == "" {
+		cmdName = r.CommandName(c)
+	}
 
 	// Get positional arguments for this command
 	positionals := r.parser.getPositionalsForCommand(c.path)

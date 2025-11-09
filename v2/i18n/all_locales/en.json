@@ -169,6 +169,7 @@
     "goopt.error.validation.recursion_depth_exceeded": "validator recursion depth exceeded (max 10 levels)",
     "goopt.error.validation.must_use_parentheses": "compositional validator '%[1]s' must use parentheses syntax: %[1]s(...)",
     "goopt.msg.all_parent_flags": "all parent flags",
+    "goopt.msg.in_command": "in command",
     "goopt.msg.error_prefix": "Error",
     "goopt.msg.unknown_command": "Unknown command '%[1]s'",
     "goopt.msg.did_you_mean": "Did you mean:",

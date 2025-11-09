@@ -184,7 +184,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
 					if err := validator(boolVal); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
 				}
@@ -227,7 +227,7 @@ func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, 
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
 					if err := validator(boolVal); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
 				}
@@ -2733,6 +2733,19 @@ func getFlagPath(flag string) string {
 	}
 
 	return ""
+}
+
+// formatFlagForError formats a flag name for user-facing error messages.
+// Converts "flag@command" to "'flag' (in command 'command')" for clarity.
+func (p *Parser) formatFlagForError(flag string) string {
+	parts := splitPathFlag(flag)
+	if len(parts) == 2 && parts[1] != "" {
+		// Format as: 'flag' (in command 'command')
+		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
+		return fmt.Sprintf("'%s' (%s '%s')", parts[0], inCommandMsg, parts[1])
+	}
+	// No command context, just quote the flag name
+	return fmt.Sprintf("'%s'", flag)
 }
 
 func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {

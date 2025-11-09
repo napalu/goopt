@@ -200,6 +200,7 @@ const SystemTranslations = `{
         "goopt.msg.help_options": "Help Options",
         "goopt.msg.help_system": "Help System",
         "goopt.msg.help_system_desc": "This CLI provides an advanced help system with multiple modes and options to find the information you need.",
+        "goopt.msg.in_command": "in command",
         "goopt.msg.language_description": "Set display language",
         "goopt.msg.more": "more",
         "goopt.msg.no_commands_defined": "No commands defined.",
