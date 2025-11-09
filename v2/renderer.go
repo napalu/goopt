@@ -154,20 +154,42 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 
 	cmdName := r.CommandName(c)
 
+	// Get positional arguments for this command
+	positionals := r.parser.getPositionalsForCommand(c.path)
+
+	// Build command usage with positionals
+	usageLine := cmdName
+	if len(positionals) > 0 {
+		for _, pos := range positionals {
+			// Extract just the flag name without the command path
+			flagName := pos.Value
+			if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+				flagName = flagName[:idx]
+			}
+
+			// Format as <name> for required or [name] for optional
+			if pos.Argument.Required {
+				usageLine += " <" + flagName + ">"
+			} else {
+				usageLine += " [" + flagName + "]"
+			}
+		}
+	}
+
 	if config.ShowDescription {
 		description := r.CommandDescription(c)
 		if description != "" {
 			if isRTL || r.containsRTLRunes(cmdName) || r.containsRTLRunes(description) {
 				// In RTL, description comes first
-				return description + " :" + cmdName
+				return description + " :" + usageLine
 			} else {
 				// In LTR, command comes first (keep original format with quotes)
-				return cmdName + " \"" + description + "\""
+				return usageLine + " \"" + description + "\""
 			}
 		}
 	}
 
-	return cmdName
+	return usageLine
 }
 
 // formatDefaultValue formats a default value according to locale and type

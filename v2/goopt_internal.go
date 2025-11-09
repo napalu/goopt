@@ -3032,9 +3032,27 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 			if cmd.Value.topLevel {
 				flagCount := p.countCommandFlags(cmd.Value.Name)
+				// Use CommandUsage to include positionals
+				cmdName := cmd.Value.Name
+				desc := p.renderer.CommandDescription(cmd.Value)
+
+				// Get positionals to build the full command name with args
+				positionals := p.getPositionalsForCommand(cmd.Value.path)
+				for _, pos := range positionals {
+					flagName := pos.Value
+					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+						flagName = flagName[:idx]
+					}
+					if pos.Argument.Required {
+						cmdName += " <" + flagName + ">"
+					} else {
+						cmdName += " [" + flagName + "]"
+					}
+				}
+
 				fmt.Fprintf(writer, "  %-15s %-40s",
-					cmd.Value.Name,
-					util.Truncate(p.renderer.CommandDescription(cmd.Value), 40))
+					cmdName,
+					util.Truncate(desc, 40))
 				if flagCount > 0 {
 					fmt.Fprintf(writer, " [%d %s]", flagCount, p.layeredProvider.GetMessage(messages.MsgFlagsKey))
 				}
@@ -3229,11 +3247,26 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 		ppConfig := p.DefaultPrettyPrintConfig()
 		if cmd.Value.topLevel {
+			// Build command name with positionals
+			cmdName := cmd.Value.Name
+			positionals := p.getPositionalsForCommand(cmd.Value.path)
+			for _, pos := range positionals {
+				flagName := pos.Value
+				if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+					flagName = flagName[:idx]
+				}
+				if pos.Argument.Required {
+					cmdName += " <" + flagName + ">"
+				} else {
+					cmdName += " [" + flagName + "]"
+				}
+			}
+
 			desc := p.renderer.CommandDescription(cmd.Value)
 			if desc != "" {
-				fmt.Fprintf(writer, "\n%-20s %s\n", cmd.Value.Name, desc)
+				fmt.Fprintf(writer, "\n%-20s %s\n", cmdName, desc)
 			} else {
-				fmt.Fprintf(writer, "\n%s\n", cmd.Value.Name)
+				fmt.Fprintf(writer, "\n%s\n", cmdName)
 			}
 			for i := range cmd.Value.Subcommands {
 				prefix := ppConfig.DefaultPrefix
@@ -3243,12 +3276,28 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 				sub := &cmd.Value.Subcommands[i]
 				// Look up the actual registered command to get the correct description
 				subPath := cmd.Value.Name + " " + sub.Name
+
+				// Build subcommand name with positionals
+				subName := sub.Name
+				subPositionals := p.getPositionalsForCommand(subPath)
+				for _, pos := range subPositionals {
+					flagName := pos.Value
+					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+						flagName = flagName[:idx]
+					}
+					if pos.Argument.Required {
+						subName += " <" + flagName + ">"
+					} else {
+						subName += " [" + flagName + "]"
+					}
+				}
+
 				if registeredSub, found := p.registeredCommands.Get(subPath); found {
 					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
 				} else {
 					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, sub.Name, desc)
+					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
 				}
 			}
 		}
