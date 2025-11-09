@@ -13,4 +13,4 @@ require (
 	golang.org/x/text v0.21.0 // indirect
 )
 
-replace github.com/napalu/goopt/v2 => /Users/florent/src/goopt/v2
+replace github.com/napalu/goopt/v2 => ../../
