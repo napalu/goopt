@@ -478,6 +478,281 @@ func TestCommandUsageRTL(t *testing.T) {
 	})
 }
 
+// TestCommandUsageWithPositionals tests CommandUsage with positional arguments
+func TestCommandUsageWithPositionals(t *testing.T) {
+	t.Run("command with single required positional", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "keygen",
+			Description: "Generate keypair",
+			path:        "keygen",
+		}
+
+		// Add a positional argument
+		err := p.AddFlag("prefix", NewArg(
+			WithType(types.Single),
+			WithDescription("Key prefix"),
+			WithRequired(true),
+			WithPosition(0),
+		), "keygen")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		assert.Contains(t, usage, "keygen <prefix>")
+		assert.Contains(t, usage, "Generate keypair")
+	})
+
+	t.Run("command with single optional positional", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "deploy",
+			Description: "Deploy application",
+			path:        "deploy",
+		}
+
+		// Add an optional positional argument
+		err := p.AddFlag("config", NewArg(
+			WithType(types.Single),
+			WithDescription("Config file"),
+			WithRequired(false),
+			WithPosition(0),
+		), "deploy")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		assert.Contains(t, usage, "deploy [config]")
+		assert.Contains(t, usage, "Deploy application")
+	})
+
+	t.Run("command with multiple positionals", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "verify",
+			Description: "Verify signature",
+			path:        "verify",
+		}
+
+		// Add multiple positional arguments
+		err := p.AddFlag("message", NewArg(
+			WithType(types.Single),
+			WithDescription("Message"),
+			WithRequired(true),
+			WithPosition(0),
+		), "verify")
+		assert.NoError(t, err)
+
+		err = p.AddFlag("signature", NewArg(
+			WithType(types.Single),
+			WithDescription("Signature"),
+			WithRequired(true),
+			WithPosition(1),
+		), "verify")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		assert.Contains(t, usage, "verify <message> <signature>")
+		assert.Contains(t, usage, "Verify signature")
+	})
+
+	t.Run("command with mixed required and optional positionals", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "copy",
+			Description: "Copy files",
+			path:        "copy",
+		}
+
+		// Add mixed positionals
+		err := p.AddFlag("source", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(0),
+		), "copy")
+		assert.NoError(t, err)
+
+		err = p.AddFlag("dest", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(1),
+		), "copy")
+		assert.NoError(t, err)
+
+		err = p.AddFlag("options", NewArg(
+			WithType(types.Single),
+			WithRequired(false),
+			WithPosition(2),
+		), "copy")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		assert.Contains(t, usage, "copy <source> <dest> [options]")
+		assert.Contains(t, usage, "Copy files")
+	})
+
+	t.Run("command with positionals strips command path from flag name", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "process",
+			Description: "Process data",
+			path:        "process",
+		}
+
+		// The flag gets stored as "input@process" internally
+		err := p.AddFlag("input", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(0),
+		), "process")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		// Should show "input" not "input@process"
+		assert.Contains(t, usage, "process <input>")
+		assert.NotContains(t, usage, "@process")
+	})
+
+	t.Run("command without positionals shows just name", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "status",
+			Description: "Show status",
+			path:        "status",
+		}
+
+		usage := p.renderer.CommandUsage(cmd)
+		assert.Equal(t, `status "Show status"`, usage)
+	})
+
+	t.Run("positionals are sorted by position", func(t *testing.T) {
+		p := NewParser()
+
+		cmd := &Command{
+			Name:        "build",
+			Description: "Build project",
+			path:        "build",
+		}
+
+		// Add positionals in non-sequential order
+		err := p.AddFlag("output", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(2),
+		), "build")
+		assert.NoError(t, err)
+
+		err = p.AddFlag("input", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(0),
+		), "build")
+		assert.NoError(t, err)
+
+		err = p.AddFlag("config", NewArg(
+			WithType(types.Single),
+			WithRequired(false),
+			WithPosition(1),
+		), "build")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		// Should be sorted: input (0), config (1), output (2)
+		assert.Contains(t, usage, "build <input> [config] <output>")
+	})
+
+	t.Run("command with positionals in RTL", func(t *testing.T) {
+		bundle := i18n.NewEmptyBundle()
+		bundle.AddLanguage(language.Arabic, map[string]string{})
+
+		p := NewParser()
+		err := p.SetUserBundle(bundle)
+		assert.NoError(t, err)
+		p.SetLanguage(language.Arabic)
+
+		cmd := &Command{
+			Name:        "ابدأ",
+			Description: "بدء الخادم",
+			path:        "ابدأ",
+		}
+
+		err = p.AddFlag("ملف", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithPosition(0),
+		), "ابدأ")
+		assert.NoError(t, err)
+
+		usage := p.renderer.CommandUsage(cmd)
+		// In RTL, description comes first
+		assert.Contains(t, usage, "بدء الخادم")
+		assert.Contains(t, usage, "ابدأ")
+		assert.Contains(t, usage, "<ملف>")
+	})
+}
+
+// TestFlagUsageWithRequiredIf tests FlagUsage with conditional requirements
+func TestFlagUsageWithRequiredIf(t *testing.T) {
+	t.Run("flag with RequiredIf shows conditional", func(t *testing.T) {
+		p := NewParser()
+		p.SetHelpConfig(HelpConfig{
+			ShowShortFlags:  false,
+			ShowDescription: true,
+			ShowDefaults:    false,
+			ShowRequired:    true,
+		})
+
+		// Create a flag with RequiredIf condition
+		arg := &Argument{
+			Description: "Config file path",
+			TypeOf:      types.Single,
+			RequiredIf: func(cmdLine *Parser, optionName string) (bool, string) {
+				return true, "production flag is set"
+			},
+		}
+
+		usage := p.renderer.FlagUsage(arg)
+		// Should show "conditional" instead of "required" or "optional"
+		assert.Contains(t, usage, "conditional")
+		assert.Contains(t, usage, "Config file path")
+	})
+
+	t.Run("flag with RequiredIf in different locale", func(t *testing.T) {
+		bundle := i18n.NewEmptyBundle()
+		bundle.AddLanguage(language.German, map[string]string{
+			"goopt.msg.conditional": "bedingt",
+		})
+
+		p := NewParser()
+		err := p.SetUserBundle(bundle)
+		assert.NoError(t, err)
+		p.SetLanguage(language.German)
+		p.SetHelpConfig(HelpConfig{
+			ShowShortFlags:  false,
+			ShowDescription: true,
+			ShowDefaults:    false,
+			ShowRequired:    true,
+		})
+
+		arg := &Argument{
+			Description: "Konfigurationsdatei",
+			TypeOf:      types.Single,
+			RequiredIf: func(cmdLine *Parser, optionName string) (bool, string) {
+				return true, "production flag is set"
+			},
+		}
+
+		usage := p.renderer.FlagUsage(arg)
+		// Should show German translation of "conditional"
+		assert.Contains(t, usage, "bedingt")
+		assert.Contains(t, usage, "Konfigurationsdatei")
+	})
+}
+
 // TestMixedRTLContent tests handling of mixed RTL/LTR content
 func TestMixedRTLContent(t *testing.T) {
 	t.Run("RTL flag name with Latin short flag", func(t *testing.T) {
