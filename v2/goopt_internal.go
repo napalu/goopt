@@ -194,7 +194,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 			}
 		}
 	case types.Single, types.Chained, types.File:
@@ -237,7 +237,7 @@ func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, 
 			p.options[lookup] = boolVal
 			err := p.setBoundVariable(boolVal, lookup)
 			if err != nil {
-				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 			}
 		}
 	case types.Single, types.Chained, types.File:
@@ -719,7 +719,7 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, next, argument); err != nil {
-					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				}
 			}
 		}
@@ -746,7 +746,7 @@ func (p *Parser) processFlagWithValue(argument *Argument, embeddedValue string, 
 				p.addError(err)
 			} else {
 				if err = p.processValueFlag(flag, value, argument); err != nil {
-					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				}
 			}
 		}
@@ -1396,7 +1396,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 			if len(argInfo.Argument.Validators) > 0 {
 				for _, validator := range argInfo.Argument.Validators {
 					if err = validator(pass); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 						return
 					}
 				}
@@ -1405,7 +1405,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 
 		err = p.registerSecureValue(name, pass)
 		if err != nil {
-			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, name))
+			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 		}
 	} else {
 		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, name))
@@ -1478,7 +1478,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
 			if err := validator(value); err != nil {
-				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				return "", false
 			}
 		}
@@ -1534,7 +1534,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
 				if err := validator(args[i]); err != nil {
-					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, flag))
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 					return "", false
 				}
 			}
@@ -2744,8 +2744,8 @@ func (p *Parser) formatFlagForError(flag string) string {
 		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
 		return fmt.Sprintf("'%s' (%s '%s')", parts[0], inCommandMsg, parts[1])
 	}
-	// No command context, just quote the flag name
-	return fmt.Sprintf("'%s'", flag)
+	// No command context, just quote the flag name (use first part to strip any trailing @)
+	return fmt.Sprintf("'%s'", parts[0])
 }
 
 func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {

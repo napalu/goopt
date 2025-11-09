@@ -15056,6 +15056,96 @@ func TestParser_EqualsSyntax(t *testing.T) {
 	})
 }
 
+func TestParser_FormatFlagForError(t *testing.T) {
+	t.Run("flag with command context", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test flag@command format
+		result := parser.formatFlagForError("admin-email@deploy")
+		assert.Contains(t, result, "admin-email")
+		assert.Contains(t, result, "deploy")
+		assert.Contains(t, result, "in command")
+
+		// Should be formatted as: 'admin-email' (in command 'deploy')
+		expected := "'admin-email' (in command 'deploy')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("flag without command context", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test plain flag name
+		result := parser.formatFlagForError("verbose")
+		assert.Equal(t, "'verbose'", result)
+	})
+
+	t.Run("flag with empty command path", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test flag@ format (empty command)
+		result := parser.formatFlagForError("flag@")
+		assert.Equal(t, "'flag'", result)
+	})
+
+	t.Run("flag with nested command path", func(t *testing.T) {
+		parser := NewParser()
+
+		// Test with space-separated command path
+		result := parser.formatFlagForError("config@create user")
+		expected := "'config' (in command 'create user')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("translated message in different locale", func(t *testing.T) {
+		// Test with German locale
+		bundle := i18n.NewEmptyBundle()
+		bundle.AddLanguage(language.German, map[string]string{
+			"goopt.msg.in_command": "im Befehl",
+		})
+
+		parser := NewParser()
+		err := parser.SetUserBundle(bundle)
+		require.NoError(t, err)
+		parser.SetLanguage(language.German)
+
+		result := parser.formatFlagForError("test@cmd")
+		assert.Contains(t, result, "im Befehl")
+		expected := "'test' (im Befehl 'cmd')"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("validation error shows formatted flag name", func(t *testing.T) {
+		parser := NewParser()
+
+		// Create a validator that always fails
+		validator := validation.MinLength(10)
+
+		cmd := &Command{Name: "deploy"}
+		parser.AddCommand(cmd)
+
+		err := parser.AddFlag("email", NewArg(
+			WithType(types.Single),
+			WithRequired(true),
+			WithValidators(validator),
+		), "deploy")
+		require.NoError(t, err)
+
+		// Parse with a value that will fail validation
+		args := []string{"program", "deploy", "--email", "short"}
+		parser.Parse(args)
+
+		// Check that error contains formatted flag name
+		errors := parser.GetErrors()
+		assert.NotEmpty(t, errors)
+		errorMsg := errors[0].Error()
+
+		// The error should contain the formatted flag name
+		assert.Contains(t, errorMsg, "'email'")
+		assert.Contains(t, errorMsg, "in command")
+		assert.Contains(t, errorMsg, "'deploy'")
+	})
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
