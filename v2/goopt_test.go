@@ -1394,12 +1394,12 @@ Global Flags:
 
 Commands:
  +  create "Create resources"
- ├─  ** create user "Manage users"
- │   │  --email or -e "Email for user creation" (optional)
- └─  **  ** create user type "Specify user type"
- │   │   │  --username "Username for user creation" (required)
- │   │   │  --firstName "User first name" (optional)
- └─  ** create group "Manage groups"
+ ├─  +  create user "Manage users"
+ │   │   ** --email or -e "Email for user creation" (optional)
+ └─  +  create user type "Specify user type"
+ │   │   │   ** --username "Username for user creation" (required)
+ │   │   │   ** --firstName "User first name" (optional)
+ └─  +  create group "Manage groups"
 `
 	output := strings.Join(*writer.data, "")
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly")
@@ -1467,11 +1467,11 @@ func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	opts.PrintCommandsWithFlags(writer, printConfig)
 
 	expectedOutput := ` + create "Create resources"
- │  * create user "Manage users"
- └  └ --email "Email for user creation" (optional)
- └  *  * create user type "Specify user type"
- └  └  └ --username "Username for user creation" (required)
- └  * create group "Manage groups"
+ │  + create user "Manage users"
+ └  └  * --email "Email for user creation" (optional)
+ └  + create user type "Specify user type"
+ └  └  └  * --username "Username for user creation" (required)
+ └  + create group "Manage groups"
 `
 
 	// Check that the printed output matches the expected structure
@@ -13940,7 +13940,8 @@ func TestParser_CommandHierarchyDescriptions(t *testing.T) {
 	// Note: Without translations set up, descriptionKeys are shown instead of descriptions.
 	// This is intentional - it helps catch regressions where descriptionKeys might be
 	// incorrectly propagated from child to parent commands.
-	if !strings.Contains(output, "middle               middle.desc") {
+	// Descriptions now have quotes
+	if !strings.Contains(output, "middle               \"middle.desc\"") {
 		t.Errorf("Hierarchical help doesn't show correct description key for middle command.\nOutput:\n%s", output)
 	}
 }
@@ -14029,7 +14030,8 @@ func TestParser_HierarchicalHelpRegression(t *testing.T) {
 	output := buf.String()
 
 	// The bug was that "copy" showed "copy blob configuration" instead of "nexus copy commands"
-	if !strings.Contains(output, "copy                 nexus copy commands") {
+	// Descriptions now have quotes
+	if !strings.Contains(output, "copy                 \"nexus copy commands\"") {
 		t.Errorf("Hierarchical help shows wrong description for copy command.\nOutput:\n%s", output)
 	}
 }
