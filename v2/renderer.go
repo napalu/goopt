@@ -196,6 +196,55 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	return usageLine
 }
 
+// PositionalUsage generates a usage string for a positional argument.
+// The format is similar to FlagUsage but without the -- prefix:
+// name "description" (required/optional)
+func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
+	config := r.parser.GetHelpConfig()
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+
+	// Get the flag name (positionals use flag storage internally)
+	flagName := r.FlagName(f)
+
+	// Build the description part
+	var parts []string
+
+	if config.ShowDescription {
+		description := r.FlagDescription(f)
+		if description != "" {
+			// Keep quotes for backward compatibility in LTR
+			if isRTL {
+				parts = append(parts, description)
+			} else {
+				parts = append(parts, "\""+description+"\"")
+			}
+		}
+	}
+
+	if config.ShowRequired {
+		requiredOrOptional := r.parser.layeredProvider.GetMessage(messages.MsgOptionalKey)
+		if f.Required {
+			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgRequiredKey)
+		}
+		parts = append(parts, "("+requiredOrOptional+")")
+	}
+
+	// Format based on RTL/LTR
+	if isRTL {
+		// In RTL, description comes first, then the name
+		if len(parts) > 0 {
+			return strings.Join(parts, " ") + " " + flagName
+		}
+		return flagName
+	} else {
+		// In LTR, name comes first, then description
+		if len(parts) > 0 {
+			return flagName + " " + strings.Join(parts, " ")
+		}
+		return flagName
+	}
+}
+
 // formatDefaultValue formats a default value according to locale and type
 func (r *DefaultRenderer) formatDefaultValue(f *Argument) string {
 	// Try to detect numeric types and format accordingly

@@ -2974,7 +2974,12 @@ func (p *Parser) detectBestStyle() HelpStyle {
 		return HelpStyleGrouped
 	}
 
-	// Simple CLI
+	// CLI with any commands uses grouped style for clarity
+	if cmdCount > 0 {
+		return HelpStyleGrouped
+	}
+
+	// Simple CLI with no commands - flat style
 	return HelpStyleFlat
 }
 
@@ -2986,6 +2991,18 @@ func (p *Parser) printFlatHelp(writer io.Writer) {
 // printGroupedHelp prints help with flags grouped by command
 func (p *Parser) printGroupedHelp(writer io.Writer) {
 	p.PrintUsageWithGroups(writer)
+}
+
+// printGroupedCleanHelp prints grouped help with clean, compact formatting (no ** markers, tighter spacing)
+func (p *Parser) printGroupedCleanHelp(writer io.Writer) {
+	cleanConfig := &PrettyPrintConfig{
+		NewCommandPrefix:     " +  ",
+		DefaultPrefix:        " ├─ ",
+		TerminalPrefix:       " └─ ",
+		InnerLevelBindPrefix: "  ", // 2 spaces - clean and compact
+		OuterLevelBindPrefix: " │  ",
+	}
+	p.PrintUsageWithGroups(writer, cleanConfig)
 }
 
 // printCompactHelp prints deduplicated, compact help
@@ -3063,9 +3080,14 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 					}
 				}
 
-				fmt.Fprintf(writer, "  %-15s %-40s",
-					cmdName,
-					util.Truncate(desc, 40))
+				if desc != "" {
+					fmt.Fprintf(writer, "  %-15s \"%-40s\"",
+						cmdName,
+						util.Truncate(desc, 40))
+				} else {
+					fmt.Fprintf(writer, "  %-15s %-40s",
+						cmdName, "")
+				}
 				if flagCount > 0 {
 					fmt.Fprintf(writer, " [%d %s]", flagCount, p.layeredProvider.GetMessage(messages.MsgFlagsKey))
 				}
@@ -3277,7 +3299,7 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 
 			desc := p.renderer.CommandDescription(cmd.Value)
 			if desc != "" {
-				fmt.Fprintf(writer, "\n%-20s %s\n", cmdName, desc)
+				fmt.Fprintf(writer, "\n%-20s \"%s\"\n", cmdName, desc)
 			} else {
 				fmt.Fprintf(writer, "\n%s\n", cmdName)
 			}
@@ -3307,10 +3329,10 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 
 				if registeredSub, found := p.registeredCommands.Get(subPath); found {
 					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
+					fmt.Fprintf(writer, "  %s %-20s \"%s\"\n", prefix, subName, desc)
 				} else {
 					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-					fmt.Fprintf(writer, "  %s %-20s %s\n", prefix, subName, desc)
+					fmt.Fprintf(writer, "  %s %-20s \"%s\"\n", prefix, subName, desc)
 				}
 			}
 		}

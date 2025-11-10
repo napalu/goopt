@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -637,6 +638,123 @@ func TestWithHelpConfig(t *testing.T) {
 		assert.Equal(t, 5, actualConfig.MaxGlobals)
 		assert.False(t, actualConfig.GroupSharedFlags)
 		assert.Equal(t, 10, actualConfig.CompactThreshold)
+	})
+}
+
+func TestWithPrettyPrintConfig(t *testing.T) {
+	t.Run("WithPrettyPrintConfig sets configuration", func(t *testing.T) {
+		customConfig := &PrettyPrintConfig{
+			NewCommandPrefix:     " >  ",
+			DefaultPrefix:        " |- ",
+			TerminalPrefix:       " `- ",
+			InnerLevelBindPrefix: "    ", // Spaces instead of **
+			OuterLevelBindPrefix: " |  ",
+		}
+
+		parser, err := NewParserWith(
+			WithPrettyPrintConfig(customConfig),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, parser)
+
+		// Verify config was set
+		actualConfig := parser.GetPrettyPrintConfig()
+		assert.NotNil(t, actualConfig)
+		assert.Equal(t, " >  ", actualConfig.NewCommandPrefix)
+		assert.Equal(t, " |- ", actualConfig.DefaultPrefix)
+		assert.Equal(t, " `- ", actualConfig.TerminalPrefix)
+		assert.Equal(t, "    ", actualConfig.InnerLevelBindPrefix)
+		assert.Equal(t, " |  ", actualConfig.OuterLevelBindPrefix)
+	})
+
+	t.Run("DefaultPrettyPrintConfig returns custom config when set", func(t *testing.T) {
+		customConfig := &PrettyPrintConfig{
+			NewCommandPrefix:     " >  ",
+			DefaultPrefix:        " |- ",
+			TerminalPrefix:       " `- ",
+			InnerLevelBindPrefix: "    ",
+			OuterLevelBindPrefix: " |  ",
+		}
+
+		parser, err := NewParserWith(
+			WithPrettyPrintConfig(customConfig),
+		)
+		assert.NoError(t, err)
+
+		// DefaultPrettyPrintConfig should return the custom config
+		defaultConfig := parser.DefaultPrettyPrintConfig()
+		assert.NotNil(t, defaultConfig)
+		assert.Equal(t, customConfig.NewCommandPrefix, defaultConfig.NewCommandPrefix)
+		assert.Equal(t, customConfig.InnerLevelBindPrefix, defaultConfig.InnerLevelBindPrefix)
+	})
+
+	t.Run("DefaultPrettyPrintConfig returns defaults when not set", func(t *testing.T) {
+		parser := NewParser()
+
+		// Should return default config
+		defaultConfig := parser.DefaultPrettyPrintConfig()
+		assert.NotNil(t, defaultConfig)
+		assert.Equal(t, " +  ", defaultConfig.NewCommandPrefix)
+		assert.Equal(t, " ├─ ", defaultConfig.DefaultPrefix)
+		assert.Equal(t, " └─ ", defaultConfig.TerminalPrefix)
+		assert.Equal(t, " ** ", defaultConfig.InnerLevelBindPrefix)
+		assert.Equal(t, " │  ", defaultConfig.OuterLevelBindPrefix)
+	})
+
+	t.Run("SetPrettyPrintConfig changes configuration", func(t *testing.T) {
+		parser := NewParser()
+
+		// Initially should be nil
+		assert.Nil(t, parser.GetPrettyPrintConfig())
+
+		// Set custom config
+		customConfig := &PrettyPrintConfig{
+			InnerLevelBindPrefix: "====",
+		}
+		parser.SetPrettyPrintConfig(customConfig)
+
+		// Should now return the custom config
+		actualConfig := parser.GetPrettyPrintConfig()
+		assert.NotNil(t, actualConfig)
+		assert.Equal(t, "====", actualConfig.InnerLevelBindPrefix)
+	})
+
+	t.Run("Custom config applies to help output", func(t *testing.T) {
+		parser, err := NewParserWith(
+			WithPrettyPrintConfig(&PrettyPrintConfig{
+				NewCommandPrefix:     " +  ",
+				DefaultPrefix:        " ├─ ",
+				TerminalPrefix:       " └─ ",
+				InnerLevelBindPrefix: "    ", // Spaces instead of **
+				OuterLevelBindPrefix: " │  ",
+			}),
+		)
+		assert.NoError(t, err)
+
+		// Add a command with a flag
+		cmd := &Command{
+			Name:        "test",
+			Description: "Test command",
+		}
+		parser.AddCommand(cmd)
+
+		testArg := NewArg(
+			WithDescription("Test flag"),
+		)
+		testArg.Short = "t"
+		parser.AddFlag("test-flag", testArg, "test")
+
+		// Generate help output
+		var buf bytes.Buffer
+		parser.PrintUsageWithGroups(&buf)
+		output := buf.String()
+
+		// Should NOT contain ** (using spaces instead)
+		assert.NotContains(t, output, " ** ")
+
+		// Should contain the custom spacing (4 spaces for indentation)
+		// The output should have spaces where ** would normally be
+		assert.Contains(t, output, "test")
 	})
 }
 

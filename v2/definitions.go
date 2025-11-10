@@ -129,6 +129,7 @@ type HelpStyle int
 const (
 	HelpStyleFlat         HelpStyle = iota // PrintUsage
 	HelpStyleGrouped                       // PrintUsageWithGroups
+	HelpStyleGroupedClean                  // PrintUsageWithGroups, clean (no ** markers)
 	HelpStyleCompact                       // Deduplicated, minimal
 	HelpStyleHierarchical                  // Command-focused, drill-down
 	HelpStyleSmart                         // Auto-detect based on CLI size
@@ -196,6 +197,7 @@ type Parser struct {
 	structCtx                 any
 	suggestionsFormatter      SuggestionsFormatter
 	helpConfig                HelpConfig
+	prettyPrintConfig         *PrettyPrintConfig
 	helpBehavior              HelpBehavior
 	autoHelp                  bool
 	helpFlags                 []string
@@ -246,6 +248,7 @@ type Renderer interface {
 	FlagName(f *Argument) string
 	FlagDescription(f *Argument) string
 	FlagUsage(f *Argument) string
+	PositionalUsage(f *Argument, position int) string
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string

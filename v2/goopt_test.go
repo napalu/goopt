@@ -10244,6 +10244,8 @@ func TestParser_SetRenderer(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
+	// Explicitly set flat style for this test since we're testing custom renderer format
+	p.SetHelpStyle(HelpStyleFlat)
 	p.PrintHelp(output)
 	// ensure table-like output from CustomRenderer
 	assert.Contains(t, output.String(), `   -f, --flag1               Flag 1
