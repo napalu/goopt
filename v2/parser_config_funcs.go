@@ -198,6 +198,13 @@ func WithHelpConfig(config HelpConfig) ConfigureCmdLineFunc {
 	}
 }
 
+// WithPrettyPrintConfig sets the configuration for pretty-printing command trees and help output
+func WithPrettyPrintConfig(config *PrettyPrintConfig) ConfigureCmdLineFunc {
+	return func(cmdLine *Parser, err *error) {
+		cmdLine.SetPrettyPrintConfig(config)
+	}
+}
+
 // WithAutoHelp enables or disables automatic help flag registration (default: true)
 func WithAutoHelp(enabled bool) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {

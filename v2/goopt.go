@@ -1779,13 +1779,7 @@ func (p *Parser) PrintUsageWithGroups(writer io.Writer, config ...*PrettyPrintCo
 	if len(config) > 0 {
 		prettyPrintConfig = config[0]
 	} else {
-		prettyPrintConfig = &PrettyPrintConfig{
-			NewCommandPrefix:     " +  ",
-			DefaultPrefix:        " ├─ ",
-			TerminalPrefix:       " └─ ",
-			InnerLevelBindPrefix: " ** ",
-			OuterLevelBindPrefix: " │  ",
-		}
+		prettyPrintConfig = p.DefaultPrettyPrintConfig()
 	}
 
 	p.PrintPositionalArgs(writer)
@@ -1929,21 +1923,22 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
 		if kv.Value.topLevel {
 			kv.Value.Visit(func(cmd *Command, level int) bool {
-				// Determine the correct prefix based on command level and position
-				var prefix string
+				// Determine the tree prefix based on command level and position
+				var treePrefix string
 				switch {
 				case level == 0:
-					prefix = config.NewCommandPrefix
+					treePrefix = ""
 				case len(cmd.Subcommands) == 0:
-					prefix = config.TerminalPrefix
+					treePrefix = config.TerminalPrefix
 				default:
-					prefix = config.DefaultPrefix
+					treePrefix = config.DefaultPrefix
 				}
 
 				// Print the command itself with proper indentation
 				// Use CommandUsage to get the properly formatted command with positionals
 				commandStr := p.renderer.CommandUsage(cmd)
-				command := fmt.Sprintf("%s%s%s\n", prefix, strings.Repeat(config.InnerLevelBindPrefix, level), commandStr)
+				// All commands get the + marker (NewCommandPrefix)
+				command := fmt.Sprintf("%s%s%s\n", treePrefix, config.NewCommandPrefix, commandStr)
 				if _, err := writer.Write([]byte(command)); err != nil {
 					return false
 				}
@@ -1959,14 +1954,28 @@ func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintCon
 
 // PrintCommandSpecificFlags print flags for a specific command with the appropriate indentation
 func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string, level int, config *PrettyPrintConfig) {
+	// Build indentation: outer line(s) + inner line
+	// For level 0: " │   │  " (one outer + inner separator)
+	// For level 1: " │   │   │  " (two outer + inner separator)
+	indent := strings.Repeat(config.OuterLevelBindPrefix, level+1) + config.InnerLevelBindPrefix
+
+	// First, collect and display positional arguments
+	positionals := p.getPositionalsForCommand(commandPath)
+	for _, pos := range positionals {
+		positionalUsage := p.renderer.PositionalUsage(pos.Argument, pos.Position)
+		output := fmt.Sprintf("%s%s\n", indent, positionalUsage)
+		_, _ = writer.Write([]byte(output))
+	}
+
+	// Then display regular flags
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 		if f.Value.CommandPath == commandPath {
-			// Skip positional arguments as they're shown inline with the command
+			// Skip positional arguments - already displayed above
 			if f.Value.Argument.isPositional() {
 				continue
 			}
 
-			flag := fmt.Sprintf("%s%s\n", strings.Repeat(config.OuterLevelBindPrefix, level+1), p.renderer.FlagUsage(f.Value.Argument))
+			flag := fmt.Sprintf("%s%s\n", indent, p.renderer.FlagUsage(f.Value.Argument))
 
 			_, _ = writer.Write([]byte(flag))
 		}
@@ -1979,6 +1988,11 @@ func (p *Parser) PrintFlags(writer io.Writer) {
 	printedFlags := make(map[string]bool)
 
 	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+		// Skip positional arguments - they are shown inline with commands
+		if f.Value.Argument.isPositional() {
+			continue
+		}
+
 		// Extract the base flag name (without command path)
 		flagKey := *f.Key
 		flagParts := splitPathFlag(flagKey)
@@ -1986,11 +2000,6 @@ func (p *Parser) PrintFlags(writer io.Writer) {
 
 		// Skip if we've already printed this flag
 		if printedFlags[baseFlagName] {
-			continue
-		}
-
-		// Skip positional arguments
-		if f.Value.Argument.isPositional() {
 			continue
 		}
 
@@ -2015,6 +2024,16 @@ func (p *Parser) GetHelpConfig() HelpConfig {
 	return p.helpConfig
 }
 
+// SetPrettyPrintConfig sets the configuration for pretty-printing command trees and help output
+func (p *Parser) SetPrettyPrintConfig(config *PrettyPrintConfig) {
+	p.prettyPrintConfig = config
+}
+
+// GetPrettyPrintConfig returns the current pretty-print configuration, or nil if not set
+func (p *Parser) GetPrettyPrintConfig() *PrettyPrintConfig {
+	return p.prettyPrintConfig
+}
+
 // PrintHelp prints help according to the configured style
 func (p *Parser) PrintHelp(writer io.Writer) {
 	style := p.helpConfig.Style
@@ -2029,6 +2048,8 @@ func (p *Parser) PrintHelp(writer io.Writer) {
 		p.printFlatHelp(writer)
 	case HelpStyleGrouped:
 		p.printGroupedHelp(writer)
+	case HelpStyleGroupedClean:
+		p.printGroupedCleanHelp(writer)
 	case HelpStyleCompact:
 		p.printCompactHelp(writer)
 	case HelpStyleHierarchical:
@@ -2041,6 +2062,12 @@ func (p *Parser) PrintHelp(writer io.Writer) {
 }
 
 func (p *Parser) DefaultPrettyPrintConfig() *PrettyPrintConfig {
+	// Return custom config if set
+	if p.prettyPrintConfig != nil {
+		return p.prettyPrintConfig
+	}
+
+	// Otherwise return default config
 	return &PrettyPrintConfig{
 		NewCommandPrefix:     " +  ",
 		DefaultPrefix:        " ├─ ",

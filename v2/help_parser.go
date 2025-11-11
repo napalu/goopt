@@ -40,7 +40,7 @@ type HelpOptions struct {
 	Filter           string   `goopt:"short:f;desc:Filter subcommands"`
 	Search           string   `goopt:"short:q;desc:Search subcommands"`
 	Command          []string `goopt:"pos:0;desc:Command path"`
-	Style            string   `goopt:"desc:Help style;validators:isoneof(flat,grouped,compact,hierarchical,smart)"`
+	Style            string   `goopt:"desc:Help style;validators:isoneof(flat,grouped,grouped-clean,compact,hierarchical,smart)"`
 
 	// Negative flags for disabling features
 	NoDescriptions bool `goopt:"name:no-desc;desc:Hide descriptions;default:false"`
@@ -148,6 +148,8 @@ func (h *HelpParser) Parse(args []string) error {
 			h.config.Style = HelpStyleFlat
 		case "grouped":
 			h.config.Style = HelpStyleGrouped
+		case "grouped-clean":
+			h.config.Style = HelpStyleGroupedClean
 		case "compact":
 			h.config.Style = HelpStyleCompact
 		case "hierarchical":
@@ -560,30 +562,6 @@ func (h *HelpParser) findSimilarSubcommands(subcommands []Command, input string)
 	return suggestions
 }
 
-// detectBestStyle automatically selects the best help style based on CLI complexity
-func (h *HelpParser) detectBestStyle() HelpStyle {
-	flagCount := h.mainParser.acceptedFlags.Count()
-	cmdCount := h.mainParser.registeredCommands.Len()
-
-	// Large CLI with many flags and commands
-	if float64(flagCount) > float64(h.config.CompactThreshold)*1.4 && cmdCount > 5 {
-		return HelpStyleHierarchical
-	}
-
-	// Medium CLI with moderate complexity
-	if flagCount > h.config.CompactThreshold {
-		return HelpStyleCompact
-	}
-
-	// Small CLI with commands
-	if cmdCount > 3 {
-		return HelpStyleGrouped
-	}
-
-	// Simple CLI
-	return HelpStyleFlat
-}
-
 // findSimilarCommandsInSliceWithContext recursively searches for similar commands considering both canonical and translated names
 func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, commands []Command, input string, suggestions *[]suggestion, currentLang language.Tag) {
 	for i := range commands {
@@ -805,7 +783,7 @@ func (h *HelpParser) showDefault(writer io.Writer) error {
 
 	// Auto-detect style if set to Smart
 	if style == HelpStyleSmart {
-		style = h.detectBestStyle()
+		style = h.mainParser.detectBestStyle()
 	}
 
 	// Apply the selected style
@@ -814,6 +792,8 @@ func (h *HelpParser) showDefault(writer io.Writer) error {
 		return h.showFlatStyle(writer)
 	case HelpStyleGrouped:
 		return h.showGroupedStyle(writer)
+	case HelpStyleGroupedClean:
+		return h.showGroupedCleanStyle(writer)
 	case HelpStyleCompact:
 		return h.showCompactStyle(writer)
 	case HelpStyleHierarchical:
@@ -859,6 +839,22 @@ func (h *HelpParser) showGroupedStyle(writer io.Writer) error {
 
 	// Use PrintUsageWithGroups which shows "Global Flags:" header
 	h.mainParser.PrintUsageWithGroups(writer)
+	return nil
+}
+
+// showGroupedCleanStyle shows grouped help with clean, compact formatting (no ** markers, tighter spacing)
+func (h *HelpParser) showGroupedCleanStyle(writer io.Writer) error {
+	h.showVersionHeader(writer)
+
+	// Use PrintUsageWithGroups with clean pretty print config
+	cleanConfig := &PrettyPrintConfig{
+		NewCommandPrefix:     " +  ",
+		DefaultPrefix:        " ├─ ",
+		TerminalPrefix:       " └─ ",
+		InnerLevelBindPrefix: "  ", // 2 spaces - clean and compact
+		OuterLevelBindPrefix: " │  ",
+	}
+	h.mainParser.PrintUsageWithGroups(writer, cleanConfig)
 	return nil
 }
 
@@ -1025,6 +1021,11 @@ func (h *HelpParser) collectFlags(commandPath string) []*Argument {
 	var flags []*Argument
 
 	for f := h.mainParser.acceptedFlags.Front(); f != nil; f = f.Next() {
+		// Skip positional arguments - they are shown inline with commands
+		if f.Value.Argument.isPositional() {
+			continue
+		}
+
 		if commandPath == "" || f.Value.CommandPath == commandPath {
 			flags = append(flags, f.Value.Argument)
 		}
@@ -1346,7 +1347,7 @@ func (h *HelpParser) showHelpForHelp(writer io.Writer) error {
 	// Style option
 	fmt.Fprintf(writer, "  --style <style>\n")
 	fmt.Fprintf(writer, "    %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionStyleKey))
-	fmt.Fprintf(writer, "    %s: flat, grouped, compact, hierarchical, smart\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableStylesKey))
+	fmt.Fprintf(writer, "    %s: flat, grouped, grouped-clean, compact, hierarchical, smart\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableStylesKey))
 
 	// Examples section
 	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
