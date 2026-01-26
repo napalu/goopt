@@ -2,8 +2,8 @@
 
 [![Coverage](https://codecov.io/gh/napalu/goopt/branch/main/graph/badge.svg)](https://app.codecov.io/gh/napalu/goopt)
 [![Go Reference v1](https://pkg.go.dev/badge/github.com/napalu/goopt.svg)](https://pkg.go.dev/github.com/napalu/goopt)
-[![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/napalu/goopt)
+[![Go Report Card](https://goreportcard.com/badge/github.com/napalu/goopt)](https://goreportcard.com/report/github.com/napalu/goopt)
 
 `goopt` is a flexible and powerful command-line option parser for Go. It provides a declarative, struct-first approach to building CLIs that are robust, maintainable, and user-friendly.
 
