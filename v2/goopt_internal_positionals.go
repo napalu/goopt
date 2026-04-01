@@ -234,7 +234,7 @@ func (p *Parser) matchPositionalArgument(pa *PositionalArgument, cmdPath string,
 			if len(decl.flag.Argument.Validators) > 0 {
 				for _, validator := range decl.flag.Argument.Validators {
 					if err := validator(arg); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, lookup))
+						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 					}
 				}
 			}
@@ -242,7 +242,7 @@ func (p *Parser) matchPositionalArgument(pa *PositionalArgument, cmdPath string,
 			p.registerFlagValue(lookup, arg, arg)
 			p.options[lookup] = arg
 			if err := p.setBoundVariable(arg, lookup); err != nil {
-				p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
+				p.addError(errs.ErrSettingBoundValue.WithArgs(p.formatFlagForError(lookup)).Wrap(err))
 			}
 			break
 		}
@@ -283,7 +283,7 @@ func (p *Parser) validateMissingPositionals(positional *[]PositionalArgument,
 				p.registerFlagValue(lookup, decl.flag.Argument.DefaultValue, decl.flag.Argument.DefaultValue)
 				p.options[lookup] = decl.flag.Argument.DefaultValue
 				if err := p.setBoundVariable(decl.flag.Argument.DefaultValue, lookup); err != nil {
-					p.addError(errs.ErrSettingBoundValue.WithArgs(lookup).Wrap(err))
+					p.addError(errs.ErrSettingBoundValue.WithArgs(p.formatFlagForError(lookup)).Wrap(err))
 				}
 
 				// Add a positional argument entry for the default value
@@ -295,7 +295,7 @@ func (p *Parser) validateMissingPositionals(positional *[]PositionalArgument,
 				})
 			} else if decl.required {
 				// Missing required positional
-				p.addError(errs.ErrRequiredPositionalFlag.WithArgs(decl.key, decl.index))
+				p.addError(errs.ErrRequiredPositionalFlag.WithArgs(p.formatFlagForError(buildPathFlag(decl.key, decl.flag.CommandPath)), decl.index))
 			}
 		}
 	}
