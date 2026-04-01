@@ -721,7 +721,7 @@ func (p *Parser) processFlag(argument *Argument, state parse.State, flag string)
 			state.Skip()
 		}
 		if state.Pos() >= state.Len()-1 && len(next) == 0 {
-			p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
+			p.addError(errs.ErrFlagExpectsValue.WithArgs(p.formatFlagForError(flag)))
 		} else {
 			next, err = p.flagValue(argument, next, flag)
 			if err != nil {
@@ -748,7 +748,7 @@ func (p *Parser) processFlagWithValue(argument *Argument, embeddedValue string, 
 			value = argument.DefaultValue
 		}
 		if len(value) == 0 {
-			p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
+			p.addError(errs.ErrFlagExpectsValue.WithArgs(p.formatFlagForError(flag)))
 		} else {
 			value, err = p.flagValue(argument, value, flag)
 			if err != nil {
@@ -767,15 +767,15 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 		next = expandVarExpr().ReplaceAllStringFunc(next, varFunc)
 		next, err = filepath.Abs(next)
 		if st, e := os.Stat(next); e != nil {
-			err = errs.ErrNotFoundPathForFlag.WithArgs(flag, next).Wrap(e)
+			err = errs.ErrNotFoundPathForFlag.WithArgs(p.formatFlagForError(flag), next).Wrap(e)
 			return
 		} else if st.IsDir() {
-			err = errs.ErrNotFilePathForFlag.WithArgs(flag)
+			err = errs.ErrNotFilePathForFlag.WithArgs(p.formatFlagForError(flag))
 			return
 		}
 		next = filepath.Clean(next)
 		if val, e := os.ReadFile(next); e != nil {
-			err = errs.ErrFlagFileOperation.WithArgs(flag, next).Wrap(e)
+			err = errs.ErrFlagFileOperation.WithArgs(p.formatFlagForError(flag), next).Wrap(e)
 		} else {
 			arg = string(val)
 		}
@@ -784,7 +784,7 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 		if p.isFlag(next) && argument.TypeOf == types.Single {
 			stripped := strings.TrimLeftFunc(next, p.prefixFunc)
 			if _, ok := p.acceptedFlags.Get(stripped); ok {
-				p.addError(errs.ErrFlagExpectsValue.WithArgs(flag))
+				p.addError(errs.ErrFlagExpectsValue.WithArgs(p.formatFlagForError(flag)))
 				return
 			}
 		}
@@ -1373,7 +1373,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
 		for _, validator := range argument.Validators {
 			if err := validator(processed); err != nil {
-				return errs.WrapOnce(err, errs.ErrProcessingFlag, currentArg)
+				return errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(currentArg))
 			}
 		}
 	}
@@ -1418,7 +1418,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 		}
 	} else {
-		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, name))
+		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, p.formatFlagForError(name)))
 	}
 }
 
@@ -1479,7 +1479,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 					errBuf.WriteString(", ")
 				}
 			}
-			p.addError(errs.ErrInvalidArgument.WithArgs(next, flag, errBuf.String()))
+			p.addError(errs.ErrInvalidArgument.WithArgs(next, p.formatFlagForError(flag), errBuf.String()))
 			return "", false
 		}
 	}
@@ -1536,7 +1536,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 						errBuf.WriteString(", ")
 					}
 				}
-				p.addError(errs.ErrInvalidArgument.WithArgs(args[i], flag, errBuf.String()))
+				p.addError(errs.ErrInvalidArgument.WithArgs(args[i], p.formatFlagForError(flag), errBuf.String()))
 				return "", false
 			}
 		}
@@ -1610,9 +1610,9 @@ func (p *Parser) walkFlags() {
 		if !p.shouldValidateDependencies(flagInfo) {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && p.HasCommand(cmdArg[1])) {
 				if flagInfo.Argument.Position != nil {
-					p.addError(errs.ErrRequiredPositionalFlag.WithArgs(*f.Key, *flagInfo.Argument.Position))
+					p.addError(errs.ErrRequiredPositionalFlag.WithArgs(p.formatFlagForError(*f.Key), *flagInfo.Argument.Position))
 				} else {
-					p.addError(errs.ErrRequiredFlag.WithArgs(*f.Key))
+					p.addError(errs.ErrRequiredFlag.WithArgs(p.formatFlagForError(*f.Key)))
 				}
 			}
 		} else {
@@ -1674,7 +1674,7 @@ func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visite
 	}
 
 	if visited[mainKey] {
-		p.addError(errs.ErrCircularDependency.WithArgs(mainKey))
+		p.addError(errs.ErrCircularDependency.WithArgs(p.formatFlagForError(mainKey)))
 		return
 	}
 
@@ -1683,14 +1683,14 @@ func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visite
 	for _, depends := range p.getDependentFlags(flagInfo.Argument) {
 		dependentFlag, found := p.getFlagInCommandPath(depends, flagInfo.CommandPath)
 		if !found {
-			p.addError(errs.ErrDependencyNotFound.WithArgs(mainKey, depends, flagInfo.CommandPath))
+			p.addError(errs.ErrDependencyNotFound.WithArgs(p.formatFlagForError(mainKey), p.formatFlagForError(depends), flagInfo.CommandPath))
 			continue
 		}
 
 		dependKey := p.options[depends]
 		matches, allowedValues := p.checkDependencyValue(flagInfo.Argument, depends, dependKey)
 		if !matches {
-			p.addError(errs.ErrDependencyValueNotSpecified.WithArgs(mainKey, depends, allowedValues, dependKey))
+			p.addError(errs.ErrDependencyValueNotSpecified.WithArgs(p.formatFlagForError(mainKey), p.formatFlagForError(depends), allowedValues, dependKey))
 		}
 
 		p.validateDependencies(dependentFlag, depends, visited, depth+1)
@@ -2668,7 +2668,7 @@ func (p *Parser) validateSlicePath(path string) error {
 
 	// Final check - does this path exist in our accepted flags?
 	if _, exists := p.acceptedFlags.Get(path); !exists {
-		return errs.ErrUnknownFlag.WithArgs(path)
+		return errs.ErrUnknownFlag.WithArgs(p.formatFlagForError(path))
 	}
 
 	return nil
