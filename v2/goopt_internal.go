@@ -573,7 +573,7 @@ func (p *Parser) queueSecureArgument(name string, argument *Argument) {
 	p.secureArguments.Set(name, &argument.Secure)
 }
 
-func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], commandPathSlice *[]string) bool {
+func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], commandPathSlice *[]string) (bool, *Command) {
 	terminating := false
 	currentArg := state.CurrentArg()
 
@@ -585,7 +585,7 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 	if cmdQueue.Len() > 0 {
 		ok, curSub = p.checkSubCommands(cmdQueue, currentArg)
 		if !ok {
-			return false
+			return false, nil
 		}
 	}
 
@@ -607,7 +607,7 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 	if cmd != nil {
 		// Use the canonical command name for the path
 		*commandPathSlice = append(*commandPathSlice, cmd.Name)
-		if len(cmd.Subcommands) == 0 {
+		if len(cmd.Subcommands) == 0 || cmd.Greedy {
 			cmdQueue.Clear()
 			terminating = true
 		} else {
@@ -676,14 +676,14 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 							}
 						}
 						p.addError(fmt.Errorf("%s", formatted))
-						return false
+						return false, nil
 					}
 				}
 			}
 		}
 	}
 
-	return terminating
+	return terminating, cmd
 }
 
 func (p *Parser) queueCommandCallback(cmd *Command) {
@@ -1772,12 +1772,15 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 		return commandEnvVars
 	}
 	for _, env := range p.envResolver.Environ() {
+		var v string
 		kv := strings.SplitN(env, "=", 2)
-		v := strings.Replace(kv[0], p.envVarPrefix, "", 1)
+		if p.envVarPrefix != "" && !strings.HasPrefix(kv[0], p.envVarPrefix) {
+			continue
+		}
+		v = strings.Replace(kv[0], p.envVarPrefix, "", 1)
 		if v == "" {
 			continue
 		}
-
 		v = p.envNameConverter(v)
 		for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
 			paths := splitPathFlag(*f.Key)
@@ -1974,6 +1977,23 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 		if len(validators) > 0 {
 			allValidators = append(allValidators, validators...)
 		}
+
+		// If no accepted tag was provided, derive AcceptedValues from isoneof
+		// so that completion data can see the allowed values.
+		if len(c.AcceptedValues) == 0 {
+			if values := validation.ExtractIsOneOfValues(c.Validators); len(values) > 0 {
+				pvs := make([]types.PatternValue, len(values))
+				for i, v := range values {
+					escaped := regexp.QuoteMeta(v)
+					pvs[i] = types.PatternValue{
+						Pattern:     "^" + escaped + "$",
+						Description: v,
+						Compiled:    regexp.MustCompile("^" + escaped + "$"),
+					}
+				}
+				configs = append(configs, WithAcceptedValues(pvs))
+			}
+		}
 	}
 
 	// Add all validators to the argument
@@ -1996,6 +2016,7 @@ type CommandConfig struct {
 	DescriptionKey string
 	NameKey        string
 	Parent         *Command
+	Greedy         bool
 }
 
 func (p *Parser) buildCommand(commandPath, description, descriptionKey string, parent *Command) (*Command, error) {
@@ -2040,7 +2061,8 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 			} else {
 				// Create a new top-level command
 				newCommand := &Command{
-					Name: cmdName,
+					Name:   cmdName,
+					Greedy: config.Greedy,
 				}
 
 				// Only apply properties if this is the actual command being configured
@@ -2079,6 +2101,7 @@ func (p *Parser) buildCommandFromConfig(config *CommandConfig) (*Command, error)
 					Name:        cmdName,
 					Subcommands: []Command{},
 					path:        config.Path,
+					Greedy:      config.Greedy,
 				}
 				// For single command paths, always apply properties
 				// For multi-command paths, only apply to the last command
@@ -2381,6 +2404,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 			DescriptionKey: cmd.DescriptionKey,
 			NameKey:        cmd.NameKey,
 			Parent:         nil,
+			Greedy:         cmd.Greedy,
 		})
 		if err != nil {
 			return errs.WrapOnce(err, errs.ErrProcessingCommand, cmd.path)
@@ -2460,6 +2484,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				DescriptionKey: cmd.DescriptionKey,
 				NameKey:        cmd.NameKey,
 				Parent:         parent,
+				Greedy:         cmd.Greedy,
 			})
 			if err != nil {
 				return errs.ErrProcessingCommand.WithArgs(cmdPath).Wrap(err)
@@ -2507,6 +2532,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 				DescriptionKey: config.DescriptionKey,
 				NameKey:        config.NameKey,
 				Parent:         parent,
+				Greedy:         config.Greedy,
 			})
 			if err != nil {
 				return errs.WrapOnce(err, errs.ErrProcessingCommand, cmdPath)
@@ -3058,35 +3084,33 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 
 	// Commands with flag counts
 	if p.registeredCommands.Count() > 0 {
+		// Pre-pass: compute max command name width for alignment
+		maxCmdWidth := 0
+		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
+			if cmd.Value.topLevel {
+				cmdName := p.buildCommandNameWithPositionals(cmd.Value)
+				if len(cmdName) > maxCmdWidth {
+					maxCmdWidth = len(cmdName)
+				}
+			}
+		}
+		maxCmdWidth += 2 // add padding after longest name
+
 		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandsKey))
 		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 			if cmd.Value.topLevel {
 				flagCount := p.countCommandFlags(cmd.Value.Name)
-				// Use CommandUsage to include positionals
-				cmdName := cmd.Value.Name
+				cmdName := p.buildCommandNameWithPositionals(cmd.Value)
 				desc := p.renderer.CommandDescription(cmd.Value)
 
-				// Get positionals to build the full command name with args
-				positionals := p.getPositionalsForCommand(cmd.Value.path)
-				for _, pos := range positionals {
-					flagName := pos.Value
-					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
-						flagName = flagName[:idx]
-					}
-					if pos.Argument.Required {
-						cmdName += " <" + flagName + ">"
-					} else {
-						cmdName += " [" + flagName + "]"
-					}
-				}
-
 				if desc != "" {
-					fmt.Fprintf(writer, "  %-15s \"%-40s\"",
-						cmdName,
-						util.Truncate(desc, 40))
+					quotedDesc := fmt.Sprintf("\"%s\"", util.Truncate(desc, 40))
+					fmt.Fprintf(writer, "  %-*s %-42s",
+						maxCmdWidth, cmdName,
+						quotedDesc)
 				} else {
-					fmt.Fprintf(writer, "  %-15s %-40s",
-						cmdName, "")
+					fmt.Fprintf(writer, "  %-*s %-42s",
+						maxCmdWidth, cmdName, "")
 				}
 				if flagCount > 0 {
 					fmt.Fprintf(writer, " [%d %s]", flagCount, p.layeredProvider.GetMessage(messages.MsgFlagsKey))
@@ -3260,7 +3284,7 @@ func (p *Parser) printCompactFlag(writer io.Writer, arg *Argument) {
 	}
 
 	if p.helpConfig.ShowDefaults && arg.DefaultValue != "" {
-		flagStr += fmt.Sprintf(" %s (%s)", p.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
+		flagStr += fmt.Sprintf(" (%s: %s)", p.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
 			arg.DefaultValue)
 	}
 
@@ -3279,27 +3303,36 @@ func (p *Parser) printCompactFlag(writer io.Writer, arg *Argument) {
 
 // printCommandTree prints the command hierarchy as a tree
 func (p *Parser) printCommandTree(writer io.Writer) {
+	// Pre-pass: compute max widths for alignment
+	maxTopWidth := 0
+	maxSubWidth := 0
+	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
+		if cmd.Value.topLevel {
+			cmdName := p.buildCommandNameWithPositionals(cmd.Value)
+			if len(cmdName) > maxTopWidth {
+				maxTopWidth = len(cmdName)
+			}
+			for i := range cmd.Value.Subcommands {
+				sub := &cmd.Value.Subcommands[i]
+				subPath := cmd.Value.Name + " " + sub.Name
+				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
+				if len(subName) > maxSubWidth {
+					maxSubWidth = len(subName)
+				}
+			}
+		}
+	}
+	maxTopWidth += 2 // add padding after longest name
+	maxSubWidth += 2
+
 	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
 		ppConfig := p.DefaultPrettyPrintConfig()
 		if cmd.Value.topLevel {
-			// Build command name with positionals
-			cmdName := cmd.Value.Name
-			positionals := p.getPositionalsForCommand(cmd.Value.path)
-			for _, pos := range positionals {
-				flagName := pos.Value
-				if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
-					flagName = flagName[:idx]
-				}
-				if pos.Argument.Required {
-					cmdName += " <" + flagName + ">"
-				} else {
-					cmdName += " [" + flagName + "]"
-				}
-			}
+			cmdName := p.buildCommandNameWithPositionals(cmd.Value)
 
 			desc := p.renderer.CommandDescription(cmd.Value)
 			if desc != "" {
-				fmt.Fprintf(writer, "\n%-20s \"%s\"\n", cmdName, desc)
+				fmt.Fprintf(writer, "\n%-*s \"%s\"\n", maxTopWidth, cmdName, desc)
 			} else {
 				fmt.Fprintf(writer, "\n%s\n", cmdName)
 			}
@@ -3309,30 +3342,15 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 					prefix = ppConfig.TerminalPrefix
 				}
 				sub := &cmd.Value.Subcommands[i]
-				// Look up the actual registered command to get the correct description
 				subPath := cmd.Value.Name + " " + sub.Name
-
-				// Build subcommand name with positionals
-				subName := sub.Name
-				subPositionals := p.getPositionalsForCommand(subPath)
-				for _, pos := range subPositionals {
-					flagName := pos.Value
-					if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
-						flagName = flagName[:idx]
-					}
-					if pos.Argument.Required {
-						subName += " <" + flagName + ">"
-					} else {
-						subName += " [" + flagName + "]"
-					}
-				}
+				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
 
 				if registeredSub, found := p.registeredCommands.Get(subPath); found {
 					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
-					fmt.Fprintf(writer, "  %s %-20s \"%s\"\n", prefix, subName, desc)
+					fmt.Fprintf(writer, "  %s %-*s \"%s\"\n", prefix, maxSubWidth, subName, desc)
 				} else {
 					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-					fmt.Fprintf(writer, "  %s %-20s \"%s\"\n", prefix, subName, desc)
+					fmt.Fprintf(writer, "  %s %-*s \"%s\"\n", prefix, maxSubWidth, subName, desc)
 				}
 			}
 		}
@@ -3348,6 +3366,43 @@ func (p *Parser) countCommandFlags(cmdPath string) int {
 		}
 	}
 	return count
+}
+
+// buildCommandNameWithPositionals builds a command name string including its positional args
+// (e.g., "cp <source> <dest>" or "ls [subfolder]")
+func (p *Parser) buildCommandNameWithPositionals(cmd *Command) string {
+	cmdName := cmd.Name
+	positionals := p.getPositionalsForCommand(cmd.path)
+	for _, pos := range positionals {
+		flagName := pos.Value
+		if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+			flagName = flagName[:idx]
+		}
+		if pos.Argument.Required {
+			cmdName += " <" + flagName + ">"
+		} else {
+			cmdName += " [" + flagName + "]"
+		}
+	}
+	return cmdName
+}
+
+// buildSubcommandNameWithPositionals builds a subcommand name string including its positional args
+func (p *Parser) buildSubcommandNameWithPositionals(sub *Command, subPath string) string {
+	subName := sub.Name
+	subPositionals := p.getPositionalsForCommand(subPath)
+	for _, pos := range subPositionals {
+		flagName := pos.Value
+		if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+			flagName = flagName[:idx]
+		}
+		if pos.Argument.Required {
+			subName += " <" + flagName + ">"
+		} else {
+			subName += " [" + flagName + "]"
+		}
+	}
+	return subName
 }
 
 // extractFlagPrefix extracts the prefix from a flag name (e.g., "core.ldap" from "core.ldap.host")

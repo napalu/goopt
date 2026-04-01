@@ -206,6 +206,14 @@ func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 	// Get the flag name (positionals use flag storage internally)
 	flagName := r.FlagName(f)
 
+	// Wrap positional name in brackets to distinguish from flags:
+	// <name> for required, [name] for optional
+	if f.Required {
+		flagName = "<" + flagName + ">"
+	} else {
+		flagName = "[" + flagName + "]"
+	}
+
 	// Build the description part
 	var parts []string
 

@@ -12,13 +12,13 @@ type FlagType int
 
 const (
 	// Single denotes a flag accepting a string value
-	FlagTypeSingle FlagType = 0
+	FlagTypeSingle FlagType = 1
 	// Chained denotes a flag accepting a string value which should be evaluated as a list
-	FlagTypeChained FlagType = 1
+	FlagTypeChained FlagType = 2
 	// Standalone denotes a boolean flag (does not accept a value)
-	FlagTypeStandalone FlagType = 2
+	FlagTypeStandalone FlagType = 3
 	// File denotes a flag which is evaluated as a path
-	FlagTypeFile FlagType = 3
+	FlagTypeFile FlagType = 4
 )
 
 // FlagPair represents a short and long version of the same flag

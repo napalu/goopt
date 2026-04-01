@@ -136,7 +136,7 @@
   "goopt.error.validation.value_at_most": "يجب أن تكون القيمة '%[2]s' على الأكثر %[1]v",
   "goopt.error.validation.value_between": "يجب أن تكون القيمة '%[3]s' بين %[1]v و %[2]v",
   "goopt.error.validation.value_cannot_be": "لا يمكن أن تكون القيمة '%[2]s': %[1]s",
-  "goopt.error.validation.value_must_be_one_of": "يجب أن تكون القيمة '%[2]s' واحدة من: %[1]s",
+  "goopt.error.validation.value_must_be_one_of": "يجب أن تكون القيمة '%[1]s' واحدة من: %[2]s",
   "goopt.error.validation_failed": "فشل التحقق للعلامة %[1]s",
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.all_flags": "كل العلامات:",

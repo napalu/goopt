@@ -136,7 +136,7 @@
   "goopt.error.validation.value_at_most": "Wert darf höchstens %[1]v sein",
   "goopt.error.validation.value_between": "Wert muss zwischen %[1]v und %[2]v liegen",
   "goopt.error.validation.value_cannot_be": "Wert darf nicht sein: %[1]s",
-  "goopt.error.validation.value_must_be_one_of": "Wert muss einer der folgenden sein: %[1]s",
+  "goopt.error.validation.value_must_be_one_of": "Wert '%[1]s' muss einer der folgenden sein: %[2]s",
   "goopt.error.validation_failed": "Validierung fehlgeschlagen für Flag %[1]s",
   "goopt.error.wrapped": "%[1]s: %[2]v",
   "goopt.msg.all_flags": "Alle Flags:",

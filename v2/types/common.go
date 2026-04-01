@@ -81,6 +81,7 @@ type TagConfig struct {
 	Capacity       int
 	Position       *int
 	Validators     []string // List of validator specifications
+	Greedy         bool     // Indicates that this command is the last one in the command chain
 }
 
 // Describe a PatternValue (regular expression with a human-readable explanation of the pattern)

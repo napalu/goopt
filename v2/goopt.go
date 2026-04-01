@@ -160,7 +160,7 @@ func NewParserFromInterface(i interface{}, config ...ConfigureCmdLineFunc) (*Par
 // SetEnvVarPrefix sets the prefix for environment variables.
 func (p *Parser) SetEnvVarPrefix(prefix string) {
 	if !strings.HasSuffix(prefix, "_") {
-		prefix = prefix + "_"
+		prefix += "_"
 	}
 	p.envVarPrefix = prefix
 }
@@ -697,7 +697,7 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 
 		} else {
 			// Parse the next command
-			terminating := p.parseCommand(state, cmdQueue, &commandPathSlice)
+			terminating, cmd := p.parseCommand(state, cmdQueue, &commandPathSlice)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
@@ -721,6 +721,11 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 				}
 				lastCommandPath = currentCommandPath
 				commandPathSlice = commandPathSlice[:0]
+			}
+
+			if cmd != nil && cmd.Greedy {
+				p.greedyAfterPos = state.Pos() + 1
+				break
 			}
 		}
 	}
@@ -1717,8 +1722,8 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 		cmd := ""
 		flagName := flag
 		if len(flagParts) > 1 {
-			cmd = flagParts[0]
-			flagName = flagParts[1]
+			flagName = flagParts[0]
+			cmd = flagParts[1]
 		}
 
 		addFlagToCompletionData(&data, cmd, flagName, flagInfo, p.renderer)
@@ -2046,10 +2051,8 @@ func (p *Parser) PrintHelp(writer io.Writer) {
 	switch style {
 	case HelpStyleFlat:
 		p.printFlatHelp(writer)
-	case HelpStyleGrouped:
+	case HelpStyleGrouped, HelpStyleGroupedClean:
 		p.printGroupedHelp(writer)
-	case HelpStyleGroupedClean:
-		p.printGroupedCleanHelp(writer)
 	case HelpStyleCompact:
 		p.printCompactHelp(writer)
 	case HelpStyleHierarchical:
@@ -2072,7 +2075,7 @@ func (p *Parser) DefaultPrettyPrintConfig() *PrettyPrintConfig {
 		NewCommandPrefix:     " +  ",
 		DefaultPrefix:        " ├─ ",
 		TerminalPrefix:       " └─ ",
-		InnerLevelBindPrefix: " ** ",
+		InnerLevelBindPrefix: "    ",
 		OuterLevelBindPrefix: " │  ",
 	}
 }

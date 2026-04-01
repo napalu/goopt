@@ -25,7 +25,7 @@ import (
     "log"
     "fmt"
     "github.com/napalu/goopt/v2"
-    c "github.com/napalu/goopt/v2/completion"
+    comp "github.com/napalu/goopt/v2/completion"
 )
 
 func main() {
@@ -36,7 +36,7 @@ func main() {
 	parser.AddCommand(goopt.NewCommand(
 		goopt.WithName("completion"),
 		goopt.WithCommandDescription("Generate shell completion script"),
-		goopt.WithCallback(func(p *goopt.Parser, c *goopt.Command) error {
+		goopt.WithCallback(func(p *goopt.Parser, _ *goopt.Command) error {
 			// In a real app, you'd let the user specify the shell
 			// as an argument to this command (e.g., 'completion bash').
 			shell := "bash"
@@ -46,7 +46,7 @@ func main() {
 				return err
 			}
 
-			manager, err := c.NewManager(shell, exec)
+			manager, err := comp.NewManager(shell, exec)
 			if err != nil {
 				return err
 			}

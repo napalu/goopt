@@ -697,7 +697,7 @@ func TestWithPrettyPrintConfig(t *testing.T) {
 		assert.Equal(t, " +  ", defaultConfig.NewCommandPrefix)
 		assert.Equal(t, " ├─ ", defaultConfig.DefaultPrefix)
 		assert.Equal(t, " └─ ", defaultConfig.TerminalPrefix)
-		assert.Equal(t, " ** ", defaultConfig.InnerLevelBindPrefix)
+		assert.Equal(t, "    ", defaultConfig.InnerLevelBindPrefix)
 		assert.Equal(t, " │  ", defaultConfig.OuterLevelBindPrefix)
 	})
 

@@ -146,7 +146,7 @@ const SystemTranslations = `{
         "goopt.error.validation.value_at_most": "הערך '%[2]s' חייב להיות לכל היותר %[1]v",
         "goopt.error.validation.value_between": "הערך '%[3]s' חייב להיות בין %[1]v ל %[2]v",
         "goopt.error.validation.value_cannot_be": "הערך '%[2]s' אינו יכול להיות: %[1]s",
-        "goopt.error.validation.value_must_be_one_of": "הערך '%[2]s' חייב להיות אחד מ: %[1]s",
+        "goopt.error.validation.value_must_be_one_of": "הערך '%[1]s' חייב להיות אחד מ: %[2]s",
         "goopt.error.validation_failed": "האימות נכשל עבור דגל %[1]s",
         "goopt.error.wrapped": "%[1]s: %[2]v",
         "goopt.flag.help": "עזרה",

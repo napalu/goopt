@@ -136,7 +136,7 @@
   "goopt.error.validation.value_at_most": "la valeur ne doit pas dépasser %[1]v",
   "goopt.error.validation.value_between": "la valeur doit être comprise entre %[1]v et %[2]v",
   "goopt.error.validation.value_cannot_be": "la valeur ne peut pas être : %[1]s",
-  "goopt.error.validation.value_must_be_one_of": "la valeur doit être l'une des suivantes : %[1]s",
+  "goopt.error.validation.value_must_be_one_of": "la valeur '%[1]s' doit être l'une des suivantes : %[2]s",
   "goopt.error.validation_failed": "échec de la validation pour l'option %[1]s",
   "goopt.error.wrapped": "%[1]s : %[2]v",
   "goopt.msg.all_flags": "Toutes les options :",

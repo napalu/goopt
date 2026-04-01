@@ -147,7 +147,7 @@
     "goopt.error.validation.value_at_least": "value '%[2]s' must be at least %[1]v",
     "goopt.error.validation.value_at_most": "value '%[2]s' must be at most %[1]v",
     "goopt.error.validation.pattern_match": "value '%[2]s' must match pattern: %[1]s",
-    "goopt.error.validation.value_must_be_one_of": "value '%[2]s' must be one of: %[1]s",
+    "goopt.error.validation.value_must_be_one_of": "value '%[1]s' must be one of: %[2]s",
     "goopt.error.validation.value_cannot_be": "value '%[2]s' cannot be: %[1]s",
     "goopt.error.validation.must_be_integer": "value '%[1]s' must be an integer",
     "goopt.error.validation.must_be_boolean": "value '%[1]s' must be true or false",
