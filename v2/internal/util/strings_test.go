@@ -6,13 +6,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLevenshteinDistance(t *testing.T) {
+func TestDamerauLevenshteinDistance(t *testing.T) {
 	tests := []struct {
 		name     string
 		s1       string
 		s2       string
 		expected int
 	}{
+		// Basic cases (same as plain Levenshtein)
 		{"identical strings", "hello", "hello", 0},
 		{"one character different", "hello", "hallo", 1},
 		{"completely different", "abc", "xyz", 3},
@@ -21,6 +22,15 @@ func TestLevenshteinDistance(t *testing.T) {
 		{"case sensitive", "Hello", "hello", 1},
 		{"longer example", "kitten", "sitting", 3},
 		{"reversed strings", "abc", "cba", 2},
+		// Transposition cases (improved over plain Levenshtein)
+		{"adjacent transposition", "ab", "ba", 1},
+		{"transposition rekey", "rekye", "rekey", 1},
+		{"transposition list", "lits", "list", 1},
+		{"transposition convert", "convret", "convert", 1},
+		{"transposition keyfile", "keyifle", "keyfile", 1},
+		{"transposition in compound", "lsit-users", "list-users", 1},
+		{"transposition + missing char", "lits-usrs", "list-users", 2},
+		{"transposition middle", "acb", "abc", 1},
 		// Unicode tests
 		{"japanese identical", "こんにちは", "こんにちは", 0},
 		{"japanese one char diff", "こんにちは", "こんにちわ", 1},
@@ -32,14 +42,22 @@ func TestLevenshteinDistance(t *testing.T) {
 		{"combining chars", "café", "cafe", 1}, // é vs e
 		{"hebrew rtl", "שלום", "שלם", 1},
 		{"devanagari", "नमस्ते", "नमस्कार", 3},
+		// Unicode transposition
+		{"unicode transposition", "こん", "んこ", 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := LevenshteinDistance(tt.s1, tt.s2)
+			result := DamerauLevenshteinDistance(tt.s1, tt.s2)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestLevenshteinDistanceAlias(t *testing.T) {
+	// Verify the deprecated alias returns the same results
+	assert.Equal(t, DamerauLevenshteinDistance("hello", "hallo"), LevenshteinDistance("hello", "hallo"))
+	assert.Equal(t, DamerauLevenshteinDistance("rekye", "rekey"), LevenshteinDistance("rekye", "rekey"))
 }
 
 func TestTruncate(t *testing.T) {
