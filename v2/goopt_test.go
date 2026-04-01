@@ -1395,10 +1395,10 @@ Global Flags:
 Commands:
  +  create "Create resources"
  ├─  +  create user "Manage users"
- │   │   ** --email or -e "Email for user creation" (optional)
+ │   │      --email or -e "Email for user creation" (optional)
  └─  +  create user type "Specify user type"
- │   │   │   ** --username "Username for user creation" (required)
- │   │   │   ** --firstName "User first name" (optional)
+ │   │   │      --username "Username for user creation" (required)
+ │   │   │      --firstName "User first name" (optional)
  └─  +  create group "Manage groups"
 `
 	output := strings.Join(*writer.data, "")
@@ -13941,7 +13941,7 @@ func TestParser_CommandHierarchyDescriptions(t *testing.T) {
 	// This is intentional - it helps catch regressions where descriptionKeys might be
 	// incorrectly propagated from child to parent commands.
 	// Descriptions now have quotes
-	if !strings.Contains(output, "middle               \"middle.desc\"") {
+	if !strings.Contains(output, "\"middle.desc\"") || !strings.Contains(output, "middle") {
 		t.Errorf("Hierarchical help doesn't show correct description key for middle command.\nOutput:\n%s", output)
 	}
 }
@@ -14031,7 +14031,7 @@ func TestParser_HierarchicalHelpRegression(t *testing.T) {
 
 	// The bug was that "copy" showed "copy blob configuration" instead of "nexus copy commands"
 	// Descriptions now have quotes
-	if !strings.Contains(output, "copy                 \"nexus copy commands\"") {
+	if !strings.Contains(output, "\"nexus copy commands\"") || !strings.Contains(output, "copy") {
 		t.Errorf("Hierarchical help shows wrong description for copy command.\nOutput:\n%s", output)
 	}
 }

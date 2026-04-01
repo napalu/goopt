@@ -106,6 +106,12 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			config.Description = value
 		case "default":
 			config.Default = value
+		case "greedy":
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, errs.ErrInvalidAttributeForType.WithArgs("'greedy'", field.Name, value)
+			}
+			config.Greedy = boolVal
 		case "required":
 			boolVal, err := strconv.ParseBool(value)
 			if err != nil {

@@ -103,9 +103,11 @@ type Command struct {
 	ExecOnParse      bool
 	Description      string
 	DescriptionKey   string
+	Greedy           bool // Greedy if true any further commands and flags will be consumed as unbound positionals
 	topLevel         bool
 	path             string
 	callbackLocation reflect.Value // stores reference to a field which may contain a CommandFunc in the future
+
 }
 
 // FlagInfo is used to store information about a flag
@@ -129,7 +131,7 @@ type HelpStyle int
 const (
 	HelpStyleFlat         HelpStyle = iota // PrintUsage
 	HelpStyleGrouped                       // PrintUsageWithGroups
-	HelpStyleGroupedClean                  // PrintUsageWithGroups, clean (no ** markers)
+	HelpStyleGroupedClean                  // Deprecated: alias for HelpStyleGrouped (now uses clean formatting by default)
 	HelpStyleCompact                       // Deduplicated, minimal
 	HelpStyleHierarchical                  // Command-focused, drill-down
 	HelpStyleSmart                         // Auto-detect based on CLI size
@@ -231,6 +233,7 @@ type Parser struct {
 	treatUnknownAsPositionals bool // If true, treat unknown flags and their values as positionals
 	mu                        sync.Mutex
 	envVarPrefix              string // Prefix for environment variables
+	greedyAfterPos            int    // Position of the first arg after which all remaining args are greedily consumed as positionals
 }
 
 // CompletionData is used to store information for command line completion

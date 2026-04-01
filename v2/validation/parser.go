@@ -105,6 +105,33 @@ func ParseValidators(specs []string) ([]ValidatorFunc, error) {
 	return validators, nil
 }
 
+// ExtractIsOneOfValues scans validator specs for isoneof(...) and returns the
+// literal allowed values. This lets callers (e.g. toArgument) populate
+// AcceptedValues for shell completion without duplicating the accepted tag.
+func ExtractIsOneOfValues(specs []string) []string {
+	for _, spec := range specs {
+		spec = strings.TrimSpace(spec)
+		parenIndex := strings.Index(spec, "(")
+		if parenIndex == -1 || !strings.HasSuffix(spec, ")") {
+			continue
+		}
+		name := spec[:parenIndex]
+		if !strings.EqualFold(name, ValidatorIsOneOf) {
+			continue
+		}
+		argsStr := spec[parenIndex+1 : len(spec)-1]
+		if argsStr == "" {
+			continue
+		}
+		args := strings.Split(argsStr, ",")
+		for i := range args {
+			args[i] = strings.TrimSpace(args[i])
+		}
+		return args
+	}
+	return nil
+}
+
 // parseCompositeArgs parses arguments for composite validators like oneof and all
 // It handles nested validators by tracking parentheses/braces depth
 func parseCompositeArgs(input string) []string {

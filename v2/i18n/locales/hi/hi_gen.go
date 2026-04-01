@@ -146,7 +146,7 @@ const SystemTranslations = `{
         "goopt.error.validation.value_at_most": "मान '%[2]s' अधिकतम %[1]v होना चाहिए",
         "goopt.error.validation.value_between": "मान '%[3]s' %[1]v और %[2]v के बीच होना चाहिए",
         "goopt.error.validation.value_cannot_be": "मान '%[2]s' यह नहीं हो सकता: %[1]s",
-        "goopt.error.validation.value_must_be_one_of": "मान '%[2]s' इनमें से एक होना चाहिए: %[1]s",
+        "goopt.error.validation.value_must_be_one_of": "मान '%[1]s' इनमें से एक होना चाहिए: %[2]s",
         "goopt.error.validation_failed": "फ्लैग %[1]s के लिए सत्यापन विफल",
         "goopt.error.wrapped": "%[1]s: %[2]v",
         "goopt.flag.help": "सहायता",

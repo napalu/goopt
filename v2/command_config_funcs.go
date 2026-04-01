@@ -99,3 +99,12 @@ func WithExecuteOnParse(cmdExecOnParse bool) ConfigureCommandFunc {
 		command.ExecOnParse = cmdExecOnParse
 	}
 }
+
+// WithGreedy sets the Greedy property of the command. If true, any further ags will not be evaluated but are added as
+// unbound positionals - this is useful for passthrough commands that are only used to invoke other commands,
+// e.g. `git branch` or `git checkout`.
+func WithGreedy(beGreedy bool) ConfigureCommandFunc {
+	return func(command *Command) {
+		command.Greedy = beGreedy
+	}
+}

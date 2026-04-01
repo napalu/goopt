@@ -146,7 +146,7 @@ const SystemTranslations = `{
         "goopt.error.validation.value_at_most": "value '%[2]s' must be at most %[1]v",
         "goopt.error.validation.value_between": "value '%[3]s' must be between %[1]v and %[2]v",
         "goopt.error.validation.value_cannot_be": "value '%[2]s' cannot be: %[1]s",
-        "goopt.error.validation.value_must_be_one_of": "value '%[2]s' must be one of: %[1]s",
+        "goopt.error.validation.value_must_be_one_of": "value '%[1]s' must be one of: %[2]s",
         "goopt.error.validation_failed": "validation failed for flag %[1]s",
         "goopt.error.wrapped": "%[1]s: %[2]v",
         "goopt.flag.help": "help",

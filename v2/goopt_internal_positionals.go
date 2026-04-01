@@ -171,9 +171,7 @@ func (p *Parser) shouldSkipBooleanAfterStandalone(args []string, i int, currentC
 	}
 
 	return false
-}
-
-// updateCommandPath updates the current command path based on the argument
+} // updateCommandPath updates the current command path based on the argument
 // Returns true if the argument was a command
 func (p *Parser) updateCommandPath(arg string, currentCmdPath *[]string, argPos *int, executedCommands map[string]bool) bool {
 	isCmd := false
@@ -341,6 +339,16 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 	executedCommands[""] = true               // Always check global positionals
 
 	for i, arg := range args {
+		if p.greedyAfterPos > 0 && i >= p.greedyAfterPos {
+			positional = append(positional, PositionalArgument{
+				Position: i,
+				Value:    arg,
+				ArgPos:   argPos,
+			})
+			argPos++
+			continue
+		}
+
 		if skipNext {
 			skipNext = false
 			continue

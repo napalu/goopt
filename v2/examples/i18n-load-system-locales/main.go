@@ -121,7 +121,7 @@ func demoLocales(parser *goopt.Parser, cfg *Config) {
 
 	printSection("🧭 RTL Language Features", i18n.IsRTL(currentLang), func() {
 		fmt.Println("  ➤ Direction: Right-to-Left")
-		fmt.Println("  ➤ Note: Terminal rendering for RTL may vary across platforms\n")
+		fmt.Println("  ➤ Note: Greedy rendering for RTL may vary across platforms\n")
 	})
 
 	printSection("🗣️ Sample Translations", true, func() {

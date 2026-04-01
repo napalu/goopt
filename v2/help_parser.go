@@ -212,26 +212,42 @@ func (h *HelpParser) normalize(args []string) ([]string, int) {
 		return args, 0
 	}
 
-	// Collect all non-flag strings before the first flag
+	// Collect all non-flag, non-keyword strings from anywhere in the args.
+	// These are command path components (e.g., "keyfile" "rekey").
+	// We need to collect them regardless of position because pos:0 on a []string
+	// only captures the first positional arg — multiple separate args get lost.
 	commands := []string{}
-	if firstFlagIndex > 0 {
-		for i := 0; i < firstFlagIndex; i++ {
-			commands = append(commands, args[i])
+	flags := []string{}
+	for i, arg := range args {
+		if h.hp.isFlag(arg) {
+			if !h.isHelpArg(arg) {
+				flags = append(flags, arg)
+				// If this flag needs a value, also capture the next arg
+				if i+1 < len(args) && !h.hp.isFlag(args[i+1]) {
+					flags = append(flags, args[i+1])
+				}
+			}
+			continue
+		}
+		// Skip values already consumed by flags above
+		if i > 0 && h.hp.isFlag(args[i-1]) && !h.isHelpArg(args[i-1]) {
+			continue
+		}
+		if !isHelpKeyword(arg) {
+			commands = append(commands, arg)
 		}
 	}
 
 	// Build new args
 	newArgs := []string{}
 
-	// If we have commands, add them as a comma-separated positional argument
+	// Add commands as a comma-separated positional argument so pos:0 []string works
 	if len(commands) > 0 {
 		newArgs = append(newArgs, strings.Join(commands, ","))
 	}
 
-	// Add everything after the help flag (except the help flag itself)
-	for i := helpIndex + 1; i < len(args); i++ {
-		newArgs = append(newArgs, args[i])
-	}
+	// Add the non-help flags
+	newArgs = append(newArgs, flags...)
 
 	return newArgs, len(commands)
 }
@@ -790,10 +806,8 @@ func (h *HelpParser) showDefault(writer io.Writer) error {
 	switch style {
 	case HelpStyleFlat:
 		return h.showFlatStyle(writer)
-	case HelpStyleGrouped:
+	case HelpStyleGrouped, HelpStyleGroupedClean:
 		return h.showGroupedStyle(writer)
-	case HelpStyleGroupedClean:
-		return h.showGroupedCleanStyle(writer)
 	case HelpStyleCompact:
 		return h.showCompactStyle(writer)
 	case HelpStyleHierarchical:
