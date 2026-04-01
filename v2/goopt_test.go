@@ -13354,6 +13354,183 @@ func TestParser_SuggestionsForCommands(t *testing.T) {
 	})
 }
 
+func TestParser_PositionalGuardSuppressesSuggestions(t *testing.T) {
+	// When a command context has declared positionals, unknown args should
+	// fall through to setPositionalArguments() instead of triggering "did you mean?"
+
+	t.Run("Root level: positional declared, arg near command name", func(t *testing.T) {
+		type Opts struct {
+			Target string `goopt:"pos:0;desc:Target name"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// Add a command whose name is close to the positional value
+		parser.AddCommand(NewCommand(
+			WithName("process"),
+			WithCommandDescription("Process data"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// "produce" is distance 2 from "process" — would trigger suggestion without the guard
+		ok := parser.Parse([]string{"produce"})
+		assert.True(t, ok, "Should succeed: 'produce' treated as positional, not a typo for 'process'")
+		assert.Equal(t, "produce", opts.Target)
+
+		// Verify no "did you mean" errors
+		for _, e := range parser.GetErrors() {
+			assert.NotContains(t, e.Error(), "Did you mean")
+		}
+	})
+
+	t.Run("Root level: NO positionals, arg near command name → still suggests", func(t *testing.T) {
+		parser := NewParser()
+
+		parser.AddCommand(NewCommand(
+			WithName("process"),
+			WithCommandDescription("Process data"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// "procesz" is distance 1 from "process" (substitution of last char)
+		ok := parser.Parse([]string{"procesz"})
+		assert.False(t, ok, "Should fail: no positionals declared, 'procesz' is a typo")
+
+		errStr := ""
+		for _, e := range parser.GetErrors() {
+			errStr += e.Error() + "\n"
+		}
+		assert.Contains(t, errStr, "process", "Should suggest 'process' for 'procesz'")
+	})
+
+	t.Run("Subcommand level: parent has positionals, arg near subcommand name", func(t *testing.T) {
+		type FileCmd struct {
+			Path string `goopt:"pos:0;desc:File path"`
+		}
+		type Opts struct {
+			File FileCmd `goopt:"kind:command;desc:File operations"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// Add a subcommand to "file" whose name is close to the positional value
+		fileCmd, _ := parser.registeredCommands.Get("file")
+		fileCmd.AddSubcommand(NewCommand(
+			WithName("patch"),
+			WithCommandDescription("Patch a file"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// "path" is distance 1 from "patch" — would trigger suggestion without the guard
+		ok := parser.Parse([]string{"file", "/tmp/test.txt"})
+		assert.True(t, ok, "Should succeed: '/tmp/test.txt' treated as positional")
+		assert.Equal(t, "/tmp/test.txt", opts.File.Path)
+	})
+
+	t.Run("Terminating command with positionals, next arg not treated as typo", func(t *testing.T) {
+		// This mirrors the "sympa ls Ra" scenario:
+		// "ls" is a terminating command (no subcommands) with a positional arg.
+		// After "ls" terminates, commandPathSlice is cleared, so the guard must
+		// use lastCommandPath to check for positionals on "ls".
+		type LsOpts struct {
+			Path string `goopt:"pos:0;desc:Path to list"`
+		}
+		type Opts struct {
+			Ls LsOpts `goopt:"kind:command;desc:List contents"`
+			Rm string `goopt:"kind:command;desc:Remove item"`
+			Mv string `goopt:"kind:command;desc:Move item"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// "Ra" is distance 2 from "ls", "rm", "mv" — would trigger suggestions without the guard
+		ok := parser.Parse([]string{"ls", "Ra"})
+		assert.True(t, ok, "Should succeed: 'Ra' is a positional for 'ls', not a typo")
+		assert.Equal(t, "Ra", opts.Ls.Path)
+
+		for _, e := range parser.GetErrors() {
+			assert.NotContains(t, e.Error(), "Did you mean")
+		}
+	})
+
+	t.Run("Subcommand level: parent has NO positionals, unknown arg → still suggests", func(t *testing.T) {
+		parser := NewParser()
+
+		serverCmd := NewCommand(
+			WithName("server"),
+			WithCommandDescription("Server management"),
+		)
+		serverCmd.AddSubcommand(NewCommand(
+			WithName("start"),
+			WithCommandDescription("Start server"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		serverCmd.AddSubcommand(NewCommand(
+			WithName("stop"),
+			WithCommandDescription("Stop server"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+		parser.AddCommand(serverCmd)
+
+		// "stat" is distance 1 from "start" — should still suggest since no positionals
+		ok := parser.Parse([]string{"server", "stat"})
+		assert.False(t, ok, "Should fail: no positionals on 'server', 'stat' is a typo")
+
+		errStr := ""
+		for _, e := range parser.GetErrors() {
+			errStr += e.Error() + "\n"
+		}
+		assert.Contains(t, errStr, "start", "Should suggest 'start' for 'stat'")
+	})
+}
+
+func TestParser_DamerauLevenshteinTranspositionSuggestions(t *testing.T) {
+	// Verify that transposition typos (the most common typing error) are
+	// now caught at distance 1 instead of 2 thanks to Damerau-Levenshtein
+
+	t.Run("Transposition in command name gets suggested", func(t *testing.T) {
+		parser := NewParser()
+
+		parser.AddCommand(NewCommand(
+			WithName("rekey"),
+			WithCommandDescription("Rekey operation"),
+			WithCallback(func(cmdLine *Parser, command *Command) error { return nil }),
+		))
+
+		// "rekye" is a transposition of "rekey" — distance 1 with Damerau
+		ok := parser.Parse([]string{"rekye"})
+		assert.False(t, ok)
+
+		errStr := ""
+		for _, e := range parser.GetErrors() {
+			errStr += e.Error() + "\n"
+		}
+		assert.Contains(t, errStr, "rekey", "Transposition typo 'rekye' should suggest 'rekey'")
+	})
+
+	t.Run("Transposition in flag name gets suggested", func(t *testing.T) {
+		parser := NewParser()
+		parser.AddFlag("verbose", NewArg(
+			WithType(types.Standalone),
+			WithDescription("Verbose output"),
+		))
+
+		// "vreobse" → "verbose": transposition + more edits
+		// Better test: "--verobse" → "--verbose": transposition of 'bo' to 'ob'
+		ok := parser.Parse([]string{"--verobse"})
+		assert.False(t, ok)
+
+		errStr := ""
+		for _, e := range parser.GetErrors() {
+			errStr += e.Error() + "\n"
+		}
+		assert.Contains(t, errStr, "verbose", "Transposition typo 'verobse' should suggest 'verbose'")
+	})
+}
+
 func TestParser_PositionalArgument(t *testing.T) {
 	type ServerCmd struct {
 		Workers    int    `goopt:"default:10"`

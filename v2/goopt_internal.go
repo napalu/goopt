@@ -573,7 +573,7 @@ func (p *Parser) queueSecureArgument(name string, argument *Argument) {
 	p.secureArguments.Set(name, &argument.Secure)
 }
 
-func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], commandPathSlice *[]string) (bool, *Command) {
+func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], commandPathSlice *[]string, lastCommandPath string) (bool, *Command) {
 	terminating := false
 	currentArg := state.CurrentArg()
 
@@ -624,14 +624,23 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 		}
 
 	} else {
-		// Command not found - check if it might be a typo
-		// Only generate suggestions if we have registered commands and this looks like a command attempt
-		if p.registeredCommands.Len() > 0 {
+		// Command not found - if positionals are declared for this context,
+		// let the arg fall through to setPositionalArguments() instead of suggesting.
+		// Check both the current path and the last terminating command's path,
+		// since commandPathSlice is cleared after a terminating command.
+		currentPath := strings.Join(*commandPathSlice, " ")
+		hasPositionals := len(p.getPositionalsForCommand(currentPath)) > 0
+		if !hasPositionals && lastCommandPath != "" {
+			hasPositionals = len(p.getPositionalsForCommand(lastCommandPath)) > 0
+		}
+
+		// Only generate suggestions if no positionals could claim this arg
+		if !hasPositionals && p.registeredCommands.Len() > 0 {
 			suggestions, _ := p.findSimilarRootCommandsWithContext(currentArg)
 			if len(suggestions) > 0 {
 				// Check if any suggestion is very close (likely a typo)
 				for _, suggestion := range suggestions {
-					distance := util.LevenshteinDistance(currentArg, suggestion)
+					distance := util.DamerauLevenshteinDistance(currentArg, suggestion)
 					if distance <= 2 {
 						// Very likely a typo - generate error with suggestions
 						p.addError(errs.ErrCommandNotFound.WithArgs(currentArg))
@@ -647,8 +656,8 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 								if cmd, found := p.registeredCommands.Get(suggestion); found && cmd.NameKey != "" {
 									if translated, found := p.translationRegistry.GetCommandTranslation(suggestion, p.GetLanguage()); found {
 										// Compare distances to determine which form to show
-										canonicalDist := util.LevenshteinDistance(currentArg, suggestion)
-										translatedDist := util.LevenshteinDistance(currentArg, translated)
+										canonicalDist := util.DamerauLevenshteinDistance(currentArg, suggestion)
+										translatedDist := util.DamerauLevenshteinDistance(currentArg, translated)
 
 										// Show the form that's closer to what user typed
 										if translatedDist < canonicalDist {
@@ -804,7 +813,7 @@ func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input 
 	// Check all subcommands - both canonical and translated names
 	for _, cmd := range subcommands {
 		// Check canonical name
-		distance := util.LevenshteinDistance(input, cmd.Name)
+		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
 		if distance > 0 && distance <= threshold {
 			allSuggestions = append(allSuggestions, subcommandSuggestion{
 				canonicalName: cmd.Name,
@@ -821,7 +830,7 @@ func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input 
 				fullPath = parentPath + " " + cmd.Name
 			}
 			if translatedName, found := p.translationRegistry.GetCommandTranslation(fullPath, currentLang); found {
-				translatedDistance := util.LevenshteinDistance(input, translatedName)
+				translatedDistance := util.DamerauLevenshteinDistance(input, translatedName)
 				if translatedDistance > 0 && translatedDistance <= threshold {
 					// Check if we already have this command in suggestions
 					found := false
@@ -942,7 +951,7 @@ func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) (
 		flagName := flagParts[0]
 
 		// Check canonical name
-		distance := util.LevenshteinDistance(cleanInput, flagName)
+		distance := util.DamerauLevenshteinDistance(cleanInput, flagName)
 		if distance > 0 && distance <= threshold {
 			allSuggestions = append(allSuggestions, flagSuggestion{
 				canonicalName: flagName,
@@ -953,7 +962,7 @@ func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) (
 
 		// Check short form if available
 		if flagInfo.Argument.Short != "" {
-			shortDistance := util.LevenshteinDistance(cleanInput, flagInfo.Argument.Short)
+			shortDistance := util.DamerauLevenshteinDistance(cleanInput, flagInfo.Argument.Short)
 			if shortDistance > 0 && shortDistance <= threshold {
 				// Check if we already have this flag in suggestions
 				found := false
@@ -980,7 +989,7 @@ func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) (
 		// Check translated name if available
 		if p.translationRegistry != nil && flagInfo.Argument.NameKey != "" {
 			if translatedName, found := p.translationRegistry.GetFlagTranslation(flagName, currentLang); found {
-				translatedDistance := util.LevenshteinDistance(cleanInput, translatedName)
+				translatedDistance := util.DamerauLevenshteinDistance(cleanInput, translatedName)
 				if translatedDistance > 0 && translatedDistance <= threshold {
 					// Check if we already have this flag in suggestions
 					found := false
@@ -1089,7 +1098,7 @@ func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, boo
 		cmdName := *c.Key
 
 		// Check canonical name
-		distance := util.LevenshteinDistance(input, cmdName)
+		distance := util.DamerauLevenshteinDistance(input, cmdName)
 		if distance > 0 && distance <= threshold {
 			allSuggestions = append(allSuggestions, suggestion{
 				canonicalName: cmdName,
@@ -1101,7 +1110,7 @@ func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, boo
 		// Check translated name if available
 		if p.translationRegistry != nil && cmd.NameKey != "" {
 			if translated, found := p.translationRegistry.GetCommandTranslation(cmdName, currentLang); found {
-				translatedDistance := util.LevenshteinDistance(input, translated)
+				translatedDistance := util.DamerauLevenshteinDistance(input, translated)
 				if translatedDistance > 0 && translatedDistance <= threshold {
 					// Check if we already have this command in suggestions
 					found := false
@@ -1197,8 +1206,8 @@ func (p *Parser) generateFlagError(flagName string, commandPath string) {
 				// Check if there's a translation
 				if translated, found := p.translationRegistry.GetFlagTranslation(s, p.GetLanguage()); found {
 					// Compare distances to determine which form to show
-					canonicalDist := util.LevenshteinDistance(cleanInput, s)
-					translatedDist := util.LevenshteinDistance(cleanInput, translated)
+					canonicalDist := util.DamerauLevenshteinDistance(cleanInput, s)
+					translatedDist := util.DamerauLevenshteinDistance(cleanInput, translated)
 
 					// Show the form that's closer to what user typed
 					if translatedDist < canonicalDist {
@@ -1271,9 +1280,10 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		cmdQueue.Push(&sub) // Keep subcommands in the queue
 		return true, &sub
 	} else if len(currentCmd.Subcommands) > 0 {
-		// Check if the current arg looks like it was meant to be a subcommand
-		// (not a flag or positional argument)
-		if !p.isFlag(currentArg) {
+		// If the parent command has positionals declared, the unknown arg
+		// might be a positional value — let it fall through instead of suggesting
+		hasPositionals := len(p.getPositionalsForCommand(currentCmd.path)) > 0
+		if !hasPositionals && !p.isFlag(currentArg) {
 			// Find similar subcommands - pass the parent command's path
 			suggestions, _ := p.findSimilarSubcommandsWithContext(currentCmd.Subcommands, currentArg, currentCmd.path)
 			if len(suggestions) > 0 {
@@ -1295,8 +1305,8 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 							}
 							if translated, found := p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage()); found {
 								// Compare distances to determine which form to show
-								canonicalDist := util.LevenshteinDistance(currentArg, suggestion)
-								translatedDist := util.LevenshteinDistance(currentArg, translated)
+								canonicalDist := util.DamerauLevenshteinDistance(currentArg, suggestion)
+								translatedDist := util.DamerauLevenshteinDistance(currentArg, translated)
 
 								// Show the form that's closer to what user typed
 								if translatedDist < canonicalDist {

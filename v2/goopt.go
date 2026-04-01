@@ -697,7 +697,7 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 
 		} else {
 			// Parse the next command
-			terminating, cmd := p.parseCommand(state, cmdQueue, &commandPathSlice)
+			terminating, cmd := p.parseCommand(state, cmdQueue, &commandPathSlice, lastCommandPath)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
