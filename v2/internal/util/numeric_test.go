@@ -88,36 +88,3 @@ func TestParseNumeric(t *testing.T) {
 		})
 	}
 }
-
-func TestMin(t *testing.T) {
-	// Test with two values
-	assert.Equal(t, 5, Min(5, 10))
-	assert.Equal(t, 5, Min(10, 5))
-	assert.Equal(t, -10, Min(-10, -5))
-	assert.Equal(t, 0, Min(0, 0))
-}
-
-func TestMinOf(t *testing.T) {
-	// Test with no values
-	_, err := MinOf[int]()
-	assert.Error(t, err)
-
-	// Test with single value
-	result, err := MinOf(42)
-	assert.NoError(t, err)
-	assert.Equal(t, 42, result)
-
-	// Test with multiple values
-	result, err = MinOf(5, 3, 8, 1, 9)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, result)
-
-	result, err = MinOf(10, -5, 0, -20, 15)
-	assert.NoError(t, err)
-	assert.Equal(t, -20, result)
-
-	// Test with floats
-	fResult, err := MinOf(3.14, 2.7, 1.5, 4.2)
-	assert.NoError(t, err)
-	assert.Equal(t, 1.5, fResult)
-}

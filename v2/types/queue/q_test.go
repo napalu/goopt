@@ -1,9 +1,8 @@
 package queue
 
 import (
+	"slices"
 	"testing"
-
-	"github.com/napalu/goopt/v2/internal/util"
 )
 
 func TestStackOperations(t *testing.T) {
@@ -125,7 +124,7 @@ func TestIterate(t *testing.T) {
 	}
 
 	actualItems = []int{}
-	util.Reverse(expectedItems)
+	slices.Reverse(expectedItems)
 
 	q.ForEachReverse(func(item int, index int) bool {
 		actualItems = append(actualItems, item)
@@ -142,6 +141,83 @@ func TestIterate(t *testing.T) {
 		}
 	}
 
+}
+
+func TestAll(t *testing.T) {
+	q := New[int]()
+	q.Enqueue(1)
+	q.Enqueue(2)
+	q.Enqueue(3)
+
+	var indices []int
+	var items []int
+	for i, item := range q.All() {
+		indices = append(indices, i)
+		items = append(items, item)
+	}
+
+	if len(items) != 3 || items[0] != 1 || items[1] != 2 || items[2] != 3 {
+		t.Errorf("Expected [1,2,3] but got %v", items)
+	}
+	if indices[0] != 0 || indices[1] != 1 || indices[2] != 2 {
+		t.Errorf("Expected indices [0,1,2] but got %v", indices)
+	}
+}
+
+func TestBackward(t *testing.T) {
+	q := New[int]()
+	q.Enqueue(1)
+	q.Enqueue(2)
+	q.Enqueue(3)
+
+	var indices []int
+	var items []int
+	for i, item := range q.Backward() {
+		indices = append(indices, i)
+		items = append(items, item)
+	}
+
+	if len(items) != 3 || items[0] != 3 || items[1] != 2 || items[2] != 1 {
+		t.Errorf("Expected [3,2,1] but got %v", items)
+	}
+	if indices[0] != 2 || indices[1] != 1 || indices[2] != 0 {
+		t.Errorf("Expected indices [2,1,0] but got %v", indices)
+	}
+}
+
+func TestAllEmpty(t *testing.T) {
+	q := New[int]()
+
+	count := 0
+	for range q.All() {
+		count++
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 iterations on empty queue, got %d", count)
+	}
+
+	for range q.Backward() {
+		count++
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 iterations on empty queue backward, got %d", count)
+	}
+}
+
+func TestAllEarlyBreak(t *testing.T) {
+	q := New[int]()
+	q.Enqueue(1)
+	q.Enqueue(2)
+	q.Enqueue(3)
+
+	count := 0
+	for range q.All() {
+		count++
+		break
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 iteration with early break, got %d", count)
+	}
 }
 
 func TestEdgeCases(t *testing.T) {

@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  test-v1:
     timeout-minutes: 15
     strategy:
       matrix:
@@ -32,29 +32,16 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      # --- Run tests for v1 ---
       - name: Run Test & Coverage (v1)
         run: |
           go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=coverage_v1.out
         shell: bash
 
-      # --- Run tests for v2 ---
-      - name: Run Test & Coverage (v2)
+      - name: Validate Coverage File
         run: |
-          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=coverage_v2.out
-        working-directory: ./v2
+          test -f coverage_v1.out && echo "coverage_v1.out exists" || (echo "coverage_v1.out missing" && exit 1)
         shell: bash
 
-      # --- Confirm coverage files exist ---
-      - name: Validate Coverage Files
-        run: |
-          echo "Working dir: $(pwd)"
-          ls -l || true
-          test -f coverage_v1.out && echo "✅ coverage_v1.out exists" || (echo "❌ coverage_v1.out missing" && exit 1)
-          test -f v2/coverage_v2.out && echo "✅ v2/coverage_v2.out exists" || (echo "❌ coverage_v2.out missing in v2/ dir" && exit 1)
-        shell: bash
-
-      # --- Upload v1 coverage ---
       - name: Upload Coverage to Codecov (v1)
         uses: codecov/codecov-action@v4
         with:
@@ -67,7 +54,34 @@ jobs:
           verbose: true
         continue-on-error: true
 
-      # --- Upload v2 coverage ---
+  test-v2:
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        go-version: [1.23.x, stable]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Run Test & Coverage (v2)
+        run: |
+          go test -v ./... -race -timeout 10m -covermode=atomic -coverprofile=coverage_v2.out
+        working-directory: ./v2
+        shell: bash
+
+      - name: Validate Coverage File
+        run: |
+          test -f v2/coverage_v2.out && echo "coverage_v2.out exists" || (echo "coverage_v2.out missing" && exit 1)
+        shell: bash
+
       - name: Upload Coverage to Codecov (v2)
         uses: codecov/codecov-action@v4
         with:

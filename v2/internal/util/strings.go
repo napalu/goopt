@@ -23,10 +23,10 @@ func DamerauLevenshteinDistance(s1, s2 string) int {
 	}
 
 	// Initialize base cases
-	for i := 0; i <= len(r1); i++ {
+	for i := range len(r1) + 1 {
 		dp[i][0] = i
 	}
-	for j := 0; j <= len(r2); j++ {
+	for j := range len(r2) + 1 {
 		dp[0][j] = j
 	}
 
@@ -38,9 +38,7 @@ func DamerauLevenshteinDistance(s1, s2 string) int {
 				cost = 0
 			}
 
-			// MinOf should never fail here as we're passing 3 values
-			minVal, _ := MinOf(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
-			dp[i][j] = minVal
+			dp[i][j] = min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
 
 			// Transposition of adjacent characters
 			if i > 1 && j > 1 && r1[i-1] == r2[j-2] && r1[i-2] == r2[j-1] {
@@ -71,12 +69,3 @@ func Truncate(s string, length int) string {
 	return s[:length-3] + "..."
 }
 
-// Contains checks if a string slice contains a value
-func Contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}

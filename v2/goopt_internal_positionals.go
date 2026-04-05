@@ -1,7 +1,8 @@
 package goopt
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,10 +32,7 @@ func (p *Parser) buildFlagCache() *flagCache {
 		isStandalone: make(map[string]bool),
 	}
 
-	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
-		fv := flag.Value
-		longName := *flag.Key
-
+	for longName, fv := range p.acceptedFlags.All() {
 		// Extract the base flag name (before @)
 		baseName := splitPathFlag(longName)[0]
 
@@ -84,11 +82,10 @@ func (p *Parser) buildFlagCache() *flagCache {
 func (p *Parser) collectDeclaredPositionals() []positionalDeclaration {
 	declaredPos := make([]positionalDeclaration, 0, p.acceptedFlags.Len())
 
-	for flag := p.acceptedFlags.Front(); flag != nil; flag = flag.Next() {
-		fv := flag.Value
+	for flagKey, fv := range p.acceptedFlags.All() {
 		if fv.Argument.Position != nil {
 			declaredPos = append(declaredPos, positionalDeclaration{
-				key:      *flag.Key,
+				key:      flagKey,
 				flag:     fv,
 				index:    *fv.Argument.Position,
 				required: fv.Argument.Required,
@@ -97,8 +94,8 @@ func (p *Parser) collectDeclaredPositionals() []positionalDeclaration {
 	}
 
 	if len(declaredPos) > 0 {
-		sort.SliceStable(declaredPos, func(i, j int) bool {
-			return declaredPos[i].index < declaredPos[j].index
+		slices.SortStableFunc(declaredPos, func(a, b positionalDeclaration) int {
+			return cmp.Compare(a.index, b.index)
 		})
 	}
 
@@ -315,8 +312,8 @@ func filterAndSortPositionals(positional []PositionalArgument) []PositionalArgum
 	}
 
 	// Sort by position to maintain order
-	sort.Slice(newResult, func(i, j int) bool {
-		return newResult[i].Position < newResult[j].Position
+	slices.SortFunc(newResult, func(a, b PositionalArgument) int {
+		return cmp.Compare(a.Position, b.Position)
 	})
 
 	return newResult

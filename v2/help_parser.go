@@ -1,12 +1,13 @@
 package goopt
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/napalu/goopt/v2/errs"
@@ -442,9 +443,7 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 	currentLang := h.mainParser.GetLanguage()
 
 	// Check all commands - both canonical and translated names
-	for kv := h.mainParser.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		cmd := kv.Value
-
+	for _, cmd := range h.mainParser.registeredCommands.All() {
 		// Check canonical name
 		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
 		if distance > 0 && distance <= 2 {
@@ -530,18 +529,17 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 	finalSuggestions = filtered
 
 	// Sort by distance
-	sort.Slice(finalSuggestions, func(i, j int) bool {
-		dist1 := 3
-		dist2 := 3
+	slices.SortFunc(finalSuggestions, func(a, b string) int {
+		dist1, dist2 := 3, 3
 		for _, s := range allSuggestions {
-			if s.commandPath == finalSuggestions[i] {
+			if s.commandPath == a {
 				dist1 = s.distance
 			}
-			if s.commandPath == finalSuggestions[j] {
+			if s.commandPath == b {
 				dist2 = s.distance
 			}
 		}
-		return dist1 < dist2
+		return cmp.Compare(dist1, dist2)
 	})
 
 	// Limit to top 3
@@ -566,8 +564,8 @@ func (h *HelpParser) findSimilarSubcommands(subcommands []Command, input string)
 	}
 
 	// Sort by similarity
-	sort.Slice(suggestions, func(i, j int) bool {
-		return util.DamerauLevenshteinDistance(input, suggestions[i]) < util.DamerauLevenshteinDistance(input, suggestions[j])
+	slices.SortFunc(suggestions, func(a, b string) int {
+		return cmp.Compare(util.DamerauLevenshteinDistance(input, a), util.DamerauLevenshteinDistance(input, b))
 	})
 
 	// Limit to top 3
@@ -928,8 +926,8 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 				groups = append(groups, groupInfo{prefix, len(info.commands)})
 			}
 		}
-		sort.Slice(groups, func(i, j int) bool {
-			return groups[i].cmdCount > groups[j].cmdCount
+		slices.SortFunc(groups, func(a, b groupInfo) int {
+			return cmp.Compare(b.cmdCount, a.cmdCount)
 		})
 
 		for _, g := range groups {
@@ -1034,14 +1032,14 @@ func (h *HelpParser) filterFlags(flags []*Argument) []*Argument {
 func (h *HelpParser) collectFlags(commandPath string) []*Argument {
 	var flags []*Argument
 
-	for f := h.mainParser.acceptedFlags.Front(); f != nil; f = f.Next() {
+	for _, flagInfo := range h.mainParser.acceptedFlags.All() {
 		// Skip positional arguments - they are shown inline with commands
-		if f.Value.Argument.isPositional() {
+		if flagInfo.Argument.isPositional() {
 			continue
 		}
 
-		if commandPath == "" || f.Value.CommandPath == commandPath {
-			flags = append(flags, f.Value.Argument)
+		if commandPath == "" || flagInfo.CommandPath == commandPath {
+			flags = append(flags, flagInfo.Argument)
 		}
 	}
 
@@ -1099,9 +1097,8 @@ func (h *HelpParser) searchHelp(query string) []searchResult {
 	hasWildcards := strings.Contains(query, "*") || strings.Contains(query, "?")
 
 	// Search flags
-	for f := h.mainParser.acceptedFlags.Front(); f != nil; f = f.Next() {
-		flagName := *f.Key
-		arg := f.Value.Argument
+	for flagName, flagInfo := range h.mainParser.acceptedFlags.All() {
+		arg := flagInfo.Argument
 		desc := h.mainParser.renderer.FlagDescription(arg)
 
 		var matches bool
@@ -1124,15 +1121,15 @@ func (h *HelpParser) searchHelp(query string) []searchResult {
 				Name:        h.mainParser.renderer.FlagName(arg),
 				Short:       arg.Short,
 				Description: desc,
-				Context:     f.Value.CommandPath,
+				Context:     flagInfo.CommandPath,
 			})
 		}
 	}
 
 	// Search commands
-	for cmd := h.mainParser.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
-		cmdName := cmd.Value.Name
-		desc := h.mainParser.renderer.CommandDescription(cmd.Value)
+	for _, cmd := range h.mainParser.registeredCommands.All() {
+		cmdName := cmd.Name
+		desc := h.mainParser.renderer.CommandDescription(cmd)
 
 		var matches bool
 		if hasWildcards {
@@ -1151,7 +1148,7 @@ func (h *HelpParser) searchHelp(query string) []searchResult {
 				Type:        "command",
 				Name:        cmdName,
 				Description: desc,
-				Context:     cmd.Value.path,
+				Context:     cmd.path,
 			})
 		}
 	}
@@ -1171,7 +1168,7 @@ func (h *HelpParser) detectCommandPathWithValidation(args []string) (commandPath
 	p := h.mainParser
 
 	// Build command path and detect invalid parts
-	for i := 0; i < len(args); i++ {
+	for i := range len(args) {
 		if p.isFlag(args[i]) {
 			break
 		}

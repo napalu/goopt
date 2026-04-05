@@ -405,7 +405,7 @@ func (sr *TransformationReplacer) applySimpleToFile(filename string, replacement
 	}
 
 	// Sort replacements by position (descending order)
-	for i := 0; i < len(replacements); i++ {
+	for i := range len(replacements) {
 		for j := i + 1; j < len(replacements); j++ {
 			if replacements[i].Pos < replacements[j].Pos {
 				replacements[i], replacements[j] = replacements[j], replacements[i]
@@ -835,7 +835,7 @@ func (sr *TransformationReplacer) createFormatFunctionComment(key, value string,
 	// Build a comment that shows arguments should go inside tr.T()
 	// and the function should change from Msgf to Msg
 	argPlaceholders := make([]string, numArgs)
-	for i := 0; i < numArgs; i++ {
+	for i := range numArgs {
 		argPlaceholders[i] = "arg" +
 			fmt.Sprintf("%d", i+1)
 	}

@@ -146,7 +146,7 @@ func parseParenthesesArgs(input string) []string {
 	parenDepth := 0
 	braceDepth := 0
 
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		ch := input[i]
 
 		switch ch {

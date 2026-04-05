@@ -16,14 +16,17 @@
 package goopt
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
+	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -227,13 +230,7 @@ func (p *Parser) GetSupportedLanguages() []language.Tag {
 		}
 	}
 
-	// Convert to slice
-	result := make([]language.Tag, 0, len(langs))
-	for lang := range langs {
-		result = append(result, lang)
-	}
-
-	return result
+	return slices.Collect(maps.Keys(langs))
 }
 
 // SetEnvResolver sets the environment resolver for the parser. Returns an error if the provided resolver is nil.
@@ -742,8 +739,8 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 	// Process secure arguments if parsing succeeded
 	success := len(p.errors) == 0
 	if success {
-		for f := p.secureArguments.Front(); f != nil; f = f.Next() {
-			p.processSecureFlag(*f.Key, f.Value)
+		for key, sec := range p.secureArguments.All() {
+			p.processSecureFlag(key, sec)
 		}
 		if p.callbackOnParseComplete && !p.callbackOnParse {
 			numErrs := p.ExecuteCommands()
@@ -824,7 +821,7 @@ func (p *Parser) ParseWithDefaults(defaults map[string]string, args []string) bo
 	argLen := len(args)
 	argMap := make(map[string]string, argLen)
 
-	for i := 0; i < argLen; i++ {
+	for i := range argLen {
 		if p.isFlag(args[i]) {
 			arg := p.flagOrShortFlag(strings.TrimLeftFunc(args[i], p.prefixFunc))
 			if i < argLen-1 {
@@ -885,9 +882,9 @@ func (p *Parser) HasPositionalArgs() bool {
 // GetCommands returns the list of all commands seen on command-line
 func (p *Parser) GetCommands() []string {
 	pathValues := make([]string, 0, p.commandOptions.Count())
-	for kv := p.commandOptions.Front(); kv != nil; kv = kv.Next() {
-		if kv.Value {
-			pathValues = append(pathValues, *kv.Key)
+	for path, matched := range p.commandOptions.All() {
+		if matched {
+			pathValues = append(pathValues, path)
 		}
 	}
 
@@ -1200,7 +1197,7 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	if argument.Capacity > 0 {
 		// Register each index
-		for i := 0; i < argument.Capacity; i++ {
+		for i := range argument.Capacity {
 			indexPath := fmt.Sprintf("%s.%d", lookupFlag, i)
 			p.acceptedFlags.Set(indexPath, &FlagInfo{
 				Argument:    argument,
@@ -1257,12 +1254,12 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 		newSlice := reflect.MakeSlice(elem.Type(), argument.Capacity, argument.Capacity)
 		// If resizing existing slice, preserve values where possible
 		if elem.Len() > 0 {
-			copyLen := util.Min(elem.Len(), argument.Capacity)
+			copyLen := min(elem.Len(), argument.Capacity)
 			reflect.Copy(newSlice.Slice(0, copyLen), elem.Slice(0, copyLen))
 		}
 		elem.Set(newSlice)
 
-		for i := 0; i < argument.Capacity; i++ {
+		for i := range argument.Capacity {
 			indexPath := fmt.Sprintf("%s.%d", lookupFlag, i)
 			p.bind[indexPath] = bindPtr
 		}
@@ -1335,7 +1332,7 @@ func (p *Parser) AcceptPatterns(flag string, acceptVal []types.PatternValue, com
 	lenValues := len(acceptVal)
 	arg.AcceptedValues = acceptVal
 
-	for i := 0; i < lenValues; i++ {
+	for i := range lenValues {
 		re, err := regexp.Compile(acceptVal[i].Pattern)
 		if err != nil {
 			return errs.ErrRegexCompile.WithArgs(acceptVal[i].Pattern, err)
@@ -1701,6 +1698,29 @@ func (p *Parser) GetErrorCount() int {
 	return len(p.errors)
 }
 
+// Flags returns an iterator over all registered flags and their info in registration order.
+func (p *Parser) Flags() iter.Seq2[string, *FlagInfo] {
+	return p.acceptedFlags.All()
+}
+
+// Errors returns an iterator over parsing errors with lazy translation wrapping.
+// Unlike GetErrors(), translation wrapping is deferred until each error is yielded,
+// making it efficient for early termination (e.g., checking only the first error).
+func (p *Parser) Errors() iter.Seq[error] {
+	return func(yield func(error) bool) {
+		var te i18n.TranslatableError
+		for _, e := range p.errors {
+			wrapped := e
+			if errors.As(e, &te) {
+				wrapped = errs.WithProvider(te, p.layeredProvider)
+			}
+			if !yield(wrapped) {
+				return
+			}
+		}
+	}
+}
+
 // GetCompletionData populates a CompletionData struct containing information for command line completion
 func (p *Parser) GetCompletionData() completion.CompletionData {
 	data := completion.CompletionData{
@@ -1714,9 +1734,7 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 	}
 
 	// Process flags
-	for iter := p.acceptedFlags.Front(); iter != nil; iter = iter.Next() {
-		flag := *iter.Key
-		flagInfo := iter.Value
+	for flag, flagInfo := range p.acceptedFlags.All() {
 		flagParts := splitPathFlag(flag)
 
 		cmd := ""
@@ -1737,8 +1755,7 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 	}
 
 	// Process commands
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		cmd := kv.Value
+	for _, cmd := range p.registeredCommands.All() {
 		if cmd != nil {
 			data.Commands = append(data.Commands, cmd.path)
 			data.CommandDescriptions[cmd.path] = p.renderer.CommandDescription(cmd)
@@ -1803,26 +1820,26 @@ func (p *Parser) PrintPositionalArgs(writer io.Writer) {
 
 	// Collect only global positional arguments (not command-specific ones)
 	// Command-specific positionals are now shown inline with the command usage
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.Argument != nil && f.Value.Argument.isPositional() {
-			if f.Value.Argument.Position == nil {
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.Argument != nil && flagInfo.Argument.isPositional() {
+			if flagInfo.Argument.Position == nil {
 				continue
 			}
 
 			// Only include positionals that are not tied to a specific command
-			if f.Value.CommandPath == "" {
+			if flagInfo.CommandPath == "" {
 				args = append(args, PositionalArgument{
-					Position: *f.Value.Argument.Position,
-					Value:    *f.Key,
-					Argument: f.Value.Argument,
+					Position: *flagInfo.Argument.Position,
+					Value:    flagKey,
+					Argument: flagInfo.Argument,
 				})
 			}
 		}
 	}
 
 	// Sort by position
-	sort.SliceStable(args, func(i, j int) bool {
-		return args[i].Position < args[j].Position
+	slices.SortStableFunc(args, func(a, b PositionalArgument) int {
+		return cmp.Compare(a.Position, b.Position)
 	})
 
 	// Print args with indices (only if there are global positionals)
@@ -1859,26 +1876,26 @@ func (p *Parser) getPositionalsForCommand(commandPath string) []PositionalArgume
 	var args []PositionalArgument
 
 	// Collect all flags marked as positional for this command
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.Argument != nil && f.Value.Argument.isPositional() {
-			if f.Value.Argument.Position == nil {
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.Argument != nil && flagInfo.Argument.isPositional() {
+			if flagInfo.Argument.Position == nil {
 				continue
 			}
 
 			// Check if this positional belongs to the specified command
-			if f.Value.CommandPath == commandPath {
+			if flagInfo.CommandPath == commandPath {
 				args = append(args, PositionalArgument{
-					Position: *f.Value.Argument.Position,
-					Value:    *f.Key,
-					Argument: f.Value.Argument,
+					Position: *flagInfo.Argument.Position,
+					Value:    flagKey,
+					Argument: flagInfo.Argument,
 				})
 			}
 		}
 	}
 
 	// Sort by position
-	sort.SliceStable(args, func(i, j int) bool {
-		return args[i].Position < args[j].Position
+	slices.SortStableFunc(args, func(a, b PositionalArgument) int {
+		return cmp.Compare(a.Position, b.Position)
 	})
 
 	return args
@@ -1892,21 +1909,21 @@ func (p *Parser) PrintGlobalFlags(writer io.Writer) {
 	totalGlobals := 0
 
 	// First count total globals
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.Argument.isPositional() {
+	for _, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.Argument.isPositional() {
 			continue
 		}
-		if f.Value.CommandPath == "" {
+		if flagInfo.CommandPath == "" {
 			totalGlobals++
 		}
 	}
 
 	// Print globals up to MaxGlobals limit
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.Argument.isPositional() {
+	for _, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.Argument.isPositional() {
 			continue
 		}
-		if f.Value.CommandPath == "" { // Global flags have no command path
+		if flagInfo.CommandPath == "" { // Global flags have no command path
 			if p.helpConfig.MaxGlobals > 0 && count >= p.helpConfig.MaxGlobals {
 				remaining := totalGlobals - count
 				if remaining > 0 {
@@ -1917,7 +1934,7 @@ func (p *Parser) PrintGlobalFlags(writer io.Writer) {
 				}
 				break
 			}
-			_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
+			_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(flagInfo.Argument))))
 			count++
 		}
 	}
@@ -1925,9 +1942,9 @@ func (p *Parser) PrintGlobalFlags(writer io.Writer) {
 
 // PrintCommandsWithFlags prints commands with their respective flags
 func (p *Parser) PrintCommandsWithFlags(writer io.Writer, config *PrettyPrintConfig) {
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		if kv.Value.topLevel {
-			kv.Value.Visit(func(cmd *Command, level int) bool {
+	for _, regCmd := range p.registeredCommands.All() {
+		if regCmd.topLevel {
+			regCmd.Visit(func(cmd *Command, level int) bool {
 				// Determine the tree prefix based on command level and position
 				var treePrefix string
 				switch {
@@ -1973,14 +1990,14 @@ func (p *Parser) PrintCommandSpecificFlags(writer io.Writer, commandPath string,
 	}
 
 	// Then display regular flags
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.CommandPath == commandPath {
+	for _, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.CommandPath == commandPath {
 			// Skip positional arguments - already displayed above
-			if f.Value.Argument.isPositional() {
+			if flagInfo.Argument.isPositional() {
 				continue
 			}
 
-			flag := fmt.Sprintf("%s%s\n", indent, p.renderer.FlagUsage(f.Value.Argument))
+			flag := fmt.Sprintf("%s%s\n", indent, p.renderer.FlagUsage(flagInfo.Argument))
 
 			_, _ = writer.Write([]byte(flag))
 		}
@@ -1992,14 +2009,13 @@ func (p *Parser) PrintFlags(writer io.Writer) {
 	// Track which flags we've already printed to avoid duplicates
 	printedFlags := make(map[string]bool)
 
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
 		// Skip positional arguments - they are shown inline with commands
-		if f.Value.Argument.isPositional() {
+		if flagInfo.Argument.isPositional() {
 			continue
 		}
 
 		// Extract the base flag name (without command path)
-		flagKey := *f.Key
 		flagParts := splitPathFlag(flagKey)
 		baseFlagName := flagParts[0] // Flag name is the first part
 
@@ -2010,7 +2026,7 @@ func (p *Parser) PrintFlags(writer io.Writer) {
 
 		// Mark as printed and output
 		printedFlags[baseFlagName] = true
-		_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(f.Value.Argument))))
+		_, _ = writer.Write([]byte(fmt.Sprintf(" %s\n", p.renderer.FlagUsage(flagInfo.Argument))))
 	}
 }
 
@@ -2103,9 +2119,9 @@ func (p *Parser) PrintCommands(writer io.Writer, config ...*PrettyPrintConfig) {
 // PrettyPrintConfig.OuterLevelBindPrefix is used for indentation. The indentation is repeated for each Level under the
 // command root. The Command root is at Level 0.
 func (p *Parser) PrintCommandsUsing(writer io.Writer, config *PrettyPrintConfig) {
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		if kv.Value.topLevel {
-			kv.Value.Visit(func(cmd *Command, level int) bool {
+	for _, regCmd := range p.registeredCommands.All() {
+		if regCmd.topLevel {
+			regCmd.Visit(func(cmd *Command, level int) bool {
 				var start = config.DefaultPrefix
 				switch {
 				case level == 0:

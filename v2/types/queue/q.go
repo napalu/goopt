@@ -1,5 +1,7 @@
 package queue
 
+import "iter"
+
 // Q is a generic stack/queue structure that supports both stack and queue operations.
 // Stack operations (Push/Pop) are O(1)
 // Queue operations (Enqueue/Dequeue) are O(1) amortized for Enqueue, O(n) for Dequeue
@@ -98,11 +100,33 @@ func (q *Q[T]) Clear() {
 	q.items = q.items[:0]
 }
 
+// All returns an iterator over items from front to back with their indices.
+func (q *Q[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i, item := range q.items {
+			if !yield(i, item) {
+				return
+			}
+		}
+	}
+}
+
+// Backward returns an iterator over items from back to front with their indices.
+func (q *Q[T]) Backward() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i := len(q.items) - 1; i >= 0; i-- {
+			if !yield(i, q.items[i]) {
+				return
+			}
+		}
+	}
+}
+
 // iterate allows you to iterate over the items (from front to back when direction is Forward and from back to front when direction is Backward)
 // returning false from the callback will stop the iteration early
 func (q *Q[T]) iterate(direction IterationDirection, callback IterationCallback[T]) {
 	if direction == Forward {
-		for i := 0; i < len(q.items); i++ {
+		for i := range len(q.items) {
 			if !callback(q.items[i], i) {
 				break
 			}

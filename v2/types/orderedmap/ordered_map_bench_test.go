@@ -110,6 +110,21 @@ func BenchmarkOrderedMapMemory(b *testing.B) {
 	}
 }
 
+func BenchmarkOrderedMapIterAll(b *testing.B) {
+	om := NewOrderedMap[string, int]()
+	for i := 0; i < 10; i++ {
+		om.Set(string(rune('a'+i)), i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		count := 0
+		for _, v := range om.All() {
+			count += v
+		}
+	}
+}
+
 func BenchmarkBuiltinMapMemory(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
