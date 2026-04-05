@@ -29,7 +29,7 @@ This table provides a complete reference to all available tags.
 | `type` | Overrides the inferred flag type. See `types.OptionType`. | `type:standalone` |
 | `required` | Makes a flag mandatory. The parser will error if it's missing. | `required:true` |
 | `default` | Provides a default value if the flag is not set. | `default:./output.txt` |
-| `secure` | Marks a flag as a secure input (e.g., for passwords). Hides user input. | `secure:true` |
+| `secure` | Marks a flag as a secure input (e.g., for passwords). Hides user input. When `SetEnvNameConverter` is configured, a matching environment variable will be used instead of prompting — useful for CI/CD and automation. CLI values are always ignored for security. | `secure:true` |
 | `prompt` | Sets the prompt text to display for a `secure` flag. | `prompt:"Enter password:"` |
 | `path` | Associates a flag with one or more comma-separated commands. | `path:"server start,server stop"` |
 | `pos` | Defines a flag as a positional argument at a specific index. | `pos:0` |

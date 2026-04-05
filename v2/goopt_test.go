@@ -4837,6 +4837,193 @@ func TestParser_SecureFlagsInCommandContext(t *testing.T) {
 	assert.Empty(t, opts.ShouldNotBeAsked)
 }
 
+func TestParser_SecureFlagEnvOverride(t *testing.T) {
+	t.Run("env var set with envNameConverter — skips prompt", func(t *testing.T) {
+		type Opts struct {
+			Password string `goopt:"name:password;secure:true;prompt:Enter password"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// Set up env resolver with matching var
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{
+				"MYAPP_PASSWORD": "env-secret-123",
+			},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("MYAPP_")
+		parser.SetEnvNameConverter(func(s string) string {
+			return strings.ToLower(s)
+		})
+
+		// No terminal — would fail if it tried to prompt
+		parser.SetTerminalReader(&MockTerminal{
+			IsTerminalResult: false,
+		})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"--password"})
+		assert.True(t, ok, "Should succeed: env var provides the value")
+		assert.Equal(t, "env-secret-123", opts.Password)
+	})
+
+	t.Run("env var not set — falls back to prompt", func(t *testing.T) {
+		type Opts struct {
+			Password string `goopt:"name:password;secure:true;prompt:Enter password"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// Empty env — no matching var
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("MYAPP_")
+		parser.SetEnvNameConverter(func(s string) string {
+			return strings.ToLower(s)
+		})
+
+		// Mock terminal that returns a password
+		parser.SetTerminalReader(&MockTerminal{
+			Password:         []byte("prompted-pass"),
+			IsTerminalResult: true,
+		})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"--password"})
+		assert.True(t, ok, "Should succeed: prompted for password")
+		assert.Equal(t, "prompted-pass", opts.Password)
+	})
+
+	t.Run("no envNameConverter — always prompts even if env var exists", func(t *testing.T) {
+		type Opts struct {
+			Password string `goopt:"name:password;secure:true;prompt:Enter password"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		// Env var IS set, but no envNameConverter — should not look it up
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{
+				"MYAPP_PASSWORD": "env-secret",
+			},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("MYAPP_")
+		// Deliberately NOT setting envNameConverter
+
+		// Mock terminal returns different value
+		parser.SetTerminalReader(&MockTerminal{
+			Password:         []byte("terminal-pass"),
+			IsTerminalResult: true,
+		})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"--password"})
+		assert.True(t, ok, "Should succeed: prompted for password")
+		assert.Equal(t, "terminal-pass", opts.Password, "Should use prompted value, not env var")
+	})
+
+	t.Run("env var set with validator — validator runs on env value", func(t *testing.T) {
+		parser := NewParser()
+		_ = parser.AddFlag("password", NewArg(
+			WithSecurePrompt("Enter password"),
+			WithValidators(func(value string) error {
+				if len(value) < 8 {
+					return fmt.Errorf("password must be at least 8 characters")
+				}
+				return nil
+			}),
+		))
+
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{
+				"APP_PASSWORD": "short", // too short — should fail validation
+			},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("APP_")
+		parser.SetEnvNameConverter(func(s string) string {
+			return strings.ToLower(s)
+		})
+		parser.SetTerminalReader(&MockTerminal{IsTerminalResult: false})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"--password"})
+		assert.False(t, ok, "Should fail: env value too short for validator")
+
+		errStr := ""
+		for _, e := range parser.GetErrors() {
+			errStr += e.Error() + "\n"
+		}
+		assert.Contains(t, errStr, "at least 8 characters")
+	})
+
+	t.Run("empty env var — still prompts", func(t *testing.T) {
+		type Opts struct {
+			Password string `goopt:"name:password;secure:true"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{
+				"MYAPP_PASSWORD": "", // empty value
+			},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("MYAPP_")
+		parser.SetEnvNameConverter(func(s string) string {
+			return strings.ToLower(s)
+		})
+
+		parser.SetTerminalReader(&MockTerminal{
+			Password:         []byte("prompted-pass"),
+			IsTerminalResult: true,
+		})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"--password"})
+		assert.True(t, ok)
+		assert.Equal(t, "prompted-pass", opts.Password, "Empty env var should fall through to prompt")
+	})
+
+	t.Run("secure flag in command context with env override", func(t *testing.T) {
+		type ServerOpts struct {
+			ApiKey string `goopt:"name:api-key;secure:true;prompt:Enter API key"`
+		}
+		type Opts struct {
+			Server ServerOpts `goopt:"kind:command"`
+		}
+		opts := &Opts{}
+		parser, err := NewParserFromStruct(opts)
+		require.NoError(t, err)
+
+		mockEnv := &mockEnvResolver{
+			envVars: map[string]string{
+				"APP_API_KEY": "env-api-key-value",
+			},
+		}
+		_ = parser.SetEnvResolver(mockEnv)
+		parser.SetEnvVarPrefix("APP_")
+		parser.SetEnvNameConverter(func(s string) string {
+			return strings.ToLower(strings.ReplaceAll(s, "_", "-"))
+		})
+		parser.SetTerminalReader(&MockTerminal{IsTerminalResult: false})
+		parser.SetStderr(&bytes.Buffer{})
+
+		ok := parser.Parse([]string{"server", "--api-key"})
+		assert.True(t, ok, "Should succeed: env var provides the value for command-scoped secure flag")
+		assert.Equal(t, "env-api-key-value", opts.Server.ApiKey)
+	})
+}
+
 func TestParser_ComplexPositionalArguments(t *testing.T) {
 	tests := []struct {
 		name          string
