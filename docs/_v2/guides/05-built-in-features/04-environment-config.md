@@ -44,6 +44,27 @@ func main() {
 
 With a converter set, an environment variable like `MYAPP_HOST=db.example.com` would automatically provide the value for a `--host` flag if it wasn't set on the command line.
 
+### Secure Flags and Environment Variables
+
+Flags marked with `secure:true` have special environment variable behavior. For security, values passed on the command line (e.g., `--password secret`) are always ignored — this prevents secrets from leaking via `ps aux` or shell history.
+
+However, when `SetEnvNameConverter` is configured, a matching environment variable will be used **instead of prompting**. This makes secure flags work in non-interactive environments like CI/CD pipelines, Docker containers, and automation scripts.
+
+```go
+parser.SetEnvNameConverter(strcase.ToLowerCamel)
+parser.SetEnvVarPrefix("MYAPP_")
+
+// With MYAPP_PASSWORD=s3cret in the environment:
+// - The user will NOT be prompted for the password
+// - The value "s3cret" is used directly
+// - Validators still run on the value
+
+// Without the env var set:
+// - The user is prompted interactively (existing behavior)
+```
+
+This works transparently with custom `env.Resolver` implementations (e.g., HashiCorp Vault, AWS SSM, Kubernetes secrets) — the resolver's `Environ()` output is scanned for matching variables.
+
 ---
 
 ## External Configuration (`ParseWithDefaults`)

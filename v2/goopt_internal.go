@@ -1386,7 +1386,6 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 }
 
 func (p *Parser) processSecureFlag(name string, config *types.Secure) {
-	var prompt string
 	if !p.HasFlag(name) {
 		return
 	}
@@ -1394,32 +1393,71 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if !config.IsSecure {
 		return
 	}
-	if config.Prompt == "" {
-		prompt = "password: "
-	} else {
-		prompt = config.Prompt
+
+	var pass string
+	var err error
+
+	// Try environment variable first (opt-in: only when envNameConverter is set)
+	if p.envNameConverter != nil {
+		if envValue := p.resolveSecureEnvVar(name); envValue != "" {
+			pass = envValue
+		}
 	}
-	if pass, err := input.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader()); err == nil {
-		// Get the argument info to run validators
-		if argInfo := p.getArgumentInfoByID(name); argInfo != nil && argInfo.Argument != nil {
-			// Run validators on secure value
-			if len(argInfo.Argument.Validators) > 0 {
-				for _, validator := range argInfo.Argument.Validators {
-					if err = validator(pass); err != nil {
-						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
-						return
-					}
+
+	// No env value — prompt interactively
+	if pass == "" {
+		prompt := "password: "
+		if config.Prompt != "" {
+			prompt = config.Prompt
+		}
+		pass, err = input.GetSecureString(prompt, p.GetStderr(), p.GetTerminalReader())
+		if err != nil {
+			p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, p.formatFlagForError(name)))
+			return
+		}
+	}
+
+	// Run validators on the value (regardless of source)
+	if flagInfo, found := p.acceptedFlags.Get(name); found && flagInfo.Argument != nil {
+		if len(flagInfo.Argument.Validators) > 0 {
+			for _, validator := range flagInfo.Argument.Validators {
+				if err = validator(pass); err != nil {
+					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
+					return
 				}
 			}
 		}
-
-		err = p.registerSecureValue(name, pass)
-		if err != nil {
-			p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
-		}
-	} else {
-		p.addError(errs.WrapOnce(err, errs.ErrSecureFlagExpectsValue, p.formatFlagForError(name)))
 	}
+
+	// Register value
+	if err = p.registerSecureValue(name, pass); err != nil {
+		p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
+	}
+}
+
+// resolveSecureEnvVar checks if an environment variable matches the secure flag name.
+// Uses the same prefix/converter pattern as groupEnvVarsByCommand().
+func (p *Parser) resolveSecureEnvVar(name string) string {
+	baseName := splitPathFlag(name)[0]
+	for _, envEntry := range p.envResolver.Environ() {
+		kv := strings.SplitN(envEntry, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		varName := kv[0]
+		if p.envVarPrefix != "" && !strings.HasPrefix(varName, p.envVarPrefix) {
+			continue
+		}
+		stripped := strings.Replace(varName, p.envVarPrefix, "", 1)
+		if stripped == "" {
+			continue
+		}
+		converted := p.envNameConverter(stripped)
+		if converted == baseName {
+			return kv[1]
+		}
+	}
+	return ""
 }
 
 func (p *Parser) processSingleValue(next, key string, argument *Argument) (string, bool) {
