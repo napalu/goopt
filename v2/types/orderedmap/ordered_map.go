@@ -10,6 +10,7 @@ package orderedmap
 */
 import (
 	"container/list"
+	"iter"
 )
 
 // Iterator starting at OrderedMap.Front or OrderedMap.Back
@@ -162,6 +163,50 @@ func (o *OrderedMap[K, V]) Front() *Iterator[K, V] {
 // Back returns an Iterator pointing to the newest (inserted-last) keyValue
 func (o *OrderedMap[K, V]) Back() *Iterator[K, V] {
 	return newIterator[K, V](o, false)
+}
+
+// All returns an iterator over key-value pairs in insertion order.
+func (o *OrderedMap[K, V]) All() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for it := o.Front(); it != nil; it = it.Next() {
+			if !yield(*it.Key, it.Value) {
+				return
+			}
+		}
+	}
+}
+
+// Backward returns an iterator over key-value pairs in reverse insertion order.
+func (o *OrderedMap[K, V]) Backward() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for it := o.Back(); it != nil; it = it.Next() {
+			if !yield(*it.Key, it.Value) {
+				return
+			}
+		}
+	}
+}
+
+// Keys returns an iterator over keys in insertion order.
+func (o *OrderedMap[K, V]) Keys() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for it := o.Front(); it != nil; it = it.Next() {
+			if !yield(*it.Key) {
+				return
+			}
+		}
+	}
+}
+
+// Values returns an iterator over values in insertion order.
+func (o *OrderedMap[K, V]) Values() iter.Seq[V] {
+	return func(yield func(V) bool) {
+		for it := o.Front(); it != nil; it = it.Next() {
+			if !yield(it.Value) {
+				return
+			}
+		}
+	}
 }
 
 func newIterator[K comparable, V any](o *OrderedMap[K, V], forward bool) *Iterator[K, V] {

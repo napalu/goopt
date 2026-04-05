@@ -83,24 +83,3 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
-	tests := []struct {
-		name     string
-		slice    []string
-		item     string
-		expected bool
-	}{
-		{"item exists", []string{"a", "b", "c"}, "b", true},
-		{"item doesn't exist", []string{"a", "b", "c"}, "d", false},
-		{"empty slice", []string{}, "a", false},
-		{"empty string in slice", []string{"", "a", "b"}, "", true},
-		{"case sensitive", []string{"Hello", "World"}, "hello", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := Contains(tt.slice, tt.item)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}

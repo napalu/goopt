@@ -3,7 +3,7 @@ package parse
 import (
 	"errors"
 
-	"github.com/napalu/goopt/v2/internal/util"
+	"slices"
 )
 
 // State represents the current state of the argument parser
@@ -70,7 +70,7 @@ func (s *DefaultState) CurrentArg() string {
 
 // InsertArgsAt inserts new arguments at a specific position
 func (s *DefaultState) InsertArgsAt(pos int, newArgs ...string) {
-	s.args = util.InsertSlice(s.args, pos, newArgs...)
+	s.args = slices.Insert(s.args, pos, newArgs...)
 }
 
 // ReplaceArgs replaces the entire argument list with new arguments

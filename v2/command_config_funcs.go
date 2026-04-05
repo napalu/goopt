@@ -76,7 +76,7 @@ func WithCommandNameKey(nameKey string) ConfigureCommandFunc {
 // WithSubcommands function takes a list of subcommands and associates them with a command.
 func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {
-		for i := 0; i < len(subcommands); i++ {
+		for i := range len(subcommands) {
 			command.Subcommands = append(command.Subcommands, *subcommands[i])
 		}
 	}
@@ -86,7 +86,7 @@ func WithSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 func WithOverwriteSubcommands(subcommands ...*Command) ConfigureCommandFunc {
 	return func(command *Command) {
 		command.Subcommands = command.Subcommands[:0]
-		for i := 0; i < len(subcommands); i++ {
+		for i := range len(subcommands) {
 			command.Subcommands = append(command.Subcommands, *subcommands[i])
 		}
 	}

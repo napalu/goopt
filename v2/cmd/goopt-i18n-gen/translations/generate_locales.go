@@ -1,11 +1,12 @@
 package translations
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -127,8 +128,8 @@ func loadLocaleFiles(patterns []string, tr i18n.Translator) ([]localeData, error
 	}
 
 	// Sort by language code for consistent output
-	sort.Slice(locales, func(i, j int) bool {
-		return locales[i].Code < locales[j].Code
+	slices.SortFunc(locales, func(a, b localeData) int {
+		return cmp.Compare(a.Code, b.Code)
 	})
 
 	return locales, nil

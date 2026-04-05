@@ -1,6 +1,8 @@
 module github.com/napalu/goopt/v2/examples/i18n-demo
 
-go 1.18
+go 1.23
+
+toolchain go1.24.4
 
 replace github.com/napalu/goopt/v2 => ../../
 

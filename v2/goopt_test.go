@@ -2894,9 +2894,8 @@ func TestParser_ProcessStructCommands(t *testing.T) {
 			assert.NoError(t, err, "processStructCommands should not error")
 
 			var gotCmds []string
-			for kv := parser.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-				gotCmds = append(gotCmds, kv.Value.path)
-
+			for _, cmd := range parser.registeredCommands.All() {
+				gotCmds = append(gotCmds, cmd.path)
 			}
 
 			sort.Strings(gotCmds)
@@ -3677,7 +3676,7 @@ func TestParser_PositionalArguments(t *testing.T) {
 
 			assert.Equal(t, len(tt.wantPositions), len(pos))
 
-			for i := 0; i < util.Min(len(tt.wantPositions), len(pos)); i++ {
+			for i := range min(len(tt.wantPositions), len(pos)) {
 				assert.Equal(t, tt.wantPositions[i].Position, pos[i].Position,
 					"Position mismatch at index %d", i)
 				assert.Equal(t, tt.wantPositions[i].Value, pos[i].Value,
@@ -5172,7 +5171,7 @@ func TestParser_ComplexPositionalArguments(t *testing.T) {
 			pos := p.GetPositionalArgs()
 			assert.Equal(t, len(tt.wantPositions), len(pos))
 
-			for i := 0; i < util.Min(len(tt.wantPositions), len(pos)); i++ {
+			for i := range min(len(tt.wantPositions), len(pos)) {
 				assert.Equal(t, tt.wantPositions[i].Position, pos[i].Position,
 					"Position mismatch at index %d", i)
 				assert.Equal(t, tt.wantPositions[i].Value, pos[i].Value,
@@ -14271,10 +14270,9 @@ func TestParser_CommandHierarchyDescriptions(t *testing.T) {
 
 	// Debug: print all registered commands
 	t.Logf("Registered commands:")
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		cmd := kv.Value
+	for cmdKey, cmd := range p.registeredCommands.All() {
 		t.Logf("  Path: %s, Name: %s, NameKey: %s, Desc: %s, DescKey: %s",
-			*kv.Key, cmd.Name, cmd.NameKey, cmd.Description, cmd.DescriptionKey)
+			cmdKey, cmd.Name, cmd.NameKey, cmd.Description, cmd.DescriptionKey)
 	}
 
 	for _, tt := range tests {
@@ -15511,6 +15509,124 @@ func TestParser_FormatFlagForError(t *testing.T) {
 		assert.Contains(t, errorMsg, "'email'")
 		assert.Contains(t, errorMsg, "in command")
 		assert.Contains(t, errorMsg, "'deploy'")
+	})
+}
+
+func TestParser_Flags(t *testing.T) {
+	t.Run("global and command flags", func(t *testing.T) {
+		opts := NewParser()
+
+		_ = opts.AddCommand(&Command{Name: "serve"})
+
+		err := opts.AddFlag("verbose", &Argument{
+			Description: "Enable verbose",
+			TypeOf:      types.Standalone,
+		})
+		assert.Nil(t, err)
+
+		err = opts.AddFlag("port", &Argument{
+			Description: "Port number",
+			TypeOf:      types.Single,
+		}, "serve")
+		assert.Nil(t, err)
+
+		var keys []string
+		for name, info := range opts.Flags() {
+			keys = append(keys, name)
+			assert.NotNil(t, info)
+			assert.NotNil(t, info.Argument)
+		}
+
+		assert.Contains(t, keys, "verbose")
+		assert.Len(t, keys, 2) // verbose + port
+	})
+
+	t.Run("empty parser", func(t *testing.T) {
+		opts := NewParser()
+
+		count := 0
+		for range opts.Flags() {
+			count++
+		}
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("early break", func(t *testing.T) {
+		opts := NewParser()
+
+		_ = opts.AddFlag("a", &Argument{Description: "flag a", TypeOf: types.Single})
+		_ = opts.AddFlag("b", &Argument{Description: "flag b", TypeOf: types.Single})
+		_ = opts.AddFlag("c", &Argument{Description: "flag c", TypeOf: types.Single})
+
+		count := 0
+		for range opts.Flags() {
+			count++
+			break
+		}
+		assert.Equal(t, 1, count)
+	})
+}
+
+func TestParser_Errors_Iterator(t *testing.T) {
+	t.Run("matches GetErrors", func(t *testing.T) {
+		opts := NewParser()
+
+		// Add a required flag but don't provide it
+		_ = opts.AddFlag("name", &Argument{
+			Description: "Name",
+			TypeOf:      types.Single,
+			Required:    true,
+		})
+
+		opts.ParseString("") // triggers required flag error
+
+		// Collect via iterator
+		var iterErrors []string
+		for err := range opts.Errors() {
+			iterErrors = append(iterErrors, err.Error())
+		}
+
+		// Collect via GetErrors
+		var getErrors []string
+		for _, err := range opts.GetErrors() {
+			getErrors = append(getErrors, err.Error())
+		}
+
+		assert.Equal(t, getErrors, iterErrors, "Errors() and GetErrors() should produce same results")
+		assert.Greater(t, len(iterErrors), 0, "should have at least one error")
+	})
+
+	t.Run("empty when no errors", func(t *testing.T) {
+		opts := NewParser()
+
+		_ = opts.AddFlag("name", &Argument{
+			Description: "Name",
+			TypeOf:      types.Single,
+		})
+
+		opts.ParseString("--name test")
+
+		count := 0
+		for range opts.Errors() {
+			count++
+		}
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("early break", func(t *testing.T) {
+		opts := NewParser()
+
+		_ = opts.AddFlag("a", &Argument{Description: "a", TypeOf: types.Single, Required: true})
+		_ = opts.AddFlag("b", &Argument{Description: "b", TypeOf: types.Single, Required: true})
+
+		opts.ParseString("") // triggers errors for both required flags
+
+		count := 0
+		for range opts.Errors() {
+			count++
+			break
+		}
+		assert.Equal(t, 1, count, "early break should stop after first error")
 	})
 }
 

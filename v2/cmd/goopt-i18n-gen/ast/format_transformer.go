@@ -279,7 +279,7 @@ func (ft *FormatTransformer) RemoveI18nTodoCommentsFromSource(src []byte) []byte
 	lines := strings.Split(string(src), "\n")
 	var result []string
 
-	for i := 0; i < len(lines); i++ {
+	for i := range len(lines) {
 		line := lines[i]
 
 		// Remove block comments /* i18n-todo: ... */
@@ -1176,7 +1176,7 @@ func (ft *FormatTransformer) transformGenericPrintf(call *ast.CallExpr, info *Fo
 
 		// Keep all args before format string, replace format and all args after
 		newArgs := make([]ast.Expr, 0, info.FormatStringIndex+1)
-		for i := 0; i < info.FormatStringIndex; i++ {
+		for i := range info.FormatStringIndex {
 			newArgs = append(newArgs, call.Args[i])
 		}
 		newArgs = append(newArgs, trCall)
@@ -1283,7 +1283,7 @@ func (ft *FormatTransformer) transformGenericErrorf(call *ast.CallExpr, info *Fo
 
 		// New args
 		newArgs := make([]ast.Expr, 0, info.FormatStringIndex+3)
-		for i := 0; i < info.FormatStringIndex; i++ {
+		for i := range info.FormatStringIndex {
 			newArgs = append(newArgs, call.Args[i])
 		}
 		newArgs = append(newArgs, call.Args[info.FormatStringIndex], trCall)
@@ -1336,7 +1336,7 @@ func (ft *FormatTransformer) transformGenericWrapf(call *ast.CallExpr, info *For
 	newArgs := make([]ast.Expr, 0, info.FormatStringIndex+2)
 
 	// Add arguments before format string (e.g., the error for errors.Wrapf)
-	for i := 0; i < info.FormatStringIndex; i++ {
+	for i := range info.FormatStringIndex {
 		newArgs = append(newArgs, call.Args[i])
 	}
 
@@ -1569,7 +1569,7 @@ func (ft *FormatTransformer) removeTransformedI18nTodoComments(src []byte) []byt
 	lines := strings.Split(string(src), "\n")
 	var result []string
 
-	for i := 0; i < len(lines); i++ {
+	for i := range len(lines) {
 		line := lines[i]
 
 		// Check if this line contains both a translator call and an i18n-todo comment
@@ -1620,7 +1620,7 @@ func (ft *FormatTransformer) fixMultilineKeys(src []byte) []byte {
 	// We need to match the pattern with "(messages.Keys." or "(messages."
 	trCallPrefix := ft.trPattern + "(messages."
 
-	for i := 0; i < len(lines); i++ {
+	for i := range len(lines) {
 		line := lines[i]
 
 		// Check if this line contains a translator call that might be split
@@ -1702,7 +1702,7 @@ func (ft *FormatTransformer) cleanupTrCall(combined string, indent string) strin
 // sortComments ensures comments are properly sorted by position
 func sortComments(fset *token.FileSet, file *ast.File) {
 	// Sort comment groups by position to ensure proper ordering
-	for i := 0; i < len(file.Comments)-1; i++ {
+	for i := range len(file.Comments) - 1 {
 		for j := i + 1; j < len(file.Comments); j++ {
 			if file.Comments[i].Pos() > file.Comments[j].Pos() {
 				file.Comments[i], file.Comments[j] = file.Comments[j], file.Comments[i]

@@ -1,6 +1,7 @@
 package goopt
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -129,7 +131,7 @@ func (p *Parser) normalizePosixArgs(state parse.State, currentArg string, comman
 	}
 
 	value := ""
-	for i := 0; i < len(currentArg); i++ {
+	for i := range len(currentArg) {
 		cf := p.flagOrShortFlag(currentArg[i:i+1], commandPath)
 		if _, found := p.acceptedFlags.Get(cf); found {
 			if len(value) > 0 {
@@ -218,10 +220,7 @@ func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, 
 		if argument.Secure.IsSecure {
 			p.queueSecureArgument(lookup, argument)
 		} else {
-			boolVal := embeddedValue
-			if boolVal == "" {
-				boolVal = "true"
-			}
+			boolVal := cmp.Or(embeddedValue, "true")
 
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
@@ -301,7 +300,7 @@ func (p *Parser) validateCommand(cmdArg *Command, level, maxDepth int) (bool, er
 		cmdArg.path = cmdArg.Name
 	}
 
-	for i := 0; i < len(cmdArg.Subcommands); i++ {
+	for i := range len(cmdArg.Subcommands) {
 		cmdArg.Subcommands[i].path = cmdArg.path + " " + cmdArg.Subcommands[i].Name
 		if ok, err := p.validateCommand(&cmdArg.Subcommands[i], level+1, maxDepth); err != nil {
 			return ok, err
@@ -896,18 +895,17 @@ func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input 
 	}
 
 	// Sort by distance
-	sort.Slice(result, func(i, j int) bool {
-		dist1 := 3
-		dist2 := 3
+	slices.SortFunc(result, func(a, b string) int {
+		dist1, dist2 := 3, 3
 		for _, s := range allSuggestions {
-			if s.canonicalName == result[i] {
+			if s.canonicalName == a {
 				dist1 = s.distance
 			}
-			if s.canonicalName == result[j] {
+			if s.canonicalName == b {
 				dist2 = s.distance
 			}
 		}
-		return dist1 < dist2
+		return cmp.Compare(dist1, dist2)
 	})
 
 	// Limit to top 3
@@ -937,9 +935,7 @@ func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) (
 	currentLang := p.GetLanguage()
 
 	// Check all flags - both canonical and translated names
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		flagKey := *f.Key
-		flagInfo := f.Value
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
 
 		// Skip flags not in the current command context
 		if commandPath != "" && flagInfo.CommandPath != commandPath && flagInfo.CommandPath != "" {
@@ -1055,18 +1051,17 @@ func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) (
 	}
 
 	// Sort by distance
-	sort.Slice(result, func(i, j int) bool {
-		dist1 := 3
-		dist2 := 3
+	slices.SortFunc(result, func(a, b string) int {
+		dist1, dist2 := 3, 3
 		for _, s := range allSuggestions {
-			if s.canonicalName == result[i] {
+			if s.canonicalName == a {
 				dist1 = s.distance
 			}
-			if s.canonicalName == result[j] {
+			if s.canonicalName == b {
 				dist2 = s.distance
 			}
 		}
-		return dist1 < dist2
+		return cmp.Compare(dist1, dist2)
 	})
 
 	// Limit to top 3
@@ -1093,9 +1088,7 @@ func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, boo
 	}
 
 	// Check all commands - both canonical and translated names
-	for c := p.registeredCommands.Front(); c != nil; c = c.Next() {
-		cmd := c.Value
-		cmdName := *c.Key
+	for cmdName, cmd := range p.registeredCommands.All() {
 
 		// Check canonical name
 		distance := util.DamerauLevenshteinDistance(input, cmdName)
@@ -1166,18 +1159,17 @@ func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, boo
 	}
 
 	// Sort by distance
-	sort.Slice(finalSuggestions, func(i, j int) bool {
-		dist1 := 3
-		dist2 := 3
+	slices.SortFunc(finalSuggestions, func(a, b string) int {
+		dist1, dist2 := 3, 3
 		for _, s := range allSuggestions {
-			if s.canonicalName == finalSuggestions[i] {
+			if s.canonicalName == a {
 				dist1 = s.distance
 			}
-			if s.canonicalName == finalSuggestions[j] {
+			if s.canonicalName == b {
 				dist2 = s.distance
 			}
 		}
-		return dist1 < dist2
+		return cmp.Compare(dist1, dist2)
 	})
 
 	// Limit to top 3
@@ -1547,7 +1539,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 	args := strings.FieldsFunc(next, listDelimFunc)
 
 	// Process each value in the list
-	for i := 0; i < len(args); i++ {
+	for i := range len(args) {
 		// Apply pre-filter
 		if argument.PreFilter != nil {
 			args[i] = argument.PreFilter(args[i])
@@ -1607,26 +1599,25 @@ func (p *Parser) validateProcessedOptions() {
 
 func (p *Parser) walkFlags() {
 	visited := make(map[string]bool)
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		flagInfo := f.Value
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
 		if flagInfo.Argument.isPositional() {
 			continue
 		}
 		if flagInfo.Argument.RequiredIf != nil {
-			if required, msg := flagInfo.Argument.RequiredIf(p, *f.Key); required {
+			if required, msg := flagInfo.Argument.RequiredIf(p, flagKey); required {
 				p.addError(errors.New(msg))
 			}
 			continue
 		}
 
 		if !flagInfo.Argument.Required {
-			if p.HasFlag(*f.Key) && flagInfo.Argument.TypeOf == types.Standalone {
-				p.validateStandaloneFlag(*f.Key)
+			if p.HasFlag(flagKey) && flagInfo.Argument.TypeOf == types.Standalone {
+				p.validateStandaloneFlag(flagKey)
 			}
 			continue
 		}
 
-		mainKey := p.flagOrShortFlag(*f.Key)
+		mainKey := p.flagOrShortFlag(flagKey)
 		if _, found := p.options[mainKey]; found {
 			if flagInfo.Argument.TypeOf == types.Standalone {
 				p.validateStandaloneFlag(mainKey)
@@ -1648,9 +1639,9 @@ func (p *Parser) walkFlags() {
 		if !p.shouldValidateDependencies(flagInfo) {
 			if len(cmdArg) == 1 || (len(cmdArg) == 2 && p.HasCommand(cmdArg[1])) {
 				if flagInfo.Argument.Position != nil {
-					p.addError(errs.ErrRequiredPositionalFlag.WithArgs(p.formatFlagForError(*f.Key), *flagInfo.Argument.Position))
+					p.addError(errs.ErrRequiredPositionalFlag.WithArgs(p.formatFlagForError(flagKey), *flagInfo.Argument.Position))
 				} else {
-					p.addError(errs.ErrRequiredFlag.WithArgs(p.formatFlagForError(*f.Key)))
+					p.addError(errs.ErrRequiredFlag.WithArgs(p.formatFlagForError(flagKey)))
 				}
 			}
 		} else {
@@ -1672,8 +1663,8 @@ func (p *Parser) validateStandaloneFlag(key string) {
 
 func (p *Parser) walkCommands() {
 	stack := queue.New[*Command]()
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		stack.Push(kv.Value)
+	for _, cmd := range p.registeredCommands.All() {
+		stack.Push(cmd)
 	}
 	for stack.Len() > 0 {
 		cmd, _ := stack.Pop()
@@ -1797,7 +1788,7 @@ func (p *Parser) appendOrSetBoundVariable(value string, data any, currentArg str
 }
 
 func (p *Parser) prefixFunc(r rune) bool {
-	for i := 0; i < len(p.prefixes); i++ {
+	for i := range len(p.prefixes) {
 		if r == p.prefixes[i] {
 			return true
 		}
@@ -1830,18 +1821,17 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 			continue
 		}
 		v = p.envNameConverter(v)
-		for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-			paths := splitPathFlag(*f.Key)
+		for flagKey := range p.acceptedFlags.Keys() {
+			paths := splitPathFlag(flagKey)
 			length := len(paths)
 			// Global flag (no command path)
 			if length == 1 && paths[0] == v {
-				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", *f.Key), kv[1])
+				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", flagKey), kv[1])
 			}
 			// Command-specific flag
 			if length > 1 && paths[0] == v {
-				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", *f.Key), kv[1])
+				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", flagKey), kv[1])
 			}
-
 		}
 	}
 
@@ -1858,16 +1848,16 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 	for k, v := range nestedCmdLine.customBind {
 		p.customBind[k] = v
 	}
-	for it := nestedCmdLine.acceptedFlags.Front(); it != nil; it = it.Next() {
-		p.acceptedFlags.Set(*it.Key, it.Value)
+	for k, v := range nestedCmdLine.acceptedFlags.All() {
+		p.acceptedFlags.Set(k, v)
 	}
 	for k, v := range nestedCmdLine.lookup {
 		p.lookup[k] = v
 	}
-	for it := nestedCmdLine.registeredCommands.Front(); it != nil; it = it.Next() {
+	for cmdKey, cmdVal := range nestedCmdLine.registeredCommands.All() {
 		// Check if command already exists and preserve its properties
-		if existing, found := p.registeredCommands.Get(*it.Key); found {
-			newCmd := it.Value
+		if existing, found := p.registeredCommands.Get(cmdKey); found {
+			newCmd := cmdVal
 			// Preserve existing properties that shouldn't be overwritten
 			if existing.NameKey != "" && newCmd.NameKey == "" {
 				newCmd.NameKey = existing.NameKey
@@ -1878,9 +1868,9 @@ func (p *Parser) mergeCmdLine(nestedCmdLine *Parser) error {
 			if existing.DescriptionKey != "" && newCmd.DescriptionKey == "" {
 				newCmd.DescriptionKey = existing.DescriptionKey
 			}
-			p.registeredCommands.Set(*it.Key, newCmd)
+			p.registeredCommands.Set(cmdKey, newCmd)
 		} else {
-			p.registeredCommands.Set(*it.Key, it.Value)
+			p.registeredCommands.Set(cmdKey, cmdVal)
 		}
 	}
 
@@ -2228,7 +2218,7 @@ func newParserFromReflectValue(structValue reflect.Value, flagPrefix, commandPat
 	}
 
 	// Use unwrappedValue for field iteration
-	for i := 0; i < st.NumField(); i++ {
+	for i := range st.NumField() {
 		field := st.Field(i)
 		if _, ok := field.Tag.Lookup("ignore"); ok {
 			continue
@@ -2471,7 +2461,7 @@ func (p *Parser) processStructCommands(val reflect.Value, currentPath string, cu
 	}
 
 	// Process all fields in the struct
-	for i := 0; i < unwrappedValue.NumField(); i++ {
+	for i := range unwrappedValue.NumField() {
 		field := unwrappedValue.Field(i)
 		fieldType := typ.Field(i)
 		if !fieldType.IsExported() || fieldType.Tag.Get("ignore") != "" {
@@ -2730,7 +2720,7 @@ func processSliceField(flagPrefix, commandPath string, fieldValue reflect.Value,
 		(capacity > 0 && unwrappedValue.Cap() != capacity) {
 		newSlice := reflect.MakeSlice(unwrappedValue.Type(), capacity, capacity)
 		if !unwrappedValue.IsNil() && unwrappedValue.Len() > 0 {
-			copyLen := util.Min(unwrappedValue.Len(), capacity)
+			copyLen := min(unwrappedValue.Len(), capacity)
 			reflect.Copy(newSlice.Slice(0, copyLen), unwrappedValue.Slice(0, copyLen))
 		}
 		unwrappedValue.Set(newSlice)
@@ -3134,9 +3124,9 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 	if p.registeredCommands.Count() > 0 {
 		// Pre-pass: compute max command name width for alignment
 		maxCmdWidth := 0
-		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
-			if cmd.Value.topLevel {
-				cmdName := p.buildCommandNameWithPositionals(cmd.Value)
+		for _, cmd := range p.registeredCommands.All() {
+			if cmd.topLevel {
+				cmdName := p.buildCommandNameWithPositionals(cmd)
 				if len(cmdName) > maxCmdWidth {
 					maxCmdWidth = len(cmdName)
 				}
@@ -3145,11 +3135,11 @@ func (p *Parser) printCompactHelp(writer io.Writer) {
 		maxCmdWidth += 2 // add padding after longest name
 
 		fmt.Fprintf(writer, "\n%s:\n", p.layeredProvider.GetMessage(messages.MsgCommandsKey))
-		for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
-			if cmd.Value.topLevel {
-				flagCount := p.countCommandFlags(cmd.Value.Name)
-				cmdName := p.buildCommandNameWithPositionals(cmd.Value)
-				desc := p.renderer.CommandDescription(cmd.Value)
+		for _, cmd := range p.registeredCommands.All() {
+			if cmd.topLevel {
+				flagCount := p.countCommandFlags(cmd.Name)
+				cmdName := p.buildCommandNameWithPositionals(cmd)
+				desc := p.renderer.CommandDescription(cmd)
 
 				if desc != "" {
 					quotedDesc := fmt.Sprintf("\"%s\"", util.Truncate(desc, 40))
@@ -3218,8 +3208,8 @@ func (p *Parser) printHierarchicalHelp(writer io.Writer) {
 				groups = append(groups, groupInfo{prefix, len(info.commands)})
 			}
 		}
-		sort.Slice(groups, func(i, j int) bool {
-			return groups[i].cmdCount > groups[j].cmdCount
+		slices.SortFunc(groups, func(a, b groupInfo) int {
+			return cmp.Compare(b.cmdCount, a.cmdCount)
 		})
 
 		for _, g := range groups {
@@ -3260,9 +3250,9 @@ func (p *Parser) printHierarchicalHelp(writer io.Writer) {
 // getGlobalFlags returns flags with no command path
 func (p *Parser) getGlobalFlags() []*Argument {
 	var globalFlags []*Argument
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.CommandPath == "" && !f.Value.Argument.isPositional() {
-			globalFlags = append(globalFlags, f.Value.Argument)
+	for _, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.CommandPath == "" && !flagInfo.Argument.isPositional() {
+			globalFlags = append(globalFlags, flagInfo.Argument)
 		}
 	}
 	return globalFlags
@@ -3273,8 +3263,7 @@ func (p *Parser) detectSharedFlagGroups() map[string]*flagGroupInfo {
 	groups := make(map[string]*flagGroupInfo)
 	flagsByPrefix := make(map[string]map[string]bool) // Track unique flags per prefix
 
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		flagName := *f.Key
+	for flagName, flagInfo := range p.acceptedFlags.All() {
 		flagParts := splitPathFlag(flagName)
 		baseName := flagParts[0] // Flag name is the first part
 
@@ -3294,14 +3283,14 @@ func (p *Parser) detectSharedFlagGroups() map[string]*flagGroupInfo {
 
 		// Only add unique flags to the group
 		if !flagsByPrefix[prefix][baseName] {
-			groups[prefix].flags = append(groups[prefix].flags, f.Value.Argument)
+			groups[prefix].flags = append(groups[prefix].flags, flagInfo.Argument)
 			flagsByPrefix[prefix][baseName] = true
 		}
 
 		// Always track which commands use this flag
-		if f.Value.CommandPath != "" {
-			if !util.Contains(groups[prefix].commands, f.Value.CommandPath) {
-				groups[prefix].commands = append(groups[prefix].commands, f.Value.CommandPath)
+		if flagInfo.CommandPath != "" {
+			if !slices.Contains(groups[prefix].commands, flagInfo.CommandPath) {
+				groups[prefix].commands = append(groups[prefix].commands, flagInfo.CommandPath)
 			}
 		}
 	}
@@ -3354,15 +3343,15 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 	// Pre-pass: compute max widths for alignment
 	maxTopWidth := 0
 	maxSubWidth := 0
-	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
-		if cmd.Value.topLevel {
-			cmdName := p.buildCommandNameWithPositionals(cmd.Value)
+	for _, cmd := range p.registeredCommands.All() {
+		if cmd.topLevel {
+			cmdName := p.buildCommandNameWithPositionals(cmd)
 			if len(cmdName) > maxTopWidth {
 				maxTopWidth = len(cmdName)
 			}
-			for i := range cmd.Value.Subcommands {
-				sub := &cmd.Value.Subcommands[i]
-				subPath := cmd.Value.Name + " " + sub.Name
+			for i := range cmd.Subcommands {
+				sub := &cmd.Subcommands[i]
+				subPath := cmd.Name + " " + sub.Name
 				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
 				if len(subName) > maxSubWidth {
 					maxSubWidth = len(subName)
@@ -3373,24 +3362,24 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 	maxTopWidth += 2 // add padding after longest name
 	maxSubWidth += 2
 
-	for cmd := p.registeredCommands.Front(); cmd != nil; cmd = cmd.Next() {
+	for _, cmd := range p.registeredCommands.All() {
 		ppConfig := p.DefaultPrettyPrintConfig()
-		if cmd.Value.topLevel {
-			cmdName := p.buildCommandNameWithPositionals(cmd.Value)
+		if cmd.topLevel {
+			cmdName := p.buildCommandNameWithPositionals(cmd)
 
-			desc := p.renderer.CommandDescription(cmd.Value)
+			desc := p.renderer.CommandDescription(cmd)
 			if desc != "" {
 				fmt.Fprintf(writer, "\n%-*s \"%s\"\n", maxTopWidth, cmdName, desc)
 			} else {
 				fmt.Fprintf(writer, "\n%s\n", cmdName)
 			}
-			for i := range cmd.Value.Subcommands {
+			for i := range cmd.Subcommands {
 				prefix := ppConfig.DefaultPrefix
-				if i == len(cmd.Value.Subcommands)-1 {
+				if i == len(cmd.Subcommands)-1 {
 					prefix = ppConfig.TerminalPrefix
 				}
-				sub := &cmd.Value.Subcommands[i]
-				subPath := cmd.Value.Name + " " + sub.Name
+				sub := &cmd.Subcommands[i]
+				subPath := cmd.Name + " " + sub.Name
 				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
 
 				if registeredSub, found := p.registeredCommands.Get(subPath); found {
@@ -3408,8 +3397,8 @@ func (p *Parser) printCommandTree(writer io.Writer) {
 // countCommandFlags counts flags specific to a command
 func (p *Parser) countCommandFlags(cmdPath string) int {
 	count := 0
-	for f := p.acceptedFlags.Front(); f != nil; f = f.Next() {
-		if f.Value.CommandPath == cmdPath {
+	for _, flagInfo := range p.acceptedFlags.All() {
+		if flagInfo.CommandPath == cmdPath {
 			count++
 		}
 	}
@@ -3468,9 +3457,8 @@ func (p *Parser) checkNamingConsistency() []string {
 	var warnings []string
 
 	// Check flags
-	for kv := p.acceptedFlags.Front(); kv != nil; kv = kv.Next() {
-		flagName := *kv.Key
-		flagInfo := kv.Value
+	for flagKey, flagInfo := range p.acceptedFlags.All() {
+		flagName := flagKey
 
 		// Skip command-specific flags (handle them with their command context)
 		if strings.Contains(flagName, "@") {
@@ -3493,7 +3481,7 @@ func (p *Parser) checkNamingConsistency() []string {
 		if p.translationRegistry != nil && flagInfo.Argument.NameKey != "" {
 			currentLang := p.GetLanguage()
 			if currentLang != language.Und {
-				translation, ok := p.translationRegistry.GetFlagTranslation(*kv.Key, currentLang)
+				translation, ok := p.translationRegistry.GetFlagTranslation(flagKey, currentLang)
 				if ok && translation != "" && translation != flagName {
 					convertedTranslation := p.flagNameConverter(translation)
 					if translation != convertedTranslation {
@@ -3507,9 +3495,7 @@ func (p *Parser) checkNamingConsistency() []string {
 	}
 
 	// Check commands
-	for kv := p.registeredCommands.Front(); kv != nil; kv = kv.Next() {
-		cmdName := *kv.Key
-		cmd := kv.Value
+	for cmdName, cmd := range p.registeredCommands.All() {
 
 		// Check if the command name matches what the converter would produce
 		converted := p.commandNameConverter(cmdName)

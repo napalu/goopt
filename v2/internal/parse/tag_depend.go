@@ -55,7 +55,7 @@ func Dependencies(input string) (DependencyMap, error) {
 		bracketCount, braceCount int
 	)
 
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		ch := input[i]
 		switch ch {
 		case '[':
@@ -135,7 +135,7 @@ func Dependency(input string) (string, []string, error) {
 	var bracketCount int
 
 	input += "," // Add trailing comma to simplify parsing
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		ch := input[i]
 		switch ch {
 		case '[':

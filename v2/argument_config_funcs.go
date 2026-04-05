@@ -125,7 +125,7 @@ func WithAcceptedValues(values []types.PatternValue) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.AcceptedValues = values
 
-		for i := 0; i < len(values); i++ {
+		for i := range len(values) {
 			re, e := regexp.Compile(argument.AcceptedValues[i].Pattern)
 			if e != nil {
 				if err != nil {

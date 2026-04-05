@@ -17,11 +17,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"strings"
+	"sync"
+
 	"github.com/napalu/goopt/v2/i18n/locales/de"
 	"github.com/napalu/goopt/v2/i18n/locales/en"
 	"github.com/napalu/goopt/v2/i18n/locales/fr"
-	"strings"
-	"sync"
 
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
@@ -178,9 +180,9 @@ func NewBundleWithFS(fs embed.FS, dirPrefix string, lang ...language.Tag) (*Bund
 
 	// Build supported languages list
 	supported := make([]language.Tag, 0, b.translations.Len())
-	for iter := b.translations.Front(); iter != nil; iter = iter.Next() {
+	for langKey := range b.translations.Keys() {
 		// Parse the string key back to language.Tag
-		if tag, err := language.Parse(*iter.Key); err == nil {
+		if tag, err := language.Parse(langKey); err == nil {
 			supported = append(supported, tag)
 		}
 	}
@@ -245,13 +247,11 @@ func (b *Bundle) AddLanguage(lang language.Tag, translations map[string]string) 
 
 	// Merge with existing translations
 	existing, _ := b.translations.Get(lang.String())
-	merged := make(map[string]string)
-	for k, v := range existing {
-		merged[k] = v
+	merged := maps.Clone(existing)
+	if merged == nil {
+		merged = make(map[string]string)
 	}
-	for k, v := range translations {
-		merged[k] = v
-	}
+	maps.Copy(merged, translations)
 
 	// Store original state for rollback
 	original, hadOriginal := b.translations.Get(lang.String())
@@ -310,13 +310,11 @@ func (b *Bundle) LanguagesWithKey(key string) []language.Tag {
 	defer b.mu.RUnlock()
 
 	var langs []language.Tag
-	for iter := b.translations.Front(); iter != nil; iter = iter.Next() {
-		if messages, ok := b.translations.Get(*iter.Key); ok {
-			if _, hasKey := messages[key]; hasKey {
-				// Parse the string key back to language.Tag
-				if tag, err := language.Parse(*iter.Key); err == nil {
-					langs = append(langs, tag)
-				}
+	for langKey, messages := range b.translations.All() {
+		if _, hasKey := messages[key]; hasKey {
+			// Parse the string key back to language.Tag
+			if tag, err := language.Parse(langKey); err == nil {
+				langs = append(langs, tag)
 			}
 		}
 	}
@@ -327,9 +325,9 @@ func (b *Bundle) LanguagesWithKey(key string) []language.Tag {
 func (b *Bundle) updateMatcher() {
 	supported := make([]language.Tag, 0, b.translations.Len())
 	// OrderedMap maintains insertion order, so English will always be first
-	for iter := b.translations.Front(); iter != nil; iter = iter.Next() {
+	for langKey := range b.translations.Keys() {
 		// Parse the string key back to language.Tag
-		if tag, err := language.Parse(*iter.Key); err == nil {
+		if tag, err := language.Parse(langKey); err == nil {
 			supported = append(supported, tag)
 		}
 	}
@@ -428,9 +426,9 @@ func (b *Bundle) Languages() []language.Tag {
 	defer b.mu.RUnlock()
 
 	langs := make([]language.Tag, 0, b.translations.Len())
-	for iter := b.translations.Front(); iter != nil; iter = iter.Next() {
+	for langKey := range b.translations.Keys() {
 		// Parse the string key back to language.Tag
-		if tag, err := language.Parse(*iter.Key); err == nil {
+		if tag, err := language.Parse(langKey); err == nil {
 			langs = append(langs, tag)
 		}
 	}
@@ -503,11 +501,7 @@ func (b *Bundle) GetTranslations(lang language.Tag) map[string]string {
 
 	if translations, ok := b.translations.Get(lang.String()); ok {
 		// Return a copy to prevent external modification
-		result := make(map[string]string, len(translations))
-		for k, v := range translations {
-			result[k] = v
-		}
-		return result
+		return maps.Clone(translations)
 	}
 	return nil
 }
@@ -615,9 +609,9 @@ func (b *Bundle) validateLanguage(lang language.Tag) []error {
 	// Check if bundle has any existing languages to validate against
 	existingLanguages := 0
 	var referenceTranslations map[string]string
-	for iter := b.translations.Front(); iter != nil; iter = iter.Next() {
-		if *iter.Key != lang.String() {
-			if trans, ok := b.translations.Get(*iter.Key); ok && len(trans) > 0 {
+	for langKey, trans := range b.translations.All() {
+		if langKey != lang.String() {
+			if len(trans) > 0 {
 				existingLanguages++
 				if referenceTranslations == nil {
 					referenceTranslations = trans

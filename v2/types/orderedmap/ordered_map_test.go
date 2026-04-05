@@ -1,6 +1,7 @@
 package orderedmap
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -222,6 +223,99 @@ func TestOrderedMap(t *testing.T) {
 		assert.Equal(t, "two", *key2)
 		assert.Equal(t, 2, val2)
 	})
+}
+
+func TestOrderedMap_All(t *testing.T) {
+	t.Run("forward iteration", func(t *testing.T) {
+		om := NewOrderedMap[string, int]()
+		om.Set("one", 1)
+		om.Set("two", 2)
+		om.Set("three", 3)
+
+		var keys []string
+		var vals []int
+		for k, v := range om.All() {
+			keys = append(keys, k)
+			vals = append(vals, v)
+		}
+
+		assert.Equal(t, []string{"one", "two", "three"}, keys)
+		assert.Equal(t, []int{1, 2, 3}, vals)
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		om := NewOrderedMap[string, int]()
+
+		count := 0
+		for range om.All() {
+			count++
+		}
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("early break", func(t *testing.T) {
+		om := NewOrderedMap[string, int]()
+		om.Set("one", 1)
+		om.Set("two", 2)
+		om.Set("three", 3)
+
+		count := 0
+		for range om.All() {
+			count++
+			break
+		}
+		assert.Equal(t, 1, count)
+	})
+}
+
+func TestOrderedMap_Backward(t *testing.T) {
+	om := NewOrderedMap[string, int]()
+	om.Set("one", 1)
+	om.Set("two", 2)
+	om.Set("three", 3)
+
+	var keys []string
+	var vals []int
+	for k, v := range om.Backward() {
+		keys = append(keys, k)
+		vals = append(vals, v)
+	}
+
+	assert.Equal(t, []string{"three", "two", "one"}, keys)
+	assert.Equal(t, []int{3, 2, 1}, vals)
+}
+
+func TestOrderedMap_Keys(t *testing.T) {
+	om := NewOrderedMap[string, int]()
+	om.Set("one", 1)
+	om.Set("two", 2)
+	om.Set("three", 3)
+
+	keys := slices.Collect(om.Keys())
+	assert.Equal(t, []string{"one", "two", "three"}, keys)
+}
+
+func TestOrderedMap_Values(t *testing.T) {
+	om := NewOrderedMap[string, int]()
+	om.Set("one", 1)
+	om.Set("two", 2)
+	om.Set("three", 3)
+
+	vals := slices.Collect(om.Values())
+	assert.Equal(t, []int{1, 2, 3}, vals)
+}
+
+func TestOrderedMap_IteratorsEmpty(t *testing.T) {
+	om := NewOrderedMap[string, int]()
+
+	assert.Empty(t, slices.Collect(om.Keys()))
+	assert.Empty(t, slices.Collect(om.Values()))
+
+	count := 0
+	for range om.Backward() {
+		count++
+	}
+	assert.Equal(t, 0, count)
 }
 
 func TestOrderedMap_Len(t *testing.T) {
