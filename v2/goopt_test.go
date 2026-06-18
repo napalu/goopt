@@ -2587,6 +2587,7 @@ func TestParser_ConfigurationPrecedence(t *testing.T) {
 }
 
 func TestParser_NestedConfigurationPrecedence(t *testing.T) {
+	ev := &envVarTest{}
 	tests := []struct {
 		name          string
 		setupFunc     func() (*Parser, error)
@@ -2607,7 +2608,7 @@ func TestParser_NestedConfigurationPrecedence(t *testing.T) {
 						} `goopt:"name:connection"`
 					} `goopt:"name:database"`
 				}{}
-				return NewParserFromStruct(opts)
+				return NewParserFromStruct(opts, WithEnvResolver(ev))
 			},
 			cliArgs:       []string{"--database.connection.host", "cli_host"},
 			envVar:        "DATABASE_CONNECTION_HOST=env_host",
@@ -2626,7 +2627,7 @@ func TestParser_NestedConfigurationPrecedence(t *testing.T) {
 						} `goopt:"name:connection"`
 					} `goopt:"name:database"`
 				}{}
-				return NewParserFromStruct(opts)
+				return NewParserFromStruct(opts, WithEnvResolver(ev))
 			},
 			envVar:        "DATABASE_CONNECTION_HOST=env_host",
 			flagName:      "database.connection.host",
@@ -2644,7 +2645,7 @@ func TestParser_NestedConfigurationPrecedence(t *testing.T) {
 						} `goopt:"name:connection"`
 					} `goopt:"name:database"`
 				}{}
-				return NewParserFromStruct(opts)
+				return NewParserFromStruct(opts, WithEnvResolver(ev))
 			},
 			envVar:        "DATABASE_CONNECTION_HOST=env_host",
 			flagName:      "database.connection.host",
@@ -2662,15 +2663,19 @@ func TestParser_NestedConfigurationPrecedence(t *testing.T) {
 			// Setup environment with custom converter for nested flags
 			if tt.envVar != "" {
 				key, value, _ := strings.Cut(tt.envVar, "=")
-				os.Setenv(key, value)
-				defer os.Unsetenv(key)
-				parser.SetEnvNameConverter(func(s string) string {
+				_ = ev.Set(key, value)
+				converter := func(s string) string {
 					parts := strings.Split(s, "_")
+					if len(parts) == 1 {
+						parts = strings.Split(s, ".")
+					}
 					for i, part := range parts {
 						parts[i] = DefaultFlagNameConverter(part)
 					}
 					return strings.Join(parts, ".")
-				})
+				}
+				parser.SetEnvNameConverter(converter)
+				parser.SetFlagNameConverter(converter)
 			}
 
 			// Parse with or without defaults
