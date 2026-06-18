@@ -110,14 +110,20 @@ func (e *TrError) Unwrap() error {
 
 func (e *TrError) Format(provider MessageProvider) string {
 	msg := provider.GetMessage(e.key)
+
+	// Get the formatter and the RTL flag if the provider supports it. The RTL
+	// flag gates bidi-isolation of injected values (flag names, paths, wrapped
+	// errors) so that LTR runs embedded in an RTL message cannot reorder the
+	// surrounding translated text.
+	var formatter *Formatter
+	rtl := false
+	if lp, ok := provider.(*LayeredMessageProvider); ok {
+		formatter = lp.GetFormatter()
+		rtl = IsRTL(lp.GetLanguage())
+	}
+
 	if len(e.args) > 0 {
 		translatedArgs := make([]interface{}, len(e.args))
-
-		// Get formatter if provider supports it
-		var formatter *Formatter
-		if lp, ok := provider.(*LayeredMessageProvider); ok {
-			formatter = lp.GetFormatter()
-		}
 
 		// Parse format string to determine which arguments need locale formatting
 		// This is a simple heuristic: if we see %d, %f, etc., we keep raw values
@@ -144,6 +150,12 @@ func (e *TrError) Format(provider MessageProvider) string {
 						translatedArgs[i] = formatter.FormatFloat(float64(v), 2)
 					default:
 						translatedArgs[i] = arg
+					}
+					// Isolate the (possibly LTR) value so it cannot reorder the
+					// surrounding RTL message. Only s/v args, which render as
+					// text — isolating a %d/%f arg would break the verb.
+					if rtl {
+						translatedArgs[i] = isolate(fmt.Sprintf("%v", translatedArgs[i]))
 					}
 				} else {
 					// Keep raw value for %d, %f, etc.
@@ -176,9 +188,24 @@ func (e *TrError) Format(provider MessageProvider) string {
 			wrappedMsg = e.wrapped.Error()
 		}
 
+		// Isolate the appended reason (often opposite-direction, e.g. an LTR
+		// system error) so the ':' separator and the reason render correctly
+		// within an RTL message.
+		if rtl {
+			wrappedMsg = isolate(wrappedMsg)
+		}
+
 		return fmt.Sprintf("%s: %s", msg, wrappedMsg)
 	}
 	return msg
+}
+
+// isolate wraps s in Unicode First Strong Isolate (U+2068) / Pop Directional
+// Isolate (U+2069). FSI auto-detects the run's direction from its first strong
+// character and isolates it, so an LTR value embedded in RTL text (or vice
+// versa) cannot reorder the surrounding characters.
+func isolate(s string) string {
+	return "\u2068" + s + "\u2069" // FSI … PDI
 }
 
 // parseFormatSpecifiers extracts the format specifier characters from a format string

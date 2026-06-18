@@ -1598,7 +1598,7 @@ func (p *Parser) validateProcessedOptions() {
 }
 
 func (p *Parser) walkFlags() {
-	visited := make(map[string]bool)
+	visited := orderedmap.NewOrderedMap[string, bool]()
 	for flagKey, flagInfo := range p.acceptedFlags.All() {
 		if flagInfo.Argument.isPositional() {
 			continue
@@ -1696,18 +1696,35 @@ func (p *Parser) walkCommands() {
 	}
 }
 
-func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visited map[string]bool, depth int) {
+func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visited *orderedmap.OrderedMap[string, bool], depth int) {
 	if depth > p.maxDependencyDepth {
 		p.addError(errs.ErrRecursionDepthExceeded.WithArgs(p.maxDependencyDepth))
 		return
 	}
 
-	if visited[mainKey] {
-		p.addError(errs.ErrCircularDependency.WithArgs(p.formatFlagForError(mainKey)))
+	if _, onPath := visited.Get(mainKey); onPath {
+		// mainKey is already on the active DFS path — a genuine cycle. Because we
+		// Set on enter and Delete on backtrack, the ordered keys are exactly that
+		// path, so we can render the chain that closes back on mainKey.
+		var chain []string
+		started := false
+		for k := range visited.Keys() {
+			if k == mainKey {
+				started = true
+			}
+			if started {
+				chain = append(chain, splitPathFlag(k)[0])
+			}
+		}
+		chain = append(chain, splitPathFlag(mainKey)[0]) // close the loop
+		p.addError(errs.ErrCircularDependency.WithArgs(
+			p.formatFlagForError(mainKey),
+			strings.Join(chain, " → "),
+		))
 		return
 	}
 
-	visited[mainKey] = true
+	visited.Set(mainKey, true)
 
 	for _, depends := range p.getDependentFlags(flagInfo.Argument) {
 		dependentFlag, found := p.getFlagInCommandPath(depends, flagInfo.CommandPath)
@@ -1725,7 +1742,7 @@ func (p *Parser) validateDependencies(flagInfo *FlagInfo, mainKey string, visite
 		p.validateDependencies(dependentFlag, depends, visited, depth+1)
 	}
 
-	visited[mainKey] = false
+	visited.Delete(mainKey)
 }
 
 func (p *Parser) getFlagInCommandPath(flag string, commandPath string) (*FlagInfo, bool) {
