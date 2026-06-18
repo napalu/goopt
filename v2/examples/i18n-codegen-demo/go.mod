@@ -1,6 +1,6 @@
 module github.com/napalu/goopt/v2/examples/i18n-codegen-demo
 
-go 1.18
+go 1.23
 
 require github.com/napalu/goopt/v2 v2.2.3
 

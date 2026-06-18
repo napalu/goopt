@@ -50,7 +50,7 @@ Translations are applied automatically based on `LANG`, or programmatically via 
 
 ## Requirements
 
-- Go 1.18 or higher
+- Go 1.23 or higher
 - [`golang.org/x/text`](https://pkg.go.dev/golang.org/x/text)
 - [`github.com/napalu/goopt`](https://github.com/napalu/goopt)
 
