@@ -1,15 +1,15 @@
 module github.com/napalu/goopt/v2
 
-go 1.25.0
+go 1.23.0
 
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/iancoleman/strcase v0.3.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sys v0.46.0
-	golang.org/x/term v0.44.0
-	golang.org/x/text v0.38.0
+	golang.org/x/sys v0.35.0
+	golang.org/x/term v0.34.0
+	golang.org/x/text v0.28.0
 )
 
 require (
