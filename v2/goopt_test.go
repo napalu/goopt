@@ -621,6 +621,32 @@ func TestParser_EnvToFlag(t *testing.T) {
 	assert.True(t, cmdLine.HasCommand("command test"))
 }
 
+type Embedded struct {
+	SecurePassword string `goopt:"secure:true;required:true"`
+	AppUrl         string `goopt:"type:url"`
+}
+
+type EmbTest struct {
+	Verbose bool `goopt:"type:bool"`
+	Embedded
+}
+
+func TestParser_EmbeddedTypesWithEnvVars(t *testing.T) {
+	c := &EmbTest{}
+	ev := &envVarTest{}
+	p, err := NewParserFromStruct(c, WithEnvVarPrefix("TEST_"),
+		WithEnvResolver(ev),
+		WithEnvNameConverter(ToKebabCase),
+		WithFlagNameConverter(ToKebabCase))
+	assert.Nil(t, err)
+	_ = ev.Set("TEST_EMBEDDED_SECURE_PASSWORD", "test")
+	_ = ev.Set("TEST_EMBEDDED_APP_URL", "http://example.com")
+
+	assert.True(t, p.ParseString(""))
+	assert.Equal(t, "test", c.Embedded.SecurePassword)
+	assert.Equal(t, "http://example.com", c.Embedded.AppUrl)
+}
+
 func TestParser_GlobalAndCommandEnvVars(t *testing.T) {
 	opts := NewParser()
 

@@ -1445,7 +1445,7 @@ func (p *Parser) resolveSecureEnvVar(name string) string {
 			continue
 		}
 		converted := p.envNameConverter(stripped)
-		if converted == baseName {
+		if converted == p.envNameConverter(baseName) {
 			return kv[1]
 		}
 	}
@@ -1825,11 +1825,11 @@ func (p *Parser) groupEnvVarsByCommand() map[string][]string {
 			paths := splitPathFlag(flagKey)
 			length := len(paths)
 			// Global flag (no command path)
-			if length == 1 && paths[0] == v {
+			if length == 1 && p.envNameConverter(paths[0]) == v {
 				commandEnvVars["global"] = append(commandEnvVars["global"], fmt.Sprintf("--%s", flagKey), kv[1])
 			}
 			// Command-specific flag
-			if length > 1 && paths[0] == v {
+			if length > 1 && p.envNameConverter(paths[0]) == v {
 				commandEnvVars[paths[1]] = append(commandEnvVars[paths[1]], fmt.Sprintf("--%s", flagKey), kv[1])
 			}
 		}
