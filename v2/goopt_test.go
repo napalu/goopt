@@ -26,6 +26,7 @@ import (
 	"github.com/napalu/goopt/v2/internal/testutil"
 	"github.com/napalu/goopt/v2/internal/util"
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/types/orderedmap"
 	"github.com/stretchr/testify/assert"
 
 	"golang.org/x/text/language"
@@ -3042,7 +3043,7 @@ func TestParser_ValidateDependencies(t *testing.T) {
 			p := NewParser()
 			flagInfo := tt.setupFunc(p)
 
-			visited := make(map[string]bool)
+			visited := orderedmap.NewOrderedMap[string, bool]()
 			p.validateDependencies(flagInfo, tt.mainKey, visited, 0)
 
 			errs := p.GetErrors()
@@ -3057,6 +3058,33 @@ func TestParser_ValidateDependencies(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCircularDependencyChain(t *testing.T) {
+	p := NewParser()
+
+	// flag1 -> flag2 -> flag3 -> flag1
+	flag1 := NewArg()
+	flag1.DependencyMap = map[string][]string{"flag2": {""}}
+	_ = p.AddFlag("flag1", flag1)
+
+	flag2 := NewArg()
+	flag2.DependencyMap = map[string][]string{"flag3": {""}}
+	_ = p.AddFlag("flag2", flag2)
+
+	flag3 := NewArg()
+	flag3.DependencyMap = map[string][]string{"flag1": {""}}
+	_ = p.AddFlag("flag3", flag3)
+
+	flagInfo, _ := p.acceptedFlags.Get("flag1")
+	visited := orderedmap.NewOrderedMap[string, bool]()
+	p.validateDependencies(flagInfo, "flag1", visited, 0)
+
+	errsList := p.GetErrors()
+	require.NotEmpty(t, errsList, "expected a circular dependency error")
+	if msg := errsList[0].Error(); !strings.Contains(msg, "flag1 → flag2 → flag3 → flag1") {
+		t.Fatalf("expected cycle chain 'flag1 → flag2 → flag3 → flag1' in error, got: %q", msg)
 	}
 }
 
