@@ -38,11 +38,10 @@ func NewLayeredMessageProvider(defaultBundle, systemBundle, userBundle *Bundle) 
 // GetMessage returns the message for the given key, checking each layer in order
 func (p *LayeredMessageProvider) GetMessage(key string) string {
 	p.mu.RLock()
-	lang := p.currentLanguage
-	p.mu.RUnlock()
-
-	// Use TL with the current language
-	return p.TL(lang, key)
+	defer p.mu.RUnlock()
+	// Pure lookup (no formatting) — avoids routing a dynamic key through the
+	// variadic TL, which go vet treats as a printf format string.
+	return p.lookupLocked(p.currentLanguage, key)
 }
 
 // tryGetMessage attempts to get a message from a bundle
@@ -185,52 +184,43 @@ func (p *LayeredMessageProvider) TL(lang language.Tag, key string, args ...inter
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Try to get message from each layer in priority order, checking for the requested language first
+	// lookupLocked returns the raw template, or the key itself if untranslated —
+	// so the no-translation + args path below still formats key, as before.
+	msg := p.lookupLocked(lang, key)
+	if len(args) > 0 {
+		// Use locale-aware printer for formatting, falling back to fmt.
+		if p.formatter != nil && p.formatter.printer != nil {
+			return p.formatter.printer.Sprintf(msg, args...)
+		}
+		return fmt.Sprintf(msg, args...)
+	}
+	return msg
+}
+
+// lookupLocked resolves key through the layered bundles (requested language,
+// then English fallback) and returns the raw message, or the key itself when no
+// translation exists. It performs no formatting. The caller must hold p.mu.
+func (p *LayeredMessageProvider) lookupLocked(lang language.Tag, key string) string {
 	bundles := []*Bundle{p.userBundle, p.systemBundle, p.defaultBundle}
 
 	for _, bundle := range bundles {
 		if bundle != nil && bundle.HasKey(lang, key) {
 			if msg, ok := p.tryGetMessage(bundle, lang, key); ok {
-				if len(args) > 0 {
-					// Use locale-aware printer for formatting
-					if p.formatter != nil && p.formatter.printer != nil {
-						return p.formatter.printer.Sprintf(msg, args...)
-					}
-					// Fallback to regular formatting
-					return fmt.Sprintf(msg, args...)
-				}
 				return msg
 			}
 		}
 	}
 
-	// If requested language not found, fallback to English
 	if lang != language.English {
 		for _, bundle := range bundles {
 			if bundle != nil && bundle.HasKey(language.English, key) {
 				if msg, ok := p.tryGetMessage(bundle, language.English, key); ok {
-					if len(args) > 0 {
-						// Use locale-aware printer for formatting
-						if p.formatter != nil && p.formatter.printer != nil {
-							return p.formatter.printer.Sprintf(msg, args...)
-						}
-						// Fallback to regular formatting
-						return fmt.Sprintf(msg, args...)
-					}
 					return msg
 				}
 			}
 		}
 	}
 
-	// Return key if no translation found
-	if len(args) > 0 {
-		// Use locale-aware printer even for missing keys
-		if p.formatter != nil && p.formatter.printer != nil {
-			return p.formatter.printer.Sprintf(key, args...)
-		}
-		return fmt.Sprintf(key, args...)
-	}
 	return key
 }
 
