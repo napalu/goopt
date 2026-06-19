@@ -19,3 +19,4 @@ These features allow you to build more resilient, maintainable, and professional
 2.  **[Execution Hooks]({{ site.baseurl }}/v2/guides/04-advanced-features/02-execution-hooks/):** Learn how to run code before and after your commands to handle cross-cutting concerns like logging, authentication, and resource cleanup.
 3.  **[Error Handling]({{ site.baseurl }}/v2/guides/04-advanced-features/03-error-handling/):** Best practices for robust error handling during argument and parser setup.
 4.  **[Flag Inheritance]({{ site.baseurl }}/v2/guides/04-advanced-features/04-flag-inheritance/):** Understand the rules for how flags are inherited and overridden in nested command hierarchies.
+5.  **[Contracts]({{ site.baseurl }}/v2/guides/04-advanced-features/05-contracts/):** Declare relational constraints *between* flags — mutual exclusion, co-requirement, and conditional requirement — without hand-written callbacks.

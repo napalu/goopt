@@ -28,6 +28,7 @@ type Argument struct {
 	DefaultValue   string
 	Capacity       int // For slices, the capacity of the slice, ignored for other types
 	Position       *int
+	Contracts      []Contract
 	uniqueID       string
 }
 

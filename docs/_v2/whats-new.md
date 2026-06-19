@@ -22,6 +22,15 @@ The old `accepted` tag has been **deprecated** in favor of a completely new vali
 - **Clearer Syntax:** The new `validators` tag uses a more intuitive parenthesis-based syntax (e.g., `validators:"minlength(5)"`).
 - **➡️ [Read the Validation Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/01-validation/)**
 
+### Flag Contracts (Relational Constraints)
+Where validators check a single value, **contracts** declare constraints *between* flags —
+mutual exclusion, co-requirement, and conditional requirement — declaratively, replacing
+hand-written `RequiredIf` callbacks for the common cases.
+- **Five primitives:** `mutex` (at most one), `exactlyone` (exactly one), `conflicts`, `requires`, and `requiredOn` (required when another flag/command is present).
+- **All three paradigms:** struct tags (`contract:"mutex(format)"`), option funcs (`WithMutex`), or programmatic accessors (`AddFlagContracts`/`SetFlagContracts`/`GetFlagContracts`).
+- **Friendly, translated errors:** user-facing messages name the flags actually typed and ship in every built-in locale; misspelled group names are caught as developer-facing construction errors.
+- **➡️ [Read the Contracts Guide]({{ site.baseurl }}/v2/guides/04-advanced-features/05-contracts/)**
+
 ### Command Execution Hooks
 Manage the entire lifecycle of your commands with pre- and post-execution hooks. This is perfect for handling cross-cutting concerns without cluttering your command logic.
 - **Use cases:** Authentication checks, database connection management, logging, metrics, and resource cleanup.

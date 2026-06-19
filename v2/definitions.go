@@ -197,6 +197,7 @@ type Parser struct {
 	layeredProvider           *i18n.LayeredMessageProvider
 	renderer                  Renderer
 	structCtx                 any
+	contractGroupsChecked     bool
 	suggestionsFormatter      SuggestionsFormatter
 	helpConfig                HelpConfig
 	prettyPrintConfig         *PrettyPrintConfig

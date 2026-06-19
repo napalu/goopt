@@ -81,6 +81,7 @@ type TagConfig struct {
 	Capacity       int
 	Position       *int
 	Validators     []string // List of validator specifications
+	Contracts      []string // List of cross-flag contract specifications (mutex, conflicts, ...)
 	Greedy         bool     // Indicates that this command is the last one in the command chain
 }
 

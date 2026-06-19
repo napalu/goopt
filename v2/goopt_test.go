@@ -3,6 +3,7 @@ package goopt
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
+	"github.com/napalu/goopt/v2/i18n/locales/ja"
 	"github.com/napalu/goopt/v2/internal/testutil"
 	"github.com/napalu/goopt/v2/internal/util"
 	"github.com/napalu/goopt/v2/types"
@@ -15691,4 +15693,237 @@ func TestParser_Errors_Iterator(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
+}
+
+// baseOf returns just the base language of a tag (dropping region/script), e.g.
+// de-CH -> de. SetLanguage classifies a result by comparing bases.
+func baseOf(t language.Tag) language.Base {
+	b, _ := t.Base()
+	return b
+}
+
+// TestSetLanguage covers the three outcomes SetLanguage distinguishes by base
+// language: an exact match of a loaded language, a best match (a regional variant
+// resolving to its loaded base language), and a true fallback (a language that is
+// not loaded, where the parser lands on an unrelated default).
+func TestSetLanguage(t *testing.T) {
+	// de, en, fr are loaded by default; other locales must be loaded explicitly.
+
+	t.Run("exact match of a default-loaded language succeeds", func(t *testing.T) {
+		for _, tag := range []language.Tag{language.English, language.German, language.French} {
+			p := NewParser()
+			if err := p.SetLanguage(tag); err != nil {
+				t.Errorf("SetLanguage(%s): unexpected error %v", tag, err)
+			}
+			if got := p.GetLanguage(); got != tag {
+				t.Errorf("GetLanguage() = %s, want %s", got, tag)
+			}
+		}
+	})
+
+	t.Run("best match resolves a regional variant to its base language", func(t *testing.T) {
+		// A best match is a success: a related, loaded language was applied even
+		// though the exact regional variant was not requested-for-load.
+		cases := []struct {
+			req  language.Tag
+			base language.Tag
+		}{
+			{language.MustParse("de-CH"), language.German}, // Swiss German -> German
+			{language.MustParse("fr-CA"), language.French}, // Canadian French -> French
+			{language.MustParse("en-GB"), language.English},
+		}
+		for _, c := range cases {
+			p := NewParser()
+			if err := p.SetLanguage(c.req); err != nil {
+				t.Errorf("SetLanguage(%s): expected nil for a best match, got %v", c.req, err)
+			}
+			if got := baseOf(p.GetLanguage()); got != baseOf(c.base) {
+				t.Errorf("SetLanguage(%s): resolved base %s, want %s", c.req, got, baseOf(c.base))
+			}
+		}
+	})
+
+	t.Run("unavailable language returns ErrLanguageUnavailable and falls back", func(t *testing.T) {
+		p := NewParser()
+		err := p.SetLanguage(language.Japanese) // not loaded by default
+		if !errors.Is(err, errs.ErrLanguageUnavailable) {
+			t.Fatalf("expected ErrLanguageUnavailable, got %v", err)
+		}
+		// The parser fell back to an unrelated default rather than switching to ja.
+		if baseOf(p.GetLanguage()) == baseOf(language.Japanese) {
+			t.Errorf("expected fallback away from Japanese, but GetLanguage() = %s", p.GetLanguage())
+		}
+	})
+
+	t.Run("a language becomes available once explicitly loaded", func(t *testing.T) {
+		p := NewParser()
+		if err := p.GetSystemBundle().LoadFromString(ja.Tag, ja.SystemTranslations); err != nil {
+			t.Fatalf("loading ja: %v", err)
+		}
+		if err := p.SetLanguage(language.Japanese); err != nil {
+			t.Errorf("after loading ja, SetLanguage(ja): unexpected error %v", err)
+		}
+		if got := p.GetLanguage(); got != language.Japanese {
+			t.Errorf("GetLanguage() = %s, want ja", got)
+		}
+	})
+
+	t.Run("recovers cleanly after a failed request", func(t *testing.T) {
+		p := NewParser()
+		_ = p.SetLanguage(language.Japanese) // fails (not loaded)
+		if err := p.SetLanguage(language.French); err != nil {
+			t.Errorf("recovering with French: unexpected error %v", err)
+		}
+		if got := p.GetLanguage(); got != language.French {
+			t.Errorf("GetLanguage() = %s, want fr", got)
+		}
+	})
+}
+
+// directiveRe matches a single fmt directive: an optional explicit index [N],
+// flags/width/precision, and a verb (or %% for a literal percent). It does NOT
+// match a bare %[1] with no verb — exactly the malformed case the guard catches
+// at render time (it produces %!(NOVERB)).
+var directiveRe = regexp.MustCompile(`%(?:\[(\d+)\])?[-+ #0-9.]*([a-zA-Z%])`)
+
+// argsForTemplate builds a type-correct argument list for a template by walking
+// its directives with the same argument-cursor semantics fmt uses (bare verbs
+// consume the next argument; %[N] resets the cursor to N). A well-formed template
+// then renders without any %! token.
+func argsForTemplate(tmpl string) []interface{} {
+	maxIdx := 0
+	verb := map[int]byte{}
+	next := 1
+	for _, m := range directiveRe.FindAllStringSubmatch(tmpl, -1) {
+		if m[2] == "%" { // literal %%
+			continue
+		}
+		cur := next
+		if m[1] != "" {
+			cur, _ = strconv.Atoi(m[1])
+		}
+		verb[cur] = m[2][0]
+		if cur > maxIdx {
+			maxIdx = cur
+		}
+		next = cur + 1
+	}
+	args := make([]interface{}, maxIdx)
+	for i := 1; i <= maxIdx; i++ {
+		switch verb[i] {
+		case 'd', 'b', 'o', 'O', 'x', 'X', 'c', 'U':
+			args[i-1] = 42
+		case 'e', 'E', 'f', 'F', 'g', 'G':
+			args[i-1] = 4.2
+		default:
+			args[i-1] = "X"
+		}
+	}
+	return args
+}
+
+// loadAllLocaleTemplates reads every all_locales/*.json into (tag -> key -> template).
+func loadAllLocaleTemplates(t *testing.T) map[language.Tag]map[string]string {
+	t.Helper()
+	files, err := filepath.Glob("i18n/all_locales/*.json")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no locale files found: %v", err)
+	}
+	out := map[language.Tag]map[string]string{}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		var m map[string]string
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		tag := language.Make(strings.TrimSuffix(filepath.Base(f), ".json"))
+		out[tag] = m
+	}
+	return out
+}
+
+// TestErrorTemplatesWellFormed renders every message template in every locale with
+// type-correct args and fails on any %! token (%!(NOVERB), %!(BADINDEX), %!d(...)).
+// This guards the whole class of malformed-format bugs — e.g. a %[1] that dropped
+// its verb, or a translation that references an argument index that isn't passed.
+func TestErrorTemplatesWellFormed(t *testing.T) {
+	for tag, templates := range loadAllLocaleTemplates(t) {
+		b := i18n.NewEmptyBundle()
+		if err := b.LoadFromString(tag, mustJSON(t, templates)); err != nil {
+			t.Fatalf("[%s] load: %v", tag, err)
+		}
+		for key, tmpl := range templates {
+			out := b.TL(tag, key, argsForTemplate(tmpl)...)
+			if strings.Contains(out, "%!") {
+				t.Errorf("[%s] %s: malformed render %q (template %q)", tag, key, out, tmpl)
+			}
+		}
+	}
+}
+
+// flagArgPositions maps each error key fed by formatFlagForError to the 1-based
+// argument positions that carry a flag/command name (which formatFlagForError
+// already wraps in quote glyphs). Those positions must NOT be re-quoted by the
+// template, or the user sees doubled/mixed quotes.
+var flagArgPositions = map[string][]int{
+	"goopt.error.invalid_argument":               {2},
+	"goopt.error.dependency_not_specified":       {1, 2},
+	"goopt.error.dependency_value_not_specified": {1, 2},
+	"goopt.error.flag_expects_value":             {1},
+	"goopt.error.flag_file_operation":            {1},
+	"goopt.error.not_file_path_for_flag":         {1},
+	"goopt.error.not_found_path_for_flag":        {1},
+	"goopt.error.required_flag":                  {1},
+	"goopt.error.required_positional_flag":       {1},
+	"goopt.error.setting_bound_variable_value":   {1},
+	"goopt.error.unknown_flag":                   {1},
+}
+
+// TestFlagErrorMessagesNoDoubledQuotes renders each formatFlagForError-fed error
+// with a glyph-quoted value in its flag positions (simulating formatFlagForError's
+// output) and fails if the result contains doubled or mixed quotes — the footgun
+// where a template quotes an argument that arrives already quoted.
+func TestFlagErrorMessagesNoDoubledQuotes(t *testing.T) {
+	for tag, templates := range loadAllLocaleTemplates(t) {
+		b := i18n.NewEmptyBundle()
+		if err := b.LoadFromString(tag, mustJSON(t, templates)); err != nil {
+			t.Fatalf("[%s] load: %v", tag, err)
+		}
+		open := b.TL(tag, "goopt.msg.quote_open")
+		closing := b.TL(tag, "goopt.msg.quote_close")
+		quoted := open + "F" + closing // what formatFlagForError produces
+		bad := []string{open + open, closing + closing, `"` + open, closing + `"`}
+
+		for key, positions := range flagArgPositions {
+			tmpl, ok := templates[key]
+			if !ok {
+				t.Errorf("[%s] missing key %s", tag, key)
+				continue
+			}
+			args := argsForTemplate(tmpl)
+			for _, pos := range positions {
+				if pos-1 < len(args) {
+					args[pos-1] = quoted
+				}
+			}
+			out := b.TL(tag, key, args...)
+			for _, marker := range bad {
+				if strings.Contains(out, marker) {
+					t.Errorf("[%s] %s: quote artifact %q in render %q (template %q)", tag, key, marker, out, tmpl)
+				}
+			}
+		}
+	}
+}
+
+func mustJSON(t *testing.T, m map[string]string) string {
+	t.Helper()
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
