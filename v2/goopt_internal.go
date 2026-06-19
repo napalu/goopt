@@ -55,20 +55,14 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 		}
 	}
 
-	// If not found, try translation lookup
+	// If not found, try translation lookup. Resolve the canonical name through the
+	// same parent-walking resolver used for the canonical name above, so a
+	// translated name inherits across command scope exactly as its canonical does
+	// (e.g. --<translated> on a parent-command flag works under a subcommand).
 	if !found {
 		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
-			// The canonical name might already include command context (e.g., "flag@command")
-			// Try it as-is first
-			flag = canonical
+			flag = p.flagOrShortFlag(canonical, currentCommandPath)
 			flagInfo, found = p.acceptedFlags.Get(flag)
-
-			// If not found and we have a command path, try building the full path
-			if !found && currentCommandPath != "" {
-				commandParts := strings.Split(currentCommandPath, " ")
-				flag = buildPathFlag(canonical, commandParts...)
-				flagInfo, found = p.acceptedFlags.Get(flag)
-			}
 		}
 	}
 
@@ -2402,13 +2396,6 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 		if err != nil {
 			return err
 		}
-		if arg.DefaultValue != "" {
-			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
-			if err != nil {
-				// Default value binding errors are not critical - collect them
-				p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
-			}
-		}
 	}
 
 	return nil
@@ -2436,17 +2423,6 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 	}
 	if err != nil {
 		return err
-	}
-	if arg.DefaultValue != "" {
-		if commandPath != "" {
-			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, commandPath))
-		} else {
-			err = p.setBoundVariable(arg.DefaultValue, fullFlagName)
-		}
-		if err != nil {
-			// Default value binding errors are not critical - collect them
-			p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
-		}
 	}
 
 	return nil
@@ -2833,6 +2809,16 @@ func getFlagPath(flag string) string {
 func (p *Parser) formatFlagForError(flag string) string {
 	parts := splitPathFlag(flag)
 	if len(parts) == 2 && parts[1] != "" {
+		// Omit the "(in command 'x')" qualifier when that command was actually
+		// invoked: the user already knows which command they ran, so repeating it
+		// (e.g. once per flag in a contract error) is noise. The qualifier is kept
+		// only for a flag of a command that was not invoked, where it genuinely
+		// disambiguates.
+		for _, cmd := range p.GetCommands() {
+			if cmd == parts[1] || strings.HasPrefix(cmd, parts[1]+" ") {
+				return p.quoteForError(parts[0])
+			}
+		}
 		// Format as: 'flag' (in command 'command')
 		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
 		return p.quoteForError(parts[0]) + " (" + inCommandMsg + " " + p.quoteForError(parts[1]) + ")"

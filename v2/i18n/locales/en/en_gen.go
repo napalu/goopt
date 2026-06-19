@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "required flag missing: %[1]s",
         "goopt.error.required_positional_flag": "missing required positional argument %[1]s at index %[2]d",
         "goopt.error.required_when": "%[1]s is required when %[2]s is used",
+        "goopt.error.required_with_default": "flag %[1]q cannot be both required and have a default value (a default makes it never missing)",
         "goopt.error.secure_flag_expects_value": "secure flag %[1]s expects a value but we failed to obtain one",
         "goopt.error.setting_bound_variable_value": "error setting bound variable value for flag %[1]s",
         "goopt.error.short_flag_conflict": "short flag '%[1]s' on global flag %[2]s already exists as %[3]v",

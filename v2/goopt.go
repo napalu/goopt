@@ -1108,7 +1108,10 @@ func (p *Parser) GetWarnings() []string {
 		}
 
 		for _, depFlag := range dependentFlags {
-			dependKey := p.flagOrShortFlag(depFlag)
+			// Resolve the dependency target within the owning flag's command scope,
+			// so a command-scoped dependent (e.g. beta@cmd) is matched instead of
+			// being looked up by bare name and reported as "not specified".
+			dependKey := p.flagOrShortFlag(depFlag, flagInfo.CommandPath)
 			dependValue, hasKey := p.options[dependKey]
 
 			if !hasKey {
@@ -1156,6 +1159,13 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	if flag == "" {
 		return errs.ErrEmptyFlag
+	}
+
+	// required + default is a contradictory declaration: a default makes the flag
+	// never "missing", so `required` could never fire. Reject it at construction
+	// (Design B) rather than silently picking a winner at parse time.
+	if argument.Required && argument.DefaultValue != "" {
+		return errs.ErrRequiredWithDefault.WithArgs(flag)
 	}
 
 	// Use the helper function to generate the lookup key
@@ -1289,6 +1299,15 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 
 	// Bind the flag to the variable
 	p.bind[lookupFlag] = bindPtr
+
+	// Apply the configured default to the bound variable immediately, so a default
+	// is visible on the bound target whether you bind via a struct or call BindFlag
+	// directly. A value supplied at Parse (cmdline/env/config) overrides it.
+	if argument.DefaultValue != "" {
+		if err := p.setBoundVariable(argument.DefaultValue, lookupFlag); err != nil {
+			p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, argument.DefaultValue))
+		}
+	}
 
 	return nil
 }

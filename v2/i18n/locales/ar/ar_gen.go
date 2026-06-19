@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "العلامة المطلوبة مفقودة: %[1]s",
         "goopt.error.required_positional_flag": "الوسيطة الموضعية المطلوبة %[1]s في الفهرس %[2]d مفقودة",
         "goopt.error.required_when": "%[1]s مطلوب عند استخدام %[2]s",
+        "goopt.error.required_with_default": "لا يمكن أن تكون العلامة %[1]q مطلوبة ولها قيمة افتراضية في آن واحد (القيمة الافتراضية تجعلها لا تغيب أبدًا)",
         "goopt.error.secure_flag_expects_value": "تتوقع العلامة الآمنة %[1]s قيمة ولكننا فشلنا في الحصول عليها",
         "goopt.error.setting_bound_variable_value": "خطأ في تعيين قيمة المتغير المرتبط للعلامة %[1]s",
         "goopt.error.short_flag_conflict": "تتعارض العلامة القصيرة '%[1]s' في العلامة العامة %[2]s الموجودة بالفعل كـ %[3]v",

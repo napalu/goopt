@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "缺少必需的标志: %[1]s",
         "goopt.error.required_positional_flag": "在索引 %[2]d 处缺少必需的位置参数 %[1]s",
         "goopt.error.required_when": "使用 %[2]s 时需要 %[1]s",
+        "goopt.error.required_with_default": "标志 %[1]q 不能既是必需的又具有默认值（默认值使其永远不会缺失）",
         "goopt.error.secure_flag_expects_value": "安全标志 %[1]s 需要一个值，但我们未能获取",
         "goopt.error.setting_bound_variable_value": "为标志 %[1]s 设置绑定变量值时出错",
         "goopt.error.short_flag_conflict": "全局标志 %[2]s 上的短标志 '%[1]s' 已作为 %[3]v 存在",

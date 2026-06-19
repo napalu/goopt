@@ -1,4 +1,5 @@
 {
+    "goopt.error.required_with_default": "flag %[1]q cannot be both required and have a default value (a default makes it never missing)",
     "goopt.msg.quote_open": "'",
     "goopt.msg.quote_close": "'",
     "goopt.error.unsupported_type": "unsupported type conversion",

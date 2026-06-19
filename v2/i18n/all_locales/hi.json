@@ -1,4 +1,5 @@
 {
+  "goopt.error.required_with_default": "फ़्लैग %[1]q एक साथ आवश्यक नहीं हो सकता और उसका डिफ़ॉल्ट मान भी हो (डिफ़ॉल्ट मान इसे कभी अनुपस्थित नहीं होने देता)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",
   "goopt.error.bind_invalid_value_field": "अमान्य मान फ़ील्ड से बाइंड नहीं किया जा सकता",

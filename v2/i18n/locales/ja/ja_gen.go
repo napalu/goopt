@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "必須フラグがありません: %[1]s",
         "goopt.error.required_positional_flag": "インデックス %[2]d の必須位置引数 %[1]s がありません",
         "goopt.error.required_when": "%[2]s を使用する場合は %[1]s が必要です",
+        "goopt.error.required_with_default": "フラグ %[1]q は必須でありながらデフォルト値を持つことはできません（デフォルト値があると決して欠落しません）",
         "goopt.error.secure_flag_expects_value": "セキュアフラグ %[1]s は値を必要としますが、取得に失敗しました",
         "goopt.error.setting_bound_variable_value": "フラグ %[1]s のバインドされた変数値の設定中にエラーが発生しました",
         "goopt.error.short_flag_conflict": "グローバルフラグ %[2]s の短縮フラグ '%[1]s' は既に %[3]v として存在します",

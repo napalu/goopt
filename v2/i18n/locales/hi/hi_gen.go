@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "आवश्यक फ्लैग गायब है: %[1]s",
         "goopt.error.required_positional_flag": "सूचकांक %[2]d पर आवश्यक स्थितीय तर्क %[1]s गायब है",
         "goopt.error.required_when": "जब %[2]s का उपयोग किया जाता है तो %[1]s आवश्यक है",
+        "goopt.error.required_with_default": "फ़्लैग %[1]q एक साथ आवश्यक नहीं हो सकता और उसका डिफ़ॉल्ट मान भी हो (डिफ़ॉल्ट मान इसे कभी अनुपस्थित नहीं होने देता)",
         "goopt.error.secure_flag_expects_value": "सुरक्षित फ़्लैग %[1]s को एक मान की उम्मीद है लेकिन हम एक प्राप्त करने में विफल रहे",
         "goopt.error.setting_bound_variable_value": "फ़्लैग %[1]s के लिए बाउंड चर मान सेट करने में त्रुटि",
         "goopt.error.short_flag_conflict": "वैश्विक फ़्लैग %[2]s पर संक्षिप्त फ़्लैग '%[1]s' पहले से ही %[3]v के रूप में मौजूद है",

@@ -184,6 +184,39 @@ Contracts distinguish **developer mistakes** from **user mistakes**:
   error), keeping it out of end-user output. When you add contracts programmatically after the
   parser exists, the same guard runs on the next `Parse`.
 
+## Contracts and Commands
+
+Contracts on **command-scoped flags** are evaluated per invoked command:
+
+- A contract on a flag owned by a command applies **only when that command (or one of its
+  subcommands) is invoked**. Running `export` never triggers a `sync` flag's contract, and
+  vice-versa. **Global flags** always participate.
+- Target names resolve **within the declaring flag's command scope** first, then fall back to
+  global. So `contract:requires(group-pattern)` on an `export` flag resolves to `export`'s
+  `--group-pattern`, not a same-named flag elsewhere.
+- Group labels are **scoped per command**: a `mutex(mode)` group in `export` is independent of a
+  `mutex(mode)` group in `sync` — including the build-time singleton-group guard.
+
+```go
+type CLI struct {
+    Export struct {
+        Group        string `goopt:"contract:exactlyone(selector)"`
+        GroupPattern string `goopt:"contract:exactlyone(selector)"`
+        Search       bool   `goopt:"contract:exactlyone(selector)"`
+        Combined     bool   `goopt:"contract:requires(group-pattern)"`
+    } `goopt:"kind:command"`
+    Sync struct {
+        SourceGroup   string `goopt:"contract:exactlyone(source)"`
+        SourcePattern string `goopt:"contract:exactlyone(source)"`
+        FullReconcile bool   `goopt:"contract:requires(prune)"`
+        Prune         bool   `goopt:""`
+    } `goopt:"kind:command"`
+}
+```
+
+Here `myapp export` enforces exactly one of `export`'s selectors and `--combined`'s requirement,
+while `sync`'s `exactlyone(source)` and `requires(prune)` stay dormant until `myapp sync` runs.
+
 ## Internationalization
 
 All contract messages are fully translatable through the standard i18n system. The user-facing

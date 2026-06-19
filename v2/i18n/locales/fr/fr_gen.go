@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "option requise manquante : %[1]s",
         "goopt.error.required_positional_flag": "argument positionnel requis %[1]s manquant à l'index %[2]d",
         "goopt.error.required_when": "%[1]s est requis lorsque %[2]s est utilisé",
+        "goopt.error.required_with_default": "l'option %[1]q ne peut pas être à la fois requise et avoir une valeur par défaut (une valeur par défaut fait qu'elle n'est jamais manquante)",
         "goopt.error.secure_flag_expects_value": "l'option sécurisée %[1]s attend une valeur mais nous n'avons pas pu l'obtenir",
         "goopt.error.setting_bound_variable_value": "erreur lors de la définition de la valeur de la variable liée pour l'option %[1]s",
         "goopt.error.short_flag_conflict": "l'option courte '%[1]s' sur l'option globale %[2]s existe déjà comme %[3]v",

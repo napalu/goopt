@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "דגל נדרש חסר: %[1]s",
         "goopt.error.required_positional_flag": "חסר ארגומנט מיקומי נדרש %[1]s באינדקס %[2]d",
         "goopt.error.required_when": "%[1]s נדרש כאשר נעשה שימוש ב-%[2]s",
+        "goopt.error.required_with_default": "דגל %[1]q לא יכול להיות גם נדרש וגם בעל ערך ברירת מחדל (ערך ברירת מחדל גורם לכך שלעולם לא יחסר)",
         "goopt.error.secure_flag_expects_value": "דגל מאובטח %[1]s מצפה לערך אך לא הצלחנו להשיג אותו",
         "goopt.error.setting_bound_variable_value": "שגיאה בהגדרת ערך משתנה קשור עבור דגל %[1]s",
         "goopt.error.short_flag_conflict": "דגל קצר '%[1]s' בדגל גלובלי %[2]s כבר קיים כ-%[3]v",

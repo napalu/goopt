@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "Erforderliches Flag fehlt: %[1]s",
         "goopt.error.required_positional_flag": "Fehlender erforderlicher Positional-Argument %[1]s an Index %[2]d",
         "goopt.error.required_when": "%[1]s ist erforderlich, wenn %[2]s verwendet wird",
+        "goopt.error.required_with_default": "Flag %[1]q kann nicht gleichzeitig erforderlich sein und einen Standardwert haben (ein Standardwert sorgt dafür, dass es nie fehlt)",
         "goopt.error.secure_flag_expects_value": "Flag %[1]s erwartet einen Wert, konnte aber nicht erhalten",
         "goopt.error.setting_bound_variable_value": "Fehler beim Setzen des gebundenen Variablenwerts für Flag %[1]s",
         "goopt.error.short_flag_conflict": "Kurzflag '%[1]s' auf globalem Flag %[2]s existiert bereits als %[3]v",

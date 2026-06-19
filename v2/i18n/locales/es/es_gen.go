@@ -105,6 +105,7 @@ const SystemTranslations = `{
         "goopt.error.required_flag": "falta la bandera requerida: %[1]s",
         "goopt.error.required_positional_flag": "falta el argumento posicional requerido %[1]s en el índice %[2]d",
         "goopt.error.required_when": "%[1]s es obligatorio cuando se usa %[2]s",
+        "goopt.error.required_with_default": "la bandera %[1]q no puede ser obligatoria y tener un valor predeterminado a la vez (un valor predeterminado hace que nunca falte)",
         "goopt.error.secure_flag_expects_value": "la bandera segura %[1]s espera un valor pero no se pudo obtener uno",
         "goopt.error.setting_bound_variable_value": "error al establecer el valor de la variable vinculada para la bandera %[1]s",
         "goopt.error.short_flag_conflict": "la bandera corta '%[1]s' en la bandera global %[2]s ya existe como %[3]v",

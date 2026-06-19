@@ -1,4 +1,5 @@
 {
+  "goopt.error.required_with_default": "a flag %[1]q não pode ser obrigatória e ter um valor padrão ao mesmo tempo (um valor padrão faz com que nunca esteja ausente)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",
   "goopt.error.bind_invalid_value_field": "não é possível vincular a campo de valor inválido",
