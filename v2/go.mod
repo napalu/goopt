@@ -19,3 +19,4 @@ require (
 )
 
 retract v2.4.4 // tag was republished after deletion
+retract v2.4.6 // contracts ignored command (flag-path) scope; fixed in v2.4.7

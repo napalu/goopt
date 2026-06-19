@@ -108,25 +108,34 @@ func (p *Parser) validateContractGroups() error {
 	}
 	p.contractGroupsChecked = true
 
-	counts := map[string]int{}
+	// Group membership is scoped to the owning command: a mutex/exactlyone group in
+	// `export` is independent of a same-named group in `sync`, so a singleton in one
+	// command is still caught even if another command happens to reuse the label.
+	type groupKey struct{ cmd, label string }
+	counts := map[groupKey]int{}
 	for _, flagInfo := range p.acceptedFlags.All() {
 		for _, c := range flagInfo.Argument.Contracts {
 			if (c.Kind == ContractMutex || c.Kind == ContractExactlyOne) && len(c.Targets) > 0 {
-				counts[c.Targets[0]]++
+				counts[groupKey{flagInfo.CommandPath, c.Targets[0]}]++
 			}
 		}
 	}
 
-	names := make([]string, 0, len(counts))
+	keys := make([]groupKey, 0, len(counts))
 	for g := range counts {
-		names = append(names, g)
+		keys = append(keys, g)
 	}
-	sort.Strings(names)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].cmd != keys[j].cmd {
+			return keys[i].cmd < keys[j].cmd
+		}
+		return keys[i].label < keys[j].label
+	})
 
 	var firstErr error
-	for _, g := range names {
+	for _, g := range keys {
 		if counts[g] < 2 {
-			e := errs.ErrSingletonContractGroup.WithArgs(g)
+			e := errs.ErrSingletonContractGroup.WithArgs(g.label)
 			p.addError(e)
 			if firstErr == nil {
 				firstErr = e
@@ -136,11 +145,27 @@ func (p *Parser) validateContractGroups() error {
 	return firstErr
 }
 
-// validateContracts evaluates cross-flag contracts after parsing completes. mutex
-// groups are validated in aggregate (every flag that named the group); conflicts
-// are evaluated per-flag.
+// validateContracts evaluates cross-flag contracts after parsing completes.
+// Contracts are command-scoped: a flag owned by a command participates only when
+// that command (or one of its subcommands) was invoked, and its target names
+// resolve within the command's flag scope. Global flags always participate.
 func (p *Parser) validateContracts() {
 	p.validateContractGroups()
+
+	invoked := p.GetCommands()
+	isActive := func(cmdPath string) bool {
+		if cmdPath == "" {
+			return true // global flag — always in scope
+		}
+		for _, ip := range invoked {
+			// The owning command is active when it, or a child of it, was invoked
+			// (a parent's flags are inherited by its subcommands).
+			if ip == cmdPath || strings.HasPrefix(ip, cmdPath+" ") {
+				return true
+			}
+		}
+		return false
+	}
 
 	type member struct {
 		key     string
@@ -151,6 +176,10 @@ func (p *Parser) validateContracts() {
 	conflictsReported := map[string]bool{}
 
 	for flagKey, flagInfo := range p.acceptedFlags.All() {
+		cmdPath := flagInfo.CommandPath
+		if !isActive(cmdPath) {
+			continue // contracts on flags of an uninvoked command don't apply
+		}
 		present := p.HasFlag(flagKey)
 		for _, c := range flagInfo.Argument.Contracts {
 			switch c.Kind {
@@ -168,32 +197,34 @@ func (p *Parser) validateContracts() {
 					continue
 				}
 				for _, other := range c.Targets {
-					if !p.HasFlag(other) {
+					otherKey := p.flagOrShortFlag(other, cmdPath)
+					if !p.HasFlag(otherKey) {
 						continue
 					}
 					// Dedup symmetric reports (a conflicts b == b conflicts a).
-					if conflictsReported[flagKey+"\x00"+other] || conflictsReported[other+"\x00"+flagKey] {
+					if conflictsReported[flagKey+"\x00"+otherKey] || conflictsReported[otherKey+"\x00"+flagKey] {
 						continue
 					}
-					conflictsReported[flagKey+"\x00"+other] = true
+					conflictsReported[flagKey+"\x00"+otherKey] = true
 					p.addError(errs.ErrConflictingFlags.WithArgs(
-						p.formatFlagForError(flagKey), p.formatFlagForError(other)))
+						p.formatFlagForError(flagKey), p.formatFlagForError(otherKey)))
 				}
 			case ContractRequires:
 				if !present {
 					continue
 				}
 				for _, target := range c.Targets {
-					if !p.HasFlag(target) {
+					targetKey := p.flagOrShortFlag(target, cmdPath)
+					if !p.HasFlag(targetKey) {
 						p.addError(errs.ErrFlagRequires.WithArgs(
-							p.formatFlagForError(flagKey), p.formatFlagForError(target)))
+							p.formatFlagForError(flagKey), p.formatFlagForError(targetKey)))
 					}
 				}
 			case ContractRequiredOn:
 				if present {
 					continue
 				}
-				if trigger, ok := p.contractActiveTrigger(c.Targets); ok {
+				if trigger, ok := p.contractActiveTrigger(c.Targets, cmdPath); ok {
 					p.addError(errs.ErrRequiredWhen.WithArgs(
 						p.formatFlagForError(flagKey), trigger))
 				}
@@ -367,10 +398,11 @@ func (p *Parser) GetFlagContracts(flag string) ([]Contract, error) {
 // contractActiveTrigger returns a formatted description of the first active
 // target (a set flag or an invoked command) and whether one was found. Flag and
 // command names do not collide, so a name resolves unambiguously.
-func (p *Parser) contractActiveTrigger(targets []string) (string, bool) {
+func (p *Parser) contractActiveTrigger(targets []string, cmdPath string) (string, bool) {
 	for _, t := range targets {
-		if p.HasFlag(t) {
-			return p.formatFlagForError(t), true
+		key := p.flagOrShortFlag(t, cmdPath)
+		if p.HasFlag(key) {
+			return p.formatFlagForError(key), true
 		}
 		for _, cmd := range p.GetCommands() {
 			if cmd == t {
