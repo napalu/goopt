@@ -298,3 +298,149 @@ func TestContractStructTag(t *testing.T) {
 		}
 	}
 }
+
+func mustAddCmd(t *testing.T, p *Parser, name string) {
+	t.Helper()
+	if err := p.AddCommand(NewCommand(WithName(name))); err != nil {
+		t.Fatalf("AddCommand(%s): %v", name, err)
+	}
+}
+
+func mustAddFlag(t *testing.T, p *Parser, name string, arg *Argument, path ...string) {
+	t.Helper()
+	if err := p.AddFlag(name, arg, path...); err != nil {
+		t.Fatalf("AddFlag(%s): %v", name, err)
+	}
+}
+
+// TestContractCommandScoped verifies that contracts on command-scoped flags
+// (flags keyed `name@command`) are evaluated only when their command is invoked,
+// and that their target names resolve within the command's flag scope — for every
+// primitive. Regression test for v2.4.6, where contracts ignored flag paths:
+// targets resolved by bare name (so requires/conflicts mis-resolved) and groups
+// fired across commands (exactlyone demanded flags of an uninvoked command).
+func TestContractCommandScoped(t *testing.T) {
+	mk := func(t *testing.T) *Parser {
+		p := NewParser()
+		mustAddCmd(t, p, "export")
+		mustAddCmd(t, p, "sync")
+		return p
+	}
+
+	t.Run("exactlyone is scoped to the invoked command", func(t *testing.T) {
+		build := func(t *testing.T) *Parser {
+			p := mk(t)
+			mustAddFlag(t, p, "e1", newStandalone(WithExactlyOne("esrc")), "export")
+			mustAddFlag(t, p, "e2", newStandalone(WithExactlyOne("esrc")), "export")
+			mustAddFlag(t, p, "s1", newStandalone(WithExactlyOne("ssrc")), "sync")
+			mustAddFlag(t, p, "s2", newStandalone(WithExactlyOne("ssrc")), "sync")
+			return p
+		}
+
+		p := build(t)
+		p.Parse([]string{"app", "export", "--e1"}) // one source; sync's group must NOT fire
+		if hasErr(p, errs.ErrExactlyOneRequired) || hasErr(p, errs.ErrMutexViolation) {
+			t.Fatalf("export --e1: unexpected error (sync group leaked?): %v", p.GetErrors())
+		}
+
+		p = build(t)
+		p.Parse([]string{"app", "export"}) // none of export's group set
+		if !hasErr(p, errs.ErrExactlyOneRequired) {
+			t.Fatalf("export (none): expected exactly-one-required, got %v", p.GetErrors())
+		}
+
+		p = build(t)
+		p.Parse([]string{"app", "export", "--e1", "--e2"}) // too many
+		if !hasErr(p, errs.ErrMutexViolation) {
+			t.Fatalf("export --e1 --e2: expected mutex violation, got %v", p.GetErrors())
+		}
+
+		p = build(t)
+		p.Parse([]string{"app", "sync", "--s1"}) // export's group must NOT demand a source
+		if hasErr(p, errs.ErrExactlyOneRequired) || hasErr(p, errs.ErrMutexViolation) {
+			t.Fatalf("sync --s1: unexpected error (export group leaked?): %v", p.GetErrors())
+		}
+	})
+
+	t.Run("mutex allows zero and stays command-scoped", func(t *testing.T) {
+		build := func(t *testing.T) *Parser {
+			p := mk(t)
+			mustAddFlag(t, p, "m1", newStandalone(WithMutex("mode")), "export")
+			mustAddFlag(t, p, "m2", newStandalone(WithMutex("mode")), "export")
+			return p
+		}
+		p := build(t)
+		p.Parse([]string{"app", "export", "--m1", "--m2"})
+		if !hasErr(p, errs.ErrMutexViolation) {
+			t.Fatalf("export --m1 --m2: expected mutex violation, got %v", p.GetErrors())
+		}
+		p = build(t)
+		p.Parse([]string{"app", "sync"}) // export's mutex must not fire from another command
+		if hasErr(p, errs.ErrMutexViolation) {
+			t.Fatalf("sync: export mutex leaked: %v", p.GetErrors())
+		}
+	})
+
+	t.Run("requires resolves its target within command scope", func(t *testing.T) {
+		build := func(t *testing.T) *Parser {
+			p := mk(t)
+			mustAddFlag(t, p, "combined", newStandalone(WithRequires("group-pattern")), "export")
+			mustAddFlag(t, p, "group-pattern", NewArg(), "export")
+			return p
+		}
+		// The v2.4.6 bug: target IS provided, but requires still fired (bare-name lookup missed group-pattern@export).
+		p := build(t)
+		p.Parse([]string{"app", "export", "--combined", "--group-pattern", "x"})
+		if hasErr(p, errs.ErrFlagRequires) {
+			t.Fatalf("combined + group-pattern: requirement should be satisfied, got %v", p.GetErrors())
+		}
+		p = build(t)
+		p.Parse([]string{"app", "export", "--combined"}) // target missing
+		if !hasErr(p, errs.ErrFlagRequires) {
+			t.Fatalf("combined alone: expected requires error, got %v", p.GetErrors())
+		}
+	})
+
+	t.Run("conflicts resolves within command scope", func(t *testing.T) {
+		build := func(t *testing.T) *Parser {
+			p := mk(t)
+			mustAddFlag(t, p, "a", newStandalone(WithConflicts("b")), "export")
+			mustAddFlag(t, p, "b", newStandalone(), "export")
+			return p
+		}
+		p := build(t)
+		p.Parse([]string{"app", "export", "--a", "--b"})
+		if !hasErr(p, errs.ErrConflictingFlags) {
+			t.Fatalf("export --a --b: expected conflict, got %v", p.GetErrors())
+		}
+		p = build(t)
+		p.Parse([]string{"app", "export", "--a"})
+		if hasErr(p, errs.ErrConflictingFlags) {
+			t.Fatalf("export --a: unexpected conflict: %v", p.GetErrors())
+		}
+	})
+
+	t.Run("requiredOn resolves its trigger within command scope", func(t *testing.T) {
+		build := func(t *testing.T) *Parser {
+			p := mk(t)
+			mustAddFlag(t, p, "remote", newStandalone(), "export")
+			mustAddFlag(t, p, "token", NewArg(WithRequiredOn("remote")), "export")
+			return p
+		}
+		p := build(t)
+		p.Parse([]string{"app", "export", "--remote"}) // trigger active, token missing
+		if !hasErr(p, errs.ErrRequiredWhen) {
+			t.Fatalf("export --remote: expected required-when error, got %v", p.GetErrors())
+		}
+		p = build(t)
+		p.Parse([]string{"app", "export", "--remote", "--token", "x"})
+		if hasErr(p, errs.ErrRequiredWhen) {
+			t.Fatalf("export --remote --token: unexpected required error: %v", p.GetErrors())
+		}
+		p = build(t)
+		p.Parse([]string{"app", "sync"}) // export's requiredOn must not fire elsewhere
+		if hasErr(p, errs.ErrRequiredWhen) {
+			t.Fatalf("sync: export requiredOn leaked: %v", p.GetErrors())
+		}
+	})
+}
