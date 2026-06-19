@@ -168,6 +168,8 @@ func UnmarshalTagFormat(tag string, field reflect.StructField) (*types.TagConfig
 			config.Position = &posData.Index
 		case "validators":
 			config.Validators = ValidatorSpecs(value)
+		case "contract":
+			config.Contracts = ContractSpecs(value)
 		default:
 			return nil, errs.ErrInvalidAttributeForType.WithArgs(key, field.Name)
 		}

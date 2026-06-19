@@ -137,6 +137,13 @@ func NewParserFromStructWithLevel[T any](structWithTags *T, maxDepth int, config
 	p, err := newParserFromReflectValue(reflect.ValueOf(structWithTags), "", "", maxDepth, 0, config...)
 	if p != nil {
 		p.structCtx = structWithTags
+		// Structural contract checks (e.g. misspelled mutex group names) are
+		// developer errors — surface them at construction, not end-user runtime.
+		if err == nil {
+			if cerr := p.validateContractGroups(); cerr != nil {
+				err = cerr
+			}
+		}
 	}
 
 	return p, err
@@ -197,9 +204,16 @@ func (p *Parser) SetTreatUnknownAsPositionals(value bool) {
 
 // SetLanguage sets the parser language to the specified language tag.
 // This sets the language at the layered provider level, affecting all translations.
+// Note: returns ErrLanguageUnavailable when the language could not be set - but
+// returns nil on best match (e.g. de-CH -> de)
 func (p *Parser) SetLanguage(lang language.Tag) error {
 	// Set language at the provider level - this is now the single source of truth
 	p.layeredProvider.SetDefaultLanguage(lang)
+	expected, _ := lang.Base()
+	provided, _ := p.layeredProvider.GetLanguage().Base()
+	if provided != expected {
+		return errs.ErrLanguageUnavailable.WithArgs(lang.String())
+	}
 	return nil
 }
 
@@ -1782,7 +1796,7 @@ func (p *Parser) GenerateCompletion(shell, programName string) string {
 func (p *Parser) PrintUsage(writer io.Writer) {
 	// Show version in header if configured
 	if p.showVersionInHelp && (p.version != "" || p.versionFunc != nil) {
-		fmt.Fprintf(writer, "%s %s\n\n", filepath.Base(os.Args[0]), p.GetVersion())
+		_, _ = fmt.Fprintf(writer, "%s %s\n\n", filepath.Base(os.Args[0]), p.GetVersion())
 	}
 
 	_, _ = writer.Write([]byte(p.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]) + "\n"))

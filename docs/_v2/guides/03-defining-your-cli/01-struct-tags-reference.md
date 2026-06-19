@@ -34,8 +34,9 @@ This table provides a complete reference to all available tags.
 | `path` | Associates a flag with one or more comma-separated commands. | `path:"server start,server stop"` |
 | `pos` | Defines a flag as a positional argument at a specific index. | `pos:0` |
 | `capacity` | For slices of nested structs, pre-allocates the slice capacity. | `capacity:5` |
-| `validators` | A comma-separated list of validation rules to apply. | `validators:"email,minlength(8)"` |
+| `validators` | A comma-separated list of validation rules to apply. See [Validation]({{ site.baseurl }}/v2/guides/04-advanced-features/01-validation/). | `validators:"email,minlength(8)"` |
 | `depends` | Defines a dependency where this flag requires another flag to be present with a specific value. | `depends:"{flag:format,values:[json]}"` |
+| `contract` | Comma-separated relational constraints *between* flags (mutex, exactlyone, conflicts, requires, requiredOn). See [Contracts]({{ site.baseurl }}/v2/guides/04-advanced-features/05-contracts/). | `contract:"mutex(format)"` |
 | `accepted` | **[Deprecated]** Use the `validators` tag instead. | `accepted:"{pattern:json,desc:Format}"` |
 
 ---

@@ -43,6 +43,11 @@ const (
 	MsgLanguageDescriptionKey = MessagePrefixKey + ".language_description"
 	MsgAllParentFlagsKey      = MessagePrefixKey + ".all_parent_flags"
 	MsgInCommandKey           = MessagePrefixKey + ".in_command"
+	// Quote glyphs used to delimit flag/command names in error messages.
+	// Defined as locale messages so each language can use its own quotation
+	// marks (e.g. „…" / «…» / 「…」); they default to ASCII '.
+	MsgQuoteOpenKey  = MessagePrefixKey + ".quote_open"
+	MsgQuoteCloseKey = MessagePrefixKey + ".quote_close"
 
 	// Help parser specific messages
 	MsgErrorPrefixKey           = MessagePrefixKey + ".error_prefix"

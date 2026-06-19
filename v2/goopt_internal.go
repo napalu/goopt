@@ -1595,6 +1595,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 func (p *Parser) validateProcessedOptions() {
 	p.walkCommands()
 	p.walkFlags()
+	p.validateContracts()
 }
 
 func (p *Parser) walkFlags() {
@@ -2054,6 +2055,17 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 	// Add all validators to the argument
 	if len(allValidators) > 0 {
 		configs = append(configs, WithValidators(allValidators...))
+	}
+
+	// Parse and add cross-flag contracts
+	if len(c.Contracts) > 0 {
+		contracts, err := parseContracts(c.Contracts)
+		if err != nil {
+			return nil, err
+		}
+		if len(contracts) > 0 {
+			configs = append(configs, WithContracts(contracts...))
+		}
 	}
 
 	arg := NewArg(configs...)
@@ -2823,10 +2835,19 @@ func (p *Parser) formatFlagForError(flag string) string {
 	if len(parts) == 2 && parts[1] != "" {
 		// Format as: 'flag' (in command 'command')
 		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
-		return fmt.Sprintf("'%s' (%s '%s')", parts[0], inCommandMsg, parts[1])
+		return p.quoteForError(parts[0]) + " (" + inCommandMsg + " " + p.quoteForError(parts[1]) + ")"
 	}
 	// No command context, just quote the flag name (use first part to strip any trailing @)
-	return fmt.Sprintf("'%s'", parts[0])
+	return p.quoteForError(parts[0])
+}
+
+// quoteForError wraps s in the locale's quotation glyphs. The glyphs are sourced
+// from the message bundle (defaulting to ASCII ') so each language can use its own
+// quotation marks without code changes.
+func (p *Parser) quoteForError(s string) string {
+	open := p.layeredProvider.GetMessage(messages.MsgQuoteOpenKey)
+	closing := p.layeredProvider.GetMessage(messages.MsgQuoteCloseKey)
+	return open + s + closing
 }
 
 func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {
