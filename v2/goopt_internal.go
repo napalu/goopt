@@ -2911,7 +2911,13 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 		data.CommandFlags[cmd] = append(data.CommandFlags[cmd], pair)
 	}
 
-	// Handle flag values
+	// Handle flag values. NOTE: AcceptedValues is deprecated (superseded by
+	// validators); this keeps value-completion correct while it sunsets — do not grow
+	// it with command-aware keys. Key by the BARE flag name(s) — exactly what every
+	// generator reads (data.FlagValues[flag.Long]). The old code stored only when a
+	// short existed and prefixed command-scoped keys with "cmd@", a key no generator
+	// ever looks up — so value completion was dead for long-only and command-scoped
+	// flags.
 	if len(flagInfo.Argument.AcceptedValues) > 0 {
 		values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
 		for i, v := range flagInfo.Argument.AcceptedValues {
@@ -2921,18 +2927,44 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 			}
 		}
 
-		// Add values for both forms if short exists
-		if flagInfo.Argument.Short != "" {
-			shortKey := pair.Short
-			longKey := pair.Long
-			if cmd != "" {
-				shortKey = cmd + "@" + shortKey
-				longKey = cmd + "@" + longKey
-			}
-			data.FlagValues[shortKey] = values
-			data.FlagValues[longKey] = values
+		data.FlagValues[pair.Long] = values
+		if pair.Short != "" {
+			data.FlagValues[pair.Short] = values
 		}
 	}
+}
+
+// applyCommandFlagInheritance rewrites data.CommandFlags so each command lists its OWN
+// flags plus those inherited from every ancestor command — mirroring the parser's
+// parent-walking flag resolution, so completion offers exactly what the parser accepts
+// (without this, a parent command's flags are silently absent from subcommand
+// completion even though the parser accepts them there). The nearest owner wins on a
+// name collision, matching the parser's nearest-ancestor override. Ancestors are the
+// space-joined path prefixes the parser itself walks.
+func applyCommandFlagInheritance(data *completion.CompletionData) {
+	if len(data.CommandFlags) == 0 {
+		return
+	}
+	ownFlags := data.CommandFlags
+	merged := make(map[string][]completion.FlagPair, len(ownFlags))
+	for _, path := range data.Commands {
+		seen := make(map[string]bool)
+		var flags []completion.FlagPair
+		tokens := strings.Split(path, " ")
+		for i := len(tokens); i >= 1; i-- { // own path first, then ancestors
+			for _, fp := range ownFlags[strings.Join(tokens[:i], " ")] {
+				if seen[fp.Long] {
+					continue // a nearer command already defines this flag
+				}
+				seen[fp.Long] = true
+				flags = append(flags, fp)
+			}
+		}
+		if len(flags) > 0 {
+			merged[path] = flags
+		}
+	}
+	data.CommandFlags = merged
 }
 
 func isFieldCommand(field reflect.StructField) bool {

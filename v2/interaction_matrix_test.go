@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/i18n/locales/ar"
@@ -1248,4 +1249,83 @@ func TestInteractionMatrixExoticTyped(t *testing.T) {
 			t.Errorf("File flag value should be the file CONTENT; got %q", v)
 		}
 	})
+}
+
+// TestInteractionMatrixCompletionInheritance charts the completion × command-tree
+// seam: a completion script is a second representation of "which flags are valid
+// here", and it must agree with what the parser actually accepts. The parser inherits
+// a parent command's flags onto subcommands (parent-walking), so completion must
+// surface them there too — otherwise tab-completion under-suggests valid flags.
+func TestInteractionMatrixCompletionInheritance(t *testing.T) {
+	p := NewParser()
+	if err := p.AddFlag("verbose", newStandalone(WithShortFlag("v"))); err != nil { // global
+		t.Fatal(err)
+	}
+	start := NewCommand(WithName("start"))
+	server := NewCommand(WithName("server"), WithSubcommands(start))
+	if err := p.AddCommand(server); err != nil {
+		t.Fatal(err)
+	}
+	mustAddFlag(t, p, "port", NewArg(WithType(types.Single)), "server")             // owned by server
+	mustAddFlag(t, p, "timeout", NewArg(WithType(types.Single)), "server", "start") // owned by server start
+
+	has := func(fps []completion.FlagPair, long string) bool {
+		for _, f := range fps {
+			if f.Long == long {
+				return true
+			}
+		}
+		return false
+	}
+	d := p.GetCompletionData()
+
+	// server: own flag only (no descendant leakage upward).
+	if !has(d.CommandFlags["server"], "port") {
+		t.Errorf("server completion must offer its own --port; got %v", d.CommandFlags["server"])
+	}
+	if has(d.CommandFlags["server"], "timeout") {
+		t.Errorf("server must NOT offer the subcommand-only --timeout; got %v", d.CommandFlags["server"])
+	}
+	// server start: own flag PLUS the inherited parent flag — the regression.
+	if !has(d.CommandFlags["server start"], "timeout") {
+		t.Errorf("`server start` must offer its own --timeout; got %v", d.CommandFlags["server start"])
+	}
+	if !has(d.CommandFlags["server start"], "port") {
+		t.Errorf("`server start` must inherit parent's --port (parser accepts it there); got %v", d.CommandFlags["server start"])
+	}
+}
+
+// TestInteractionMatrixCompletionValues locks the FlagValues keying fix: value
+// completion (deprecated AcceptedValues) must reach the generators, which read the
+// BARE flag name. Previously values were stored only when a short flag existed and
+// command-scoped values were keyed "cmd@flag" — a key no generator reads — so value
+// completion was dead for long-only and command-scoped flags.
+func TestInteractionMatrixCompletionValues(t *testing.T) {
+	vals := func(pats ...string) []types.PatternValue {
+		out := make([]types.PatternValue, len(pats))
+		for i, pp := range pats {
+			out[i] = types.PatternValue{Pattern: pp, Description: pp}
+		}
+		return out
+	}
+	p := NewParser()
+	mustAddFlag(t, p, "mode", NewArg(WithType(types.Single), WithAcceptedValues(vals("fast", "slow")))) // global, no short
+	mustAddCmd(t, p, "run")
+	mustAddFlag(t, p, "level", NewArg(WithType(types.Single), WithShortFlag("l"), WithAcceptedValues(vals("hi", "lo"))), "run") // command-scoped
+
+	d := p.GetCompletionData()
+	if _, ok := d.FlagValues["mode"]; !ok {
+		t.Errorf("long-only global flag values must be keyed by bare long 'mode'; keys=%v", keysOf(d.FlagValues))
+	}
+	if _, ok := d.FlagValues["level"]; !ok {
+		t.Errorf("command-scoped flag values must be keyed by bare long 'level' (not 'run@level'); keys=%v", keysOf(d.FlagValues))
+	}
+}
+
+func keysOf(m map[string][]completion.CompletionValue) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

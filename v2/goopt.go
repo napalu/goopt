@@ -1846,6 +1846,11 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 		}
 	}
 
+	// Completion must offer a parent command's flags on its subcommands too (the parser
+	// inherits them via parent-walking resolution); applied here so all shell generators
+	// see the same inheritance the parser enforces.
+	applyCommandFlagInheritance(&data)
+
 	return data
 }
 
