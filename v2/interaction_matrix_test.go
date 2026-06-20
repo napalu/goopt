@@ -1250,6 +1250,21 @@ func TestInteractionMatrixExoticTyped(t *testing.T) {
 	})
 }
 
+// EnvCreds is an embedded creds struct; its flags are namespaced as env-creds.* and
+// registered per command (e.g. "env-creds.url@undo").
+type EnvCreds struct {
+	URL     string `goopt:"required:true;short:u;desc:url"`
+	AppName string `goopt:"required:true;short:a;desc:app"`
+}
+
+type envPositionalCfg struct {
+	Undo struct {
+		Input string `goopt:"short:i;pos:0;required:true;desc:input file"`
+		EnvCreds
+		Exec CommandFunc
+	} `goopt:"kind:command;desc:undo"`
+}
+
 // TestInteractionMatrixPositionalEnv charts the positional × env × command-scope seam.
 // A command-scoped flag supplied via an environment variable is injected into the arg
 // stream as the internal "name@command" form; setPositionalArguments must recognise
