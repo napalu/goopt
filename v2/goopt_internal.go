@@ -529,16 +529,52 @@ func (p *Parser) registerSecureValue(flag, value string) error {
 	return err
 }
 
+// chainedInternalSep is the internal separator for stored Chained (list) values: the
+// ASCII Unit Separator. It is deliberately a control byte that cannot be typed on a
+// command line (or appear in config/env data), so it never collides with a value and
+// is never a user-facing list separator. The user's ListDelimiterFunc remains the
+// sole authority on ELEMENT separation; this marker only delimits the dimensions the
+// user never specifies — repeated-occurrence boundaries and the validated-element
+// rejoin. Stored values are read back by splitting on (user delimiter ∪ this marker),
+// see chainedSplitFunc.
+const chainedInternalSep = "\x1f"
+const chainedInternalSepRune = '\x1f'
+
+// chainedSplitFunc returns the predicate for splitting a STORED chained value back
+// into elements: the configured input delimiter UNION the internal marker. Input
+// parsing uses the user delimiter alone; reading a stored value must additionally
+// break on the marker that joins occurrences and validated elements.
+func (p *Parser) chainedSplitFunc() types.ListDelimiterFunc {
+	input := p.getListDelimiterFunc()
+	return func(r rune) bool { return r == chainedInternalSepRune || input(r) }
+}
+
+// chainedRegisteredDownstream reports whether a Chained flag's options value is
+// written by a step after flagValue: checkMultiple (when it has validators or
+// accepted-values) or the filter block in processValueFlag (when it has pre/post
+// filters). Such flags must NOT also be registered in flagValue, to keep exactly one
+// options write per occurrence.
+func (p *Parser) chainedRegisteredDownstream(argument *Argument) bool {
+	return argument.TypeOf == types.Chained &&
+		(len(argument.Validators) > 0 || len(argument.AcceptedValues) > 0 ||
+			argument.PreFilter != nil || argument.PostFilter != nil)
+}
+
 func (p *Parser) registerFlagValue(flag, value, rawValue string) {
 	parts := splitPathFlag(flag)
 	p.rawArgs[parts[0]] = rawValue
 	p.rawArgs[rawValue] = rawValue
 
-	// For Chained type flags that are repeated, append values
+	// For Chained (list) flags, accumulate repeated occurrences. We store each
+	// occurrence's token verbatim (preserving the user's declared list separator) and
+	// join occurrences with the internal marker — NOT a list separator of our own.
+	// repeatedFlags is now marked per-occurrence for EVERY chained flag (in
+	// processValueFlag), so accumulation no longer depends on the flag being bound to
+	// a variable, and registerFlagValue is called exactly once per occurrence (see the
+	// deferral in flagValue) so a repeat never double-appends.
 	if flagInfo, found := p.acceptedFlags.Get(flag); found && flagInfo.Argument.TypeOf == types.Chained {
 		if existingValue, exists := p.options[flag]; exists && p.repeatedFlags[flag] {
-			// Append with pipe separator (the default for chained values)
-			p.options[flag] = existingValue + "|" + value
+			p.options[flag] = existingValue + chainedInternalSep + value
 			return
 		}
 	}
@@ -782,7 +818,15 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 			}
 		}
 		arg = next
-		p.registerFlagValue(flag, next, next)
+		// A Chained flag that has validators/accepted-values (split+validated in
+		// checkMultiple) or filters (applied in processValueFlag) is registered by
+		// that downstream step instead. Writing the raw token here too would store it
+		// twice — and, now that repeated accumulation is bind-independent, append it
+		// twice on a repeat. Plain chained flags have no downstream write, so they are
+		// stored here.
+		if !p.chainedRegisteredDownstream(argument) {
+			p.registerFlagValue(flag, next, next)
+		}
 	}
 
 	return arg, err
@@ -1336,9 +1380,9 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 		processed, validationPassed = p.processSingleValue(next, currentArg, argument)
 	} else {
 		haveFilters := argument.PreFilter != nil || argument.PostFilter != nil
+		processed = next
 		if argument.PreFilter != nil {
 			processed = argument.PreFilter(next)
-			p.registerFlagValue(currentArg, processed, next)
 		}
 		if argument.PostFilter != nil {
 			if processed != "" {
@@ -1346,10 +1390,11 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 			} else {
 				processed = argument.PostFilter(next)
 			}
-			p.registerFlagValue(currentArg, processed, next)
 		}
-		if !haveFilters {
-			processed = next
+		if haveFilters {
+			// Register once, after both filters — registering after each would write
+			// (and, for a repeated chained flag, accumulate) twice per occurrence.
+			p.registerFlagValue(currentArg, processed, next)
 		}
 	}
 
@@ -1366,7 +1411,15 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 
 	// Only set bound variable if validation passed
 	if validationPassed {
-		return p.setBoundVariable(processed, currentArg)
+		err := p.setBoundVariable(processed, currentArg)
+		// Mark the occurrence complete for chained flags so a SUBSEQUENT occurrence
+		// accumulates (in both options and any bound slice) rather than replacing —
+		// independent of whether the flag is bound. This is the single per-occurrence
+		// boundary that both registerFlagValue and appendOrSetBoundVariable read.
+		if argument.TypeOf == types.Chained {
+			p.repeatedFlags[currentArg] = true
+		}
+		return err
 	}
 	return nil
 }
@@ -1580,8 +1633,10 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 		}
 	}
 
-	// All validations passed for all values
-	value := strings.Join(args, "|")
+	// All validations passed for all values. Join the validated elements with the
+	// internal marker (not a user-facing separator); GetList / ConvertString recover
+	// them by splitting on (user delimiter ∪ marker).
+	value := strings.Join(args, chainedInternalSep)
 	p.registerFlagValue(flag, value, next)
 	return value, true
 }
@@ -1776,9 +1831,12 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 		}
 	}
 
-	// For Chained type with repeated flag support, check if we need to append
+	// For Chained type with repeated flag support, check if we need to append. The
+	// value may carry the internal marker (from checkMultiple's validated rejoin), so
+	// split on (user delimiter ∪ marker) — the same recovery GetList uses — to keep
+	// the bound slice and GetList in lockstep.
 	if flagInfo.Argument.TypeOf == types.Chained {
-		return p.appendOrSetBoundVariable(value, data, currentArg, p.listFunc)
+		return p.appendOrSetBoundVariable(value, data, currentArg, p.chainedSplitFunc())
 	}
 
 	return util.ConvertString(value, data, currentArg, p.listFunc)
@@ -1788,13 +1846,10 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 // or replacing the value for non-slice types. This enables the pattern:
 // -o option1 -o option2 instead of -o "option1,option2"
 func (p *Parser) appendOrSetBoundVariable(value string, data any, currentArg string, delimiterFunc types.ListDelimiterFunc) error {
-	// Check if we've already seen this flag
-	doAppend := true
-	if !p.repeatedFlags[currentArg] {
-		// First occurrence, mark it as seen and set normally
-		p.repeatedFlags[currentArg] = true
-		doAppend = false
-	}
+	// Append when this flag was already completed in a PRIOR occurrence; otherwise
+	// set. The per-occurrence mark is owned by processValueFlag (bind-independent), so
+	// the first occurrence reads false (set) and later ones read true (append).
+	doAppend := p.repeatedFlags[currentArg]
 
 	return util.ConvertString(value, data, currentArg, delimiterFunc, doAppend)
 }

@@ -3,8 +3,11 @@ package goopt
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -987,6 +990,262 @@ func TestInteractionMatrixDeepNesting(t *testing.T) {
 		}
 		if v, _ := p.Get("dup", "a", "b"); v != "mid" {
 			t.Errorf("the parent's dup should keep its default 'mid', untouched; got %q", v)
+		}
+	})
+}
+
+// TestInteractionMatrixTypedFlags charts the Chained (list) value type, which the
+// constraint matrix never exercised. It locks the two bugs found at the
+// list × {repeated, custom-delimiter, bound-vs-unbound} seam:
+//
+//	A — a custom ListDelimiterFunc made GetList mangle the list (the internal
+//	    occurrence marker leaked into an element), diverging from the bound slice.
+//	B — repeated occurrences of an UNBOUND chained flag silently dropped all but the
+//	    last (accumulation was coupled to having a bound variable).
+//
+// The invariant under test: GetList (unbound) and a bound []string must return the
+// SAME list in every cell, and the user's declared separator is honoured for element
+// separation while repeated occurrences still accumulate.
+func TestInteractionMatrixTypedFlags(t *testing.T) {
+	want := []string{"a", "b", "c", "d"}
+
+	t.Run("unbound repeated accumulates (default delimiter)", func(t *testing.T) {
+		p := NewParser()
+		mustAddFlag(t, p, "v", NewArg(WithType(types.Chained)))
+		p.Parse([]string{"--v", "a,b", "--v", "c,d"})
+		got, err := p.GetList("v")
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("unbound repeated should accumulate to %v; got %v (err=%v)", want, got, err)
+		}
+	})
+
+	t.Run("unbound repeated accumulates (custom ';' delimiter)", func(t *testing.T) {
+		p := NewParser()
+		if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "v", NewArg(WithType(types.Chained)))
+		p.Parse([]string{"--v", "a;b", "--v", "c;d"})
+		got, err := p.GetList("v")
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("custom-delimiter unbound list should be %v; got %v (err=%v)", want, got, err)
+		}
+	})
+
+	t.Run("bound []string and GetList agree under a custom delimiter", func(t *testing.T) {
+		var bound []string
+		p := NewParser()
+		if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.BindFlag(&bound, "v", NewArg(WithType(types.Chained))); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--v", "a;b", "--v", "c;d"})
+		got, _ := p.GetList("v")
+		if !slices.Equal(bound, want) {
+			t.Errorf("bound slice should be %v; got %v", want, bound)
+		}
+		if !slices.Equal(got, bound) {
+			t.Errorf("GetList must equal the bound slice; GetList=%v bound=%v", got, bound)
+		}
+	})
+
+	t.Run("single token splits on the user delimiter, not the internal marker", func(t *testing.T) {
+		p := NewParser()
+		if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "v", NewArg(WithType(types.Chained)))
+		p.Parse([]string{"--v", "a;b"})
+		if got, _ := p.GetList("v"); !slices.Equal(got, []string{"a", "b"}) {
+			t.Errorf("single token should split to [a b]; got %v", got)
+		}
+	})
+
+	t.Run("per-element validators run on each list element", func(t *testing.T) {
+		mk := func() *Parser {
+			p := NewParser()
+			if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+				t.Fatal(err)
+			}
+			mustAddFlag(t, p, "v", NewArg(WithType(types.Chained), WithValidators(validation.MinLength(2))))
+			return p
+		}
+		// every element satisfies MinLength(2), across a repeat → accumulates clean
+		p := mk()
+		p.Parse([]string{"--v", "ab;cd", "--v", "ef"})
+		if got, _ := p.GetList("v"); !slices.Equal(got, []string{"ab", "cd", "ef"}) {
+			t.Errorf("validated list should be [ab cd ef]; got %v", got)
+		}
+		// a single bad element (len 1) trips the validator
+		p = mk()
+		p.Parse([]string{"--v", "ab;x"})
+		if len(p.GetErrors()) == 0 {
+			t.Errorf("element 'x' (<2) should fail MinLength; got no error")
+		}
+	})
+
+	t.Run("Get returns a representation without a control byte leaking", func(t *testing.T) {
+		p := NewParser()
+		if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "v", NewArg(WithType(types.Chained)))
+		p.Parse([]string{"--v", "a;b", "--v", "c;d"})
+		raw, _ := p.Get("v")
+		if strings.ContainsRune(raw, '\x1f') {
+			t.Errorf("Get must not leak the internal marker; got %q", raw)
+		}
+	})
+}
+
+// TestInteractionMatrixExoticTyped charts the typed value types: scalar conversion
+// (time.Duration, time.Time), typed slices (which auto-infer to Chained and convert
+// per element — crossing directly through the chained-list refactor), and the File
+// type (whose value is the file's CONTENT, not its path). The seam of interest is
+// typed-slice × {custom delimiter, repeated}: per-element conversion must ride the
+// same (user delimiter ∪ internal marker) recovery the string path uses.
+func TestInteractionMatrixExoticTyped(t *testing.T) {
+	t.Run("BindFlag infers the option type from the bound variable", func(t *testing.T) {
+		// Regression: AddFlag's Empty->Single default used to run before BindFlag's
+		// inference, silently turning every bound slice into a scalar and every bound
+		// bool into a value-flag. Inference now runs first.
+		var ports []int
+		var verbose bool
+		var name string
+		p := NewParser()
+		if err := p.BindFlag(&ports, "port", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.BindFlag(&verbose, "verbose", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.BindFlag(&name, "name", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct {
+			flag string
+			want types.OptionType
+		}{
+			{"port", types.Chained},       // []int → list
+			{"verbose", types.Standalone}, // bool → presence-flag
+			{"name", types.Single},        // string → scalar
+		} {
+			arg, err := p.GetArgument(tc.flag)
+			if err != nil {
+				t.Fatalf("GetArgument(%s): %v", tc.flag, err)
+			}
+			if arg.TypeOf != tc.want {
+				t.Errorf("%s inferred TypeOf=%v, want %v", tc.flag, arg.TypeOf, tc.want)
+			}
+		}
+	})
+
+	t.Run("time.Duration scalar infers Single and parses", func(t *testing.T) {
+		var d time.Duration
+		p := NewParser()
+		if err := p.BindFlag(&d, "timeout", NewArg()); err != nil { // type inferred
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--timeout", "1m30s"})
+		if d != 90*time.Second {
+			t.Errorf("timeout should parse to 90s; got %v", d)
+		}
+	})
+
+	t.Run("time.Time scalar infers Single and parses", func(t *testing.T) {
+		var ts time.Time
+		p := NewParser()
+		if err := p.BindFlag(&ts, "since", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--since", "2026-06-20"})
+		if ts.Year() != 2026 || ts.Month() != time.June || ts.Day() != 20 {
+			t.Errorf("since should parse to 2026-06-20; got %v", ts)
+		}
+	})
+
+	t.Run("[]int slice infers Chained and converts per element (default delimiter)", func(t *testing.T) {
+		var ports []int
+		p := NewParser()
+		if err := p.BindFlag(&ports, "port", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--port", "80,443", "--port", "8080"})
+		if !slices.Equal(ports, []int{80, 443, 8080}) {
+			t.Errorf("ports should accumulate+convert to [80 443 8080]; got %v", ports)
+		}
+	})
+
+	t.Run("[]int slice converts per element under a CUSTOM delimiter + repeat", func(t *testing.T) {
+		// This is the cell crossing the chained refactor: per-element typed conversion
+		// must split on (user ';' ∪ internal marker), same as GetList.
+		var ports []int
+		p := NewParser()
+		if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.BindFlag(&ports, "port", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--port", "80;443", "--port", "8080"})
+		if !slices.Equal(ports, []int{80, 443, 8080}) {
+			t.Errorf("custom-delimiter typed slice should be [80 443 8080]; got %v (errs=%v)", ports, p.GetErrors())
+		}
+	})
+
+	t.Run("[]time.Duration slice converts per element across a repeat", func(t *testing.T) {
+		var durs []time.Duration
+		p := NewParser()
+		if err := p.BindFlag(&durs, "wait", NewArg()); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{"--wait", "5s,2h", "--wait", "90m"})
+		want := []time.Duration{5 * time.Second, 2 * time.Hour, 90 * time.Minute}
+		if !slices.Equal(durs, want) {
+			t.Errorf("durations should be %v; got %v (errs=%v)", want, durs, p.GetErrors())
+		}
+	})
+
+	t.Run("numeric validator + typed slice + custom delimiter validates and converts per element", func(t *testing.T) {
+		// The capstone cross: per-element VALIDATION and per-element typed CONVERSION
+		// both ride (user ';' ∪ internal marker), across a repeat. Numeric validators
+		// parse the string before comparing, so there is no lexical-comparison trap.
+		mk := func() (*Parser, *[]int) {
+			var ports []int
+			p := NewParser()
+			if err := p.SetListDelimiterFunc(func(r rune) bool { return r == ';' }); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.BindFlag(&ports, "port", NewArg(WithType(types.Chained), WithValidators(validation.IntRange(1, 100)))); err != nil {
+				t.Fatal(err)
+			}
+			return p, &ports
+		}
+		p, ports := mk()
+		p.Parse([]string{"--port", "10;20", "--port", "30"})
+		if !slices.Equal(*ports, []int{10, 20, 30}) || len(p.GetErrors()) != 0 {
+			t.Errorf("all-in-range should give [10 20 30] no error; got %v errs=%v", *ports, p.GetErrors())
+		}
+		p2, _ := mk()
+		p2.Parse([]string{"--port", "10;200"})
+		if !hasErr(p2, errs.ErrValueBetween) {
+			t.Errorf("element 200 should trip IntRange; got %v", p2.GetErrors())
+		}
+	})
+
+	t.Run("File type yields the file's content as the value", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "secret.txt")
+		if err := os.WriteFile(path, []byte("s3cr3t-token"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p := NewParser()
+		mustAddFlag(t, p, "creds", NewArg(WithType(types.File)))
+		p.Parse([]string{"--creds", path})
+		if v, _ := p.Get("creds"); v != "s3cr3t-token" {
+			t.Errorf("File flag value should be the file CONTENT; got %q", v)
 		}
 	})
 }

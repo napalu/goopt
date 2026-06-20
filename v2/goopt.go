@@ -906,8 +906,24 @@ func (p *Parser) GetCommands() []string {
 }
 
 // Get returns a combination of a Flag's value as string and true if found. If a flag is not set but has a configured default value
-// the default value is registered and is returned. Returns an empty string and false otherwise
+// the default value is registered and is returned. Returns an empty string and false otherwise.
+//
+// For a Chained (list) flag the returned string is a REPRESENTATION of the list, not
+// guaranteed to match the original input format: the internal occurrence/element
+// marker is rendered as a comma. Use GetList for the structured value.
 func (p *Parser) Get(flag string, commandPath ...string) (string, bool) {
+	value, found := p.getRawValue(flag, commandPath...)
+	if found && strings.ContainsRune(value, chainedInternalSepRune) {
+		value = strings.ReplaceAll(value, chainedInternalSep, ",")
+	}
+	return value, found
+}
+
+// getRawValue resolves a flag's stored value without rendering. Chained values are
+// returned verbatim, still carrying the internal marker — callers that need the
+// structured list (GetList) or the bound-variable split read this and split on
+// chainedSplitFunc; Get renders the marker for display.
+func (p *Parser) getRawValue(flag string, commandPath ...string) (string, bool) {
 	lookup := buildPathFlag(flag, commandPath...)
 	mainKey := p.flagOrShortFlag(lookup, commandPath...)
 	value, found := p.options[mainKey]
@@ -989,20 +1005,22 @@ func (p *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (floa
 	return val, nil
 }
 
-// GetList attempts to split the string value of a Chained Flag to a string slice
-// by default the value is split on '|', ',' or ' ' delimiters
+// GetList returns the elements of a Chained Flag as a string slice. Elements are
+// recovered by splitting the stored value on the configured input delimiter UNION the
+// internal marker (see chainedSplitFunc), so a custom ListDelimiterFunc and repeated
+// occurrences are both honoured — the result matches what a bound []string receives.
 func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err == nil {
 		if arg.TypeOf == types.Chained {
-			value, success := p.Get(flag, commandPath...)
+			// Read the RAW stored value (not Get's rendered form) so the marker is
+			// still present to split on.
+			value, success := p.getRawValue(flag, commandPath...)
 			if !success {
 				return []string{}, errs.ErrFlagValueNotRetrieved.WithArgs(flag)
 			}
 
-			listDelimFunc := p.getListDelimiterFunc()
-
-			return strings.FieldsFunc(value, listDelimFunc), nil
+			return strings.FieldsFunc(value, p.chainedSplitFunc()), nil
 		}
 
 		return []string{}, errs.ErrInvalidArgumentType.WithArgs(flag, types.Chained)
@@ -1302,12 +1320,17 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 		}
 	}
 
-	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
-		return err
+	// Infer the option type from the bound variable BEFORE AddFlag. AddFlag defaults
+	// an unset (Empty) type to Single — if inference ran after it, a bound slice would
+	// silently stay a scalar (no list split, no repeated-flag accumulation) and a
+	// bound bool would not become Standalone. Inference maps a slice to Chained, bool
+	// to Standalone, and time.Duration/Time/numerics to Single.
+	if argument.TypeOf == types.Empty {
+		argument.TypeOf = parse.InferFieldType(elem.Type())
 	}
 
-	if argument.TypeOf == types.Empty {
-		argument.TypeOf = parse.InferFieldType(reflect.ValueOf(bindPtr).Elem().Type())
+	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
+		return err
 	}
 
 	// Bind the flag to the variable
