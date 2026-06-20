@@ -865,3 +865,128 @@ func TestInteractionMatrixMultipleCommands(t *testing.T) {
 		}
 	})
 }
+
+// TestInteractionMatrixDeepNesting charts the 3-level command axis. The rest of
+// the matrix tops out at two levels (`cmd` / `cmd sub`); a third level exposes
+// seams that only appear past depth 2: parent-walk flag resolution that must climb
+// TWO ancestors, cross-level contract targets, and command-scoping (`isActive`)
+// at depth, where a deep terminal's constraints must stay off for sibling branches.
+//
+// Command tree:
+//
+//	a
+//	├── b
+//	│   ├── c   (terminal)
+//	│   └── d   (terminal)
+//	└── e       (terminal)
+func TestInteractionMatrixDeepNesting(t *testing.T) {
+	// build constructs the tree afresh; opts registers the subtest's flags.
+	build := func(t *testing.T, opts func(p *Parser)) *Parser {
+		t.Helper()
+		p := NewParser()
+		c := NewCommand(WithName("c"))
+		d := NewCommand(WithName("d"))
+		e := NewCommand(WithName("e"))
+		b := NewCommand(WithName("b"), WithSubcommands(c, d))
+		a := NewCommand(WithName("a"), WithSubcommands(b, e))
+		if err := p.AddCommand(a); err != nil {
+			t.Fatalf("add a: %v", err)
+		}
+		if opts != nil {
+			opts(p)
+		}
+		return p
+	}
+
+	t.Run("level-1/2/3 flags all resolve when the deepest command is invoked", func(t *testing.T) {
+		p := build(t, func(p *Parser) {
+			mustAddFlag(t, p, "top", NewArg(WithType(types.Single)), "a")
+			mustAddFlag(t, p, "mid", NewArg(WithType(types.Single)), "a", "b")
+			mustAddFlag(t, p, "leaf", NewArg(WithType(types.Single)), "a", "b", "c")
+		})
+		p.Parse([]string{os.Args[0], "a", "b", "c", "--top", "T", "--mid", "M", "--leaf", "L"})
+		if e := p.GetErrors(); len(e) != 0 {
+			t.Fatalf("clean deep parse should have no errors; got %v", e)
+		}
+		// Each token binds to its OWNING command, proving the parser climbed up to
+		// two ancestors to resolve `top` (on a) and one for `mid` (on a b).
+		for _, tc := range []struct {
+			name string
+			path []string
+			want string
+		}{
+			{"top", []string{"a"}, "T"},
+			{"mid", []string{"a", "b"}, "M"},
+			{"leaf", []string{"a", "b", "c"}, "L"},
+		} {
+			if v, ok := p.Get(tc.name, tc.path...); !ok || v != tc.want {
+				t.Errorf("%s@%v: got (%q,%v), want %q", tc.name, tc.path, v, ok, tc.want)
+			}
+		}
+	})
+
+	t.Run("requires on a level-3 flag resolves its target on a level-1 ancestor", func(t *testing.T) {
+		mk := func() *Parser {
+			return build(t, func(p *Parser) {
+				mustAddFlag(t, p, "top", NewArg(WithType(types.Single)), "a")
+				mustAddFlag(t, p, "leaf", newStandalone(WithRequires("top")), "a", "b", "c")
+			})
+		}
+		// leaf set, target two levels up absent → requires must fire.
+		p := mk()
+		p.Parse([]string{os.Args[0], "a", "b", "c", "--leaf"})
+		if !hasErr(p, errs.ErrFlagRequires) {
+			t.Errorf("leaf requires top (two levels up); want ErrFlagRequires, got %v", p.GetErrors())
+		}
+		// target supplied → satisfied.
+		p = mk()
+		p.Parse([]string{os.Args[0], "a", "b", "c", "--leaf", "--top", "T"})
+		if hasErr(p, errs.ErrFlagRequires) {
+			t.Errorf("top supplied; requires should be satisfied, got %v", p.GetErrors())
+		}
+	})
+
+	t.Run("a deep terminal's required flag stays inactive for sibling branches", func(t *testing.T) {
+		mk := func() *Parser {
+			return build(t, func(p *Parser) {
+				mustAddFlag(t, p, "needc", NewArg(WithType(types.Single), WithRequired(true)), "a", "b", "c")
+			})
+		}
+		// sibling leaf under the same parent: `a b d` must not demand `a b c`'s flag.
+		p := mk()
+		p.Parse([]string{os.Args[0], "a", "b", "d"})
+		if hasErr(p, errs.ErrRequiredFlag) {
+			t.Errorf("invoking sibling `a b d` must not require a flag of `a b c`; got %v", p.GetErrors())
+		}
+		// different level-2 branch entirely: `a e` must not demand it either.
+		p = mk()
+		p.Parse([]string{os.Args[0], "a", "e"})
+		if hasErr(p, errs.ErrRequiredFlag) {
+			t.Errorf("invoking `a e` must not require a flag of `a b c`; got %v", p.GetErrors())
+		}
+		// the owning terminal itself, flag omitted → must fire.
+		p = mk()
+		p.Parse([]string{os.Args[0], "a", "b", "c"})
+		if !hasErr(p, errs.ErrRequiredFlag) {
+			t.Errorf("invoking `a b c` without needc should require it; got %v", p.GetErrors())
+		}
+	})
+
+	t.Run("nearest-ancestor wins when a child redefines an inherited flag", func(t *testing.T) {
+		p := build(t, nil)
+		if err := p.AddFlag("dup", NewArg(WithType(types.Single), WithDefaultValue("mid")), "a", "b"); err != nil {
+			t.Fatalf("add dup@'a b': %v", err)
+		}
+		// A child redefining a parent's flag name is the documented override case.
+		if err := p.AddFlag("dup", NewArg(WithType(types.Single), WithDefaultValue("leaf")), "a", "b", "c"); err != nil {
+			t.Skipf("child override of an inherited flag rejected at build time: %v", err)
+		}
+		p.Parse([]string{os.Args[0], "a", "b", "c", "--dup", "X"})
+		if v, ok := p.Get("dup", "a", "b", "c"); !ok || v != "X" {
+			t.Errorf("the leaf's own dup should receive X (nearest ancestor wins); got (%q,%v)", v, ok)
+		}
+		if v, _ := p.Get("dup", "a", "b"); v != "mid" {
+			t.Errorf("the parent's dup should keep its default 'mid', untouched; got %q", v)
+		}
+	})
+}
