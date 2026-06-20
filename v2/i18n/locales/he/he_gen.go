@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "שגיאה בהגדרת המנתח",
         "goopt.error.conflicting_flags": "לא ניתן להשתמש ב-%[1]s וב-%[2]s יחד",
         "goopt.error.contract_args": "לחוזה %[1]q יש מספר שגוי של ארגומנטים",
+        "goopt.error.default_in_exclusive_group": "דגל %[1]q לא יכול להיות בעל ערך ברירת מחדל מכיוון שהוא חלק מקבוצה הדדית בלעדית (mutex/exactlyone)",
         "goopt.error.dependency_not_specified": "דגל %[1]s תלוי ב-%[2]s שלא צוין.",
         "goopt.error.dependency_on_empty_flag": "לא ניתן לציין תלות בדגל ריק",
         "goopt.error.dependency_value_not_specified": "דגל %[1]s תלוי ב-%[2]s עם ערך %[3]s שלא צוין. (התקבל %[4]q)",

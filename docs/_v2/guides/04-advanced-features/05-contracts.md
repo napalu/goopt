@@ -184,6 +184,15 @@ Contracts distinguish **developer mistakes** from **user mistakes**:
   error), keeping it out of end-user output. When you add contracts programmatically after the
   parser exists, the same guard runs on the next `Parse`.
 
+> **No `default` on a `mutex`/`exactlyone` member.** A fallback value has no coherent meaning
+> for an option you select *among others*: it can neither count as a choice (it would
+> permanently win the group) nor be ignored (it would demand a selection while already holding a
+> value). So `default` on a `mutex`/`exactlyone` flag is **rejected at construction**. "Pick one
+> *with* a default" is not a group at all — it's a single value flag: `--format` with
+> `default:"json"` and `validators:isoneof(json,yaml,table)`. Use a group only for *separate*,
+> heterogeneous flags (e.g. `--from-file` / `--from-url` / `--from-stdin`), where a per-member
+> default doesn't apply.
+
 ## Contracts and Commands
 
 Contracts on **command-scoped flags** are evaluated per invoked command:

@@ -1,4 +1,5 @@
 {
+    "goopt.error.default_in_exclusive_group": "flag %[1]q cannot have a default value because it is part of a mutually-exclusive group (mutex/exactlyone)",
     "goopt.error.required_with_default": "flag %[1]q cannot be both required and have a default value (a default makes it never missing)",
     "goopt.msg.quote_open": "'",
     "goopt.msg.quote_close": "'",

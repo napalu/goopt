@@ -1,4 +1,5 @@
 {
+  "goopt.error.default_in_exclusive_group": "l'option %[1]q ne peut pas avoir de valeur par défaut car elle fait partie d'un groupe mutuellement exclusif (mutex/exactlyone)",
   "goopt.error.required_with_default": "l'option %[1]q ne peut pas être à la fois requise et avoir une valeur par défaut (une valeur par défaut fait qu'elle n'est jamais manquante)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",

@@ -20,6 +20,7 @@ var (
 	ErrNonPointerVar                = i18n.NewError(ErrNonPointerVarKey)
 	ErrRequiredFlag                 = i18n.NewError(ErrRequiredFlagKey)
 	ErrRequiredWithDefault          = i18n.NewError(ErrRequiredWithDefaultKey)
+	ErrDefaultInExclusiveGroup      = i18n.NewError(ErrDefaultInExclusiveGroupKey)
 	ErrRequiredPositionalFlag       = i18n.NewError(ErrRequiredPositionalFlagKey)
 	ErrInvalidArgumentType          = i18n.NewError(ErrInvalidArgumentTypeKey)
 	ErrFlagValueNotRetrieved        = i18n.NewError(ErrFlagValueNotRetrievedKey)

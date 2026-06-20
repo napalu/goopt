@@ -1,4 +1,5 @@
 {
+  "goopt.error.default_in_exclusive_group": "फ़्लैग %[1]q का डिफ़ॉल्ट मान नहीं हो सकता क्योंकि यह एक पारस्परिक रूप से अनन्य समूह (mutex/exactlyone) का हिस्सा है",
   "goopt.error.required_with_default": "फ़्लैग %[1]q एक साथ आवश्यक नहीं हो सकता और उसका डिफ़ॉल्ट मान भी हो (डिफ़ॉल्ट मान इसे कभी अनुपस्थित नहीं होने देता)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",

@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "Fehler beim Konfigurieren des Parsers",
         "goopt.error.conflicting_flags": "%[1]s und %[2]s können nicht zusammen verwendet werden",
         "goopt.error.contract_args": "Vertrag %[1]q hat die falsche Anzahl von Argumenten",
+        "goopt.error.default_in_exclusive_group": "Flag %[1]q kann keinen Standardwert haben, da es Teil einer sich gegenseitig ausschließenden Gruppe ist (mutex/exactlyone)",
         "goopt.error.dependency_not_specified": "Flag %[1]s hängt von %[2]s ab, das nicht angegeben wurde.",
         "goopt.error.dependency_on_empty_flag": "Kann Abhängigkeit von leerem Flag nicht spezifizieren",
         "goopt.error.dependency_value_not_specified": "Flag %[1]s hängt von %[2]s mit Wert %[3]s ab, der nicht angegeben wurde. (Erhalten: '%[4]s')",

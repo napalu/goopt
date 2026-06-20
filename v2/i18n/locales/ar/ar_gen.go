@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "خطأ في تكوين المحلل",
         "goopt.error.conflicting_flags": "لا يمكن استخدام %[1]s و %[2]s معًا",
         "goopt.error.contract_args": "العقد %[1]q يحتوي على عدد خاطئ من الوسائط",
+        "goopt.error.default_in_exclusive_group": "لا يمكن أن تحتوي العلامة %[1]q على قيمة افتراضية لأنها جزء من مجموعة حصرية متبادلة (mutex/exactlyone)",
         "goopt.error.dependency_not_specified": "العلامة %[1]s تعتمد على %[2]s التي لم يتم تحديدها.",
         "goopt.error.dependency_on_empty_flag": "لا يمكن تحديد تبعية على علامة فارغة",
         "goopt.error.dependency_value_not_specified": "العلامة %[1]s تعتمد على %[2]s بالقيمة %[3]s التي لم يتم تحديدها. (تم الحصول على %[4]q)",

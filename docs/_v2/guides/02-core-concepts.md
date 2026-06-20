@@ -98,6 +98,30 @@ Flags in `goopt` can be global or tied to a specific command. This is a core con
 
 For example, in a command like `myapp --verbose service start`, the `--verbose` flag (if global) is available to and can be checked by the logic for both the `service` and `start` commands.
 
+## Design Principles
+
+A handful of invariants explain *why* `goopt` behaves the way it does. Knowing them up front means a surprising behavior reads as a deliberate choice rather than a bug — and they're the rules the rest of the guides build on.
+
+*   **Diagnostics are collected, not thrown.** `Parse` doesn't stop at the first problem — it gathers every error and warning so the user can fix them all in one pass. You inspect them afterwards via `parser.GetErrors()` and `parser.GetWarnings()` and decide what is fatal. This is why a "required flag missing" doesn't abort parsing of the rest of the command line.
+
+*   **Two audiences, two moments.** *Contradictory declarations* — a `mutex`/`exactlyone` group with a single member, or a flag that is both `required` and has a `default` — are caught at **construction** (`NewParserFromStruct` / `AddFlag` return an error). *Invalid user input* is caught at **parse** time, where messages are end-user-facing and translatable. Developer mistakes and user mistakes surface at different moments, to different people.
+
+*   **`required` means "the user must supply it."** It is about explicit provision, not "must end up with a value" — and *supply* spans every input channel (command line, environment, or config), not just the command line. A flag therefore cannot be both `required` and have a `default`: that's a contradiction (a default means it is never actually missing), and `goopt` rejects it at construction. (For the same family of reasons, a `default` on a `mutex`/`exactlyone` member is also rejected — a fallback value for a mutually-exclusive option is meaningless.) When you want a fallback value, read it with `GetOrDefault()`, which always returns the configured default.
+
+*   **Secure (prompted) flags stay automation-friendly.** A `secure` flag normally reads hidden input from an interactive prompt. But when an env converter is set and the matching variable is present, the value is taken from the environment *in lieu of prompting* — so a `required` secure flag (a password, an API token) behaves the same in an interactive shell and in CI/CD, where no prompt is possible. The environment value counts as supplied; nothing silently falls back to a default.
+
+*   **Defaults are trusted; user input is validated.** A `default:` value is *not* run through the flag's validators — you, the developer, control it. A value supplied by the user (command line, env, or config) *is* validated. Validators guard untrusted input, not your own defaults.
+
+*   **Flags inherit to subcommands; positional arguments do not.** Flags are name-keyed, so a parent's flag is unambiguously available to its children (see [Flag Scopes & Inheritance](#flag-scopes--inheritance) above). Positionals are index-keyed, so inheriting them across command levels would risk silently binding a value to the wrong slot — they stay [command-local]({{ site.baseurl }}/v2/guides/03-defining-your-cli/04-positional-arguments/) by design.
+
+*   **Translation completeness is enforced, not optional.** Every loaded locale must define every message key; a missing key panics at load rather than silently falling back to English. This keeps translations honest — an incomplete locale fails loudly during development instead of shipping half-translated. (Only `en`, `de`, and `fr` load by default; other locales are opt-in.)
+
+*   **A field's tag decides what it is.** In the struct-first approach a field with a flag tag (`desc`, `default`, `short`, …) becomes a **flag**, a field tagged `kind:command` becomes a **command**, and a field with an empty or absent tag is **neither** (ignored). Give a flag field at least a `desc` or a `default` so `goopt` registers it.
+
+*   **You can tell a supplied value from a default.** `HasFlag(name)` returns `true` only when a value was *explicitly* supplied (command line, env, or config) and `false` when the flag fell back to its default — even when the supplied value happens to equal the default. Reach for it when "did the user actually set this?" matters.
+
+*   **Precedence and build style are settled choices, not accidents.** Value [precedence](#configuration-precedence) is fixed (`default < env < config < command line`), and the [three build styles](#the-three-ways-to-build-your-cli) are equivalent — struct, programmatic, and hybrid all produce the same parser, so you pick the ergonomics, not the capabilities.
+
 ## Batteries-Included Features
 
 Finally, `goopt` is designed to reduce boilerplate by providing powerful features out of the box.

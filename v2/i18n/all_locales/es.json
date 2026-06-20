@@ -1,4 +1,5 @@
 {
+  "goopt.error.default_in_exclusive_group": "la bandera %[1]q no puede tener un valor predeterminado porque forma parte de un grupo mutuamente excluyente (mutex/exactlyone)",
   "goopt.error.required_with_default": "la bandera %[1]q no puede ser obligatoria y tener un valor predeterminado a la vez (un valor predeterminado hace que nunca falte)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",

@@ -517,6 +517,18 @@ func TestInteractionMatrixDefaults(t *testing.T) {
 				}
 			})
 
+			// (A2) a default on a mutex/exactlyone member is meaningless -> rejected.
+			t.Run("default_on_exclusive_member_is_rejected", func(t *testing.T) {
+				p := mk(t)
+				if err := p.AddFlag("mx", NewArg(WithType(types.Single), WithDefaultValue("d"), WithMutex("g")), s.flagPath...); !errors.Is(err, errs.ErrDefaultInExclusiveGroup) {
+					t.Errorf("mutex+default should be rejected at construction; got %v", err)
+				}
+				p = mk(t)
+				if err := p.AddFlag("xo", NewArg(WithType(types.Single), WithDefaultValue("d"), WithExactlyOne("g")), s.flagPath...); !errors.Is(err, errs.ErrDefaultInExclusiveGroup) {
+					t.Errorf("exactlyone+default should be rejected at construction; got %v", err)
+				}
+			})
+
 			// (B) bad default, no value -> validators are NOT run on the default.
 			t.Run("bad_default_bypasses_validators", func(t *testing.T) {
 				p := mk(t)
@@ -612,6 +624,45 @@ func TestInteractionMatrixBindDefault(t *testing.T) {
 		p.Parse([]string{os.Args[0], "--f", "x"})
 		if v != "x" {
 			t.Errorf("override: bound=%q, want %q", v, "x")
+		}
+	})
+}
+
+// promptDetector is a TerminalReader that records whether the interactive prompt
+// was ever invoked — so a test can prove an env var was used *in lieu of* prompting.
+type promptDetector struct{ prompted *bool }
+
+func (d promptDetector) ReadPassword(fd int) ([]byte, error) {
+	*d.prompted = true
+	return nil, errors.New("unexpected interactive prompt")
+}
+func (d promptDetector) IsTerminal(fd int) bool { return true }
+
+// TestInteractionMatrixSecureEnv verifies a required `secure` flag is satisfied by
+// an environment variable in lieu of the interactive prompt (CI/CD-friendly): the
+// required check passes, the value is taken from the environment, and the terminal
+// is never read.
+func TestInteractionMatrixSecureEnv(t *testing.T) {
+	conv := func(s string) string { return strings.ToUpper(strings.ReplaceAll(s, "-", "_")) }
+	t.Run("env satisfies required secure flag without prompting", func(t *testing.T) {
+		t.Setenv("TOKEN", "s3cret")
+		prompted := false
+		var token string
+		p := NewParser()
+		p.SetEnvNameConverter(conv)
+		p.SetTerminalReader(promptDetector{&prompted})
+		if err := p.BindFlag(&token, "token", NewArg(WithType(types.Single), WithSecurePrompt("Token: "), WithRequired(true))); err != nil {
+			t.Fatal(err)
+		}
+		p.Parse([]string{os.Args[0]})
+		if hasErr(p, errs.ErrRequiredFlag) {
+			t.Errorf("env should satisfy the required secure flag; got %v", p.GetErrors())
+		}
+		if prompted {
+			t.Errorf("secure flag prompted despite the env var being set — env should replace the prompt")
+		}
+		if token != "s3cret" {
+			t.Errorf("secure value = %q, want %q (from env)", token, "s3cret")
 		}
 	})
 }

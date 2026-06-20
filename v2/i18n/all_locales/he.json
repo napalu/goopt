@@ -1,4 +1,5 @@
 {
+  "goopt.error.default_in_exclusive_group": "דגל %[1]q לא יכול להיות בעל ערך ברירת מחדל מכיוון שהוא חלק מקבוצה הדדית בלעדית (mutex/exactlyone)",
   "goopt.error.required_with_default": "דגל %[1]q לא יכול להיות גם נדרש וגם בעל ערך ברירת מחדל (ערך ברירת מחדל גורם לכך שלעולם לא יחסר)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",

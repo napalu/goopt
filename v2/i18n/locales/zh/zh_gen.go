@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "配置解析器时出错",
         "goopt.error.conflicting_flags": "%[1]s 和 %[2]s 不能同时使用",
         "goopt.error.contract_args": "契约 %[1]q 的参数数量不正确",
+        "goopt.error.default_in_exclusive_group": "标志 %[1]q 属于互斥组（mutex/exactlyone），因此不能有默认值",
         "goopt.error.dependency_not_specified": "标志 %[1]s 依赖于未指定的 %[2]s。",
         "goopt.error.dependency_on_empty_flag": "无法在空标志上指定依赖关系",
         "goopt.error.dependency_value_not_specified": "标志 %[1]s 依赖于带有值 %[3]s 的 %[2]s，但未指定。(得到 %[4]q)",

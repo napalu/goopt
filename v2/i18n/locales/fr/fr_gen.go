@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "erreur de configuration de l'analyseur",
         "goopt.error.conflicting_flags": "%[1]s et %[2]s ne peuvent pas être utilisés ensemble",
         "goopt.error.contract_args": "le contrat %[1]q a un nombre incorrect d'arguments",
+        "goopt.error.default_in_exclusive_group": "l'option %[1]q ne peut pas avoir de valeur par défaut car elle fait partie d'un groupe mutuellement exclusif (mutex/exactlyone)",
         "goopt.error.dependency_not_specified": "L'option %[1]s dépend de %[2]s qui n'a pas été spécifiée",
         "goopt.error.dependency_on_empty_flag": "impossible de spécifier une dépendance sur une option vide",
         "goopt.error.dependency_value_not_specified": "L'option %[1]s dépend de %[2]s avec la valeur %[3]s qui n'a pas été spécifiée (reçu %[4]q)",

@@ -1168,6 +1168,19 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 		return errs.ErrRequiredWithDefault.WithArgs(flag)
 	}
 
+	// A default on a mutually-exclusive member (mutex/exactlyone) has no coherent
+	// meaning: a fallback value for an option you select among others can neither
+	// count as a choice (it would permanently win the group) nor be ignored
+	// (it would fire "must set one" despite holding a value). "Pick one with a
+	// default" is a single value flag + isoneof, not a group; reject it here.
+	if argument.DefaultValue != "" {
+		for _, c := range argument.Contracts {
+			if c.Kind == ContractMutex || c.Kind == ContractExactlyOne {
+				return errs.ErrDefaultInExclusiveGroup.WithArgs(flag)
+			}
+		}
+	}
+
 	// Use the helper function to generate the lookup key
 	lookupFlag := buildPathFlag(flag, commandPath...)
 
@@ -1462,7 +1475,15 @@ func (p *Parser) GetShortFlag(flag string, commandPath ...string) (string, error
 	return "", err
 }
 
-// HasFlag returns true when the Flag has been seen on the command line.
+// HasFlag reports whether a value for the flag was explicitly supplied — on the
+// command line, via an environment variable, or via external config
+// (ParseWithDefaults) — as opposed to the flag falling back to its default value.
+//
+// This is provenance, not a value comparison: it returns true even when the
+// supplied value happens to equal the default, and false when the flag is holding
+// its default (or is unset). Reach for it to answer "did the user actually set
+// this?" — e.g. before overriding a defaulted value with your own logic. It does
+// not distinguish which of those sources supplied the value.
 func (p *Parser) HasFlag(flag string, commandPath ...string) bool {
 	// First try canonical lookup
 	mainKey := p.flagOrShortFlag(flag, commandPath...)

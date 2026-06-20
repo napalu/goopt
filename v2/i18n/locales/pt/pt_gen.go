@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "erro ao configurar o analisador",
         "goopt.error.conflicting_flags": "%[1]s e %[2]s não podem ser usados juntos",
         "goopt.error.contract_args": "o contrato %[1]q tem um número incorreto de argumentos",
+        "goopt.error.default_in_exclusive_group": "a flag %[1]q não pode ter um valor padrão porque faz parte de um grupo mutuamente exclusivo (mutex/exactlyone)",
         "goopt.error.dependency_not_specified": "A flag %[1]s depende de %[2]s que não foi especificada.",
         "goopt.error.dependency_on_empty_flag": "não é possível definir dependência em flag vazia",
         "goopt.error.dependency_value_not_specified": "A flag %[1]s depende de %[2]s com valor %[3]s que não foi especificado. (recebido %[4]q)",

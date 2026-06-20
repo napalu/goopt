@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "पार्सर को कॉन्फ़िगर करने में त्रुटि",
         "goopt.error.conflicting_flags": "%[1]s और %[2]s का एक साथ उपयोग नहीं किया जा सकता",
         "goopt.error.contract_args": "अनुबंध %[1]q में तर्कों की गलत संख्या है",
+        "goopt.error.default_in_exclusive_group": "फ़्लैग %[1]q का डिफ़ॉल्ट मान नहीं हो सकता क्योंकि यह एक पारस्परिक रूप से अनन्य समूह (mutex/exactlyone) का हिस्सा है",
         "goopt.error.dependency_not_specified": "फ़्लैग %[1]s, %[2]s पर निर्भर करता है जिसे निर्दिष्ट नहीं किया गया था।",
         "goopt.error.dependency_on_empty_flag": "खाली फ़्लैग पर निर्भरता निर्दिष्ट नहीं की जा सकती",
         "goopt.error.dependency_value_not_specified": "फ़्लैग %[1]s, मान %[3]s के साथ %[2]s पर निर्भर करता है जिसे निर्दिष्ट नहीं किया गया था। (%[4]q मिला)",

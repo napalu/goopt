@@ -20,6 +20,7 @@ const SystemTranslations = `{
         "goopt.error.configuring_parser": "パーサーの設定中にエラーが発生しました",
         "goopt.error.conflicting_flags": "%[1]s と %[2]s は同時に使用できません",
         "goopt.error.contract_args": "契約 %[1]q の引数の数が正しくありません",
+        "goopt.error.default_in_exclusive_group": "フラグ %[1]q は相互排他グループ（mutex/exactlyone）の一部であるため、デフォルト値を持つことはできません",
         "goopt.error.dependency_not_specified": "フラグ %[1]s は指定されていない %[2]s に依存しています。",
         "goopt.error.dependency_on_empty_flag": "空のフラグへの依存関係を指定できません",
         "goopt.error.dependency_value_not_specified": "フラグ %[1]s は値 %[3]s を持つ %[2]s に依存していますが、指定されていません（%[4]q を取得）",

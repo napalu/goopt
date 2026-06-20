@@ -1,4 +1,5 @@
 {
+  "goopt.error.default_in_exclusive_group": "Flag %[1]q kann keinen Standardwert haben, da es Teil einer sich gegenseitig ausschließenden Gruppe ist (mutex/exactlyone)",
   "goopt.error.required_with_default": "Flag %[1]q kann nicht gleichzeitig erforderlich sein und einen Standardwert haben (ein Standardwert sorgt dafür, dass es nie fehlt)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",
