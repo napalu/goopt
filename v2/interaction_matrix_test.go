@@ -339,6 +339,73 @@ func TestInteractionMatrixTranslatedNames(t *testing.T) {
 	}
 }
 
+// TestInteractionMatrixTranslatedCommands is the command-path twin of the
+// translated-flag test: a command invoked by its localized name must resolve to
+// its canonical path — terminal, nested (translated parent + translated sub), and
+// mixed canonical/translated — and the canonical names must still work in the
+// non-English locale. Commands resolve through a different path (getCommand /
+// GetCanonicalCommandPath) than flags, so it gets its own coverage.
+func TestInteractionMatrixTranslatedCommands(t *testing.T) {
+	build := func(t *testing.T) *Parser {
+		p := NewParser()
+		b := i18n.NewEmptyBundle()
+		if err := b.AddLanguage(language.Spanish, map[string]string{
+			"cmd.status": "estado", "cmd.deploy": "desplegar", "cmd.service": "servicio",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetUserBundle(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetLanguage(language.Spanish); err != nil {
+			t.Fatal(err)
+		}
+		// terminal command "status"
+		if err := p.AddCommand(NewCommand(WithName("status"), WithCommandNameKey("cmd.status"))); err != nil {
+			t.Fatal(err)
+		}
+		// nested: deploy -> service
+		sub := NewCommand(WithName("service"), WithCommandNameKey("cmd.service"))
+		if err := p.AddCommand(NewCommand(WithName("deploy"), WithCommandNameKey("cmd.deploy"), WithSubcommands(sub))); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	invoked := func(p *Parser, path string) bool {
+		for _, c := range p.GetCommands() {
+			if c == path {
+				return true
+			}
+		}
+		return false
+	}
+	check := func(t *testing.T, args []string, wantPath string) {
+		t.Helper()
+		p := build(t)
+		p.Parse(append([]string{os.Args[0]}, args...))
+		if errs := p.GetErrors(); len(errs) != 0 {
+			t.Fatalf("%v: unexpected errors: %v", args, errs)
+		}
+		if !invoked(p, wantPath) {
+			t.Errorf("%v did not invoke %q; commands=%v", args, wantPath, p.GetCommands())
+		}
+	}
+
+	t.Run("terminal by translated name", func(t *testing.T) {
+		check(t, []string{"estado"}, "status")
+	})
+	t.Run("nested by translated names", func(t *testing.T) {
+		check(t, []string{"desplegar", "servicio"}, "deploy service")
+	})
+	t.Run("mixed canonical parent + translated sub", func(t *testing.T) {
+		check(t, []string{"deploy", "servicio"}, "deploy service")
+	})
+	t.Run("canonical still works in the non-en locale", func(t *testing.T) {
+		check(t, []string{"deploy", "service"}, "deploy service")
+		check(t, []string{"status"}, "status")
+	})
+}
+
 // TestInteractionMatrixShortFlags crosses POSIX short-flag invocation (-x) with
 // scope. Short flags go through a separate parse path (parsePosixFlag) from long
 // flags, so this checks they resolve — and carry their constraints — identically
