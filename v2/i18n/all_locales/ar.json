@@ -1,4 +1,6 @@
 {
+  "goopt.error.default_in_exclusive_group": "لا يمكن أن تحتوي العلامة %[1]q على قيمة افتراضية لأنها جزء من مجموعة حصرية متبادلة (mutex/exactlyone)",
+  "goopt.error.required_with_default": "لا يمكن أن تكون العلامة %[1]q مطلوبة ولها قيمة افتراضية في آن واحد (القيمة الافتراضية تجعلها لا تغيب أبدًا)",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",
   "goopt.error.bind_invalid_value_field": "لا يمكن الربط بحقل قيمة غير صالح",

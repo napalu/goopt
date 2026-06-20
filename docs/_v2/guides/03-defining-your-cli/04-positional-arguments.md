@@ -76,6 +76,25 @@ type Config struct {
 }
 ```
 
+### Positionals and Commands
+
+Positional arguments are **command-local**: a positional declared on a command binds only when **that exact command** is invoked. Unlike named flags — which are inherited by subcommands — positionals are **not** inherited. A positional declared on a parent command is not bound when a subcommand is invoked.
+
+This is by design. Flags are name-keyed and therefore unambiguous to inherit, but positionals are index-keyed: inheriting them across command levels would let a parent's `pos:0` and a subcommand's `pos:0` collide, silently mis-binding a value, and would let a subcommand swallow stray arguments that should otherwise raise an "unknown argument" error. Keeping positionals command-local keeps binding predictable.
+
+If you need the same value across several subcommands, either declare the positional on each subcommand, or use a **named flag** (which *does* inherit):
+
+```go
+type Config struct {
+    Db struct {
+        Name    string `goopt:"name:name"`        // a flag inherits into every subcommand
+        Migrate struct{} `goopt:"kind:command"`
+        Backup  struct{} `goopt:"kind:command"`
+    } `goopt:"kind:command"`
+}
+// myapp db migrate --name prod   and   myapp db backup --name prod
+```
+
 ## Mixing Positional Arguments and Named Flags
 
 goopt seamlessly handles command lines that contain both positional arguments (defined with `pos:N`) and named flags (e.g., `--verbose`, `--output file`).
@@ -157,7 +176,7 @@ type PositionalArgument struct {
 goopt provides clear error messages for position violations:
 
 ```go
-if !parser.Parse(os.Args[1:]) {
+if !parser.Parse(os.Args) {
     for _, err := range parser.GetErrors() {
         fmt.Println("Error:", err)
         // Example: "Error: missing required positional argument 'source' at position 0"

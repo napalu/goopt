@@ -55,20 +55,14 @@ func (p *Parser) parseFlag(state parse.State, currentCommandPath string) bool {
 		}
 	}
 
-	// If not found, try translation lookup
+	// If not found, try translation lookup. Resolve the canonical name through the
+	// same parent-walking resolver used for the canonical name above, so a
+	// translated name inherits across command scope exactly as its canonical does
+	// (e.g. --<translated> on a parent-command flag works under a subcommand).
 	if !found {
 		if canonical, ok := p.translationRegistry.GetCanonicalFlagName(flagName, p.GetLanguage()); ok {
-			// The canonical name might already include command context (e.g., "flag@command")
-			// Try it as-is first
-			flag = canonical
+			flag = p.flagOrShortFlag(canonical, currentCommandPath)
 			flagInfo, found = p.acceptedFlags.Get(flag)
-
-			// If not found and we have a command path, try building the full path
-			if !found && currentCommandPath != "" {
-				commandParts := strings.Split(currentCommandPath, " ")
-				flag = buildPathFlag(canonical, commandParts...)
-				flagInfo, found = p.acceptedFlags.Get(flag)
-			}
 		}
 	}
 
@@ -535,16 +529,52 @@ func (p *Parser) registerSecureValue(flag, value string) error {
 	return err
 }
 
+// chainedInternalSep is the internal separator for stored Chained (list) values: the
+// ASCII Unit Separator. It is deliberately a control byte that cannot be typed on a
+// command line (or appear in config/env data), so it never collides with a value and
+// is never a user-facing list separator. The user's ListDelimiterFunc remains the
+// sole authority on ELEMENT separation; this marker only delimits the dimensions the
+// user never specifies — repeated-occurrence boundaries and the validated-element
+// rejoin. Stored values are read back by splitting on (user delimiter ∪ this marker),
+// see chainedSplitFunc.
+const chainedInternalSep = "\x1f"
+const chainedInternalSepRune = '\x1f'
+
+// chainedSplitFunc returns the predicate for splitting a STORED chained value back
+// into elements: the configured input delimiter UNION the internal marker. Input
+// parsing uses the user delimiter alone; reading a stored value must additionally
+// break on the marker that joins occurrences and validated elements.
+func (p *Parser) chainedSplitFunc() types.ListDelimiterFunc {
+	input := p.getListDelimiterFunc()
+	return func(r rune) bool { return r == chainedInternalSepRune || input(r) }
+}
+
+// chainedRegisteredDownstream reports whether a Chained flag's options value is
+// written by a step after flagValue: checkMultiple (when it has validators or
+// accepted-values) or the filter block in processValueFlag (when it has pre/post
+// filters). Such flags must NOT also be registered in flagValue, to keep exactly one
+// options write per occurrence.
+func (p *Parser) chainedRegisteredDownstream(argument *Argument) bool {
+	return argument.TypeOf == types.Chained &&
+		(len(argument.Validators) > 0 || len(argument.AcceptedValues) > 0 ||
+			argument.PreFilter != nil || argument.PostFilter != nil)
+}
+
 func (p *Parser) registerFlagValue(flag, value, rawValue string) {
 	parts := splitPathFlag(flag)
 	p.rawArgs[parts[0]] = rawValue
 	p.rawArgs[rawValue] = rawValue
 
-	// For Chained type flags that are repeated, append values
+	// For Chained (list) flags, accumulate repeated occurrences. We store each
+	// occurrence's token verbatim (preserving the user's declared list separator) and
+	// join occurrences with the internal marker — NOT a list separator of our own.
+	// repeatedFlags is now marked per-occurrence for EVERY chained flag (in
+	// processValueFlag), so accumulation no longer depends on the flag being bound to
+	// a variable, and registerFlagValue is called exactly once per occurrence (see the
+	// deferral in flagValue) so a repeat never double-appends.
 	if flagInfo, found := p.acceptedFlags.Get(flag); found && flagInfo.Argument.TypeOf == types.Chained {
 		if existingValue, exists := p.options[flag]; exists && p.repeatedFlags[flag] {
-			// Append with pipe separator (the default for chained values)
-			p.options[flag] = existingValue + "|" + value
+			p.options[flag] = existingValue + chainedInternalSep + value
 			return
 		}
 	}
@@ -788,7 +818,15 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 			}
 		}
 		arg = next
-		p.registerFlagValue(flag, next, next)
+		// A Chained flag that has validators/accepted-values (split+validated in
+		// checkMultiple) or filters (applied in processValueFlag) is registered by
+		// that downstream step instead. Writing the raw token here too would store it
+		// twice — and, now that repeated accumulation is bind-independent, append it
+		// twice on a repeat. Plain chained flags have no downstream write, so they are
+		// stored here.
+		if !p.chainedRegisteredDownstream(argument) {
+			p.registerFlagValue(flag, next, next)
+		}
 	}
 
 	return arg, err
@@ -1342,9 +1380,9 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 		processed, validationPassed = p.processSingleValue(next, currentArg, argument)
 	} else {
 		haveFilters := argument.PreFilter != nil || argument.PostFilter != nil
+		processed = next
 		if argument.PreFilter != nil {
 			processed = argument.PreFilter(next)
-			p.registerFlagValue(currentArg, processed, next)
 		}
 		if argument.PostFilter != nil {
 			if processed != "" {
@@ -1352,10 +1390,11 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 			} else {
 				processed = argument.PostFilter(next)
 			}
-			p.registerFlagValue(currentArg, processed, next)
 		}
-		if !haveFilters {
-			processed = next
+		if haveFilters {
+			// Register once, after both filters — registering after each would write
+			// (and, for a repeated chained flag, accumulate) twice per occurrence.
+			p.registerFlagValue(currentArg, processed, next)
 		}
 	}
 
@@ -1372,7 +1411,15 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 
 	// Only set bound variable if validation passed
 	if validationPassed {
-		return p.setBoundVariable(processed, currentArg)
+		err := p.setBoundVariable(processed, currentArg)
+		// Mark the occurrence complete for chained flags so a SUBSEQUENT occurrence
+		// accumulates (in both options and any bound slice) rather than replacing —
+		// independent of whether the flag is bound. This is the single per-occurrence
+		// boundary that both registerFlagValue and appendOrSetBoundVariable read.
+		if argument.TypeOf == types.Chained {
+			p.repeatedFlags[currentArg] = true
+		}
+		return err
 	}
 	return nil
 }
@@ -1586,8 +1633,10 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 		}
 	}
 
-	// All validations passed for all values
-	value := strings.Join(args, "|")
+	// All validations passed for all values. Join the validated elements with the
+	// internal marker (not a user-facing separator); GetList / ConvertString recover
+	// them by splitting on (user delimiter ∪ marker).
+	value := strings.Join(args, chainedInternalSep)
 	p.registerFlagValue(flag, value, next)
 	return value, true
 }
@@ -1782,9 +1831,12 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 		}
 	}
 
-	// For Chained type with repeated flag support, check if we need to append
+	// For Chained type with repeated flag support, check if we need to append. The
+	// value may carry the internal marker (from checkMultiple's validated rejoin), so
+	// split on (user delimiter ∪ marker) — the same recovery GetList uses — to keep
+	// the bound slice and GetList in lockstep.
 	if flagInfo.Argument.TypeOf == types.Chained {
-		return p.appendOrSetBoundVariable(value, data, currentArg, p.listFunc)
+		return p.appendOrSetBoundVariable(value, data, currentArg, p.chainedSplitFunc())
 	}
 
 	return util.ConvertString(value, data, currentArg, p.listFunc)
@@ -1794,13 +1846,10 @@ func (p *Parser) setBoundVariable(value string, currentArg string) error {
 // or replacing the value for non-slice types. This enables the pattern:
 // -o option1 -o option2 instead of -o "option1,option2"
 func (p *Parser) appendOrSetBoundVariable(value string, data any, currentArg string, delimiterFunc types.ListDelimiterFunc) error {
-	// Check if we've already seen this flag
-	doAppend := true
-	if !p.repeatedFlags[currentArg] {
-		// First occurrence, mark it as seen and set normally
-		p.repeatedFlags[currentArg] = true
-		doAppend = false
-	}
+	// Append when this flag was already completed in a PRIOR occurrence; otherwise
+	// set. The per-occurrence mark is owned by processValueFlag (bind-independent), so
+	// the first occurrence reads false (set) and later ones read true (append).
+	doAppend := p.repeatedFlags[currentArg]
 
 	return util.ConvertString(value, data, currentArg, delimiterFunc, doAppend)
 }
@@ -2402,13 +2451,6 @@ func (p *Parser) processPathTag(pathTag string, fieldValue reflect.Value, fullFl
 		if err != nil {
 			return err
 		}
-		if arg.DefaultValue != "" {
-			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, cmdPath))
-			if err != nil {
-				// Default value binding errors are not critical - collect them
-				p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
-			}
-		}
 	}
 
 	return nil
@@ -2436,17 +2478,6 @@ func (p *Parser) bindArgument(commandPath string, fieldValue reflect.Value, full
 	}
 	if err != nil {
 		return err
-	}
-	if arg.DefaultValue != "" {
-		if commandPath != "" {
-			err = p.setBoundVariable(arg.DefaultValue, buildPathFlag(fullFlagName, commandPath))
-		} else {
-			err = p.setBoundVariable(arg.DefaultValue, fullFlagName)
-		}
-		if err != nil {
-			// Default value binding errors are not critical - collect them
-			p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, arg.DefaultValue))
-		}
 	}
 
 	return nil
@@ -2833,6 +2864,16 @@ func getFlagPath(flag string) string {
 func (p *Parser) formatFlagForError(flag string) string {
 	parts := splitPathFlag(flag)
 	if len(parts) == 2 && parts[1] != "" {
+		// Omit the "(in command 'x')" qualifier when that command was actually
+		// invoked: the user already knows which command they ran, so repeating it
+		// (e.g. once per flag in a contract error) is noise. The qualifier is kept
+		// only for a flag of a command that was not invoked, where it genuinely
+		// disambiguates.
+		for _, cmd := range p.GetCommands() {
+			if cmd == parts[1] || strings.HasPrefix(cmd, parts[1]+" ") {
+				return p.quoteForError(parts[0])
+			}
+		}
 		// Format as: 'flag' (in command 'command')
 		inCommandMsg := p.layeredProvider.GetMessage(messages.MsgInCommandKey)
 		return p.quoteForError(parts[0]) + " (" + inCommandMsg + " " + p.quoteForError(parts[1]) + ")"
@@ -2870,7 +2911,13 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 		data.CommandFlags[cmd] = append(data.CommandFlags[cmd], pair)
 	}
 
-	// Handle flag values
+	// Handle flag values. NOTE: AcceptedValues is deprecated (superseded by
+	// validators); this keeps value-completion correct while it sunsets — do not grow
+	// it with command-aware keys. Key by the BARE flag name(s) — exactly what every
+	// generator reads (data.FlagValues[flag.Long]). The old code stored only when a
+	// short existed and prefixed command-scoped keys with "cmd@", a key no generator
+	// ever looks up — so value completion was dead for long-only and command-scoped
+	// flags.
 	if len(flagInfo.Argument.AcceptedValues) > 0 {
 		values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
 		for i, v := range flagInfo.Argument.AcceptedValues {
@@ -2880,18 +2927,44 @@ func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName stri
 			}
 		}
 
-		// Add values for both forms if short exists
-		if flagInfo.Argument.Short != "" {
-			shortKey := pair.Short
-			longKey := pair.Long
-			if cmd != "" {
-				shortKey = cmd + "@" + shortKey
-				longKey = cmd + "@" + longKey
-			}
-			data.FlagValues[shortKey] = values
-			data.FlagValues[longKey] = values
+		data.FlagValues[pair.Long] = values
+		if pair.Short != "" {
+			data.FlagValues[pair.Short] = values
 		}
 	}
+}
+
+// applyCommandFlagInheritance rewrites data.CommandFlags so each command lists its OWN
+// flags plus those inherited from every ancestor command — mirroring the parser's
+// parent-walking flag resolution, so completion offers exactly what the parser accepts
+// (without this, a parent command's flags are silently absent from subcommand
+// completion even though the parser accepts them there). The nearest owner wins on a
+// name collision, matching the parser's nearest-ancestor override. Ancestors are the
+// space-joined path prefixes the parser itself walks.
+func applyCommandFlagInheritance(data *completion.CompletionData) {
+	if len(data.CommandFlags) == 0 {
+		return
+	}
+	ownFlags := data.CommandFlags
+	merged := make(map[string][]completion.FlagPair, len(ownFlags))
+	for _, path := range data.Commands {
+		seen := make(map[string]bool)
+		var flags []completion.FlagPair
+		tokens := strings.Split(path, " ")
+		for i := len(tokens); i >= 1; i-- { // own path first, then ancestors
+			for _, fp := range ownFlags[strings.Join(tokens[:i], " ")] {
+				if seen[fp.Long] {
+					continue // a nearer command already defines this flag
+				}
+				seen[fp.Long] = true
+				flags = append(flags, fp)
+			}
+		}
+		if len(flags) > 0 {
+			merged[path] = flags
+		}
+	}
+	data.CommandFlags = merged
 }
 
 func isFieldCommand(field reflect.StructField) bool {

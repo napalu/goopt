@@ -12897,14 +12897,16 @@ func TestParser_BindFlagWithSlices(t *testing.T) {
 		var value bool
 
 		err := parser.BindFlag(&value, "flag", &Argument{
-			TypeOf: types.Empty, // Should infer as Standalone for bool
+			TypeOf: types.Empty, // bool with an unset type must infer as Standalone
 		})
 		require.NoError(t, err)
 
-		// Verify type was inferred (bool becomes Single when TypeOf is Empty)
+		// A bound bool infers Standalone (presence-flag): inference now runs BEFORE
+		// AddFlag's Empty->Single default, which previously masked it (the old test
+		// asserted the masked Single value).
 		arg, err := parser.GetArgument("flag")
 		assert.NoError(t, err)
-		assert.Equal(t, types.Single, arg.TypeOf)
+		assert.Equal(t, types.Standalone, arg.TypeOf)
 	})
 }
 
@@ -15566,10 +15568,23 @@ func TestParser_FormatFlagForError(t *testing.T) {
 		assert.NotEmpty(t, errors)
 		errorMsg := errors[0].Error()
 
-		// The error should contain the formatted flag name
+		// The error shows the formatted flag name. Because "deploy" was actually
+		// invoked, the "(in command 'deploy')" qualifier is suppressed as redundant.
 		assert.Contains(t, errorMsg, "'email'")
-		assert.Contains(t, errorMsg, "in command")
-		assert.Contains(t, errorMsg, "'deploy'")
+		assert.NotContains(t, errorMsg, "in command")
+		assert.NotContains(t, errorMsg, "'deploy'")
+	})
+
+	t.Run("qualifier suppressed for invoked command, kept otherwise", func(t *testing.T) {
+		parser := NewParser()
+		require.NoError(t, parser.AddCommand(&Command{Name: "deploy"}))
+		require.NoError(t, parser.AddCommand(&Command{Name: "build"}))
+		parser.Parse([]string{"prog", "deploy"})
+
+		// Flag of the invoked command -> qualifier omitted (the user knows they ran deploy).
+		assert.Equal(t, "'token'", parser.formatFlagForError("token@deploy"))
+		// Flag of a command that was NOT invoked -> qualifier kept for disambiguation.
+		assert.Equal(t, "'config' (in command 'build')", parser.formatFlagForError("config@build"))
 	})
 }
 

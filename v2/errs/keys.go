@@ -25,6 +25,8 @@ const (
 	ErrBindNilKey                      = ErrorPrefixKey + ".bind_nil"
 	ErrNonPointerVarKey                = ErrorPrefixKey + ".non_pointer_var"
 	ErrRequiredFlagKey                 = ErrorPrefixKey + ".required_flag"
+	ErrRequiredWithDefaultKey          = ErrorPrefixKey + ".required_with_default"
+	ErrDefaultInExclusiveGroupKey      = ErrorPrefixKey + ".default_in_exclusive_group"
 	ErrRequiredPositionalFlagKey       = ErrorPrefixKey + ".required_positional_flag"
 	ErrInvalidArgumentTypeKey          = ErrorPrefixKey + ".invalid_argument_type"
 	ErrFlagValueNotRetrievedKey        = ErrorPrefixKey + ".flag_value_not_retrieved"

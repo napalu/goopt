@@ -906,8 +906,24 @@ func (p *Parser) GetCommands() []string {
 }
 
 // Get returns a combination of a Flag's value as string and true if found. If a flag is not set but has a configured default value
-// the default value is registered and is returned. Returns an empty string and false otherwise
+// the default value is registered and is returned. Returns an empty string and false otherwise.
+//
+// For a Chained (list) flag the returned string is a REPRESENTATION of the list, not
+// guaranteed to match the original input format: the internal occurrence/element
+// marker is rendered as a comma. Use GetList for the structured value.
 func (p *Parser) Get(flag string, commandPath ...string) (string, bool) {
+	value, found := p.getRawValue(flag, commandPath...)
+	if found && strings.ContainsRune(value, chainedInternalSepRune) {
+		value = strings.ReplaceAll(value, chainedInternalSep, ",")
+	}
+	return value, found
+}
+
+// getRawValue resolves a flag's stored value without rendering. Chained values are
+// returned verbatim, still carrying the internal marker — callers that need the
+// structured list (GetList) or the bound-variable split read this and split on
+// chainedSplitFunc; Get renders the marker for display.
+func (p *Parser) getRawValue(flag string, commandPath ...string) (string, bool) {
 	lookup := buildPathFlag(flag, commandPath...)
 	mainKey := p.flagOrShortFlag(lookup, commandPath...)
 	value, found := p.options[mainKey]
@@ -989,20 +1005,22 @@ func (p *Parser) GetFloat(flag string, bitSize int, commandPath ...string) (floa
 	return val, nil
 }
 
-// GetList attempts to split the string value of a Chained Flag to a string slice
-// by default the value is split on '|', ',' or ' ' delimiters
+// GetList returns the elements of a Chained Flag as a string slice. Elements are
+// recovered by splitting the stored value on the configured input delimiter UNION the
+// internal marker (see chainedSplitFunc), so a custom ListDelimiterFunc and repeated
+// occurrences are both honoured — the result matches what a bound []string receives.
 func (p *Parser) GetList(flag string, commandPath ...string) ([]string, error) {
 	arg, err := p.GetArgument(flag, commandPath...)
 	if err == nil {
 		if arg.TypeOf == types.Chained {
-			value, success := p.Get(flag, commandPath...)
+			// Read the RAW stored value (not Get's rendered form) so the marker is
+			// still present to split on.
+			value, success := p.getRawValue(flag, commandPath...)
 			if !success {
 				return []string{}, errs.ErrFlagValueNotRetrieved.WithArgs(flag)
 			}
 
-			listDelimFunc := p.getListDelimiterFunc()
-
-			return strings.FieldsFunc(value, listDelimFunc), nil
+			return strings.FieldsFunc(value, p.chainedSplitFunc()), nil
 		}
 
 		return []string{}, errs.ErrInvalidArgumentType.WithArgs(flag, types.Chained)
@@ -1108,7 +1126,10 @@ func (p *Parser) GetWarnings() []string {
 		}
 
 		for _, depFlag := range dependentFlags {
-			dependKey := p.flagOrShortFlag(depFlag)
+			// Resolve the dependency target within the owning flag's command scope,
+			// so a command-scoped dependent (e.g. beta@cmd) is matched instead of
+			// being looked up by bare name and reported as "not specified".
+			dependKey := p.flagOrShortFlag(depFlag, flagInfo.CommandPath)
 			dependValue, hasKey := p.options[dependKey]
 
 			if !hasKey {
@@ -1156,6 +1177,26 @@ func (p *Parser) AddFlag(flag string, argument *Argument, commandPath ...string)
 
 	if flag == "" {
 		return errs.ErrEmptyFlag
+	}
+
+	// required + default is a contradictory declaration: a default makes the flag
+	// never "missing", so `required` could never fire. Reject it at construction
+	// (Design B) rather than silently picking a winner at parse time.
+	if argument.Required && argument.DefaultValue != "" {
+		return errs.ErrRequiredWithDefault.WithArgs(flag)
+	}
+
+	// A default on a mutually-exclusive member (mutex/exactlyone) has no coherent
+	// meaning: a fallback value for an option you select among others can neither
+	// count as a choice (it would permanently win the group) nor be ignored
+	// (it would fire "must set one" despite holding a value). "Pick one with a
+	// default" is a single value flag + isoneof, not a group; reject it here.
+	if argument.DefaultValue != "" {
+		for _, c := range argument.Contracts {
+			if c.Kind == ContractMutex || c.Kind == ContractExactlyOne {
+				return errs.ErrDefaultInExclusiveGroup.WithArgs(flag)
+			}
+		}
 	}
 
 	// Use the helper function to generate the lookup key
@@ -1279,16 +1320,30 @@ func (p *Parser) BindFlag(bindPtr interface{}, flag string, argument *Argument, 
 		}
 	}
 
+	// Infer the option type from the bound variable BEFORE AddFlag. AddFlag defaults
+	// an unset (Empty) type to Single — if inference ran after it, a bound slice would
+	// silently stay a scalar (no list split, no repeated-flag accumulation) and a
+	// bound bool would not become Standalone. Inference maps a slice to Chained, bool
+	// to Standalone, and time.Duration/Time/numerics to Single.
+	if argument.TypeOf == types.Empty {
+		argument.TypeOf = parse.InferFieldType(elem.Type())
+	}
+
 	if err := p.AddFlag(flag, argument, commandPath...); err != nil {
 		return err
 	}
 
-	if argument.TypeOf == types.Empty {
-		argument.TypeOf = parse.InferFieldType(reflect.ValueOf(bindPtr).Elem().Type())
-	}
-
 	// Bind the flag to the variable
 	p.bind[lookupFlag] = bindPtr
+
+	// Apply the configured default to the bound variable immediately, so a default
+	// is visible on the bound target whether you bind via a struct or call BindFlag
+	// directly. A value supplied at Parse (cmdline/env/config) overrides it.
+	if argument.DefaultValue != "" {
+		if err := p.setBoundVariable(argument.DefaultValue, lookupFlag); err != nil {
+			p.addError(errs.WrapOnce(err, errs.ErrSettingBoundValue, argument.DefaultValue))
+		}
+	}
 
 	return nil
 }
@@ -1443,7 +1498,15 @@ func (p *Parser) GetShortFlag(flag string, commandPath ...string) (string, error
 	return "", err
 }
 
-// HasFlag returns true when the Flag has been seen on the command line.
+// HasFlag reports whether a value for the flag was explicitly supplied — on the
+// command line, via an environment variable, or via external config
+// (ParseWithDefaults) — as opposed to the flag falling back to its default value.
+//
+// This is provenance, not a value comparison: it returns true even when the
+// supplied value happens to equal the default, and false when the flag is holding
+// its default (or is unset). Reach for it to answer "did the user actually set
+// this?" — e.g. before overriding a defaulted value with your own logic. It does
+// not distinguish which of those sources supplied the value.
 func (p *Parser) HasFlag(flag string, commandPath ...string) bool {
 	// First try canonical lookup
 	mainKey := p.flagOrShortFlag(flag, commandPath...)
@@ -1782,6 +1845,11 @@ func (p *Parser) GetCompletionData() completion.CompletionData {
 			}
 		}
 	}
+
+	// Completion must offer a parent command's flags on its subcommands too (the parser
+	// inherits them via parent-walking resolution); applied here so all shell generators
+	// see the same inheritance the parser enforces.
+	applyCommandFlagInheritance(&data)
 
 	return data
 }

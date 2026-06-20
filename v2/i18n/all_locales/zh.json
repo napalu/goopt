@@ -1,4 +1,6 @@
 {
+  "goopt.error.default_in_exclusive_group": "标志 %[1]q 属于互斥组（mutex/exactlyone），因此不能有默认值",
+  "goopt.error.required_with_default": "标志 %[1]q 不能既是必需的又具有默认值（默认值使其永远不会缺失）",
   "goopt.msg.quote_open": "'",
   "goopt.msg.quote_close": "'",
   "goopt.error.bind_invalid_value_field": "无法绑定到无效的值字段",

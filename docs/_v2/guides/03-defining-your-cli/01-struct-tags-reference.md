@@ -32,7 +32,7 @@ This table provides a complete reference to all available tags.
 | `secure` | Marks a flag as a secure input (e.g., for passwords). Hides user input. When `SetEnvNameConverter` is configured, a matching environment variable will be used instead of prompting — useful for CI/CD and automation. CLI values are always ignored for security. | `secure:true` |
 | `prompt` | Sets the prompt text to display for a `secure` flag. | `prompt:"Enter password:"` |
 | `path` | Associates a flag with one or more comma-separated commands. | `path:"server start,server stop"` |
-| `pos` | Defines a flag as a positional argument at a specific index. | `pos:0` |
+| `pos` | Defines a flag as a positional argument at a specific index. Positionals are **command-local** (not inherited by subcommands) — see [Positional Arguments]({{ site.baseurl }}/v2/guides/03-defining-your-cli/04-positional-arguments/). | `pos:0` |
 | `capacity` | For slices of nested structs, pre-allocates the slice capacity. | `capacity:5` |
 | `validators` | A comma-separated list of validation rules to apply. See [Validation]({{ site.baseurl }}/v2/guides/04-advanced-features/01-validation/). | `validators:"email,minlength(8)"` |
 | `depends` | Defines a dependency where this flag requires another flag to be present with a specific value. | `depends:"{flag:format,values:[json]}"` |
