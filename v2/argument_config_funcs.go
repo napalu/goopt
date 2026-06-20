@@ -39,6 +39,16 @@ func WithNameKey(nameKey string) ConfigureArgumentFunc {
 	}
 }
 
+// WithCompleter sets a dynamic value completer for the flag — the runtime successor to
+// the deprecated AcceptedValues. The function is invoked at completion time with the
+// partial value and resolved command context, and returns the candidate values (e.g.
+// git branches, files, rows from a service). It is never called during normal parsing.
+func WithCompleter(completer CompleterFunc) ConfigureArgumentFunc {
+	return func(argument *Argument, err *error) {
+		argument.Completer = completer
+	}
+}
+
 // WithType - one of three types:
 //  1. Single - a flag which expects a value
 //  2. Chained - a flag which expects a delimited value representing elements in a list (and is evaluated as a list)

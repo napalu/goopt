@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "命令路径 '%[2]s' 中有未知参数 '%[1]s'",
         "goopt.error.unknown_flag_with_suggestions": "未知标志: %[1]s。您是否想要其中之一？%[2]s",
         "goopt.error.unmarshalling_tag": "解组标签 %[1]s 时出错",
+        "goopt.error.unsupported_shell": "不支持的 shell %[1]q（支持：bash、zsh、fish、powershell）",
         "goopt.error.unsupported_type": "不支持的类型转换",
         "goopt.error.unsupported_type_conversion": "参数 %[2]s 的数据类型 %[1]v 不支持",
         "goopt.error.unwrapping_value": "解包值时出错: %[1]v",

@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "argument inconnu '%[1]s' dans le chemin de commande '%[2]s'",
         "goopt.error.unknown_flag_with_suggestions": "option inconnue : %[1]s. Vouliez-vous dire l'un de ceux-ci ? %[2]s",
         "goopt.error.unmarshalling_tag": "erreur lors du décodage du tag %[1]s",
+        "goopt.error.unsupported_shell": "shell non pris en charge %[1]q (pris en charge : bash, zsh, fish, powershell)",
         "goopt.error.unsupported_type": "conversion de type non supportée",
         "goopt.error.unsupported_type_conversion": "type de données %[1]v non supporté pour l'argument %[2]s",
         "goopt.error.unwrapping_value": "erreur lors du déballage de la valeur : %[1]v",

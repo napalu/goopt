@@ -179,6 +179,8 @@ type Parser struct {
 	positionalArgs            []PositionalArgument
 	rawArgs                   map[string]string
 	repeatedFlags             map[string]bool
+	completionMode            bool   // when true, Parse resolves structure only: no binding, callbacks, secure prompts, errors-as-side-effects, version/help output, or post-parse validation
+	completionPath            string // deepest command path the loop resolved during a completion-mode parse (the cursor's command context, incl. intermediate/non-terminal)
 	callbackQueue             *queue.Q[*Command]
 	callbackResults           map[string]error
 	callbackOnParse           bool // *during* parse process

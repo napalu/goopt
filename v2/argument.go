@@ -22,6 +22,7 @@ type Argument struct {
 	PostFilter     FilterFunc
 	Validators     []validation.ValidatorFunc
 	AcceptedValues []types.PatternValue
+	Completer      CompleterFunc // dynamic value completion (runtime); see WithCompleter
 	DependencyMap  map[string][]string
 	Secure         types.Secure
 	Short          string

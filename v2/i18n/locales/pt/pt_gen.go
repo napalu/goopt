@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "argumento '%[1]s' desconhecido no caminho de comando '%[2]s'",
         "goopt.error.unknown_flag_with_suggestions": "flag desconhecida: %[1]s. Você quis dizer: %[2]s?",
         "goopt.error.unmarshalling_tag": "erro ao deserializar tag %[1]s",
+        "goopt.error.unsupported_shell": "shell não suportado %[1]q (suportados: bash, zsh, fish, powershell)",
         "goopt.error.unsupported_type": "conversão de tipo não suportada",
         "goopt.error.unsupported_type_conversion": "tipo de dado não suportado %[1]v para argumento %[2]s",
         "goopt.error.unwrapping_value": "erro ao descompactar valor: %[1]v",

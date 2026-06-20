@@ -378,6 +378,9 @@ func (p *Parser) getArgumentInfoByID(id string) *FlagInfo {
 }
 
 func (p *Parser) evalExecOnParse(lastCommandPath string) string {
+	if p.completionMode {
+		return "" // completion must never execute command callbacks
+	}
 	if p.callbackOnParse {
 		err := p.ExecuteCommand()
 		if err != nil {
@@ -1813,6 +1816,9 @@ func (p *Parser) getFlagInCommandPath(flag string, commandPath string) (*FlagInf
 }
 
 func (p *Parser) setBoundVariable(value string, currentArg string) error {
+	if p.completionMode {
+		return nil // completion must never write to the user's bound variables
+	}
 	data, found := p.bind[currentArg]
 	if !found {
 		return nil

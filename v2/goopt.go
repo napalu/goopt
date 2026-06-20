@@ -607,8 +607,9 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		}
 	}
 
-	// Early check for help request
-	if p.autoHelp && p.hasHelpInArgs(args) {
+	// Early check for help request (never in completion mode — completion must not
+	// print help; its stdout is the suggestion stream)
+	if p.autoHelp && !p.completionMode && p.hasHelpInArgs(args) {
 		improvedParser := NewHelpParser(p, p.helpConfig)
 
 		// Filter out language flags before passing to help parser
@@ -710,6 +711,12 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 			// Parse the next command
 			terminating, cmd := p.parseCommand(state, cmdQueue, &commandPathSlice, lastCommandPath)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
+			if p.completionMode && currentCommandPath != "" {
+				// Observe every command the real loop resolves (including intermediate,
+				// non-terminal ones) so completion knows the cursor's command context —
+				// the parser's own resolution, not a parallel walk.
+				p.completionPath = currentCommandPath
+			}
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
 				if len(envFlagsByCommand[currentCommandPath]) > 0 {
@@ -739,6 +746,13 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 				break
 			}
 		}
+	}
+
+	// Completion mode stops at resolution: the cursor's command context is captured in
+	// p.completionPath. Everything below ACTS (callbacks, positional binding, contract/
+	// required validation, secure prompts, version, validation hook) and must not run.
+	if p.completionMode {
+		return false
 	}
 
 	// Execute any remaining command callback after parsing is done
