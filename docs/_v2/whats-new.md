@@ -13,6 +13,21 @@ version: v2
 
 ## New Major Features
 
+### Runtime Shell Completion (Replaces the static generator)
+Shell completion is now **computed at runtime by the live parser** instead of being
+baked into a large static script. goopt installs a tiny stub that forwards each `<TAB>`
+back to your program, and the parser answers from its one true model.
+- **Cannot drift:** completion offers exactly what the parser accepts — inherited flags
+  on subcommands included. There is no second command-tree model to keep in sync.
+- **Dynamic values:** compute a flag's candidates at completion time (git branches, files,
+  service data) with `WithCompleter` — impossible with a static script.
+- **Smaller surface:** one forwarding stub + one formatter per shell, instead of a full
+  completion script generator per shell.
+- **Breaking change:** the static `GenerateCompletion` / `GetCompletionData` API has been
+  removed. Migration is small (add one `HandleCompletion` line, swap to
+  `GenerateCompletionStub`, move `AcceptedValues` → `WithCompleter`).
+- **➡️ [Read the Shell Completion Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/) · [Migrating from static completion]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/#migrating-from-static-completion)**
+
 ### A Powerful Validation Engine (Replaces `accepted`)
 The old `accepted` tag has been **deprecated** in favor of a completely new validation engine that is more powerful, composable, and easier to use.
 

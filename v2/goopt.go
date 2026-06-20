@@ -31,7 +31,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/env"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -1810,68 +1809,6 @@ func (p *Parser) Errors() iter.Seq[error] {
 			}
 		}
 	}
-}
-
-// GetCompletionData populates a CompletionData struct containing information for command line completion
-func (p *Parser) GetCompletionData() completion.CompletionData {
-	data := completion.CompletionData{
-		Commands:            make([]string, 0),
-		Flags:               make([]completion.FlagPair, 0),
-		CommandFlags:        make(map[string][]completion.FlagPair),
-		FlagValues:          make(map[string][]completion.CompletionValue),
-		CommandDescriptions: make(map[string]string),
-		TranslatedCommands:  make(map[string]string),
-		TranslatedFlags:     make(map[string]string),
-	}
-
-	// Process flags
-	for flag, flagInfo := range p.acceptedFlags.All() {
-		flagParts := splitPathFlag(flag)
-
-		cmd := ""
-		flagName := flag
-		if len(flagParts) > 1 {
-			flagName = flagParts[0]
-			cmd = flagParts[1]
-		}
-
-		addFlagToCompletionData(&data, cmd, flagName, flagInfo, p.renderer)
-
-		// Add translation mapping for flags
-		if p.translationRegistry != nil {
-			if translated, ok := p.translationRegistry.GetFlagTranslation(flagName, p.GetLanguage()); ok && translated != flagName {
-				data.TranslatedFlags[flagName] = translated
-			}
-		}
-	}
-
-	// Process commands
-	for _, cmd := range p.registeredCommands.All() {
-		if cmd != nil {
-			data.Commands = append(data.Commands, cmd.path)
-			data.CommandDescriptions[cmd.path] = p.renderer.CommandDescription(cmd)
-
-			// Add translation mapping for commands
-			if p.translationRegistry != nil {
-				if translated, ok := p.translationRegistry.GetCommandTranslation(cmd.path, p.GetLanguage()); ok && translated != cmd.path {
-					data.TranslatedCommands[cmd.path] = translated
-				}
-			}
-		}
-	}
-
-	// Completion must offer a parent command's flags on its subcommands too (the parser
-	// inherits them via parent-walking resolution); applied here so all shell generators
-	// see the same inheritance the parser enforces.
-	applyCommandFlagInheritance(&data)
-
-	return data
-}
-
-// GenerateCompletion generates completion scripts for the given shell and program name
-func (p *Parser) GenerateCompletion(shell, programName string) string {
-	generator := completion.GetGenerator(shell)
-	return generator.Generate(programName, p.GetCompletionData())
 }
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.

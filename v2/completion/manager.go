@@ -6,16 +6,18 @@ import (
 	"path/filepath"
 )
 
-// Manager is used to manage and save completion scripts for a given shell
+// Manager installs a completion script for a given shell at the shell's conventional
+// location. The script itself is produced by the parser (a runtime-completion stub);
+// Manager owns only the file-system concerns — where it goes and writing it.
 type Manager struct {
-	Shell       string          // The shell to generate completion for
-	ProgramName string          // The name of the program to generate completion for
+	Shell       string          // The shell to install completion for
+	ProgramName string          // The name of the program
 	Paths       CompletionPaths // The paths where the completion script will be saved
-	generator   Generator       // The generator to use to generate the completion script
-	script      string          // The generated completion script
+	script      string          // The completion script to install
 }
 
-// NewManager creates a completion manager which can be used to manage and save completion scripts for a given shell
+// NewManager creates a completion manager for a given shell. It fails for shells with
+// no known completion-path convention.
 func NewManager(shell, programName string) (*Manager, error) {
 	paths, err := getCompletionPaths(shell)
 	if err != nil {
@@ -26,13 +28,13 @@ func NewManager(shell, programName string) (*Manager, error) {
 		Shell:       shell,
 		ProgramName: filepath.Base(programName),
 		Paths:       paths,
-		generator:   GetGenerator(shell),
 	}, nil
 }
 
-// Accept generates and stores the completion script from the provided data
-func (cm *Manager) Accept(data CompletionData) {
-	cm.script = cm.generator.Generate(cm.ProgramName, data)
+// Accept stores the completion script to be installed (e.g. a stub from
+// Parser.GenerateCompletionStub).
+func (cm *Manager) Accept(script string) {
+	cm.script = script
 }
 
 // Save saves the previously generated completion script
@@ -69,7 +71,12 @@ func (cm *Manager) Save() (path string, err error) {
 
 // IsShellSupported returns whether the current shell has completion generation support
 func (cm *Manager) IsShellSupported() bool {
-	return cm.generator != nil
+	switch cm.Shell {
+	case "bash", "zsh", "fish", "powershell":
+		return true
+	default:
+		return false
+	}
 }
 
 // HasExistingCompletion checks if a completion script is already installed

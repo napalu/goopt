@@ -243,3 +243,86 @@ func TestCompletionStubsAllShells(t *testing.T) {
 		t.Error("unsupported shell must return an error")
 	}
 }
+
+// TestCompletionMatrixParity is the core invariant of the runtime system: at any
+// command context, completion offers a flag IFF the parser actually accepts it there.
+// It checks completion's offer against REAL parse acceptance (not the shared resolver,
+// which would be circular) across flag scopes — global, command-owned, inherited.
+func TestCompletionMatrixParity(t *testing.T) {
+	build := func() *Parser {
+		p := NewParser()
+		mustAddFlag(t, p, "g", newStandalone()) // global
+		mustAddCmd(t, p, "solo")
+		mustAddFlag(t, p, "s", newStandalone(), "solo")
+		child := NewCommand(WithName("child"))
+		parent := NewCommand(WithName("parent"), WithSubcommands(child))
+		if err := p.AddCommand(parent); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "p", newStandalone(), "parent")          // owned by parent
+		mustAddFlag(t, p, "c", newStandalone(), "parent", "child") // owned by parent child
+		mustAddCmd(t, p, "other")
+		mustAddFlag(t, p, "o", newStandalone(), "other")
+		return p
+	}
+	flags := []string{"g", "s", "p", "c", "o"}
+	contexts := []struct {
+		name string
+		path []string
+	}{
+		{"solo", []string{"solo"}},
+		{"parent child", []string{"parent", "child"}},
+		{"other", []string{"other"}},
+	}
+
+	sp := build() // Suggest is non-mutating, so one parser serves all completion queries
+	for _, ctx := range contexts {
+		words := append(append([]string{"app"}, ctx.path...), "--")
+		offered := map[string]bool{}
+		for _, s := range sp.Suggest(sp.resolveCompletionContext(words)) {
+			offered[strings.TrimPrefix(s.Value, "--")] = true
+		}
+		for _, f := range flags {
+			// Real parser verdict: parse `<ctx> --<f>` on a fresh parser; a valid flag
+			// parses clean, an invalid one raises an unknown-flag error.
+			pp := build()
+			pp.Parse(append(append([]string{"app"}, ctx.path...), "--"+f))
+			accepts := len(pp.GetErrors()) == 0
+			if offered[f] != accepts {
+				t.Errorf("PARITY at %q flag --%s: completion offers=%v, parser accepts=%v",
+					ctx.name, f, offered[f], accepts)
+			}
+		}
+	}
+}
+
+// TestCompletionSubcommandParity: completion offers subcommand S at context C IFF the
+// parser navigates into "C S" (a real registered child).
+func TestCompletionSubcommandParity(t *testing.T) {
+	p := NewParser()
+	gc := NewCommand(WithName("grandchild"))
+	child := NewCommand(WithName("child"), WithSubcommands(gc))
+	parent := NewCommand(WithName("parent"), WithSubcommands(child))
+	if err := p.AddCommand(parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddCommand(NewCommand(WithName("sibling"))); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(ctx []string, wantChildren ...string) {
+		words := append(append([]string{"app"}, ctx...), "")
+		got := map[string]bool{}
+		for _, s := range p.Suggest(p.resolveCompletionContext(words)) {
+			got[s.Value] = true
+		}
+		for _, w := range wantChildren {
+			if !got[w] {
+				t.Errorf("at %v completion should offer subcommand %q; got %v", ctx, w, got)
+			}
+		}
+	}
+	check(nil, "parent", "sibling") // root → top-level commands
+	check([]string{"parent"}, "child")
+	check([]string{"parent", "child"}, "grandchild")
+}

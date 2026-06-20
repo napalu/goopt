@@ -1508,52 +1508,6 @@ func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
 }
 
-func TestParser_GenerateCompletion(t *testing.T) {
-	p := NewParser()
-
-	// Add global flags
-	_ = p.AddFlag("global-flag", NewArg(WithShortFlag("g"), WithDescription("A global flag")))
-	_ = p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithDescription("Verbose output"), WithType(types.Standalone)))
-
-	// Add command with flags
-	cmd := &Command{
-		Name:        "test",
-		Description: "Test command",
-	}
-	_ = p.AddCommand(cmd)
-	_ = p.AddFlag("test-flag", NewArg(WithShortFlag("t"), WithDescription("A test flag")), "test")
-
-	shells := []string{"bash", "zsh", "fish", "powershell"}
-	for _, shell := range shells {
-		t.Run(shell, func(t *testing.T) {
-			result := p.GenerateCompletion(shell, "testapp")
-			if result == "" {
-				t.Errorf("GenerateCompletion(%q) returned empty string", shell)
-			}
-
-			// Basic validation that the output contains shell-specific content
-			switch shell {
-			case "bash":
-				if !strings.Contains(result, "function __testapp_completion") {
-					t.Error("Bash completion missing expected content")
-				}
-			case "zsh":
-				if !strings.Contains(result, "#compdef testapp") {
-					t.Error("Zsh completion missing expected content")
-				}
-			case "fish":
-				if !strings.Contains(result, "complete -c testapp") {
-					t.Error("Fish completion missing expected content")
-				}
-			case "powershell":
-				if !strings.Contains(result, "Register-ArgumentCompleter") {
-					t.Error("PowerShell completion missing expected content")
-				}
-			}
-		})
-	}
-}
-
 func TestParser_GetNumericTypes(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -11020,10 +10974,6 @@ func TestParser_ErrorMessageTranslations(t *testing.T) {
 	assert.Contains(t, errStr, "server") // Distance 3
 	// "service" won't be shown as it's distance 4
 
-	// Test completion with unsupported shell (defaults to bash)
-	result := parser.GenerateCompletion("unsupported-shell", "myapp")
-	assert.NotEmpty(t, result)                // GenerateCompletion defaults to bash for unsupported shells
-	assert.Contains(t, result, "#!/bin/bash") // Verify it's a bash script
 }
 
 // TestMultilingualHelpGeneration tests help generation in different languages
