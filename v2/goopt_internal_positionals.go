@@ -354,6 +354,18 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 		// Handle flags
 		if p.isFlag(arg) {
 			name := strings.TrimLeft(arg, "-")
+			// Command-scoped flags injected from environment variables arrive as
+			// "name@command" (an intentional internal form the main parser
+			// resolves). The "@command" suffix is the flag's authoritative command
+			// binding, so resolve the flag in THAT scope rather than the
+			// position-derived currentCmdPath (which can differ, e.g. for inherited
+			// flags). Without this the suffixed token is treated as unknown, its
+			// value is not skipped, and it leaks into a positional argument.
+			flagCmdCtx := currentCmdPath
+			if parts := splitPathFlag(name); len(parts) > 1 {
+				name = parts[0]
+				flagCmdCtx = []string{parts[1]}
+			}
 			// Try to get canonical name from translation registry
 			canonicalName := name
 			if canonical, ok := p.translationRegistry.GetCanonicalFlagName(name, p.GetLanguage()); ok {
@@ -363,7 +375,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			// Check if flag is known (exists in cache)
 			isKnownFlag := false
 			if flagInfo, exists := cache.flags[canonicalName]; exists {
-				cmdPath := strings.Join(currentCmdPath, " ")
+				cmdPath := strings.Join(flagCmdCtx, " ")
 				_, cmdExists := flagInfo[cmdPath]
 				_, globalExists := flagInfo[""]
 				isKnownFlag = cmdExists || globalExists
@@ -374,7 +386,7 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 				// Treat as positional - fall through to positional handling
 			} else {
 				// Check if this flag needs a value
-				if p.checkIfFlagNeedsValue(canonicalName, currentCmdPath, cache) {
+				if p.checkIfFlagNeedsValue(canonicalName, flagCmdCtx, cache) {
 					skipNext = true
 				}
 				continue

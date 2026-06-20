@@ -1249,3 +1249,64 @@ func TestInteractionMatrixExoticTyped(t *testing.T) {
 		}
 	})
 }
+
+// TestInteractionMatrixPositionalEnv charts the positional × env × command-scope seam.
+// A command-scoped flag supplied via an environment variable is injected into the arg
+// stream as the internal "name@command" form; setPositionalArguments must recognise
+// that suffixed token as a flag (resolving it in the suffix's command scope) and skip
+// its value — otherwise the env value is consumed as the command's positional argument.
+// Regression for the env-value-leaks-into-positional bug.
+func TestInteractionMatrixPositionalEnv(t *testing.T) {
+	// plain command-scoped flag + a positional on the same command, flag set via env.
+	t.Run("command-scoped flag via env does not leak into the positional", func(t *testing.T) {
+		type cfg struct {
+			Undo struct {
+				Input string `goopt:"pos:0;required:true;desc:input file"`
+				Token string `goopt:"required:true;desc:token"` // command-scoped, supplied via env
+			} `goopt:"kind:command;desc:undo"`
+		}
+		t.Setenv("TOKEN", "from-env")
+		c := &cfg{}
+		p, err := NewParserFromStruct(c, WithFlagNameConverter(ToKebabCase), WithEnvNameConverter(ToKebabCase))
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want %q (env value leaked into positional)", c.Undo.Input, "myfile.log")
+		}
+		if c.Undo.Token != "from-env" {
+			t.Errorf("Token = %q, want %q (resolved from env)", c.Undo.Token, "from-env")
+		}
+	})
+
+	// namespaced (embedded) command-scoped flags via env — the original repro shape:
+	// flags arrive as "env-creds.url@undo", a two-level suffixed token.
+	t.Run("namespaced embedded flags via env do not leak into the positional", func(t *testing.T) {
+		envR := &customEnvResolver{environ: map[string]string{
+			"APP_ENV_CREDS_URL":      "https://env-url/crowd",
+			"APP_ENV_CREDS_APP_NAME": "env-app",
+		}}
+		c := &envPositionalCfg{}
+		p, err := NewParserFromStruct(c,
+			WithFlagNameConverter(ToKebabCase),
+			WithEnvNameConverter(ToKebabCase),
+			WithEnvVarPrefix("APP_"),
+			WithEnvResolver(envR),
+		)
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want %q (env value leaked into positional)", c.Undo.Input, "myfile.log")
+		}
+		if c.Undo.URL != "https://env-url/crowd" || c.Undo.AppName != "env-app" {
+			t.Errorf("env creds not resolved: URL=%q AppName=%q", c.Undo.URL, c.Undo.AppName)
+		}
+	})
+}
