@@ -805,3 +805,63 @@ func TestInteractionMatrixHooks(t *testing.T) {
 		})
 	}
 }
+
+// TestInteractionMatrixMultipleCommands exercises invoking several sibling commands
+// in one line (`cmd1 --flags cmd2 --flags`): each command runs, its flags resolve to
+// it without bleed, and per-command contracts stay scoped to their command even when
+// both are active. The cross-fire case is a regression guard — same-labelled groups
+// in two simultaneously-invoked commands must NOT merge.
+func TestInteractionMatrixMultipleCommands(t *testing.T) {
+	var trace []string
+	build := func(t *testing.T) *Parser {
+		t.Helper()
+		trace = nil
+		p := NewParser()
+		mk := func(name string) *Command {
+			return NewCommand(WithName(name), WithCallback(func(p *Parser, c *Command) error {
+				trace = append(trace, name)
+				return nil
+			}))
+		}
+		if err := p.AddCommand(mk("cmd1")); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.AddCommand(mk("cmd2")); err != nil {
+			t.Fatal(err)
+		}
+		// Both commands carry a mutex group reusing the SAME label "g".
+		mustAddFlag(t, p, "a", newStandalone(WithMutex("g")), "cmd1")
+		mustAddFlag(t, p, "b", newStandalone(WithMutex("g")), "cmd1")
+		mustAddFlag(t, p, "c", newStandalone(WithMutex("g")), "cmd2")
+		mustAddFlag(t, p, "d", newStandalone(WithMutex("g")), "cmd2")
+		return p
+	}
+
+	t.Run("both commands run in order; flags resolve per command", func(t *testing.T) {
+		p := build(t)
+		p.Parse([]string{os.Args[0], "cmd1", "--a", "cmd2", "--c"})
+		p.ExecuteCommands()
+		if strings.Join(trace, " ") != "cmd1 cmd2" {
+			t.Errorf("both commands should run in order; trace=%v", trace)
+		}
+		if !p.HasFlag("a", "cmd1") || !p.HasFlag("c", "cmd2") || p.HasFlag("a", "cmd2") {
+			t.Errorf("flags should resolve per command without bleed")
+		}
+	})
+
+	t.Run("same-label contracts stay scoped per command (no cross-fire)", func(t *testing.T) {
+		p := build(t)
+		p.Parse([]string{os.Args[0], "cmd1", "--a", "cmd2", "--c"}) // a@cmd1 and c@cmd2 — different commands
+		if hasErr(p, errs.ErrMutexViolation) {
+			t.Errorf("a@cmd1 and c@cmd2 must not cross-fire the shared label; got %v", p.GetErrors())
+		}
+	})
+
+	t.Run("real same-command violation still fires", func(t *testing.T) {
+		p := build(t)
+		p.Parse([]string{os.Args[0], "cmd1", "--a", "--b", "cmd2"}) // a,b both in cmd1
+		if !hasErr(p, errs.ErrMutexViolation) {
+			t.Errorf("a,b in cmd1 should fire mutex; got %v", p.GetErrors())
+		}
+	})
+}

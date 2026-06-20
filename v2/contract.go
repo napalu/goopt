@@ -97,6 +97,19 @@ func parseContract(spec string) (Contract, error) {
 	}
 }
 
+// contractGroupKey identifies a mutex/exactlyone group. A group is scoped to its
+// owning command, so a same-named group in another command is independent. This is
+// the single definition of "what a group is", shared by the build-time singleton
+// guard (validateContractGroups) and the runtime evaluation (validateContracts) —
+// keeping the two in lockstep so a group can never mean one thing at build time and
+// another at parse time.
+type contractGroupKey struct{ cmd, label string }
+
+// conflictPair identifies an unordered pair of conflicting flags. Normalising to a
+// canonical order lets a single lookup dedup the symmetric report (a conflicts b ==
+// b conflicts a).
+type conflictPair struct{ a, b string }
+
 // validateContractGroups runs the structural (build-time) checks on contract
 // groups: a mutex/exactlyone group with fewer than two members is almost always a
 // misspelled group name. It runs once; errors are added to the parser and the
@@ -111,17 +124,16 @@ func (p *Parser) validateContractGroups() error {
 	// Group membership is scoped to the owning command: a mutex/exactlyone group in
 	// `export` is independent of a same-named group in `sync`, so a singleton in one
 	// command is still caught even if another command happens to reuse the label.
-	type groupKey struct{ cmd, label string }
-	counts := map[groupKey]int{}
+	counts := map[contractGroupKey]int{}
 	for _, flagInfo := range p.acceptedFlags.All() {
 		for _, c := range flagInfo.Argument.Contracts {
 			if (c.Kind == ContractMutex || c.Kind == ContractExactlyOne) && len(c.Targets) > 0 {
-				counts[groupKey{flagInfo.CommandPath, c.Targets[0]}]++
+				counts[contractGroupKey{flagInfo.CommandPath, c.Targets[0]}]++
 			}
 		}
 	}
 
-	keys := make([]groupKey, 0, len(counts))
+	keys := make([]contractGroupKey, 0, len(counts))
 	for g := range counts {
 		keys = append(keys, g)
 	}
@@ -171,9 +183,9 @@ func (p *Parser) validateContracts() {
 		key     string
 		present bool
 	}
-	groups := map[string][]member{}
-	groupRequired := map[string]bool{}
-	conflictsReported := map[string]bool{}
+	groups := map[contractGroupKey][]member{}
+	groupRequired := map[contractGroupKey]bool{}
+	conflictsReported := map[conflictPair]bool{}
 
 	for flagKey, flagInfo := range p.acceptedFlags.All() {
 		cmdPath := flagInfo.CommandPath
@@ -187,7 +199,12 @@ func (p *Parser) validateContracts() {
 				if len(c.Targets) == 0 {
 					continue
 				}
-				g := c.Targets[0]
+				// Scope the group to the owning command (same key the build-time
+				// singleton guard uses): without this, two commands invoked in one
+				// line that happen to reuse a group label would merge into a single
+				// group and cross-fire. The flag keys carry the command, so messages
+				// are unaffected.
+				g := contractGroupKey{cmdPath, c.Targets[0]}
 				groups[g] = append(groups[g], member{flagKey, present})
 				if c.Kind == ContractExactlyOne {
 					groupRequired[g] = true
@@ -201,11 +218,16 @@ func (p *Parser) validateContracts() {
 					if !p.HasFlag(otherKey) {
 						continue
 					}
-					// Dedup symmetric reports (a conflicts b == b conflicts a).
-					if conflictsReported[flagKey+"\x00"+otherKey] || conflictsReported[otherKey+"\x00"+flagKey] {
+					// Dedup symmetric reports (a conflicts b == b conflicts a) via a
+					// canonically-ordered pair, so a single lookup covers both directions.
+					pair := conflictPair{flagKey, otherKey}
+					if otherKey < flagKey {
+						pair = conflictPair{otherKey, flagKey}
+					}
+					if conflictsReported[pair] {
 						continue
 					}
-					conflictsReported[flagKey+"\x00"+otherKey] = true
+					conflictsReported[pair] = true
 					p.addError(errs.ErrConflictingFlags.WithArgs(
 						p.formatFlagForError(flagKey), p.formatFlagForError(otherKey)))
 				}
@@ -233,11 +255,16 @@ func (p *Parser) validateContracts() {
 	}
 
 	// mutex: deterministic order, singleton-group guard, then at-most-one.
-	names := make([]string, 0, len(groups))
+	names := make([]contractGroupKey, 0, len(groups))
 	for g := range groups {
 		names = append(names, g)
 	}
-	sort.Strings(names)
+	sort.Slice(names, func(i, j int) bool {
+		if names[i].cmd != names[j].cmd {
+			return names[i].cmd < names[j].cmd
+		}
+		return names[i].label < names[j].label
+	})
 	for _, g := range names {
 		members := groups[g]
 		if len(members) < 2 {
