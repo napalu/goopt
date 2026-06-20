@@ -1293,6 +1293,26 @@ func TestInteractionMatrixCompletionInheritance(t *testing.T) {
 	if !has(d.CommandFlags["server start"], "port") {
 		t.Errorf("`server start` must inherit parent's --port (parser accepts it there); got %v", d.CommandFlags["server start"])
 	}
+
+	// Depth + short form: the walk must climb EVERY ancestor and preserve short flags.
+	// A grandparent flag (with a short) must reach a 3-level-deep terminal.
+	p2 := NewParser()
+	cc := NewCommand(WithName("c"))
+	bb := NewCommand(WithName("b"), WithSubcommands(cc))
+	if err := p2.AddCommand(NewCommand(WithName("a"), WithSubcommands(bb))); err != nil {
+		t.Fatal(err)
+	}
+	mustAddFlag(t, p2, "top", NewArg(WithType(types.Single), WithShortFlag("t")), "a") // grandparent + short
+	d2 := p2.GetCompletionData()
+	deep := d2.CommandFlags["a b c"]
+	if !has(deep, "top") {
+		t.Errorf("`a b c` must inherit grandparent's --top across two levels; got %v", deep)
+	}
+	for _, f := range deep {
+		if f.Long == "top" && f.Short != "t" {
+			t.Errorf("inherited --top must keep its short -t; got short=%q", f.Short)
+		}
+	}
 }
 
 // TestInteractionMatrixCompletionValues locks the FlagValues keying fix: value
