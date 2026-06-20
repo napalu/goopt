@@ -733,3 +733,75 @@ func TestInteractionMatrixSecureEnv(t *testing.T) {
 		}
 	})
 }
+
+// TestInteractionMatrixHooks crosses the execution-lifecycle dimension: global vs
+// command pre/post hooks, hook ordering, and error short-circuiting. It locks the
+// observed (and coherent) model — onion ordering (pre outer->inner, post
+// inner->outer, mirrored by SetHookOrder) and defer-style errors (a pre-hook error
+// aborts the command but post-hooks still run with the error; a command error
+// propagates to every post-hook).
+func TestInteractionMatrixHooks(t *testing.T) {
+	es := func(e error) string {
+		if e == nil {
+			return "ok"
+		}
+		return "err"
+	}
+	// build wires global+command pre/post hooks and the command callback to append
+	// to a shared trace; preErr/cmdErr inject failures at the pre-hook / command.
+	build := func(t *testing.T, order HookOrder, preErr, cmdErr bool) (*Parser, *[]string) {
+		t.Helper()
+		var tr []string
+		add := func(s string) { tr = append(tr, s) }
+		p := NewParser()
+		p.SetHookOrder(order)
+		cmd := NewCommand(WithName("run"), WithCallback(func(p *Parser, c *Command) error {
+			add("cmd")
+			if cmdErr {
+				return errors.New("cmd failed")
+			}
+			return nil
+		}))
+		if err := p.AddCommand(cmd); err != nil {
+			t.Fatal(err)
+		}
+		p.AddGlobalPreHook(func(p *Parser, c *Command) error {
+			add("gPre")
+			if preErr {
+				return errors.New("gpre failed")
+			}
+			return nil
+		})
+		p.AddCommandPreHook("run", func(p *Parser, c *Command) error { add("cPre"); return nil })
+		p.AddCommandPostHook("run", func(p *Parser, c *Command, e error) error { add("cPost:" + es(e)); return nil })
+		p.AddGlobalPostHook(func(p *Parser, c *Command, e error) error { add("gPost:" + es(e)); return nil })
+		return p, &tr
+	}
+	trace := func(t *testing.T, order HookOrder, preErr, cmdErr bool) string {
+		t.Helper()
+		p, tr := build(t, order, preErr, cmdErr)
+		p.Parse([]string{os.Args[0], "run"})
+		p.ExecuteCommands()
+		return strings.Join(*tr, " ")
+	}
+
+	cases := []struct {
+		name   string
+		order  HookOrder
+		preErr bool
+		cmdErr bool
+		want   string
+	}{
+		{"global-first ordering", OrderGlobalFirst, false, false, "gPre cPre cmd cPost:ok gPost:ok"},
+		{"command-first mirrors it", OrderCommandFirst, false, false, "cPre gPre cmd gPost:ok cPost:ok"},
+		{"pre-hook error aborts command, post-hooks still run with error", OrderGlobalFirst, true, false, "gPre cPost:err gPost:err"},
+		{"command error propagates to post-hooks", OrderGlobalFirst, false, true, "gPre cPre cmd cPost:err gPost:err"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := trace(t, c.order, c.preErr, c.cmdErr); got != c.want {
+				t.Errorf("hook trace:\n got:  %s\n want: %s", got, c.want)
+			}
+		})
+	}
+}
