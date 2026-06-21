@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "ארגומנט לא ידוע '%[1]s' בנתיב הפקודה '%[2]s'",
         "goopt.error.unknown_flag_with_suggestions": "דגל לא מוכר: %[1]s. האם התכוונת לאחד מאלה? %[2]s",
         "goopt.error.unmarshalling_tag": "שגיאה בפענוח תגית %[1]s",
+        "goopt.error.unsupported_shell": "מעטפת לא נתמכת %[1]q (נתמכות: bash, zsh, fish, powershell)",
         "goopt.error.unsupported_type": "המרת סוג לא נתמכת",
         "goopt.error.unsupported_type_conversion": "סוג נתונים לא נתמך %[1]v עבור ארגומנט %[2]s",
         "goopt.error.unwrapping_value": "שגיאה בפתיחת ערך: %[1]v",

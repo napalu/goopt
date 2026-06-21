@@ -8,7 +8,7 @@ import (
 
 // OneOf creates a validator where at least one of the provided validators must pass
 // This is a composition operator that accepts any validators, not just string values
-func OneOf(validators ...ValidatorFunc) ValidatorFunc {
+func OneOf(validators ...Validator) ValidatorFunc {
 	if len(validators) == 0 {
 		return func(value string) error {
 			return nil // No validators means always pass
@@ -18,7 +18,7 @@ func OneOf(validators ...ValidatorFunc) ValidatorFunc {
 	return func(value string) error {
 		var errors []string
 		for _, validator := range validators {
-			if err := validator(value); err == nil {
+			if err := validator.Validate(value); err == nil {
 				return nil // At least one passed
 			} else {
 				errors = append(errors, err.Error())
@@ -31,9 +31,9 @@ func OneOf(validators ...ValidatorFunc) ValidatorFunc {
 
 // Not creates a validator that negates another validator
 // The validation passes only if the inner validator fails
-func Not(validator ValidatorFunc) ValidatorFunc {
+func Not(validator Validator) ValidatorFunc {
 	return func(value string) error {
-		if err := validator(value); err == nil {
+		if err := validator.Validate(value); err == nil {
 			// Inner validator passed, so NOT should fail
 			return errs.ErrValueCannotBe.WithArgs(value, value)
 		}
@@ -45,20 +45,32 @@ func Not(validator ValidatorFunc) ValidatorFunc {
 // Convenience functions for common string matching cases
 // These create validators from string lists for backward compatibility
 
-// IsOneOf creates a validator that checks if value is one of the allowed strings
-// This is a convenience function equivalent to OneOf(Equals("a"), Equals("b"), ...)
-func IsOneOf(allowed ...string) ValidatorFunc {
-	allowedSet := make(map[string]bool)
-	for _, v := range allowed {
-		allowedSet[v] = true
-	}
+// oneOfValidator restricts a value to a finite literal set. It implements Validator and
+// Enumerable, so it both validates input and supplies its set to shell completion — one
+// declaration, no chance of the validated set and the completed set drifting apart.
+type oneOfValidator struct {
+	allowed []string
+	set     map[string]bool
+}
 
-	return func(value string) error {
-		if !allowedSet[value] {
-			return errs.ErrValueMustBeOneOf.WithArgs(value, strings.Join(allowed, ", "))
-		}
-		return nil
+func (o *oneOfValidator) Validate(value string) error {
+	if !o.set[value] {
+		return errs.ErrValueMustBeOneOf.WithArgs(value, strings.Join(o.allowed, ", "))
 	}
+	return nil
+}
+
+// Candidates exposes the accepted set for completion (satisfies Enumerable).
+func (o *oneOfValidator) Candidates() []string { return o.allowed }
+
+// IsOneOf creates a validator that checks if value is one of the allowed strings. The
+// returned validator is Enumerable, so it also drives shell completion.
+func IsOneOf(allowed ...string) Validator {
+	set := make(map[string]bool, len(allowed))
+	for _, v := range allowed {
+		set[v] = true
+	}
+	return &oneOfValidator{allowed: allowed, set: set}
 }
 
 // IsNotOneOf creates a validator that checks if value is NOT one of the forbidden strings

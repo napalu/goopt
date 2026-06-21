@@ -13,6 +13,43 @@ version: v2
 
 ## New Major Features
 
+### Runtime Shell Completion (Replaces the static generator)
+Shell completion is now **computed at runtime by the live parser** instead of being
+baked into a large static script. goopt installs a tiny stub that forwards each `<TAB>`
+back to your program, and the parser answers from its one true model.
+- **Cannot drift:** completion offers exactly what the parser accepts — inherited flags
+  on subcommands included. There is no second command-tree model to keep in sync.
+- **Dynamic values:** compute a flag's candidates at completion time (git branches, files,
+  service data) with `WithCompleter` — impossible with a static script.
+- **Smaller surface:** one forwarding stub + one formatter per shell, instead of a full
+  completion script generator per shell.
+- **Breaking change:** the static `GenerateCompletion` / `GetCompletionData` API has been
+  removed. Migration is small (add one `HandleCompletion` line, swap to
+  `GenerateCompletionStub`, move `AcceptedValues` → `WithCompleter`).
+- **➡️ [Read the Shell Completion Guide]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/) · [Migrating from static completion]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/#migrating-from-static-completion)**
+
+### Validators Drive Completion (and are now an interface)
+A validator can now supply its own completion candidates, so a value-restricting
+validator *also* powers shell completion — one declaration, no chance of the validated
+set and the completed set drifting apart.
+- **`validation.IsOneOf` both validates and completes:** `WithValidators(validation.IsOneOf("a","b"))`
+  rejects anything outside the set *and* offers it on `<TAB>`. Any validator implementing
+  `Enumerable` (`Candidates() []string`) does the same.
+- **Breaking change:** `validation.Validator` is now an interface (`Validate(string) error`),
+  and the validator setters (`WithValidator(s)`, `SetValidators`, `AddFlagValidators`,
+  `SetFlagValidators`, `WithFlagValidators`) take it. Built-in validators and
+  `validation.Custom(...)` are unchanged; a **bare inline `func(string) error`** must be
+  wrapped in `validation.Custom(...)`, and `[]validation.ValidatorFunc` becomes
+  `[]validation.Validator`.
+- **Automated migration:** the **`goopt-migrate-v2`** codegen tool does the wrapping and
+  slice-rename for you:
+  ```bash
+  go install github.com/napalu/goopt/v2/cmd/goopt-migrate-v2@latest
+  goopt-migrate-v2 -d . -r --dry-run   # preview; drop --dry-run to apply
+  ```
+  (Distinct binary from the v1→v2 `goopt-migrate` tool, so both can be installed.)
+- **➡️ [Migration tool details]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/) · see the `v2/migration` package README**
+
 ### A Powerful Validation Engine (Replaces `accepted`)
 The old `accepted` tag has been **deprecated** in favor of a completely new validation engine that is more powerful, composable, and easier to use.
 

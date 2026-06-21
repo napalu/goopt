@@ -31,7 +31,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/env"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
@@ -607,8 +606,9 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		}
 	}
 
-	// Early check for help request
-	if p.autoHelp && p.hasHelpInArgs(args) {
+	// Early check for help request (never in completion mode — completion must not
+	// print help; its stdout is the suggestion stream)
+	if p.autoHelp && !p.completionMode && p.hasHelpInArgs(args) {
 		improvedParser := NewHelpParser(p, p.helpConfig)
 
 		// Filter out language flags before passing to help parser
@@ -710,6 +710,12 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 			// Parse the next command
 			terminating, cmd := p.parseCommand(state, cmdQueue, &commandPathSlice, lastCommandPath)
 			currentCommandPath = strings.Join(commandPathSlice, " ")
+			if p.completionMode && currentCommandPath != "" {
+				// Observe every command the real loop resolves (including intermediate,
+				// non-terminal ones) so completion knows the cursor's command context —
+				// the parser's own resolution, not a parallel walk.
+				p.completionPath = currentCommandPath
+			}
 			// Inject relevant environment variables for the current command context
 			if instanceCount, exists := envInserted[currentCommandPath]; !exists || instanceCount < cmdQueue.Len() {
 				if len(envFlagsByCommand[currentCommandPath]) > 0 {
@@ -739,6 +745,13 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 				break
 			}
 		}
+	}
+
+	// Completion mode stops at resolution: the cursor's command context is captured in
+	// p.completionPath. Everything below ACTS (callbacks, positional binding, contract/
+	// required validation, secure prompts, version, validation hook) and must not run.
+	if p.completionMode {
+		return false
 	}
 
 	// Execute any remaining command callback after parsing is done
@@ -1796,68 +1809,6 @@ func (p *Parser) Errors() iter.Seq[error] {
 			}
 		}
 	}
-}
-
-// GetCompletionData populates a CompletionData struct containing information for command line completion
-func (p *Parser) GetCompletionData() completion.CompletionData {
-	data := completion.CompletionData{
-		Commands:            make([]string, 0),
-		Flags:               make([]completion.FlagPair, 0),
-		CommandFlags:        make(map[string][]completion.FlagPair),
-		FlagValues:          make(map[string][]completion.CompletionValue),
-		CommandDescriptions: make(map[string]string),
-		TranslatedCommands:  make(map[string]string),
-		TranslatedFlags:     make(map[string]string),
-	}
-
-	// Process flags
-	for flag, flagInfo := range p.acceptedFlags.All() {
-		flagParts := splitPathFlag(flag)
-
-		cmd := ""
-		flagName := flag
-		if len(flagParts) > 1 {
-			flagName = flagParts[0]
-			cmd = flagParts[1]
-		}
-
-		addFlagToCompletionData(&data, cmd, flagName, flagInfo, p.renderer)
-
-		// Add translation mapping for flags
-		if p.translationRegistry != nil {
-			if translated, ok := p.translationRegistry.GetFlagTranslation(flagName, p.GetLanguage()); ok && translated != flagName {
-				data.TranslatedFlags[flagName] = translated
-			}
-		}
-	}
-
-	// Process commands
-	for _, cmd := range p.registeredCommands.All() {
-		if cmd != nil {
-			data.Commands = append(data.Commands, cmd.path)
-			data.CommandDescriptions[cmd.path] = p.renderer.CommandDescription(cmd)
-
-			// Add translation mapping for commands
-			if p.translationRegistry != nil {
-				if translated, ok := p.translationRegistry.GetCommandTranslation(cmd.path, p.GetLanguage()); ok && translated != cmd.path {
-					data.TranslatedCommands[cmd.path] = translated
-				}
-			}
-		}
-	}
-
-	// Completion must offer a parent command's flags on its subcommands too (the parser
-	// inherits them via parent-walking resolution); applied here so all shell generators
-	// see the same inheritance the parser enforces.
-	applyCommandFlagInheritance(&data)
-
-	return data
-}
-
-// GenerateCompletion generates completion scripts for the given shell and program name
-func (p *Parser) GenerateCompletion(shell, programName string) string {
-	generator := completion.GetGenerator(shell)
-	return generator.Generate(programName, p.GetCompletionData())
 }
 
 // PrintUsage pretty prints accepted Flags and Commands to io.Writer.
@@ -2990,7 +2941,7 @@ func (p *Parser) executePostHooks(cmd *Command, cmdErr error) error {
 }
 
 // AddFlagValidators adds multiple validators for a flag
-func (p *Parser) AddFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
+func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validator) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -3006,7 +2957,7 @@ func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validat
 }
 
 // SetFlagValidators replaces all validators for a flag
-func (p *Parser) SetFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
+func (p *Parser) SetFlagValidators(flag string, validators ...validation.Validator) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

@@ -189,19 +189,19 @@ func TestByteLengthValidatorsViaParser(t *testing.T) {
 		assert.Len(t, validators, 3)
 
 		// Test minbytelength
-		assert.NoError(t, validators[0]("hello")) // 5 bytes
-		assert.NoError(t, validators[0]("café!")) // 6 bytes
-		assert.Error(t, validators[0]("hi"))      // 2 bytes
+		assert.NoError(t, validators[0].Validate("hello")) // 5 bytes
+		assert.NoError(t, validators[0].Validate("café!")) // 6 bytes
+		assert.Error(t, validators[0].Validate("hi"))      // 2 bytes
 
 		// Test maxbytelength
-		assert.NoError(t, validators[1]("hello"))      // 5 bytes
-		assert.NoError(t, validators[1]("1234567890")) // 10 bytes
-		assert.Error(t, validators[1]("hello world!")) // 12 bytes
+		assert.NoError(t, validators[1].Validate("hello"))      // 5 bytes
+		assert.NoError(t, validators[1].Validate("1234567890")) // 10 bytes
+		assert.Error(t, validators[1].Validate("hello world!")) // 12 bytes
 
 		// Test bytelength
-		assert.NoError(t, validators[2]("12345678")) // 8 bytes
-		assert.NoError(t, validators[2]("café123"))  // 8 bytes
-		assert.Error(t, validators[2]("1234567"))    // 7 bytes
+		assert.NoError(t, validators[2].Validate("12345678")) // 8 bytes
+		assert.NoError(t, validators[2].Validate("café123"))  // 8 bytes
+		assert.Error(t, validators[2].Validate("1234567"))    // 7 bytes
 	})
 
 	t.Run("short forms", func(t *testing.T) {
@@ -216,8 +216,8 @@ func TestByteLengthValidatorsViaParser(t *testing.T) {
 		assert.Len(t, validators, 3)
 
 		// Should work the same as long forms
-		assert.NoError(t, validators[0]("hello")) // 5 bytes
-		assert.Error(t, validators[0]("hi"))      // 2 bytes
+		assert.NoError(t, validators[0].Validate("hello")) // 5 bytes
+		assert.Error(t, validators[0].Validate("hi"))      // 2 bytes
 	})
 
 	t.Run("negative values", func(t *testing.T) {

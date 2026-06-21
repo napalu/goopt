@@ -13,14 +13,32 @@ import (
 	"github.com/napalu/goopt/v2/errs"
 )
 
-// ValidatorFunc validates a string value and returns an error if invalid
+// Validator validates a string value and returns an error if invalid. It is the
+// currency used everywhere a validator is stored or composed. ValidatorFunc is the
+// common functional implementation; richer validators (e.g. IsOneOf) are values that
+// implement Validator and may additionally implement Enumerable.
+type Validator interface {
+	Validate(value string) error
+}
+
+// Enumerable is an optional interface a Validator may implement to expose the finite
+// set of values it accepts. Shell completion consults it so a value-restricting
+// validator (e.g. IsOneOf) also drives completion — one source of truth for both.
+type Enumerable interface {
+	Candidates() []string
+}
+
+// ValidatorFunc validates a string value and returns an error if invalid.
 type ValidatorFunc func(value string) error
 
+// Validate makes ValidatorFunc satisfy Validator.
+func (f ValidatorFunc) Validate(value string) error { return f(value) }
+
 // All combines multiple validators - all must pass
-func All(validators ...ValidatorFunc) ValidatorFunc {
+func All(validators ...Validator) ValidatorFunc {
 	return func(value string) error {
 		for _, validator := range validators {
-			if err := validator(value); err != nil {
+			if err := validator.Validate(value); err != nil {
 				return err
 			}
 		}
@@ -29,11 +47,11 @@ func All(validators ...ValidatorFunc) ValidatorFunc {
 }
 
 // Any combines multiple validators - at least one must pass
-func Any(validators ...ValidatorFunc) ValidatorFunc {
+func Any(validators ...Validator) ValidatorFunc {
 	return func(value string) error {
 		var errors []string
 		for _, validator := range validators {
-			if err := validator(value); err == nil {
+			if err := validator.Validate(value); err == nil {
 				return nil
 			} else {
 				errors = append(errors, err.Error())

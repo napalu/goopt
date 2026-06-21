@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/validation"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -109,12 +110,12 @@ func TestNewArgEWithValidators(t *testing.T) {
 	t.Run("can add validators with NewArgE", func(t *testing.T) {
 		arg, err := NewArgE(
 			WithType(types.Single),
-			WithValidators(func(value string) error {
+			WithValidators(validation.ValidatorFunc(func(value string) error {
 				if !strings.HasPrefix(value, "test-") {
 					return assert.AnError
 				}
 				return nil
-			}),
+			})),
 		)
 
 		assert.NoError(t, err)

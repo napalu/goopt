@@ -17,7 +17,6 @@ import (
 	"github.com/napalu/goopt/v2/input"
 	"github.com/napalu/goopt/v2/internal/messages"
 
-	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/internal/parse"
@@ -179,7 +178,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
-					if err := validator(boolVal); err != nil {
+					if err := validator.Validate(boolVal); err != nil {
 						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
@@ -219,7 +218,7 @@ func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, 
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
-					if err := validator(boolVal); err != nil {
+					if err := validator.Validate(boolVal); err != nil {
 						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
@@ -378,6 +377,9 @@ func (p *Parser) getArgumentInfoByID(id string) *FlagInfo {
 }
 
 func (p *Parser) evalExecOnParse(lastCommandPath string) string {
+	if p.completionMode {
+		return "" // completion must never execute command callbacks
+	}
 	if p.callbackOnParse {
 		err := p.ExecuteCommand()
 		if err != nil {
@@ -1403,7 +1405,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	// Also skip if validation already failed in processSingleValue
 	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
 		for _, validator := range argument.Validators {
-			if err := validator(processed); err != nil {
+			if err := validator.Validate(processed); err != nil {
 				return errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(currentArg))
 			}
 		}
@@ -1460,7 +1462,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if flagInfo, found := p.acceptedFlags.Get(name); found && flagInfo.Argument != nil {
 		if len(flagInfo.Argument.Validators) > 0 {
 			for _, validator := range flagInfo.Argument.Validators {
-				if err = validator(pass); err != nil {
+				if err = validator.Validate(pass); err != nil {
 					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 					return
 				}
@@ -1564,7 +1566,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	// Run validators (if any) - this includes converted AcceptedValues
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
-			if err := validator(value); err != nil {
+			if err := validator.Validate(value); err != nil {
 				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				return "", false
 			}
@@ -1620,7 +1622,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
-				if err := validator(args[i]); err != nil {
+				if err := validator.Validate(args[i]); err != nil {
 					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 					return "", false
 				}
@@ -1813,6 +1815,9 @@ func (p *Parser) getFlagInCommandPath(flag string, commandPath string) (*FlagInf
 }
 
 func (p *Parser) setBoundVariable(value string, currentArg string) error {
+	if p.completionMode {
+		return nil // completion must never write to the user's bound variables
+	}
 	data, found := p.bind[currentArg]
 	if !found {
 		return nil
@@ -2051,7 +2056,7 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 
 	// Convert AcceptedValues to validators for internal processing
 	// but still store them as AcceptedValues for backward compatibility (help text, etc.)
-	var acceptedValueValidators []validation.ValidatorFunc
+	var acceptedValueValidators []validation.Validator
 	if len(c.AcceptedValues) > 0 {
 		// Store AcceptedValues for help text and backward compatibility
 		configs = append(configs, WithAcceptedValues(c.AcceptedValues))
@@ -2065,7 +2070,7 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 	}
 
 	// Parse and add validators
-	var allValidators []validation.ValidatorFunc
+	var allValidators []validation.Validator
 
 	// First add validators from accepted values (if any)
 	if len(acceptedValueValidators) > 0 {
@@ -2889,82 +2894,6 @@ func (p *Parser) quoteForError(s string) string {
 	open := p.layeredProvider.GetMessage(messages.MsgQuoteOpenKey)
 	closing := p.layeredProvider.GetMessage(messages.MsgQuoteCloseKey)
 	return open + s + closing
-}
-
-func addFlagToCompletionData(data *completion.CompletionData, cmd, flagName string, flagInfo *FlagInfo, renderer Renderer) {
-	if flagInfo == nil || flagInfo.Argument == nil {
-		return
-	}
-
-	// Create flag pair with type conversion
-	pair := completion.FlagPair{
-		Long:        flagName,
-		Short:       flagInfo.Argument.Short,
-		Description: renderer.FlagDescription(flagInfo.Argument),
-		Type:        completion.FlagType(flagInfo.Argument.TypeOf),
-	}
-
-	// Add to appropriate flag list
-	if cmd == "" {
-		data.Flags = append(data.Flags, pair)
-	} else {
-		data.CommandFlags[cmd] = append(data.CommandFlags[cmd], pair)
-	}
-
-	// Handle flag values. NOTE: AcceptedValues is deprecated (superseded by
-	// validators); this keeps value-completion correct while it sunsets — do not grow
-	// it with command-aware keys. Key by the BARE flag name(s) — exactly what every
-	// generator reads (data.FlagValues[flag.Long]). The old code stored only when a
-	// short existed and prefixed command-scoped keys with "cmd@", a key no generator
-	// ever looks up — so value completion was dead for long-only and command-scoped
-	// flags.
-	if len(flagInfo.Argument.AcceptedValues) > 0 {
-		values := make([]completion.CompletionValue, len(flagInfo.Argument.AcceptedValues))
-		for i, v := range flagInfo.Argument.AcceptedValues {
-			values[i] = completion.CompletionValue{
-				Pattern:     v.Pattern,
-				Description: v.Description,
-			}
-		}
-
-		data.FlagValues[pair.Long] = values
-		if pair.Short != "" {
-			data.FlagValues[pair.Short] = values
-		}
-	}
-}
-
-// applyCommandFlagInheritance rewrites data.CommandFlags so each command lists its OWN
-// flags plus those inherited from every ancestor command — mirroring the parser's
-// parent-walking flag resolution, so completion offers exactly what the parser accepts
-// (without this, a parent command's flags are silently absent from subcommand
-// completion even though the parser accepts them there). The nearest owner wins on a
-// name collision, matching the parser's nearest-ancestor override. Ancestors are the
-// space-joined path prefixes the parser itself walks.
-func applyCommandFlagInheritance(data *completion.CompletionData) {
-	if len(data.CommandFlags) == 0 {
-		return
-	}
-	ownFlags := data.CommandFlags
-	merged := make(map[string][]completion.FlagPair, len(ownFlags))
-	for _, path := range data.Commands {
-		seen := make(map[string]bool)
-		var flags []completion.FlagPair
-		tokens := strings.Split(path, " ")
-		for i := len(tokens); i >= 1; i-- { // own path first, then ancestors
-			for _, fp := range ownFlags[strings.Join(tokens[:i], " ")] {
-				if seen[fp.Long] {
-					continue // a nearer command already defines this flag
-				}
-				seen[fp.Long] = true
-				flags = append(flags, fp)
-			}
-		}
-		if len(flags) > 0 {
-			merged[path] = flags
-		}
-	}
-	data.CommandFlags = merged
 }
 
 func isFieldCommand(field reflect.StructField) bool {

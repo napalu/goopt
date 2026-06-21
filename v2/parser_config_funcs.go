@@ -290,7 +290,7 @@ func WithHookOrder(order HookOrder) ConfigureCmdLineFunc {
 }
 
 // WithFlagValidators adds one or more validators for a flag (including positional arguments)
-func WithFlagValidators(flag string, validators ...validation.ValidatorFunc) ConfigureCmdLineFunc {
+func WithFlagValidators(flag string, validators ...validation.Validator) ConfigureCmdLineFunc {
 	return func(cmdLine *Parser, err *error) {
 		if e := cmdLine.AddFlagValidators(flag, validators...); e != nil && err != nil {
 			*err = e

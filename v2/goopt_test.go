@@ -1508,52 +1508,6 @@ func TestParser_PrintUsageWithCustomGroups(t *testing.T) {
 	assert.Equal(t, expectedOutput, output, "usage output should be grouped and formatted correctly with custom config")
 }
 
-func TestParser_GenerateCompletion(t *testing.T) {
-	p := NewParser()
-
-	// Add global flags
-	_ = p.AddFlag("global-flag", NewArg(WithShortFlag("g"), WithDescription("A global flag")))
-	_ = p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithDescription("Verbose output"), WithType(types.Standalone)))
-
-	// Add command with flags
-	cmd := &Command{
-		Name:        "test",
-		Description: "Test command",
-	}
-	_ = p.AddCommand(cmd)
-	_ = p.AddFlag("test-flag", NewArg(WithShortFlag("t"), WithDescription("A test flag")), "test")
-
-	shells := []string{"bash", "zsh", "fish", "powershell"}
-	for _, shell := range shells {
-		t.Run(shell, func(t *testing.T) {
-			result := p.GenerateCompletion(shell, "testapp")
-			if result == "" {
-				t.Errorf("GenerateCompletion(%q) returned empty string", shell)
-			}
-
-			// Basic validation that the output contains shell-specific content
-			switch shell {
-			case "bash":
-				if !strings.Contains(result, "function __testapp_completion") {
-					t.Error("Bash completion missing expected content")
-				}
-			case "zsh":
-				if !strings.Contains(result, "#compdef testapp") {
-					t.Error("Zsh completion missing expected content")
-				}
-			case "fish":
-				if !strings.Contains(result, "complete -c testapp") {
-					t.Error("Fish completion missing expected content")
-				}
-			case "powershell":
-				if !strings.Contains(result, "Register-ArgumentCompleter") {
-					t.Error("PowerShell completion missing expected content")
-				}
-			}
-		})
-	}
-}
-
 func TestParser_GetNumericTypes(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -4993,12 +4947,12 @@ func TestParser_SecureFlagEnvOverride(t *testing.T) {
 		parser := NewParser()
 		_ = parser.AddFlag("password", NewArg(
 			WithSecurePrompt("Enter password"),
-			WithValidators(func(value string) error {
+			WithValidators(validation.ValidatorFunc(func(value string) error {
 				if len(value) < 8 {
 					return fmt.Errorf("password must be at least 8 characters")
 				}
 				return nil
-			}),
+			})),
 		))
 
 		mockEnv := &mockEnvResolver{
@@ -7422,7 +7376,7 @@ func TestParser_ValidationHooks(t *testing.T) {
 		parser, err := NewParserWith(
 			WithFlag("enabled", NewArg(
 				WithType(types.Standalone),
-				WithValidator(onlyTrue),
+				WithValidator(validation.ValidatorFunc(onlyTrue)),
 			)),
 		)
 		assert.NoError(t, err)
@@ -7435,7 +7389,7 @@ func TestParser_ValidationHooks(t *testing.T) {
 		parser = NewParser()
 		parser.AddFlag("enabled", NewArg(
 			WithType(types.Standalone),
-			WithValidator(onlyTrue),
+			WithValidator(validation.ValidatorFunc(onlyTrue)),
 		))
 		success = parser.Parse([]string{"--enabled", "false"})
 		assert.False(t, success)
@@ -7727,7 +7681,7 @@ func TestParser_ValidationIntegration(t *testing.T) {
 func TestParser_BuiltInValidators(t *testing.T) {
 	tests := []struct {
 		name      string
-		validator validation.ValidatorFunc
+		validator validation.Validator
 		valid     []string
 		invalid   []string
 	}{
@@ -7784,12 +7738,12 @@ func TestParser_BuiltInValidators(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, valid := range tt.valid {
-				err := tt.validator(valid)
+				err := tt.validator.Validate(valid)
 				assert.NoError(t, err, "Expected %q to be valid", valid)
 			}
 
 			for _, invalid := range tt.invalid {
-				err := tt.validator(invalid)
+				err := tt.validator.Validate(invalid)
 				assert.Error(t, err, "Expected %q to be invalid", invalid)
 			}
 		})
@@ -8242,10 +8196,10 @@ func TestParser_ValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator("user@example.com"), "should accept email")
-		assert.NoError(t, validator("http://example.com"), "should accept URL")
-		assert.NoError(t, validator("12345"), "should accept integer")
-		assert.Error(t, validator("not-valid"), "should reject invalid input")
+		assert.NoError(t, validator.Validate("user@example.com"), "should accept email")
+		assert.NoError(t, validator.Validate("http://example.com"), "should accept URL")
+		assert.NoError(t, validator.Validate("12345"), "should accept integer")
+		assert.Error(t, validator.Validate("not-valid"), "should reject invalid input")
 	})
 
 	t.Run("Parse nested composition", func(t *testing.T) {
@@ -8257,10 +8211,10 @@ func TestParser_ValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator("longuser@example.com"), "10+ char email")
-		assert.NoError(t, validator("http://short.com"), "URL under 50 chars")
-		assert.Error(t, validator("a@b.c"), "email too short")
-		assert.Error(t, validator("http://"+strings.Repeat("x", 50)+".com"), "URL too long")
+		assert.NoError(t, validator.Validate("longuser@example.com"), "10+ char email")
+		assert.NoError(t, validator.Validate("http://short.com"), "URL under 50 chars")
+		assert.Error(t, validator.Validate("a@b.c"), "email too short")
+		assert.Error(t, validator.Validate("http://"+strings.Repeat("x", 50)+".com"), "URL too long")
 	})
 
 	t.Run("Parse not validator", func(t *testing.T) {
@@ -8272,9 +8226,9 @@ func TestParser_ValidatorParsing(t *testing.T) {
 
 		// Test the validator works
 		validator := validators[0]
-		assert.NoError(t, validator("user"), "should accept non-reserved")
-		assert.Error(t, validator("admin"), "should reject reserved")
-		assert.Error(t, validator("root"), "should reject reserved")
+		assert.NoError(t, validator.Validate("user"), "should accept non-reserved")
+		assert.Error(t, validator.Validate("admin"), "should reject reserved")
+		assert.Error(t, validator.Validate("root"), "should reject reserved")
 	})
 }
 
@@ -11020,10 +10974,6 @@ func TestParser_ErrorMessageTranslations(t *testing.T) {
 	assert.Contains(t, errStr, "server") // Distance 3
 	// "service" won't be shown as it's distance 4
 
-	// Test completion with unsupported shell (defaults to bash)
-	result := parser.GenerateCompletion("unsupported-shell", "myapp")
-	assert.NotEmpty(t, result)                // GenerateCompletion defaults to bash for unsupported shells
-	assert.Contains(t, result, "#!/bin/bash") // Verify it's a bash script
 }
 
 // TestMultilingualHelpGeneration tests help generation in different languages

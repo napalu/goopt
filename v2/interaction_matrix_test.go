@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/napalu/goopt/v2/completion"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/i18n/locales/ar"
@@ -1251,101 +1250,117 @@ func TestInteractionMatrixExoticTyped(t *testing.T) {
 	})
 }
 
-// TestInteractionMatrixCompletionInheritance charts the completion × command-tree
-// seam: a completion script is a second representation of "which flags are valid
-// here", and it must agree with what the parser actually accepts. The parser inherits
-// a parent command's flags onto subcommands (parent-walking), so completion must
-// surface them there too — otherwise tab-completion under-suggests valid flags.
-func TestInteractionMatrixCompletionInheritance(t *testing.T) {
-	p := NewParser()
-	if err := p.AddFlag("verbose", newStandalone(WithShortFlag("v"))); err != nil { // global
-		t.Fatal(err)
-	}
-	start := NewCommand(WithName("start"))
-	server := NewCommand(WithName("server"), WithSubcommands(start))
-	if err := p.AddCommand(server); err != nil {
-		t.Fatal(err)
-	}
-	mustAddFlag(t, p, "port", NewArg(WithType(types.Single)), "server")             // owned by server
-	mustAddFlag(t, p, "timeout", NewArg(WithType(types.Single)), "server", "start") // owned by server start
-
-	has := func(fps []completion.FlagPair, long string) bool {
-		for _, f := range fps {
-			if f.Long == long {
-				return true
-			}
-		}
-		return false
-	}
-	d := p.GetCompletionData()
-
-	// server: own flag only (no descendant leakage upward).
-	if !has(d.CommandFlags["server"], "port") {
-		t.Errorf("server completion must offer its own --port; got %v", d.CommandFlags["server"])
-	}
-	if has(d.CommandFlags["server"], "timeout") {
-		t.Errorf("server must NOT offer the subcommand-only --timeout; got %v", d.CommandFlags["server"])
-	}
-	// server start: own flag PLUS the inherited parent flag — the regression.
-	if !has(d.CommandFlags["server start"], "timeout") {
-		t.Errorf("`server start` must offer its own --timeout; got %v", d.CommandFlags["server start"])
-	}
-	if !has(d.CommandFlags["server start"], "port") {
-		t.Errorf("`server start` must inherit parent's --port (parser accepts it there); got %v", d.CommandFlags["server start"])
-	}
-
-	// Depth + short form: the walk must climb EVERY ancestor and preserve short flags.
-	// A grandparent flag (with a short) must reach a 3-level-deep terminal.
-	p2 := NewParser()
-	cc := NewCommand(WithName("c"))
-	bb := NewCommand(WithName("b"), WithSubcommands(cc))
-	if err := p2.AddCommand(NewCommand(WithName("a"), WithSubcommands(bb))); err != nil {
-		t.Fatal(err)
-	}
-	mustAddFlag(t, p2, "top", NewArg(WithType(types.Single), WithShortFlag("t")), "a") // grandparent + short
-	d2 := p2.GetCompletionData()
-	deep := d2.CommandFlags["a b c"]
-	if !has(deep, "top") {
-		t.Errorf("`a b c` must inherit grandparent's --top across two levels; got %v", deep)
-	}
-	for _, f := range deep {
-		if f.Long == "top" && f.Short != "t" {
-			t.Errorf("inherited --top must keep its short -t; got short=%q", f.Short)
-		}
-	}
+// EnvCreds is an embedded creds struct; its flags are namespaced as env-creds.* and
+// registered per command (e.g. "env-creds.url@undo").
+type EnvCreds struct {
+	URL     string `goopt:"required:true;short:u;desc:url"`
+	AppName string `goopt:"required:true;short:a;desc:app"`
 }
 
-// TestInteractionMatrixCompletionValues locks the FlagValues keying fix: value
-// completion (deprecated AcceptedValues) must reach the generators, which read the
-// BARE flag name. Previously values were stored only when a short flag existed and
-// command-scoped values were keyed "cmd@flag" — a key no generator reads — so value
-// completion was dead for long-only and command-scoped flags.
-func TestInteractionMatrixCompletionValues(t *testing.T) {
-	vals := func(pats ...string) []types.PatternValue {
-		out := make([]types.PatternValue, len(pats))
-		for i, pp := range pats {
-			out[i] = types.PatternValue{Pattern: pp, Description: pp}
-		}
-		return out
-	}
-	p := NewParser()
-	mustAddFlag(t, p, "mode", NewArg(WithType(types.Single), WithAcceptedValues(vals("fast", "slow")))) // global, no short
-	mustAddCmd(t, p, "run")
-	mustAddFlag(t, p, "level", NewArg(WithType(types.Single), WithShortFlag("l"), WithAcceptedValues(vals("hi", "lo"))), "run") // command-scoped
-
-	d := p.GetCompletionData()
-	if _, ok := d.FlagValues["mode"]; !ok {
-		t.Errorf("long-only global flag values must be keyed by bare long 'mode'; keys=%v", keysOf(d.FlagValues))
-	}
-	if _, ok := d.FlagValues["level"]; !ok {
-		t.Errorf("command-scoped flag values must be keyed by bare long 'level' (not 'run@level'); keys=%v", keysOf(d.FlagValues))
-	}
+type envPositionalCfg struct {
+	Undo struct {
+		Input string `goopt:"short:i;pos:0;required:true;desc:input file"`
+		EnvCreds
+		Exec CommandFunc
+	} `goopt:"kind:command;desc:undo"`
 }
 
-func keysOf(m map[string][]completion.CompletionValue) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
+// TestInteractionMatrixPositionalEnv charts the positional × env × command-scope seam.
+// A command-scoped flag supplied via an environment variable is injected into the arg
+// stream as the internal "name@command" form; setPositionalArguments must recognise
+// that suffixed token as a flag (resolving it in the suffix's command scope) and skip
+// its value — otherwise the env value is consumed as the command's positional argument.
+// Regression for the env-value-leaks-into-positional bug.
+func TestInteractionMatrixPositionalEnv(t *testing.T) {
+	// plain command-scoped flag + a positional on the same command, flag set via env.
+	t.Run("command-scoped flag via env does not leak into the positional", func(t *testing.T) {
+		type cfg struct {
+			Undo struct {
+				Input string `goopt:"pos:0;required:true;desc:input file"`
+				Token string `goopt:"required:true;desc:token"` // command-scoped, supplied via env
+			} `goopt:"kind:command;desc:undo"`
+		}
+		t.Setenv("TOKEN", "from-env")
+		c := &cfg{}
+		p, err := NewParserFromStruct(c, WithFlagNameConverter(ToKebabCase), WithEnvNameConverter(ToKebabCase))
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want %q (env value leaked into positional)", c.Undo.Input, "myfile.log")
+		}
+		if c.Undo.Token != "from-env" {
+			t.Errorf("Token = %q, want %q (resolved from env)", c.Undo.Token, "from-env")
+		}
+	})
+
+	// namespaced (embedded) command-scoped flags via env — the original repro shape:
+	// flags arrive as "env-creds.url@undo", a two-level suffixed token.
+	t.Run("namespaced embedded flags via env do not leak into the positional", func(t *testing.T) {
+		envR := &customEnvResolver{environ: map[string]string{
+			"APP_ENV_CREDS_URL":      "https://env-url/crowd",
+			"APP_ENV_CREDS_APP_NAME": "env-app",
+		}}
+		c := &envPositionalCfg{}
+		p, err := NewParserFromStruct(c,
+			WithFlagNameConverter(ToKebabCase),
+			WithEnvNameConverter(ToKebabCase),
+			WithEnvVarPrefix("APP_"),
+			WithEnvResolver(envR),
+		)
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want %q (env value leaked into positional)", c.Undo.Input, "myfile.log")
+		}
+		if c.Undo.URL != "https://env-url/crowd" || c.Undo.AppName != "env-app" {
+			t.Errorf("env creds not resolved: URL=%q AppName=%q", c.Undo.URL, c.Undo.AppName)
+		}
+	})
+
+	// Full type sweep: EVERY flag type supplied via env must keep its value off the
+	// positional. Single/Chained/File ride the value-flag path (checkIfFlagNeedsValue);
+	// Standalone (a boolean with an explicit env value) rides shouldSkipBooleanAfterStandalone.
+	t.Run("no flag type leaks its env value into the positional", func(t *testing.T) {
+		dir := t.TempDir()
+		fpath := filepath.Join(dir, "cfg.txt")
+		if err := os.WriteFile(fpath, []byte("filecontent"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		type cfg struct {
+			Undo struct {
+				Input  string   `goopt:"pos:0;required:true;desc:input"`
+				Single string   `goopt:"desc:single"`
+				List   []string `goopt:"desc:list"`           // Chained
+				Conf   string   `goopt:"type:file;desc:conf"` // File
+				Force  bool     `goopt:"desc:force"`          // Standalone
+			} `goopt:"kind:command;desc:undo"`
+		}
+		t.Setenv("SINGLE", "sv")
+		t.Setenv("LIST", "a,b")
+		t.Setenv("CONF", fpath)
+		t.Setenv("FORCE", "true")
+		c := &cfg{}
+		p, err := NewParserFromStruct(c, WithFlagNameConverter(ToKebabCase), WithEnvNameConverter(ToKebabCase))
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want myfile.log (an env flag value leaked)", c.Undo.Input)
+		}
+		if c.Undo.Single != "sv" || len(c.Undo.List) != 2 || c.Undo.Conf != "filecontent" || !c.Undo.Force {
+			t.Errorf("env values not all resolved: Single=%q List=%v Conf=%q Force=%v",
+				c.Undo.Single, c.Undo.List, c.Undo.Conf, c.Undo.Force)
+		}
+	})
 }

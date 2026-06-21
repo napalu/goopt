@@ -38,17 +38,18 @@ While `goopt` handles the basics with ease, its real strength lies in providing 
 - **Flag Organization:** Namespace your flags with nested structs (`--db.host`) or create reusable flag groups by embedding structs.
 
 #### Powerful Features
-- **Advanced Validation:** A rich, composable validation system with built-in and custom rules.
+- **Advanced Validation:** A rich, composable validation system with built-in and custom rules — and validators that restrict a value to a set (e.g. `IsOneOf`) automatically drive shell completion too.
+- **Flag Contracts:** Declare relationships *between* flags — mutual exclusion (`mutex`), exactly-one (`exactlyone`), `conflicts`, `requires`, and conditional requirement (`requiredOn`) — declaratively in struct tags or code, with friendly, translated errors. Replaces hand-written `RequiredIf` callbacks for the common cases.
 - **Execution Hooks:** Pre- and post-execution hooks for command lifecycle management.
 - **Positional Arguments:** Robust support for required, optional, and default-valued positional arguments.
-- **Flag Dependencies:** Enforce rules where one flag depends on the presence or value of another.
+- **Flag Dependencies:** Warn (not error) when a flag is used without the other flags or values it expects — a softer, advisory complement to contracts.
 - **Repeated Flags:** Natively supports both `--tag one --tag two` and `--tag "one,two"` for slice flags.
 
 #### Developer Experience
 - **Auto-Help & Auto-Version:** Zero-config `--help` and `--version` flags that just work. 
 - **Intelligent Suggestions:** Automatic "did you mean?" suggestions for mistyped commands and flags.
 - **Full i18n Tooling:** The `goopt-i18n-gen` tool facilitates translation management.
-- **Shell Completion:** Generate completion scripts for Bash, Zsh, Fish, and PowerShell.
+- **Shell Completion:** Runtime completion for Bash, Zsh, Fish, and PowerShell — computed by the live parser, so suggestions never drift from what your CLI actually accepts, with support for dynamic, context-aware values.
 - **Secure Input:** Built-in support for securely prompting for passwords and other secrets.
 
 ## Quick Start

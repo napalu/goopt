@@ -11,6 +11,7 @@ import (
 // Core parser errors
 var (
 	ErrUnsupportedType              = i18n.NewError(ErrUnsupportedTypeKey)
+	ErrUnsupportedShell             = i18n.NewError(ErrUnsupportedShellKey)
 	ErrCommandNotFound              = i18n.NewError(ErrCommandNotFoundKey)
 	ErrCommandNoCallback            = i18n.NewError(ErrCommandNoCallbackKey)
 	ErrFlagNotFound                 = i18n.NewError(ErrFlagNotFoundKey)

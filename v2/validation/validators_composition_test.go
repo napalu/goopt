@@ -126,11 +126,11 @@ func TestCompositionalValidators(t *testing.T) {
 		notReserved := IsNotOneOf("admin", "root", "system")
 
 		// Test IsOneOf
-		assert.NoError(t, colors("red"))
-		assert.NoError(t, colors("green"))
-		assert.NoError(t, colors("blue"))
-		assert.Error(t, colors("yellow"))
-		assert.Error(t, colors(""))
+		assert.NoError(t, colors.Validate("red"))
+		assert.NoError(t, colors.Validate("green"))
+		assert.NoError(t, colors.Validate("blue"))
+		assert.Error(t, colors.Validate("yellow"))
+		assert.Error(t, colors.Validate(""))
 
 		// Test IsNotOneOf
 		assert.NoError(t, notReserved("user"))
@@ -285,7 +285,7 @@ func TestValidator_Creation(t *testing.T) {
 				assert.Len(t, validators, 1)
 
 				// Test the validator
-				err = validators[0](tc.testValue)
+				err = validators[0].Validate(tc.testValue)
 				assert.NoError(t, err)
 			})
 		}

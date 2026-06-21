@@ -80,6 +80,7 @@ const (
 	ErrCircularDependencyKey           = ErrorPrefixKey + ".circular_dependency"
 	ErrMutexViolationKey               = ErrorPrefixKey + ".mutex_violation"
 	ErrConflictingFlagsKey             = ErrorPrefixKey + ".conflicting_flags"
+	ErrUnsupportedShellKey             = ErrorPrefixKey + ".unsupported_shell"
 	ErrSingletonContractGroupKey       = ErrorPrefixKey + ".singleton_contract_group"
 	ErrInvalidContractKey              = ErrorPrefixKey + ".invalid_contract"
 	ErrUnknownContractKey              = ErrorPrefixKey + ".unknown_contract"

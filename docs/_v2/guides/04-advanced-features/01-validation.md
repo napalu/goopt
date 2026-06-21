@@ -125,8 +125,17 @@ For domain-specific rules, you can easily create your own validators.
 
 **Important:** Custom validators can currently only be used programmatically via `WithValidator()` or `AddFlagValidators()`. They cannot be referenced by name from a struct tag.
 
-### Simple Custom Validator
-A validator is just a function that takes a string and returns an error.
+### The `Validator` interface
+
+A validator is any value implementing `validation.Validator`:
+
+```go
+type Validator interface { Validate(value string) error }
+```
+
+`validation.ValidatorFunc` is the functional implementation (a `func(string) error` that
+satisfies `Validator`), and every built-in validator returns one. So the idiomatic way to
+write a **reusable** custom validator is a constructor returning `validation.ValidatorFunc`:
 
 ```go
 import "github.com/napalu/goopt/v2/validation"
@@ -142,6 +151,24 @@ func HexColor() validation.ValidatorFunc {
     }
 }
 ```
+
+For a **one-off inline** check, wrap a bare func in `validation.Custom` — a raw
+`func(string) error` does not satisfy the `Validator` interface on its own:
+
+```go
+goopt.WithValidators(
+    validation.Custom(func(value string) error {
+        if value == "forbidden" {
+            return errors.New("that value is not allowed")
+        }
+        return nil
+    }),
+)
+```
+
+> Migrating from an earlier v2? Validators used to be passed as bare funcs. The
+> `goopt-migrate-v2` tool rewrites those to `validation.Custom(...)` automatically — see
+> [What's New]({{ site.baseurl }}/v2/whats-new/).
 
 ### Using Custom Validators
 You can then add your custom validator to any flag.
@@ -190,3 +217,41 @@ func HexColorI18n() validation.ValidatorFunc {
 ```
 Now, you can provide a translation for `validation.invalid_hex_color` in your i18n JSON files, 
 see [Internationalization]({{ site.baseurl }}/v2/guides/06-internationalization/index/) for details.
+
+## Validators That Drive Completion
+
+A validator that restricts a value to a finite set can *also* feed shell completion — so
+one declaration both validates input and suggests it, with no chance of the two drifting
+apart. This works through an optional interface a validator may implement:
+
+```go
+type Enumerable interface { Candidates() []string }
+```
+
+`validation.IsOneOf` implements it, so it validates **and** completes:
+
+```go
+goopt.NewArg(goopt.WithValidators(validation.IsOneOf("prod", "staging", "dev")))
+// rejects anything outside the set AND offers the three values on <TAB>
+```
+
+Your own validator can opt in the same way by implementing `Candidates()` alongside
+`Validate()` (return a value, not a `ValidatorFunc`, so it can carry the method set):
+
+```go
+type logLevel struct{ levels []string }
+
+func (l logLevel) Validate(v string) error {
+    for _, x := range l.levels {
+        if v == x {
+            return nil
+        }
+    }
+    return errs.ErrValueMustBeOneOf.WithArgs(v, strings.Join(l.levels, ", "))
+}
+func (l logLevel) Candidates() []string { return l.levels } // satisfies Enumerable
+```
+
+Validation and completion can't diverge because they're the same value. For values that
+must be computed at runtime (git branches, files, service data), use `WithCompleter`
+instead — see the [Shell Completion guide]({{ site.baseurl }}/v2/guides/05-built-in-features/03-shell-completion/).

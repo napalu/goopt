@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "कमांड पथ '%[2]s' में अज्ञात तर्क '%[1]s'",
         "goopt.error.unknown_flag_with_suggestions": "अज्ञात फ्लैग: %[1]s। क्या आपका मतलब इनमें से एक था? %[2]s",
         "goopt.error.unmarshalling_tag": "टैग %[1]s को अनमार्शल करने में त्रुटि",
+        "goopt.error.unsupported_shell": "असमर्थित शेल %[1]q (समर्थित: bash, zsh, fish, powershell)",
         "goopt.error.unsupported_type": "असमर्थित प्रकार रूपांतरण",
         "goopt.error.unsupported_type_conversion": "तर्क %[2]s के लिए असमर्थित डेटा प्रकार %[1]v",
         "goopt.error.unwrapping_value": "मान को अनरैप करने में त्रुटि: %[1]v",

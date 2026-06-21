@@ -20,8 +20,9 @@ type Argument struct {
 	RequiredIf     RequiredIfFunc
 	PreFilter      FilterFunc
 	PostFilter     FilterFunc
-	Validators     []validation.ValidatorFunc
+	Validators     []validation.Validator
 	AcceptedValues []types.PatternValue
+	Completer      CompleterFunc // dynamic value completion (runtime); see WithCompleter
 	DependencyMap  map[string][]string
 	Secure         types.Secure
 	Short          string
@@ -95,7 +96,7 @@ func (a *Argument) ensureInit() {
 		a.DependencyMap = map[string][]string{}
 	}
 	if a.Validators == nil {
-		a.Validators = []validation.ValidatorFunc{}
+		a.Validators = []validation.Validator{}
 	}
 	if a.uniqueID == "" {
 		a.uniqueID = util.UniqueID("arg")
@@ -132,7 +133,7 @@ type comparableArgument struct {
 	DescriptionKey string
 	TypeOf         types.OptionType
 	Required       bool
-	Validators     []validation.ValidatorFunc
+	Validators     []validation.Validator
 	AcceptedValues []types.PatternValue
 	DependencyMap  map[string][]string
 	Secure         types.Secure

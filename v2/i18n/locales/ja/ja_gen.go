@@ -118,6 +118,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_in_command_path": "コマンドパス '%[2]s' に不明な引数 '%[1]s' があります",
         "goopt.error.unknown_flag_with_suggestions": "不明なフラグ: %[1]s。もしかして: %[2]s",
         "goopt.error.unmarshalling_tag": "タグ %[1]s のアンマーシャル中にエラーが発生しました",
+        "goopt.error.unsupported_shell": "サポートされていないシェル %[1]q（サポート対象: bash、zsh、fish、powershell）",
         "goopt.error.unsupported_type": "サポートされていない型変換",
         "goopt.error.unsupported_type_conversion": "引数 %[2]s のデータ型 %[1]v はサポートされていません",
         "goopt.error.unwrapping_value": "値のアンラップ中にエラーが発生しました: %[1]v",
