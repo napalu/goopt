@@ -1735,3 +1735,38 @@ func TestInteractionMatrixSuggestionThreshold(t *testing.T) {
 		}
 	}
 }
+
+// TestInteractionMatrixFlagSuggestionCore locks the flag matcher after it was folded
+// onto the shared rankSuggestions core: it must still honor flagSuggestionThreshold,
+// match via the translated flag name (surfacing the canonical key + hasTranslated),
+// and suppress beyond-threshold typos — the gatherer differs (short forms, flag
+// translation API) but the ranking is the same core the commands use.
+func TestInteractionMatrixFlagSuggestionCore(t *testing.T) {
+	p, _ := NewParserWith(WithSuggestionThreshold(1, 2)) // flag threshold = 1
+	b := i18n.NewEmptyBundle()
+	if err := b.AddLanguage(language.German, map[string]string{"flag.verbose": "ausfuehrlich"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetUserBundle(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithNameKey("flag.verbose"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetLanguage(language.German); err != nil {
+		t.Fatal(err)
+	}
+
+	// distance-1 typo of canonical name -> suggested
+	if got, _ := p.findSimilarFlagsWithContext("verbos", ""); !slices.Contains(got, "verbose") {
+		t.Errorf("canonical typo 'verbos' should suggest 'verbose', got %v", got)
+	}
+	// distance-1 typo of the TRANSLATED name -> surfaces canonical key, hasTranslated=true
+	if got, hasT := p.findSimilarFlagsWithContext("ausfuehrlic", ""); !slices.Contains(got, "verbose") || !hasT {
+		t.Errorf("translated typo should surface 'verbose' with hasTranslated=true, got %v hasTranslated=%v", got, hasT)
+	}
+	// distance-2 typo with flag threshold=1 -> suppressed
+	if got, _ := p.findSimilarFlagsWithContext("verboxx", ""); len(got) != 0 {
+		t.Errorf("flag threshold=1 must suppress a distance-2 typo, got %v", got)
+	}
+}
