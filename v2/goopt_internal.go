@@ -3168,59 +3168,100 @@ func (p *Parser) printCompactFlag(writer io.Writer, arg *Argument) {
 	fmt.Fprintf(writer, "  %s%s\n", flagStr, required)
 }
 
-// printCommandTree prints the command hierarchy as a tree
+// printCommandTree prints the registered commands as a proper indented tree: every
+// node gets a connector, children nest under their parent with guide rails, and
+// descriptions are column-aligned. Recurses to arbitrary depth (the old version only
+// drew two levels and left top-level commands flush-left — never actually a tree).
+// RTL names/descriptions are bidi-isolated so they can't scramble the tree drawing.
 func (p *Parser) printCommandTree(writer io.Writer) {
-	// Pre-pass: compute max widths for alignment
-	maxTopWidth := 0
-	maxSubWidth := 0
-	for _, cmd := range p.registeredCommands.All() {
-		if cmd.topLevel {
-			cmdName := p.buildCommandNameWithPositionals(cmd)
-			if len(cmdName) > maxTopWidth {
-				maxTopWidth = len(cmdName)
+	pp := p.DefaultPrettyPrintConfig()
+	isRTL := i18n.IsRTL(p.GetLanguage())
+	emptyGuide := strings.Repeat(" ", len([]rune(pp.OuterLevelBindPrefix)))
+
+	type node struct {
+		prefix string // accumulated guides + this node's connector
+		label  string // translated short name + positionals
+		desc   string
+	}
+	var nodes []node
+	var walk func(cmds []*Command, parentPath, guides string)
+	walk = func(cmds []*Command, parentPath, guides string) {
+		for i := range cmds {
+			c := cmds[i]
+			last := i == len(cmds)-1
+			conn := pp.DefaultPrefix
+			childGuides := guides + pp.OuterLevelBindPrefix
+			if last {
+				conn = pp.TerminalPrefix
+				childGuides = guides + emptyGuide
 			}
-			for i := range cmd.Subcommands {
-				sub := &cmd.Subcommands[i]
-				subPath := cmd.Name + " " + sub.Name
-				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
-				if len(subName) > maxSubWidth {
-					maxSubWidth = len(subName)
+			path := c.Name
+			if parentPath != "" {
+				path = parentPath + " " + c.Name
+			}
+			label := p.renderer.CommandName(c)
+			for _, pos := range p.getPositionalsForCommand(path) {
+				fn := pos.Value
+				if idx := strings.LastIndex(fn, "@"); idx >= 0 {
+					fn = fn[:idx]
+				}
+				if pos.Argument.Required {
+					label += " <" + fn + ">"
+				} else {
+					label += " [" + fn + "]"
 				}
 			}
+			nodes = append(nodes, node{guides + conn, label, p.renderer.CommandDescription(c)})
+
+			kids := make([]*Command, 0, len(c.Subcommands))
+			for j := range c.Subcommands {
+				kids = append(kids, &c.Subcommands[j])
+			}
+			walk(kids, path, childGuides)
 		}
 	}
-	maxTopWidth += 2 // add padding after longest name
-	maxSubWidth += 2
+	var roots []*Command
+	for _, c := range p.registeredCommands.All() {
+		if c.topLevel {
+			roots = append(roots, c)
+		}
+	}
+	walk(roots, "", "")
 
-	for _, cmd := range p.registeredCommands.All() {
-		ppConfig := p.DefaultPrettyPrintConfig()
-		if cmd.topLevel {
-			cmdName := p.buildCommandNameWithPositionals(cmd)
-
-			desc := p.renderer.CommandDescription(cmd)
-			if desc != "" {
-				fmt.Fprintf(writer, "\n%-*s \"%s\"\n", maxTopWidth, cmdName, desc)
-			} else {
-				fmt.Fprintf(writer, "\n%s\n", cmdName)
+	// Align descriptions to a common column (width measured pre-isolation).
+	maxW := 0
+	for _, n := range nodes {
+		if w := len([]rune(n.prefix + n.label)); w > maxW {
+			maxW = w
+		}
+	}
+	// Overview descriptions are truncated to fit HelpConfig.MaxWidth (full text shows
+	// in `--help <command>`). The budget adapts to the alignment column, so a deeper
+	// tree leaves less room; MaxWidth <= 0 means unlimited. Applied to every node,
+	// where the old code truncated subcommands only.
+	descCol := maxW + 2
+	maxWidth := p.GetHelpConfig().MaxWidth
+	for _, n := range nodes {
+		label, desc := n.label, n.desc
+		if maxWidth > 0 && desc != "" {
+			budget := maxWidth - descCol - 2 // 2 for the surrounding quotes
+			if budget < 10 {
+				budget = 10 // floor so something always shows
 			}
-			for i := range cmd.Subcommands {
-				prefix := ppConfig.DefaultPrefix
-				if i == len(cmd.Subcommands)-1 {
-					prefix = ppConfig.TerminalPrefix
-				}
-				sub := &cmd.Subcommands[i]
-				subPath := cmd.Name + " " + sub.Name
-				subName := p.buildSubcommandNameWithPositionals(sub, subPath)
-
-				if registeredSub, found := p.registeredCommands.Get(subPath); found {
-					desc := util.Truncate(p.renderer.CommandDescription(registeredSub), 50)
-					fmt.Fprintf(writer, "  %s %-*s \"%s\"\n", prefix, maxSubWidth, subName, desc)
-				} else {
-					desc := util.Truncate(p.renderer.CommandDescription(sub), 50)
-					fmt.Fprintf(writer, "  %s %-*s \"%s\"\n", prefix, maxSubWidth, subName, desc)
-				}
+			desc = util.Truncate(desc, budget)
+		}
+		if isRTL {
+			label = i18n.Isolate(label)
+			if desc != "" {
+				desc = i18n.Isolate(desc)
 			}
 		}
+		if n.desc == "" {
+			fmt.Fprintf(writer, "%s%s\n", n.prefix, label)
+			continue
+		}
+		pad := maxW - len([]rune(n.prefix+n.label)) + 2
+		fmt.Fprintf(writer, "%s%s%s\"%s\"\n", n.prefix, label, strings.Repeat(" ", pad), desc)
 	}
 }
 

@@ -2038,3 +2038,93 @@ func TestInteractionMatrixCommandHeaderRTL(t *testing.T) {
 		t.Errorf("RTL breadcrumb header must be bidi-isolated, got %q", r.String())
 	}
 }
+
+// TestInteractionMatrixCommandTree locks printCommandTree as an actual tree: a
+// connector on EVERY node (the old version left top-level commands flush-left and
+// only drew two levels), children nested under parents via guide rails, no leading
+// blank line, and RTL content bidi-isolated. This is the renderer the hierarchical
+// help style and the "Available commands" listing both use.
+func TestInteractionMatrixCommandTree(t *testing.T) {
+	p := NewParser()
+	if err := p.AddCommand(&Command{Name: "dev", Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "shell", Description: "dev shell", Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddCommand(&Command{Name: "export", Description: "export members", Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddCommand(&Command{Name: "completion", Description: "shell completion", Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	p.printCommandTree(&b)
+	out := b.String()
+
+	if strings.HasPrefix(out, "\n") {
+		t.Errorf("tree must not start with a blank line, got %q", out)
+	}
+	if !strings.Contains(out, "├─ dev") {
+		t.Errorf("top-level commands must get a tree connector (not flush-left), got %q", out)
+	}
+	if !strings.Contains(out, "└─ completion") {
+		t.Errorf("last top-level command must use the terminal connector, got %q", out)
+	}
+	if !strings.Contains(out, "└─ shell") || !strings.Contains(out, "│") {
+		t.Errorf("subcommand must nest under its parent with a guide rail, got %q", out)
+	}
+
+	// RTL: tree content isolated
+	pa := NewParser()
+	bn := i18n.NewEmptyBundle()
+	if err := bn.AddLanguage(language.Arabic, map[string]string{"c": "سحابة"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetUserBundle(bn); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.AddCommand(&Command{Name: "cloud", NameKey: "c", Description: "عمليات",
+		Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	var r bytes.Buffer
+	pa.printCommandTree(&r)
+	if !strings.ContainsAny(r.String(), "⁨⁧") {
+		t.Errorf("RTL command tree must be bidi-isolated, got %q", r.String())
+	}
+}
+
+// TestInteractionMatrixCommandTreeWidth locks that the command tree truncates overview
+// descriptions to fit HelpConfig.MaxWidth (previously a dead, never-read field): a
+// narrower MaxWidth truncates more, and MaxWidth<=0 means unlimited (full text).
+func TestInteractionMatrixCommandTreeWidth(t *testing.T) {
+	render := func(maxWidth int) string {
+		p := NewParser()
+		long := "Reverse the membership and user-creation actions recorded in a log file, then some"
+		if err := p.AddCommand(&Command{Name: "undo", Description: long,
+			Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+			t.Fatal(err)
+		}
+		cfg := DefaultHelpConfig
+		cfg.MaxWidth = maxWidth
+		p.SetHelpConfig(cfg)
+		var b bytes.Buffer
+		p.printCommandTree(&b)
+		return b.String()
+	}
+	wide := render(80)
+	narrow := render(40)
+	unlimited := render(0)
+
+	if !strings.Contains(wide, "...") {
+		t.Errorf("MaxWidth=80 should truncate a very long description, got %q", wide)
+	}
+	if len(narrow) >= len(wide) {
+		t.Errorf("MaxWidth=40 should truncate more than MaxWidth=80 (narrow=%d wide=%d)", len(narrow), len(wide))
+	}
+	if strings.Contains(unlimited, "...") {
+		t.Errorf("MaxWidth=0 should not truncate (unlimited), got %q", unlimited)
+	}
+}
