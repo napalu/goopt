@@ -139,15 +139,21 @@ const (
 
 // HelpConfig allows customization of help output (applies to "raw" --help outpout)
 type HelpConfig struct {
-	Style            HelpStyle
-	ShowDefaults     bool
-	ShowShortFlags   bool
-	ShowRequired     bool
-	ShowDescription  bool
-	MaxGlobals       int
-	MaxWidth         int
-	GroupSharedFlags bool
-	CompactThreshold int // Number of flags before switching to compact mode
+	Style           HelpStyle
+	ShowDefaults    bool
+	ShowShortFlags  bool
+	ShowRequired    bool
+	ShowDescription bool
+	ShowTypes       bool // Show each flag's type, e.g. "(string)"
+	ShowValidators  bool // Show a flag's validator count, e.g. "[validators: 2]"
+	// LocaleAwareDefaults opts into locale-formatting numeric default values in help
+	// (e.g. "8080" -> "8,080"). Off by default: a shown default is the literal value
+	// the user would type, so a port stays "8080" rather than becoming misleading.
+	LocaleAwareDefaults bool
+	MaxGlobals          int
+	MaxWidth            int
+	GroupSharedFlags    bool
+	CompactThreshold    int // Number of flags before switching to compact mode
 }
 
 // DefaultHelpConfig provides sensible defaults
@@ -254,6 +260,7 @@ type Renderer interface {
 	FlagName(f *Argument) string
 	FlagDescription(f *Argument) string
 	FlagUsage(f *Argument) string
+	FlagUsageWithConfig(f *Argument, config HelpConfig) string
 	PositionalUsage(f *Argument, position int) string
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string

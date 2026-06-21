@@ -621,7 +621,10 @@ func (h *HelpParser) showDefault(writer io.Writer) error {
 	}
 }
 
-// showFlatStyle shows traditional flat help
+// showFlatStyle shows traditional flat help. It renders each flag through the SAME
+// shared renderer as p.PrintHelp (DefaultRenderer.FlagUsageWithConfig) so the two
+// entry points cannot drift — the runtime --help options are folded into a HelpConfig
+// (effectiveFlatConfig) and passed in, rather than re-implementing the flag line.
 func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	h.showVersionHeader(writer)
 
@@ -631,14 +634,12 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	// Show positional args if any
 	h.mainParser.PrintPositionalArgs(writer)
 
-	// Show flags with options applied
-	flags := h.collectFlags("")
-	filtered := h.filterFlags(flags)
-
-	if len(filtered) > 0 {
-		for _, flag := range filtered {
-			// Format flag similar to renderer but with runtime options
-			h.printFlatStyleFlag(writer, flag)
+	// Show flags via the shared renderer, honoring runtime --help options.
+	flags := h.filterFlags(h.collectFlags(""))
+	if len(flags) > 0 {
+		cfg := h.effectiveFlatConfig()
+		for _, flag := range flags {
+			fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 		}
 	}
 
@@ -649,6 +650,30 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	}
 
 	return nil
+}
+
+// effectiveFlatConfig folds the runtime --help options onto the parser's HelpConfig
+// so the shared renderer reflects them. Runtime flags are applied as DELTAS on top of
+// the configured base (which carries ShowRequired etc.), keeping --help aligned with
+// p.PrintHelp by construction while still honoring --no-desc / --show-types / etc.
+func (h *HelpParser) effectiveFlatConfig() HelpConfig {
+	cfg := h.config
+	if h.options.NoDescriptions {
+		cfg.ShowDescription = false
+	}
+	if h.options.NoShort {
+		cfg.ShowShortFlags = false
+	}
+	if h.options.ShowDefaults {
+		cfg.ShowDefaults = true
+	}
+	if h.options.ShowTypes {
+		cfg.ShowTypes = true
+	}
+	if h.options.ShowValidators {
+		cfg.ShowValidators = true
+	}
+	return cfg
 }
 
 // showGroupedStyle shows help with flags grouped by command
@@ -1192,52 +1217,4 @@ func (h *HelpParser) showHelpForHelp(writer io.Writer) error {
 	fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipStyleAutoKey))
 
 	return nil
-}
-
-// printFlatStyleFlag prints a flag in flat style format with runtime options
-func (h *HelpParser) printFlatStyleFlag(writer io.Writer, arg *Argument) {
-	var usage string
-
-	// Use renderer for name to ensure proper translation
-	usage = "--" + h.mainParser.renderer.FlagName(arg)
-
-	// Add short flag if enabled
-	if h.options.ShowShortFlags && arg.Short != "" {
-		usage += " " + h.mainParser.layeredProvider.GetMessage(messages.MsgOrKey) + " -" + arg.Short
-	}
-
-	// Show description if enabled
-	if h.options.ShowDescriptions {
-		description := h.mainParser.renderer.FlagDescription(arg)
-		if description != "" {
-			usage += " \"" + description + "\""
-		}
-	}
-
-	// Show type if enabled (not in default renderer, but requested by runtime options)
-	if h.options.ShowTypes {
-		// Convert TypeOf to lowercase string representation
-		typeStr := strings.ToLower(arg.TypeOf.String())
-		usage += fmt.Sprintf(" (%s)", typeStr)
-	}
-
-	// Show default value if enabled
-	if h.options.ShowDefaults && arg.DefaultValue != "" {
-		// Always use round brackets for consistency
-		usage += fmt.Sprintf(" (%s: %s)", h.mainParser.layeredProvider.GetMessage(messages.MsgDefaultsToKey), arg.DefaultValue)
-	} else if arg.DefaultValue != "" && h.options.ShowDescriptions {
-		// Show default value in standard format when descriptions are on (matching renderer behavior)
-		usage += fmt.Sprintf(" (%s: %s)", h.mainParser.layeredProvider.GetMessage(messages.MsgDefaultsToKey), arg.DefaultValue)
-	}
-
-	// Show required/optional status
-	requiredOrOptional := h.mainParser.layeredProvider.GetMessage(messages.MsgOptionalKey)
-	if arg.Required {
-		requiredOrOptional = h.mainParser.layeredProvider.GetMessage(messages.MsgRequiredKey)
-	} else if arg.RequiredIf != nil {
-		requiredOrOptional = h.mainParser.layeredProvider.GetMessage(messages.MsgConditionalKey)
-	}
-	usage += " (" + requiredOrOptional + ")"
-
-	fmt.Fprintf(writer, " %s\n", usage)
 }

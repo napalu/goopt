@@ -1803,3 +1803,59 @@ func TestInteractionMatrixSuggestionDisplay(t *testing.T) {
 		}
 	}
 }
+
+// TestInteractionMatrixHelpStyleDualPath locks the help-style seam: p.PrintHelp
+// (programmatic) and the --help runtime path must render identically for every style,
+// since they share renderers. Flat used to diverge — its own printFlatStyleFlag
+// ignored ShowRequired and bypassed the bidi work; it now delegates to the shared
+// FlagUsageWithConfig like grouped/compact/hierarchical already did.
+func TestInteractionMatrixHelpStyleDualPath(t *testing.T) {
+	styles := []struct {
+		name string
+		st   HelpStyle
+	}{
+		{"flat", HelpStyleFlat}, {"grouped", HelpStyleGrouped},
+		{"compact", HelpStyleCompact}, {"hierarchical", HelpStyleHierarchical},
+	}
+	for _, s := range styles {
+		for _, showReq := range []bool{false, true} {
+			p := NewParser()
+			mustAddFlag(t, p, "verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone), WithDescription("verbose output")))
+			mustAddFlag(t, p, "output", NewArg(WithShortFlag("o"), WithDescription("output file")))
+			if err := p.AddCommand(&Command{Name: "build", Description: "build the project",
+				Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+				t.Fatal(err)
+			}
+			p.SetHelpConfig(HelpConfig{Style: s.st, ShowDescription: true, ShowShortFlags: true, ShowRequired: showReq})
+
+			var a, b bytes.Buffer
+			p.PrintHelp(&a)
+			hp := NewHelpParser(p, p.helpConfig)
+			_ = hp.showDefault(&b)
+			if a.String() != b.String() {
+				t.Errorf("%s (ShowRequired=%v): PrintHelp vs --help diverge:\n--PrintHelp--\n%q\n--help--\n%q",
+					s.name, showReq, a.String(), b.String())
+			}
+		}
+	}
+}
+
+// TestInteractionMatrixDefaultValueLiteral locks that a shown default is the literal
+// value by default (a port stays "8080", not "8,080") and locale formatting is opt-in.
+func TestInteractionMatrixDefaultValueLiteral(t *testing.T) {
+	render := func(localeAware bool) string {
+		p := NewParser()
+		mustAddFlag(t, p, "port", NewArg(WithShortFlag("p"), WithType(types.Single),
+			WithDefaultValue("8080"), WithDescription("server port")))
+		p.SetHelpConfig(HelpConfig{Style: HelpStyleFlat, ShowDescription: true, ShowDefaults: true, LocaleAwareDefaults: localeAware})
+		var b bytes.Buffer
+		p.PrintHelp(&b)
+		return b.String()
+	}
+	if out := render(false); !strings.Contains(out, "8080") || strings.Contains(out, "8,080") {
+		t.Errorf("default (opt-out): want literal 8080, got %q", out)
+	}
+	if out := render(true); !strings.Contains(out, "8,080") {
+		t.Errorf("LocaleAwareDefaults: want 8,080, got %q", out)
+	}
+}

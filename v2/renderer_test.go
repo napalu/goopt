@@ -218,7 +218,8 @@ func TestLocaleFormattedDefaults(t *testing.T) {
 			p := NewParser()
 			p.SetLanguage(tt.lang)
 			p.SetHelpConfig(HelpConfig{
-				ShowDefaults: true,
+				ShowDefaults:        true,
+				LocaleAwareDefaults: true, // opt into locale-formatting of numeric defaults
 			})
 			err := p.SetUserBundle(bundle)
 			assert.NoError(t, err)
@@ -264,8 +265,9 @@ func TestDefaultValueFormattingInHelp(t *testing.T) {
 	assert.NoError(t, err)
 	parser.SetLanguage(language.French)
 	parser.SetHelpConfig(HelpConfig{
-		ShowDefaults:    true,
-		ShowDescription: true,
+		ShowDefaults:        true,
+		ShowDescription:     true,
+		LocaleAwareDefaults: true, // opt into locale-formatting of numeric defaults
 	})
 
 	// Capture help output

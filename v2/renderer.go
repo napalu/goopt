@@ -69,12 +69,21 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 	return r.parser.layeredProvider.GetMessage(c.DescriptionKey)
 }
 
-// FlagUsage generates a usage string for a given command-line argument.
-// The usage string includes the flag name, short name (if available), description,
-// default value (if any), and whether the flag is required, optional, or conditional.
-// This method respects the HelpConfig settings and automatically handles RTL languages.
+// FlagUsage generates a usage string for a given command-line argument using the
+// parser's current HelpConfig. The usage string includes the flag name, short name
+// (if available), description, default value (if any), and whether the flag is
+// required, optional, or conditional. This method respects the HelpConfig settings
+// and automatically handles RTL languages.
 func (r *DefaultRenderer) FlagUsage(f *Argument) string {
-	config := r.parser.GetHelpConfig()
+	return r.FlagUsageWithConfig(f, r.parser.GetHelpConfig())
+}
+
+// FlagUsageWithConfig renders a flag line under an explicit HelpConfig. It is the
+// single flag-line renderer: PrintHelp/PrintUsage pass the parser config, and the
+// runtime help system (--help) passes a config derived from its runtime options.
+// Keeping both entry points here is what stops the flat --help path from drifting
+// back into a hand-rolled renderer that ignored ShowRequired and the bidi handling.
+func (r *DefaultRenderer) FlagUsageWithConfig(f *Argument, config HelpConfig) string {
 	isRTLLocale := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (potentially translated)
@@ -115,12 +124,25 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 		}
 	}
 
+	if config.ShowTypes {
+		fields = append(fields, "("+strings.ToLower(f.TypeOf.String())+")")
+	}
+
 	if f.DefaultValue != "" && config.ShowDefaults {
-		// Format numeric default values according to locale
-		formattedDefault := r.formatDefaultValue(f)
+		// Show the literal default the user would type; locale-format only on opt-in
+		// (a port "8080" must not become "8,080").
+		formattedDefault := f.DefaultValue
+		if config.LocaleAwareDefaults {
+			formattedDefault = r.formatDefaultValue(f)
+		}
 		fields = append(fields, fmt.Sprintf("(%s: %s)",
 			r.parser.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
 			formattedDefault))
+	}
+
+	if config.ShowValidators && len(f.Validators) > 0 {
+		fields = append(fields, fmt.Sprintf("[%s: %d]",
+			r.parser.layeredProvider.GetMessage(messages.MsgValidatorsKey), len(f.Validators)))
 	}
 
 	if config.ShowRequired {
