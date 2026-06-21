@@ -12,7 +12,6 @@ import (
 
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/internal/messages"
-	"github.com/napalu/goopt/v2/internal/util"
 )
 
 // HelpMode defines different help query modes
@@ -329,37 +328,18 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 		h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUnknownCommandKey, invalidCmd))
 
 	if len(suggestions) > 0 {
-		// Display each suggestion in the form that was closest to user input
-		displaySuggestions := make([]string, len(suggestions))
-		for i, suggestion := range suggestions {
-			// By default show canonical
-			displaySuggestions[i] = suggestion
-
-			// Check if we should show translated form
-			if h.mainParser.translationRegistry != nil {
-				// Get the command to check translation
-				var cmd *Command
-				if c, found := h.mainParser.registeredCommands.Get(suggestion); found {
-					cmd = c
-				}
-
-				if cmd != nil && cmd.NameKey != "" {
-					if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(suggestion, h.mainParser.GetLanguage()); found {
-						// Compare distances to determine which form to show
-						canonicalDist := util.DamerauLevenshteinDistance(invalidCmd, suggestion)
-						translatedDist := util.DamerauLevenshteinDistance(invalidCmd, translated)
-
-						// Show the form that's closer to what user typed
-						if translatedDist < canonicalDist {
-							displaySuggestions[i] = translated
-						} else if translatedDist == canonicalDist && translated != suggestion {
-							// If equal distance and different words, show both forms
-							displaySuggestions[i] = fmt.Sprintf("%s / %s", suggestion, translated)
-						}
-					}
-				}
+		// Render each suggestion in the form closest to user input (shared with the
+		// parse path so the two never diverge).
+		displaySuggestions := h.mainParser.localizeSuggestions(invalidCmd, suggestions, func(key string) (string, bool) {
+			p := h.mainParser
+			if p.translationRegistry == nil {
+				return "", false
 			}
-		}
+			if cmd, found := p.registeredCommands.Get(key); found && cmd.NameKey != "" {
+				return p.translationRegistry.GetCommandTranslation(key, p.GetLanguage())
+			}
+			return "", false
+		})
 
 		// Use the parser's suggestions formatter if available
 		var formatted string

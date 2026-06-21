@@ -1770,3 +1770,36 @@ func TestInteractionMatrixFlagSuggestionCore(t *testing.T) {
 		t.Errorf("flag threshold=1 must suppress a distance-2 typo, got %v", got)
 	}
 }
+
+// TestInteractionMatrixSuggestionDisplay locks the shared did-you-mean display core
+// (localizeSuggestions), onto which the flag, command and subcommand paths now all
+// delegate: translated form when nearer, "canonical / translated" on a tie, canonical
+// otherwise (and untouched when there is no translation).
+func TestInteractionMatrixSuggestionDisplay(t *testing.T) {
+	p := NewParser()
+	tr := func(canon, trans string) func(string) (string, bool) {
+		return func(key string) (string, bool) {
+			if key == canon {
+				return trans, true
+			}
+			return "", false
+		}
+	}
+	cases := []struct {
+		name  string
+		input string
+		keys  []string
+		fn    func(string) (string, bool)
+		want  string
+	}{
+		{"translated nearer", "ausfuhrlich", []string{"verbose"}, tr("verbose", "ausfuehrlich"), "ausfuehrlich"},
+		{"canonical nearer", "verbos", []string{"verbose"}, tr("verbose", "ausfuehrlich"), "verbose"},
+		{"equidistant shows both", "abx", []string{"abc"}, tr("abc", "abd"), "abc / abd"},
+		{"no translation", "verbos", []string{"verbose"}, func(string) (string, bool) { return "", false }, "verbose"},
+	}
+	for _, c := range cases {
+		if got := p.localizeSuggestions(c.input, c.keys, c.fn); got[0] != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got[0], c.want)
+		}
+	}
+}

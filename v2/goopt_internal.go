@@ -676,31 +676,16 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 						// Very likely a typo - generate error with suggestions
 						p.addError(errs.ErrCommandNotFound.WithArgs(currentArg))
 
-						// Display each suggestion in the form that was closest to user input
-						displaySuggestions := make([]string, len(suggestions))
-						for i, suggestion := range suggestions {
-							// By default show canonical
-							displaySuggestions[i] = suggestion
-
-							// Check if we should show translated form
-							if p.translationRegistry != nil {
-								if cmd, found := p.registeredCommands.Get(suggestion); found && cmd.NameKey != "" {
-									if translated, found := p.translationRegistry.GetCommandTranslation(suggestion, p.GetLanguage()); found {
-										// Compare distances to determine which form to show
-										canonicalDist := util.DamerauLevenshteinDistance(currentArg, suggestion)
-										translatedDist := util.DamerauLevenshteinDistance(currentArg, translated)
-
-										// Show the form that's closer to what user typed
-										if translatedDist < canonicalDist {
-											displaySuggestions[i] = translated
-										} else if translatedDist == canonicalDist && translated != suggestion {
-											// If equal distance and different words, show both forms
-											displaySuggestions[i] = fmt.Sprintf("%s / %s", suggestion, translated)
-										}
-									}
-								}
+						// Render each suggestion in the form closest to user input.
+						displaySuggestions := p.localizeSuggestions(currentArg, suggestions, func(key string) (string, bool) {
+							if p.translationRegistry == nil {
+								return "", false
 							}
-						}
+							if cmd, found := p.registeredCommands.Get(key); found && cmd.NameKey != "" {
+								return p.translationRegistry.GetCommandTranslation(key, p.GetLanguage())
+							}
+							return "", false
+						})
 
 						// Format suggestions
 						var formatted string
@@ -965,49 +950,58 @@ func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input 
 	return p.rankSuggestions(input, items, p.cmdSuggestionThreshold, 3)
 }
 
+// localizeSuggestions renders ranked suggestion keys in the form closest to what the
+// user typed: the translated name when it is a nearer match, "canonical / translated"
+// on a tie, otherwise the canonical key. translate resolves a key's translated form
+// (and whether one exists) — the only per-entity difference (command name vs full
+// path vs flag API) lives in that closure. This is the display counterpart to
+// rankSuggestions: the single place the canonical/translated/both choice lives, so it
+// cannot drift between the flag, command and subcommand "did you mean" paths.
+func (p *Parser) localizeSuggestions(input string, keys []string, translate func(key string) (string, bool)) []string {
+	out := make([]string, len(keys))
+	for i, key := range keys {
+		out[i] = key
+		translated, ok := translate(key)
+		if !ok {
+			continue
+		}
+		canonicalDist := util.DamerauLevenshteinDistance(input, key)
+		translatedDist := util.DamerauLevenshteinDistance(input, translated)
+		if translatedDist < canonicalDist {
+			out[i] = translated
+		} else if translatedDist == canonicalDist && translated != key {
+			out[i] = key + " / " + translated
+		}
+	}
+	return out
+}
+
 // suggestSubcommands returns display-ready "did you mean" suggestions for an unknown
 // subcommand `input` under `parentPath`. It is the single source of truth shared by the
-// parse path and the help system: matching is i18n-aware (a typo of a localized
-// subcommand name is found via findSimilarSubcommandsWithContext), and each suggestion
-// is rendered in the form closest to what the user actually typed — the translated name,
-// the canonical name, or "canonical / translated" when both are equidistant. Returns an
-// empty slice when nothing is similar enough. Keeping both call sites on this helper is
-// what prevents the help system from drifting back to canonical-only suggestions.
+// parse path and the help system: matching is i18n-aware (findSimilarSubcommandsWithContext)
+// and display is localized (localizeSuggestions). Returns an empty slice when nothing is
+// similar enough. Keeping both call sites on this helper is what prevents the help system
+// from drifting back to canonical-only suggestions.
 func (p *Parser) suggestSubcommands(subcommands []Command, input, parentPath string) []string {
 	suggestions, _ := p.findSimilarSubcommandsWithContext(subcommands, input, parentPath)
 	if len(suggestions) == 0 {
 		return nil
 	}
-
-	display := make([]string, len(suggestions))
-	for i, suggestion := range suggestions {
-		display[i] = suggestion
-
-		// Find the matched subcommand to check for a translated name
-		for _, sub := range subcommands {
-			if sub.Name != suggestion || sub.NameKey == "" || p.translationRegistry == nil {
-				continue
-			}
-			fullPath := suggestion
-			if parentPath != "" {
-				fullPath = parentPath + " " + suggestion
-			}
-			translated, found := p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage())
-			if !found {
-				break
-			}
-			// Show the form that's closer to what the user typed
-			canonicalDist := util.DamerauLevenshteinDistance(input, suggestion)
-			translatedDist := util.DamerauLevenshteinDistance(input, translated)
-			if translatedDist < canonicalDist {
-				display[i] = translated
-			} else if translatedDist == canonicalDist && translated != suggestion {
-				display[i] = suggestion + " / " + translated
-			}
-			break
+	return p.localizeSuggestions(input, suggestions, func(key string) (string, bool) {
+		if p.translationRegistry == nil {
+			return "", false
 		}
-	}
-	return display
+		for _, sub := range subcommands {
+			if sub.Name == key && sub.NameKey != "" {
+				fullPath := key
+				if parentPath != "" {
+					fullPath = parentPath + " " + key
+				}
+				return p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage())
+			}
+		}
+		return "", false
+	})
 }
 
 // findSimilarFlagsWithContext finds flags similar to the input and detects if input is likely translated
@@ -1066,30 +1060,18 @@ func (p *Parser) generateFlagError(flagName string, commandPath string) {
 		// Format suggestions with proper prefixes
 		formattedSuggestions := make([]string, len(suggestions))
 
-		// Remove prefix from input for comparison
+		// Decide each display form (translated/canonical/both) closest to user input,
+		// then apply flag prefixes below.
 		cleanInput := strings.TrimLeftFunc(flagName, p.prefixFunc)
-
-		for i, s := range suggestions {
-			// Decide whether to show canonical or translated based on distances
-			displayName := s
-
-			if p.translationRegistry != nil {
-				// Check if there's a translation
-				if translated, found := p.translationRegistry.GetFlagTranslation(s, p.GetLanguage()); found {
-					// Compare distances to determine which form to show
-					canonicalDist := util.DamerauLevenshteinDistance(cleanInput, s)
-					translatedDist := util.DamerauLevenshteinDistance(cleanInput, translated)
-
-					// Show the form that's closer to what user typed
-					if translatedDist < canonicalDist {
-						displayName = translated
-					} else if translatedDist == canonicalDist && translated != s {
-						// If equal distance and different words, show both forms
-						displayName = s + " / " + translated
-					}
-				}
+		displayNames := p.localizeSuggestions(cleanInput, suggestions, func(key string) (string, bool) {
+			if p.translationRegistry == nil {
+				return "", false
 			}
+			return p.translationRegistry.GetFlagTranslation(key, p.GetLanguage())
+		})
 
+		for i, displayName := range displayNames {
+			s := suggestions[i]
 			if len(displayName) == 1 || (strings.Contains(displayName, " / ") && len(s) == 1) {
 				// Short flag
 				formattedSuggestions[i] = string(p.prefixes[0]) + displayName
