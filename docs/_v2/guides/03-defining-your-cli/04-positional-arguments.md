@@ -110,6 +110,8 @@ Understanding how these interact is key:
     *   The value from the explicit flag (`value`) will be bound to the struct field.
     *   The parser will *not* attempt to bind an argument from the command line's Nth positional slot *to that specific field*. That positional argument might become an unbound positional or match a *different* field tagged with `pos:N+M`.
 
+> **End-of-options marker (`--`):** A bare `--` stops flag parsing — every token after it is treated as a positional, even if it looks like a flag. This is the POSIX convention for passing flag-looking values (e.g. a filename `-weird`): `myapp -- -weird` binds `-weird` as a positional rather than failing on an unknown flag. Flags *before* the `--` parse normally. (For passing a whole trailing command through to another tool, see greedy commands via `WithGreedy`.)
+
 **Example:**
 
 Consider this configuration:

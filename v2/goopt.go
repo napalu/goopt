@@ -643,6 +643,14 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 
 	for state.Advance() {
 		cur := state.CurrentArg()
+		if cur == "--" {
+			// End-of-flags marker (POSIX convention): stop flag/command parsing here;
+			// every remaining token is a positional, even if it looks like a flag. Reuses
+			// the greedy-passthrough machinery (the marker itself is dropped in
+			// setPositionalArguments).
+			p.greedyAfterPos = state.Pos() + 1
+			break
+		}
 		if p.isFlag(cur) {
 			if p.isGlobalFlag(cur) {
 				p.evalFlagWithPath(state, "")

@@ -1364,3 +1364,179 @@ func TestInteractionMatrixPositionalEnv(t *testing.T) {
 		}
 	})
 }
+
+// TestInteractionMatrixInputSyntax charts the input-syntax seam: goopt has three parse
+// paths — parseFlag (`--f v`), processFlagWithValue (`--f=v`), and parsePosixFlag (`-f`,
+// clusters) — and "supply value V to flag F" must bind identically through all of them.
+// Divergence between the paths is the session's signature bug shape, one level down.
+func TestInteractionMatrixInputSyntax(t *testing.T) {
+	scopes := []struct {
+		name   string
+		path   []string
+		invoke []string
+	}{
+		{"global", nil, nil},
+		{"command", []string{"cmd"}, []string{"cmd"}},
+	}
+	// the four spellings supported in default (non-posix) mode
+	forms := func(long, short, v string) []struct {
+		label string
+		toks  []string
+	} {
+		return []struct {
+			label string
+			toks  []string
+		}{
+			{"--long value", []string{"--" + long, v}},
+			{"--long=value", []string{"--" + long + "=" + v}},
+			{"-short value", []string{"-" + short, v}},
+			{"-short=value", []string{"-" + short + "=" + v}},
+		}
+	}
+
+	t.Run("single binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("color", "c", "red") {
+				var got string
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "color", NewArg(WithType(types.Single), WithShortFlag("c")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) {
+					t.Errorf("[%s %s] parse failed: %v", sc.name, f.label, p.GetErrors())
+					continue
+				}
+				if got != "red" {
+					t.Errorf("[%s %s] color=%q, want red", sc.name, f.label, got)
+				}
+			}
+		}
+	})
+
+	t.Run("chained binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("tag", "t", "a,b") {
+				var got []string
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "tag", NewArg(WithType(types.Chained), WithShortFlag("t")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) || !slices.Equal(got, []string{"a", "b"}) {
+					t.Errorf("[%s %s] tag=%v errs=%v", sc.name, f.label, got, p.GetErrors())
+				}
+			}
+		}
+	})
+
+	t.Run("typed int binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("port", "p", "8080") {
+				var got int
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "port", NewArg(WithShortFlag("p")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) || got != 8080 {
+					t.Errorf("[%s %s] port=%d errs=%v", sc.name, f.label, got, p.GetErrors())
+				}
+			}
+		}
+	})
+
+	t.Run("posix clustering binds the same value", func(t *testing.T) {
+		var got string
+		p := NewParser()
+		p.SetPosix(true)
+		if err := p.BindFlag(&got, "color", NewArg(WithType(types.Single), WithShortFlag("c"))); err != nil {
+			t.Fatal(err)
+		}
+		if !p.Parse([]string{os.Args[0], "-cred"}) || got != "red" {
+			t.Errorf("posix -cred -> %q; errs=%v", got, p.GetErrors())
+		}
+	})
+
+	t.Run("negative number is a value, not a flag", func(t *testing.T) {
+		for _, toks := range [][]string{{"--num", "-5"}, {"-n", "-5"}, {"--num=-5"}} {
+			var n int
+			p := NewParser()
+			if err := p.BindFlag(&n, "num", NewArg(WithShortFlag("n"))); err != nil {
+				t.Fatal(err)
+			}
+			if !p.Parse(matrixArgs(nil, toks)) || n != -5 {
+				t.Errorf("%v -> n=%d (want -5); errs=%v", toks, n, p.GetErrors())
+			}
+		}
+	})
+
+	t.Run("end-of-options marker -- sends the rest to positionals", func(t *testing.T) {
+		// `--` stops flag parsing: everything after is positional, even flag-looking
+		// tokens. Flags BEFORE it still parse. The marker itself is consumed.
+		for _, tc := range []struct {
+			args    []string
+			verbose bool
+			pos     []string
+		}{
+			{[]string{"--", "-x"}, false, []string{"-x"}},
+			{[]string{"--verbose", "--", "-x", "-y"}, true, []string{"-x", "-y"}},
+			{[]string{"--", "--weirdfile"}, false, []string{"--weirdfile"}},
+			{[]string{"--", "--"}, false, []string{"--"}}, // 2nd -- is a literal positional
+		} {
+			var verbose bool
+			p := NewParser()
+			if err := p.BindFlag(&verbose, "verbose", newStandalone(WithShortFlag("v"))); err != nil {
+				t.Fatal(err)
+			}
+			mustAddFlag(t, p, "p0", NewArg(WithType(types.Single), WithPosition(0)))
+			mustAddFlag(t, p, "p1", NewArg(WithType(types.Single), WithPosition(1)))
+			if !p.Parse(matrixArgs(nil, tc.args)) {
+				t.Errorf("%v: parse failed: %v", tc.args, p.GetErrors())
+				continue
+			}
+			if verbose != tc.verbose {
+				t.Errorf("%v: verbose=%v, want %v", tc.args, verbose, tc.verbose)
+			}
+			var pos []string
+			for _, pa := range p.GetPositionalArgs() {
+				pos = append(pos, pa.Value)
+			}
+			if !slices.Equal(pos, tc.pos) {
+				t.Errorf("%v: positionals=%v, want %v", tc.args, pos, tc.pos)
+			}
+			if p.HasFlag("x") || p.HasFlag("weirdfile") {
+				t.Errorf("%v: a token after -- must not be parsed as a flag", tc.args)
+			}
+		}
+	})
+
+	t.Run("greedy command passes trailing args through as positionals", func(t *testing.T) {
+		p := NewParser()
+		mustAddFlag(t, p, "verbose", newStandalone(WithShortFlag("v")))
+		if err := p.AddCommand(NewCommand(WithName("run"), WithGreedy(true))); err != nil {
+			t.Fatal(err)
+		}
+		if !p.Parse([]string{os.Args[0], "run", "--unknown", "x", "-z"}) {
+			t.Fatalf("greedy parse must not error on passthrough flag-looking tokens: %v", p.GetErrors())
+		}
+		var pos []string
+		for _, pa := range p.GetPositionalArgs() {
+			pos = append(pos, pa.Value)
+		}
+		for _, want := range []string{"--unknown", "x", "-z"} {
+			if !slices.Contains(pos, want) {
+				t.Errorf("greedy should capture %q as a passthrough positional; got %v", want, pos)
+			}
+		}
+		if p.HasFlag("unknown") {
+			t.Errorf("a flag-looking token after a greedy command must NOT be parsed as a flag")
+		}
+	})
+}
