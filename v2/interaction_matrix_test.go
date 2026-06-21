@@ -1,7 +1,9 @@
 package goopt
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1539,4 +1541,197 @@ func TestInteractionMatrixInputSyntax(t *testing.T) {
 			t.Errorf("a flag-looking token after a greedy command must NOT be parsed as a flag")
 		}
 	})
+}
+
+// TestInteractionMatrixI18nLanguageResolution locks the help × i18n seam where a
+// single-language user bundle used to hijack every other language: requesting a
+// system-default language (en/fr) that the user bundle lacks must resolve to THAT
+// language (system messages + canonical names), not fall back to the bundle's only
+// language. Regression for "German-only bundle renders English help in German".
+func TestInteractionMatrixI18nLanguageResolution(t *testing.T) {
+	mk := func() *Parser {
+		p := NewParser()
+		b := i18n.NewEmptyBundle()
+		if err := b.AddLanguage(language.German, map[string]string{"flag.v": "ausführlich"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetUserBundle(b); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "verbose", newStandalone(WithShortFlag("v"), WithNameKey("flag.v")))
+		return p
+	}
+	for _, tc := range []struct {
+		req  language.Tag
+		want language.Tag
+	}{
+		{language.English, language.English},        // system default, not in user bundle
+		{language.French, language.French},          // system default, not in user bundle
+		{language.German, language.German},          // the user bundle's own language still works
+		{language.BritishEnglish, language.English}, // en-GB genuinely relates to system en (not de)
+	} {
+		p := mk()
+		_ = p.SetLanguage(tc.req)
+		if got := p.GetLanguage(); got.String() != tc.want.String() {
+			t.Errorf("SetLanguage(%s) with a German-only user bundle resolved to %s, want %s (single-language bundle must not hijack)",
+				tc.req, got, tc.want)
+		}
+	}
+}
+
+// TestInteractionMatrixDidYouMeanI18n locks the did-you-mean × i18n × (parse vs help)
+// seam. A typo of a *localized* subcommand name must produce the same localized
+// "did you mean" suggestion whether the error surfaces during parsing or through the
+// help system. Regression: handleInvalidSubcommand used a canonical-only matcher, so a
+// German user who typo'd a German subcommand name got a suggestion from the parser but
+// NONE from --help. Both paths now share suggestSubcommands.
+func TestInteractionMatrixDidYouMeanI18n(t *testing.T) {
+	build := func(t *testing.T, lang language.Tag) (*Parser, *bytes.Buffer) {
+		p, _ := NewParserWith(WithAutoHelp(true))
+		p.helpEndFunc = func() error { return nil }
+		var stderr bytes.Buffer
+		p.SetStdout(&bytes.Buffer{})
+		p.SetStderr(&stderr)
+		b := i18n.NewEmptyBundle()
+		if err := b.AddLanguage(language.German, map[string]string{
+			"cmd.create": "erstellen", "cmd.user": "benutzer",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetUserBundle(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.AddCommand(&Command{Name: "create", NameKey: "cmd.create",
+			Callback: func(*Parser, *Command) error { return nil },
+			Subcommands: []Command{{Name: "user", NameKey: "cmd.user",
+				Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+			t.Fatal(err)
+		}
+		if lang != language.English {
+			if err := p.SetLanguage(lang); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return p, &stderr
+	}
+
+	cases := []struct {
+		name     string
+		lang     language.Tag
+		typo     string // typo of the subcommand under "create"
+		wantSugg string // form the suggestion must contain
+	}{
+		{"english canonical typo", language.English, "usr", "user"},
+		{"german translated typo", language.German, "benutze", "benutzer"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Parse path
+			pParse, _ := build(t, c.lang)
+			pParse.Parse([]string{"create", c.typo})
+			parseErrs := fmt.Sprintf("%v", pParse.GetErrors())
+			if !strings.Contains(parseErrs, c.wantSugg) {
+				t.Errorf("parse path: errors %q must suggest %q", parseErrs, c.wantSugg)
+			}
+
+			// Help path (same input + --help) must agree
+			pHelp, _ := build(t, c.lang)
+			pHelp.Parse([]string{"create", c.typo, "--help"})
+			helpErrs := fmt.Sprintf("%v", pHelp.GetErrors())
+			if !strings.Contains(helpErrs, c.wantSugg) {
+				t.Errorf("help path: errors %q must suggest %q (parse path agreed)", helpErrs, c.wantSugg)
+			}
+		})
+	}
+}
+
+// TestInteractionMatrixRTLConsistency locks the help × RTL convergence. Three
+// defects used to live here: (1) flag/command/positional each decided direction
+// with a DIFFERENT trigger, so the same content could point opposite ways on one
+// screen; (2) the help renderer never used the FSI/RLI bidi primitive the error
+// path did, so LTR runs scrambled; (3) plain LTR output risked gaining stray
+// controls. All three renderers now share one rtlInvolved trigger + bidiAssemble.
+func TestInteractionMatrixRTLConsistency(t *testing.T) {
+	const FSI, RLI = "⁨", "⁧" // U+2068 First Strong Isolate, U+2067 RTL Isolate
+	arDesc := "وصف عربي"
+
+	// (1) Plain LTR English stays byte-identical and free of bidi controls.
+	pEN := NewParser()
+	pEN.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	ltr := pEN.renderer.FlagUsage(&Argument{Description: "enable verbose output"})
+	if strings.ContainsAny(ltr, FSI+RLI) {
+		t.Errorf("plain LTR flag must carry no bidi controls, got %q", ltr)
+	}
+	if want := `-- "enable verbose output" (optional)`; ltr != want {
+		t.Errorf("plain LTR output drifted:\n got %q\nwant %q", ltr, want)
+	}
+
+	// (2) LTR locale + RTL content: flag, positional AND command must ALL take
+	// the bidi path (the original drift was only the command flipping).
+	p := NewParser()
+	p.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	mixed := map[string]string{
+		"flag":       p.renderer.FlagUsage(&Argument{Description: arDesc}),
+		"positional": p.renderer.PositionalUsage(&Argument{Description: arDesc}, 0),
+		"command":    p.renderer.CommandUsage(&Command{Name: "build", Description: arDesc}),
+	}
+	for kind, got := range mixed {
+		if !strings.Contains(got, FSI) {
+			t.Errorf("%s with RTL content must isolate (consistent trigger), got %q", kind, got)
+		}
+	}
+
+	// (3) RTL locale: every element asserts an RTL base direction via RLI wrap.
+	pAR := NewParser()
+	b := i18n.NewEmptyBundle()
+	if err := b.AddLanguage(language.Arabic, map[string]string{"_": "_"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pAR.SetUserBundle(b); err != nil {
+		t.Fatal(err)
+	}
+	pAR.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	if err := pAR.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	rtl := map[string]string{
+		"flag":       pAR.renderer.FlagUsage(&Argument{Description: arDesc}),
+		"positional": pAR.renderer.PositionalUsage(&Argument{Description: arDesc}, 0),
+		"command":    pAR.renderer.CommandUsage(&Command{Name: "build", Description: arDesc}),
+	}
+	for kind, got := range rtl {
+		if !strings.HasPrefix(got, RLI) {
+			t.Errorf("%s in RTL locale must be RLI-wrapped for base direction, got %q", kind, got)
+		}
+	}
+}
+
+// TestInteractionMatrixSuggestionThreshold locks the did-you-mean × config seam:
+// WithSuggestionThreshold must affect the help system identically to the parser.
+// The help command matcher used to hardcode a distance of 2, ignoring the user's
+// setting (and 0=disabled), so suggestions drifted between parse and --help.
+func TestInteractionMatrixSuggestionThreshold(t *testing.T) {
+	mk := func(cmdThreshold int) (*Parser, *HelpParser) {
+		p, _ := NewParserWith(WithSuggestionThreshold(2, cmdThreshold))
+		if err := p.AddCommand(&Command{Name: "search",
+			Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+			t.Fatal(err)
+		}
+		return p, NewHelpParser(p, p.helpConfig)
+	}
+	// "srch" is Damerau-distance 2 from "search".
+	for _, threshold := range []int{0, 1, 2, 3} {
+		p, hp := mk(threshold)
+		parseSugg, _ := p.findSimilarRootCommandsWithContext("srch")
+		helpSugg, _ := hp.findSimilarCommandsWithContext("srch")
+		if len(parseSugg) != len(helpSugg) {
+			t.Errorf("threshold=%d: parse %v and help %v disagree (help must honor the configured threshold)",
+				threshold, parseSugg, helpSugg)
+		}
+		// threshold<2 must suppress a distance-2 match; >=2 must surface it.
+		wantSuggested := threshold >= 2
+		if got := len(helpSugg) > 0; got != wantSuggested {
+			t.Errorf("threshold=%d: help suggested=%v, want %v", threshold, got, wantSuggested)
+		}
+	}
 }

@@ -75,19 +75,26 @@ func (r *DefaultRenderer) CommandDescription(c *Command) string {
 // This method respects the HelpConfig settings and automatically handles RTL languages.
 func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	isRTLLocale := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (potentially translated)
 	flagName := r.FlagName(f)
+	description := ""
+	if config.ShowDescription {
+		description = r.FlagDescription(f)
+	}
 
-	// Build the flag representation
+	// One direction decision drives the whole line (separator, quoting, assembly).
+	rtl := r.rtlInvolved(isRTLLocale, flagName, description, f.DefaultValue)
+
+	// Build the flag representation. When RTL is involved use a neutral "/"
+	// separator rather than the translated "or" word (which would itself need
+	// isolating); plain LTR keeps "or" for backward compatibility.
 	var flagPart string
 	if f.Short != "" && config.ShowShortFlags {
-		if isRTL || r.containsRTLRunes(flagName) {
-			// In RTL languages, use slash separator
+		if rtl {
 			flagPart = fmt.Sprintf("--%s / -%s", flagName, f.Short)
 		} else {
-			// In LTR languages, use "or" separator for backward compatibility
 			orMsg := r.parser.layeredProvider.GetMessage(messages.MsgOrKey)
 			flagPart = fmt.Sprintf("--%s %s -%s", flagName, orMsg, f.Short)
 		}
@@ -95,28 +102,25 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 		flagPart = "--" + flagName
 	}
 
-	// Build the description part
-	var parts []string
+	// Build fields in LOGICAL order — assembly handles direction.
+	fields := []string{flagPart}
 
-	if config.ShowDescription {
-		description := r.FlagDescription(f)
-		if description != "" {
-			// Keep quotes for backward compatibility in LTR
-			if isRTL {
-				parts = append(parts, description)
-			} else {
-				parts = append(parts, "\""+description+"\"")
-			}
+	if description != "" {
+		// Quotes only on the plain LTR path; in bidi mode FSI isolation, not
+		// quoting, keeps the description from reordering its neighbours.
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
 
 	if f.DefaultValue != "" && config.ShowDefaults {
 		// Format numeric default values according to locale
 		formattedDefault := r.formatDefaultValue(f)
-		defaultMsg := fmt.Sprintf("(%s: %s)",
+		fields = append(fields, fmt.Sprintf("(%s: %s)",
 			r.parser.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
-			formattedDefault)
-		parts = append(parts, defaultMsg)
+			formattedDefault))
 	}
 
 	if config.ShowRequired {
@@ -126,23 +130,10 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 		} else if f.RequiredIf != nil {
 			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgConditionalKey)
 		}
-		parts = append(parts, "("+requiredOrOptional+")")
+		fields = append(fields, "("+requiredOrOptional+")")
 	}
 
-	// Format based on RTL/LTR
-	if isRTL {
-		// In RTL, description comes first, then the flag
-		if len(parts) > 0 {
-			return strings.Join(parts, " ") + " " + flagPart
-		}
-		return flagPart
-	} else {
-		// In LTR, flag comes first, then description
-		if len(parts) > 0 {
-			return flagPart + " " + strings.Join(parts, " ")
-		}
-		return flagPart
-	}
+	return r.bidiAssemble(fields, rtl, isRTLLocale)
 }
 
 // CommandUsage generates a usage string for a given command.
@@ -180,20 +171,22 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 		}
 	}
 
+	description := ""
 	if config.ShowDescription {
-		description := r.CommandDescription(c)
-		if description != "" {
-			if isRTL || r.containsRTLRunes(cmdName) || r.containsRTLRunes(description) {
-				// In RTL, description comes first
-				return description + " :" + usageLine
-			} else {
-				// In LTR, command comes first (keep original format with quotes)
-				return usageLine + " \"" + description + "\""
-			}
+		description = r.CommandDescription(c)
+	}
+	rtl := r.rtlInvolved(isRTL, cmdName, description)
+
+	fields := []string{usageLine}
+	if description != "" {
+		// Quotes on plain LTR; bidi mode relies on FSI isolation instead.
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
-
-	return usageLine
+	return r.bidiAssemble(fields, rtl, isRTL)
 }
 
 // PositionalUsage generates a usage string for a positional argument.
@@ -201,7 +194,7 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 // name "description" (required/optional)
 func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	isRTLLocale := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (positionals use flag storage internally)
 	flagName := r.FlagName(f)
@@ -214,18 +207,19 @@ func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 		flagName = "[" + flagName + "]"
 	}
 
-	// Build the description part
-	var parts []string
-
+	description := ""
 	if config.ShowDescription {
-		description := r.FlagDescription(f)
-		if description != "" {
-			// Keep quotes for backward compatibility in LTR
-			if isRTL {
-				parts = append(parts, description)
-			} else {
-				parts = append(parts, "\""+description+"\"")
-			}
+		description = r.FlagDescription(f)
+	}
+	rtl := r.rtlInvolved(isRTLLocale, flagName, description)
+
+	// Build fields in LOGICAL order — assembly handles direction.
+	fields := []string{flagName}
+	if description != "" {
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
 
@@ -234,23 +228,10 @@ func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 		if f.Required {
 			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgRequiredKey)
 		}
-		parts = append(parts, "("+requiredOrOptional+")")
+		fields = append(fields, "("+requiredOrOptional+")")
 	}
 
-	// Format based on RTL/LTR
-	if isRTL {
-		// In RTL, description comes first, then the name
-		if len(parts) > 0 {
-			return strings.Join(parts, " ") + " " + flagName
-		}
-		return flagName
-	} else {
-		// In LTR, name comes first, then description
-		if len(parts) > 0 {
-			return flagName + " " + strings.Join(parts, " ")
-		}
-		return flagName
-	}
+	return r.bidiAssemble(fields, rtl, isRTLLocale)
 }
 
 // formatDefaultValue formats a default value according to locale and type
@@ -274,6 +255,51 @@ func (r *DefaultRenderer) formatDefaultValue(f *Argument) string {
 	}
 	// Return as-is for non-numeric or other types
 	return f.DefaultValue
+}
+
+// rtlInvolved reports whether a help line must use the bidi-aware assembly path:
+// either the UI locale is RTL, or some piece of content carries RTL runes (e.g.
+// an Arabic description in an otherwise-English help screen). When it returns
+// false the line stays on the plain LTR path and is byte-identical to historical
+// output, so ordinary ASCII help never gains zero-width bidi controls.
+func (r *DefaultRenderer) rtlInvolved(isRTLLocale bool, texts ...string) bool {
+	if isRTLLocale {
+		return true
+	}
+	for _, t := range texts {
+		if r.containsRTLRunes(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// bidiAssemble joins help-line fields given in LOGICAL (reading) order. With no
+// RTL involved it is a plain space-join (the historical LTR output). Otherwise
+// every non-empty field is FSI-isolated — so an LTR run (a --flag, a path, a
+// number) cannot reorder an adjacent RTL run, or vice versa — and an RTL UI
+// locale wraps the whole line to assert a right-to-left base direction (help
+// lines start with a neutral "--", so first-strong detection would otherwise
+// frame the line LTR). This single assembly, shared by flags, commands and
+// positionals, replaces the per-element manual reordering that used to drift.
+func (r *DefaultRenderer) bidiAssemble(fields []string, needsBidi, baseRTL bool) string {
+	var nonEmpty []string
+	for _, f := range fields {
+		if f != "" {
+			nonEmpty = append(nonEmpty, f)
+		}
+	}
+	if !needsBidi {
+		return strings.Join(nonEmpty, " ")
+	}
+	for i, f := range nonEmpty {
+		nonEmpty[i] = i18n.Isolate(f)
+	}
+	line := strings.Join(nonEmpty, " ")
+	if baseRTL {
+		line = i18n.IsolateRTL(line)
+	}
+	return line
 }
 
 // containsRTLRunes checks if a string contains RTL characters

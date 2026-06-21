@@ -457,8 +457,11 @@ func TestCommandUsageRTL(t *testing.T) {
 		}
 
 		usage := p.renderer.CommandUsage(cmd)
-		// In RTL, description comes first
-		assert.Equal(t, "بدء الخادم :ابدأ", usage)
+		// New bidi model: fields stay in LOGICAL order (command name, then
+		// description), each FSI-isolated, with the whole line RLI-wrapped to
+		// assert an RTL base direction. No manual desc-first reorder, no ":" hack.
+		expected := i18n.IsolateRTL(i18n.Isolate("ابدأ") + " " + i18n.Isolate("بدء الخادم"))
+		assert.Equal(t, expected, usage)
 	})
 
 	t.Run("English command usage", func(t *testing.T) {

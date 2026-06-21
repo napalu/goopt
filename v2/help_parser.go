@@ -399,8 +399,10 @@ func (h *HelpParser) handleInvalidSubcommand(commandPath, invalidSub string) err
 	// Get the parent command
 	cmd, _ := h.mainParser.getCommand(commandPath)
 
-	// Find similar subcommands
-	suggestions := h.findSimilarSubcommands(cmd.Subcommands, invalidSub)
+	// Find similar subcommands — shared with the parse path so suggestions are
+	// i18n-aware (a typo of a localized subcommand name is matched and shown in the
+	// user's language) rather than canonical-only.
+	suggestions := h.mainParser.suggestSubcommands(cmd.Subcommands, invalidSub, commandPath)
 
 	// Show the main parser error
 	h.showErrors(writer)
@@ -441,12 +443,19 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 
 	var allSuggestions []suggestion
 	currentLang := h.mainParser.GetLanguage()
+	// Honor the configured command-suggestion threshold. This was hardcoded to 2,
+	// so the help system ignored WithSuggestionThreshold and drifted from the parse
+	// path (which reads cmdSuggestionThreshold); 0 disables command suggestions.
+	maxDist := h.mainParser.cmdSuggestionThreshold
+	if maxDist == 0 {
+		return nil, false
+	}
 
 	// Check all commands - both canonical and translated names
 	for _, cmd := range h.mainParser.registeredCommands.All() {
 		// Check canonical name
 		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
-		if distance > 0 && distance <= 2 {
+		if distance > 0 && distance <= maxDist {
 			allSuggestions = append(allSuggestions, suggestion{
 				commandPath:  cmd.Name,
 				distance:     distance,
@@ -458,7 +467,7 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 		if h.mainParser.translationRegistry != nil && cmd.NameKey != "" {
 			if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(cmd.Name, currentLang); found {
 				translatedDistance := util.DamerauLevenshteinDistance(input, translated)
-				if translatedDistance > 0 && translatedDistance <= 2 {
+				if translatedDistance > 0 && translatedDistance <= maxDist {
 					// Check if we already have this command in suggestions
 					found := false
 					for i, s := range allSuggestions {
@@ -497,11 +506,11 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 		}
 	}
 
-	// If we have distance 1 matches, only show those
-	// Otherwise show all matches up to distance 2
+	// If we have distance 1 matches, only show those; otherwise widen to the
+	// configured threshold (mirrors the parse path's minDistance logic).
 	threshold := minDistance
-	if minDistance > 1 {
-		threshold = 2
+	if minDistance > 1 && maxDist > 1 {
+		threshold = maxDist
 	}
 
 	// Filter and determine if we should show translated names
@@ -550,34 +559,10 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 	return finalSuggestions, hasTranslated
 }
 
-// findSimilarSubcommands finds subcommands similar to the input from a specific command's subcommands
-func (h *HelpParser) findSimilarSubcommands(subcommands []Command, input string) []string {
-	var suggestions []string
-	threshold := 2 // Levenshtein distance threshold
-
-	for _, cmd := range subcommands {
-		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
-		// Skip exact matches (distance 0) and only suggest similar commands
-		if distance > 0 && distance <= threshold {
-			suggestions = append(suggestions, cmd.Name)
-		}
-	}
-
-	// Sort by similarity
-	slices.SortFunc(suggestions, func(a, b string) int {
-		return cmp.Compare(util.DamerauLevenshteinDistance(input, a), util.DamerauLevenshteinDistance(input, b))
-	})
-
-	// Limit to top 3
-	if len(suggestions) > 3 {
-		suggestions = suggestions[:3]
-	}
-
-	return suggestions
-}
-
 // findSimilarCommandsInSliceWithContext recursively searches for similar commands considering both canonical and translated names
 func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, commands []Command, input string, suggestions *[]suggestion, currentLang language.Tag) {
+	// Same configured threshold as the caller (was hardcoded to 2).
+	maxDist := h.mainParser.cmdSuggestionThreshold
 	for i := range commands {
 		cmd := &commands[i]
 		commandPath := cmd.Name
@@ -587,7 +572,7 @@ func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, comman
 
 		// Check canonical name
 		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
-		if distance > 0 && distance <= 2 {
+		if distance > 0 && distance <= maxDist {
 			*suggestions = append(*suggestions, suggestion{
 				commandPath:  commandPath,
 				distance:     distance,
@@ -599,7 +584,7 @@ func (h *HelpParser) findSimilarCommandsInSliceWithContext(prefix string, comman
 		if h.mainParser.translationRegistry != nil && cmd.NameKey != "" {
 			if translated, found := h.mainParser.translationRegistry.GetCommandTranslation(commandPath, currentLang); found {
 				translatedDistance := util.DamerauLevenshteinDistance(input, translated)
-				if translatedDistance > 0 && translatedDistance <= 2 {
+				if translatedDistance > 0 && translatedDistance <= maxDist {
 					// Check if we already have this command in suggestions
 					found := false
 					for j, s := range *suggestions {

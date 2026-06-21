@@ -155,7 +155,7 @@ func (e *TrError) Format(provider MessageProvider) string {
 					// surrounding RTL message. Only s/v args, which render as
 					// text — isolating a %d/%f arg would break the verb.
 					if rtl {
-						translatedArgs[i] = isolate(fmt.Sprintf("%v", translatedArgs[i]))
+						translatedArgs[i] = Isolate(fmt.Sprintf("%v", translatedArgs[i]))
 					}
 				} else {
 					// Keep raw value for %d, %f, etc.
@@ -192,20 +192,12 @@ func (e *TrError) Format(provider MessageProvider) string {
 		// system error) so the ':' separator and the reason render correctly
 		// within an RTL message.
 		if rtl {
-			wrappedMsg = isolate(wrappedMsg)
+			wrappedMsg = Isolate(wrappedMsg)
 		}
 
 		return fmt.Sprintf("%s: %s", msg, wrappedMsg)
 	}
 	return msg
-}
-
-// isolate wraps s in Unicode First Strong Isolate (U+2068) / Pop Directional
-// Isolate (U+2069). FSI auto-detects the run's direction from its first strong
-// character and isolates it, so an LTR value embedded in RTL text (or vice
-// versa) cannot reorder the surrounding characters.
-func isolate(s string) string {
-	return "\u2068" + s + "\u2069" // FSI … PDI
 }
 
 // parseFormatSpecifiers extracts the format specifier characters from a format string
