@@ -72,7 +72,7 @@ type RegexPattern struct {
 //	  RegexPattern{"^[A-Z]\\d[A-Z] \\d[A-Z]\\d$", "Canadian postal code"},
 //	)
 func Regexes(patterns ...RegexPattern) ValidatorFunc {
-	var validators []ValidatorFunc
+	var validators []Validator
 	for _, p := range patterns {
 		validators = append(validators, Regex(p.Pattern, p.Description))
 	}

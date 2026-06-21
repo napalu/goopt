@@ -5,6 +5,7 @@ import (
 
 	"github.com/napalu/goopt/v2/types"
 	"github.com/napalu/goopt/v2/types/orderedmap"
+	"github.com/napalu/goopt/v2/validation"
 )
 
 // Suggestion is a single completion candidate. Description is surfaced by shells that
@@ -147,9 +148,32 @@ func (p *Parser) subcommandSuggestions(cmdPath string) []Suggestion {
 		if !ok {
 			continue
 		}
-		out = append(out, Suggestion{Value: child, Description: p.renderer.CommandDescription(cmd)})
+		desc := p.renderer.CommandDescription(cmd)
+		// Offer the localized name too (the parser accepts both): GetCommandTranslation
+		// returns the translated last token for the command's full path.
+		if tr, ok := p.commandTranslation(cmd.path); ok && tr != child {
+			out = append(out, Suggestion{Value: tr, Description: desc})
+		}
+		out = append(out, Suggestion{Value: child, Description: desc})
 	}
 	return out
+}
+
+// commandTranslation returns the current-language translation of a command's own name
+// (the last token of its path), if any.
+func (p *Parser) commandTranslation(cmdPath string) (string, bool) {
+	if p.translationRegistry == nil {
+		return "", false
+	}
+	return p.translationRegistry.GetCommandTranslation(cmdPath, p.GetLanguage())
+}
+
+// flagTranslation returns the current-language translation of a flag's canonical name.
+func (p *Parser) flagTranslation(canonical string) (string, bool) {
+	if p.translationRegistry == nil {
+		return "", false
+	}
+	return p.translationRegistry.GetFlagTranslation(canonical, p.GetLanguage())
 }
 
 // directChild returns the next path token of full if full is a direct child of parent.
@@ -193,7 +217,12 @@ func (p *Parser) flagNameSuggestions(cmdPath string) []Suggestion {
 				continue
 			}
 			seen[name] = true
-			out = append(out, Suggestion{Value: "--" + name, Description: p.renderer.FlagDescription(fi.Argument)})
+			desc := p.renderer.FlagDescription(fi.Argument)
+			// Offer the localized flag name too (the parser accepts both).
+			if tr, ok := p.flagTranslation(name); ok && tr != name {
+				out = append(out, Suggestion{Value: "--" + tr, Description: desc})
+			}
+			out = append(out, Suggestion{Value: "--" + name, Description: desc})
 		}
 	}
 	return out
@@ -214,7 +243,8 @@ func ancestorPaths(cmdPath string) []string {
 
 // valueSuggestions resolves a flag's value candidates via the value-source ladder:
 // explicit completer > File (path completion, shell-delegated) > enumerable validator
-// (Phase 4) > legacy AcceptedValues.
+// (a validator that exposes its accepted set, e.g. validation.IsOneOf) > legacy
+// AcceptedValues.
 func (p *Parser) valueSuggestions(ctx CompletionContext) []Suggestion {
 	fi, ok := p.getFlagInCommandPath(ctx.ValueFlag, ctx.Command)
 	if !ok || fi.Argument == nil {
@@ -226,6 +256,18 @@ func (p *Parser) valueSuggestions(ctx CompletionContext) []Suggestion {
 	}
 	if arg.TypeOf == types.File {
 		return nil // file completion is delegated to the shell stub (Phase 4)
+	}
+	// Any validator that can enumerate its accepted set (Enumerable) drives completion —
+	// so validation.IsOneOf both validates AND completes, from one declaration.
+	for _, v := range arg.Validators {
+		if e, ok := v.(validation.Enumerable); ok {
+			cands := e.Candidates()
+			out := make([]Suggestion, 0, len(cands))
+			for _, c := range cands {
+				out = append(out, Suggestion{Value: c})
+			}
+			return out
+		}
 	}
 	if len(arg.AcceptedValues) > 0 { // deprecated, but honoured while it exists
 		out := make([]Suggestion, 0, len(arg.AcceptedValues))

@@ -129,7 +129,7 @@ func (p *Parser) GenerateCompletionStub(shell, programName string) (string, erro
 // trailing directive line (:1 → file completion).
 const bashStub = `_{{PROG}}_complete() {
     local out directive suggestions
-    out="$("${COMP_WORDS[0]}" __complete bash "${COMP_WORDS[@]}" 2>/dev/null)"
+    out="$("${COMP_WORDS[0]}" __complete bash "${COMP_WORDS[@]:0:$((COMP_CWORD+1))}" 2>/dev/null)"
     directive="${out##*$'\n'}"
     suggestions="${out%$'\n'*}"
     if [[ "$directive" == ":1" ]]; then
@@ -148,7 +148,7 @@ const zshStub = `#compdef {{PROG}}
 _{{PROG}}_complete() {
     local out directive
     local -a lines comps
-    lines=("${(@f)$(${words[1]} __complete zsh "${words[@]}" 2>/dev/null)}")
+    lines=("${(@f)$(${words[1]} __complete zsh "${words[@]:0:$CURRENT}" 2>/dev/null)}")
     directive="${lines[-1]}"
     lines=("${lines[1,-2]}")
     if [[ "$directive" == ":1" ]]; then

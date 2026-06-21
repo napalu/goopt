@@ -125,13 +125,20 @@ A `Suggestion` is `{Value, Description}`; the description is shown by shells tha
 it (zsh, fish, PowerShell) and ignored by bash. goopt prefix-filters the returned values
 by default.
 
-For a **fixed** set, return a constant slice:
+For a **fixed** set, a validator that knows its values drives completion *for free*.
+`validation.IsOneOf` implements `validation.Enumerable`, so one declaration both
+**validates** input against the set and **completes** it — the single-source successor
+to the deprecated `WithAcceptedValues`:
 
 ```go
-goopt.WithCompleter(func(_ goopt.CompleterContext) []goopt.Suggestion {
-    return []goopt.Suggestion{{Value: "prod"}, {Value: "dev"}}
-})
+goopt.NewArg(goopt.WithValidators(validation.IsOneOf("prod", "staging", "dev")))
+// rejects anything outside the set AND offers the three values on <TAB>
 ```
+
+Any validator implementing `Enumerable` (`Candidates() []string`) feeds completion the
+same way — validation and completion can't drift because they're the same value.
+(`WithCompleter` returning a constant slice works too, but only completes — it doesn't
+validate.)
 
 A **`File`-type** flag automatically gets shell path completion — no completer needed.
 
@@ -145,6 +152,17 @@ completing.
 ```sh
 yourapp completion bash    # installs (or prints) the stub
 ```
+
+## Notes & limitations
+
+- **Reserved hidden command.** Completion is driven by a hidden `__complete` subcommand
+  that `HandleCompletion` intercepts before parsing. Don't define a real command named
+  `__complete` — it would be shadowed by the completion responder.
+- **Cursor position.** Completion targets the word under the cursor. Bash, Zsh and Fish
+  report the cursor word (`COMP_CWORD` / `$CURRENT` / `commandline -ct`), so completing
+  in the *middle* of a line works. PowerShell completes against the final token.
+- **Binary on `PATH`.** Because the installed file is a stub, the program must be
+  resolvable when completion runs (always true for a CLI you're completing).
 
 ## Migrating from static completion
 
@@ -161,6 +179,23 @@ The migration is small:
 
 `Manager.Save()` and its shell-path logic are unchanged — only `Accept` now takes the
 stub string instead of `CompletionData`. The end-user install command is unchanged.
+
+### Automated migration tool
+
+The same release made `validation.Validator` an interface (so validators can drive
+completion). A bare inline `func(string) error` passed to `WithValidator(s)` must now be
+wrapped in `validation.Custom(...)`. The **`goopt-migrate-v2`** codegen tool does
+this (and renames `[]validation.ValidatorFunc` → `[]validation.Validator`) automatically:
+
+```bash
+go install github.com/napalu/goopt/v2/cmd/goopt-migrate-v2@latest
+goopt-migrate-v2 -d . -r --dry-run   # preview; drop --dry-run to apply
+```
+
+The binary is named `goopt-migrate-v2` so it does not clash with the v1→v2 tag tool
+(`goopt-migrate`). It rewrites what it can prove syntactically; the compiler flags the
+rest (e.g. a func-typed *variable*) for a one-line manual wrap. See the `v2/migration`
+package README for details and limits.
 
 Why the break (and why now): the static model was a *second* representation of your
 command tree that could disagree with the parser (inherited flags missing from

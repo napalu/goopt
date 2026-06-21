@@ -135,25 +135,32 @@ func (p *Parser) shouldSkipBooleanAfterStandalone(args []string, i int, currentC
 
 	prevName := strings.TrimFunc(args[i-1], p.prefixFunc)
 
+	// A command-scoped previous flag injected from env arrives as "name@command"; the
+	// suffix is its authoritative command binding, so resolve it in THAT scope rather
+	// than the position-derived currentCmdPath (mirrors setPositionalArguments). Without
+	// this the standalone flag isn't recognised and its boolean value leaks into the
+	// positional.
+	prevCmdCtx := currentCmdPath
+	if parts := splitPathFlag(prevName); len(parts) > 1 {
+		prevName = parts[0]
+		prevCmdCtx = []string{parts[1]}
+	}
+
 	// Try to get canonical name from translation registry
 	canonicalPrevName := prevName
 	if canonical, ok := p.translationRegistry.GetCanonicalFlagName(prevName, p.GetLanguage()); ok {
 		canonicalPrevName = canonical
 	}
 
-	// Check if previous flag was standalone
+	// Check if previous flag was standalone (in its command scope, else global)
 	isStandalone := false
-	if len(currentCmdPath) > 0 {
-		if flagInfo, exists := cache.flags[canonicalPrevName]; exists {
-			cmdPath := strings.Join(currentCmdPath, " ")
-			if cmdFlagInfo, cmdExists := flagInfo[cmdPath]; cmdExists {
+	if flagInfo, exists := cache.flags[canonicalPrevName]; exists {
+		if len(prevCmdCtx) > 0 {
+			if cmdFlagInfo, cmdExists := flagInfo[strings.Join(prevCmdCtx, " ")]; cmdExists {
 				isStandalone = cmdFlagInfo.Argument.TypeOf == types.Standalone
-			} else if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
-				isStandalone = globalFlagInfo.Argument.TypeOf == types.Standalone
 			}
 		}
-	} else {
-		if flagInfo, exists := cache.flags[canonicalPrevName]; exists {
+		if !isStandalone {
 			if globalFlagInfo, globalExists := flagInfo[""]; globalExists {
 				isStandalone = globalFlagInfo.Argument.TypeOf == types.Standalone
 			}
@@ -230,7 +237,7 @@ func (p *Parser) matchPositionalArgument(pa *PositionalArgument, cmdPath string,
 			// Run validators on positional argument
 			if len(decl.flag.Argument.Validators) > 0 {
 				for _, validator := range decl.flag.Argument.Validators {
-					if err := validator(arg); err != nil {
+					if err := validator.Validate(arg); err != nil {
 						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 					}
 				}

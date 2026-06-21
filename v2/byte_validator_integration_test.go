@@ -6,6 +6,7 @@ import (
 	"github.com/napalu/goopt/v2"
 	"github.com/napalu/goopt/v2/errs"
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -97,12 +98,12 @@ func TestByteLengthValidatorsIntegration(t *testing.T) {
 		err := p.BindFlag(&token, "token", goopt.NewArg(
 			goopt.WithType(types.Single),
 			goopt.WithDescription("API token (must be 16 bytes)"),
-			goopt.WithValidator(func(s string) error {
+			goopt.WithValidator(validation.ValidatorFunc(func(s string) error {
 				if len(s) != 16 {
 					return errs.ErrValidationFailed.WithArgs("value must be exactly 16 bytes")
 				}
 				return nil
-			}),
+			})),
 		))
 		require.NoError(t, err)
 
@@ -117,12 +118,12 @@ func TestByteLengthValidatorsIntegration(t *testing.T) {
 		err = p.BindFlag(&token, "token", goopt.NewArg(
 			goopt.WithType(types.Single),
 			goopt.WithDescription("API token (must be 16 bytes)"),
-			goopt.WithValidator(func(s string) error {
+			goopt.WithValidator(validation.ValidatorFunc(func(s string) error {
 				if len(s) != 16 {
 					return errs.ErrValidationFailed.WithArgs("value must be exactly 16 bytes")
 				}
 				return nil
-			}),
+			})),
 		))
 		require.NoError(t, err)
 

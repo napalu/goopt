@@ -26,7 +26,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("id", &goopt.Argument{
 			Description: "Unique identifier",
-			Validators:  []validation.ValidatorFunc{uuidValidator},
+			Validators:  []validation.Validator{uuidValidator},
 		})
 		assert.NoError(t, err)
 
@@ -97,7 +97,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("password", &goopt.Argument{
 			Description: "User password",
-			Validators:  []validation.ValidatorFunc{passwordValidator},
+			Validators:  []validation.Validator{passwordValidator},
 		})
 		assert.NoError(t, err)
 
@@ -138,7 +138,7 @@ func TestCustomValidatorIntegration(t *testing.T) {
 
 		err := p.AddFlag("username", &goopt.Argument{
 			Description: "Username",
-			Validators: []validation.ValidatorFunc{
+			Validators: []validation.Validator{
 				validation.MinLength(3),   // Built-in validator
 				validation.MaxLength(20),  // Built-in validator
 				validation.AlphaNumeric(), // Built-in validator

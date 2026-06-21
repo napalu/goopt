@@ -168,21 +168,21 @@ func WithDescriptionKey(key string) ConfigureArgumentFunc {
 }
 
 // WithValidator adds a single validator to the argument
-func WithValidator(validator validation.ValidatorFunc) ConfigureArgumentFunc {
+func WithValidator(validator validation.Validator) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Validators = append(argument.Validators, validator)
 	}
 }
 
 // WithValidators adds multiple validators to the argument
-func WithValidators(validators ...validation.ValidatorFunc) ConfigureArgumentFunc {
+func WithValidators(validators ...validation.Validator) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Validators = append(argument.Validators, validators...)
 	}
 }
 
 // SetValidators replaces all validators for the argument
-func SetValidators(validators ...validation.ValidatorFunc) ConfigureArgumentFunc {
+func SetValidators(validators ...validation.Validator) ConfigureArgumentFunc {
 	return func(argument *Argument, err *error) {
 		argument.Validators = validators
 	}

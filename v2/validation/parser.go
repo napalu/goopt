@@ -86,8 +86,8 @@ const (
 // - Simple: "email", "integer", "alphanumeric"
 // - With args: "minlength:5", "range:1:100", "oneof:red:green:blue"
 // - Combined: "email,minlength:5"
-func ParseValidators(specs []string) ([]ValidatorFunc, error) {
-	var validators []ValidatorFunc
+func ParseValidators(specs []string) ([]Validator, error) {
+	var validators []Validator
 
 	for _, spec := range specs {
 		spec = strings.TrimSpace(spec)
@@ -187,11 +187,11 @@ func parseParenthesesArgs(input string) []string {
 
 const maxRecursionDepth = 10 // Prevent infinite recursion
 
-func parseValidator(spec string) (ValidatorFunc, error) {
+func parseValidator(spec string) (Validator, error) {
 	return parseValidatorWithDepth(spec, 0)
 }
 
-func parseValidatorWithDepth(spec string, depth int) (ValidatorFunc, error) {
+func parseValidatorWithDepth(spec string, depth int) (Validator, error) {
 	if depth > maxRecursionDepth {
 		return nil, errs.ErrValidatorRecursionDepthExceeded
 	}
@@ -250,7 +250,7 @@ func parseValidatorWithDepth(spec string, depth int) (ValidatorFunc, error) {
 	return createValidatorWithDepth(spec, nil, depth)
 }
 
-func createValidatorWithDepth(name string, args []string, depth int) (ValidatorFunc, error) {
+func createValidatorWithDepth(name string, args []string, depth int) (Validator, error) {
 	// Use EqualFold for case-insensitive comparison that handles Unicode correctly
 	switch {
 	case strings.EqualFold(name, ValidatorEmail):
@@ -460,7 +460,7 @@ func createValidatorWithDepth(name string, args []string, depth int) (ValidatorF
 			return nil, errs.ErrValidatorRequiresAtLeastOneArgument.WithArgs(ValidatorOneOf)
 		}
 		// Parse each validator spec and compose with OneOf
-		var subValidators []ValidatorFunc
+		var subValidators []Validator
 		for _, arg := range args {
 			subValidator, err := parseValidatorWithDepth(arg, depth+1)
 			if err != nil {
@@ -474,7 +474,7 @@ func createValidatorWithDepth(name string, args []string, depth int) (ValidatorF
 			return nil, errs.ErrValidatorRequiresAtLeastOneArgument.WithArgs(ValidatorAll)
 		}
 		// Parse each validator spec and compose with All
-		var subValidators []ValidatorFunc
+		var subValidators []Validator
 		for _, arg := range args {
 			subValidator, err := parseValidatorWithDepth(arg, depth+1)
 			if err != nil {

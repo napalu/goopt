@@ -51,7 +51,7 @@ func TestValidatorChaining(t *testing.T) {
 	t.Run("Multiple regex validators", func(t *testing.T) {
 		// Since we can't use commas in regex patterns in struct tags,
 		// we need to test programmatically
-		validators := []ValidatorFunc{
+		validators := []Validator{
 			Regex("^[A-Z]", "Must start with uppercase"), // Must start with uppercase letter
 			Regex("[0-9]$", "Must end with digit"),       // Must end with digit
 			Regex("^.{5,10}$", "Must be 5-10 chars"),     // Must be 5-10 chars long
@@ -127,7 +127,7 @@ func TestValidatorChaining(t *testing.T) {
 
 	t.Run("Any combinator", func(t *testing.T) {
 		// Test the Any combinator - at least one must pass
-		validators := []ValidatorFunc{
+		validators := []Validator{
 			Email(),                                // Valid email
 			Regex("^[0-9]{10}$", "10-digit phone"), // OR 10 digit number
 			Regex("^[A-Z]{2}-[0-9]{4}$", "Code XX-1234"), // OR pattern like XX-1234

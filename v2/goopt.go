@@ -2941,7 +2941,7 @@ func (p *Parser) executePostHooks(cmd *Command, cmdErr error) error {
 }
 
 // AddFlagValidators adds multiple validators for a flag
-func (p *Parser) AddFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
+func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validator) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -2957,7 +2957,7 @@ func (p *Parser) AddFlagValidators(flag string, validators ...validation.Validat
 }
 
 // SetFlagValidators replaces all validators for a flag
-func (p *Parser) SetFlagValidators(flag string, validators ...validation.ValidatorFunc) error {
+func (p *Parser) SetFlagValidators(flag string, validators ...validation.Validator) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

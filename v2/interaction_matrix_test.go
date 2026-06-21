@@ -1324,4 +1324,43 @@ func TestInteractionMatrixPositionalEnv(t *testing.T) {
 			t.Errorf("env creds not resolved: URL=%q AppName=%q", c.Undo.URL, c.Undo.AppName)
 		}
 	})
+
+	// Full type sweep: EVERY flag type supplied via env must keep its value off the
+	// positional. Single/Chained/File ride the value-flag path (checkIfFlagNeedsValue);
+	// Standalone (a boolean with an explicit env value) rides shouldSkipBooleanAfterStandalone.
+	t.Run("no flag type leaks its env value into the positional", func(t *testing.T) {
+		dir := t.TempDir()
+		fpath := filepath.Join(dir, "cfg.txt")
+		if err := os.WriteFile(fpath, []byte("filecontent"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		type cfg struct {
+			Undo struct {
+				Input  string   `goopt:"pos:0;required:true;desc:input"`
+				Single string   `goopt:"desc:single"`
+				List   []string `goopt:"desc:list"`           // Chained
+				Conf   string   `goopt:"type:file;desc:conf"` // File
+				Force  bool     `goopt:"desc:force"`          // Standalone
+			} `goopt:"kind:command;desc:undo"`
+		}
+		t.Setenv("SINGLE", "sv")
+		t.Setenv("LIST", "a,b")
+		t.Setenv("CONF", fpath)
+		t.Setenv("FORCE", "true")
+		c := &cfg{}
+		p, err := NewParserFromStruct(c, WithFlagNameConverter(ToKebabCase), WithEnvNameConverter(ToKebabCase))
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		if !p.Parse([]string{os.Args[0], "undo", "myfile.log"}) {
+			t.Fatalf("Parse returned false; errs=%v", p.GetErrors())
+		}
+		if c.Undo.Input != "myfile.log" {
+			t.Errorf("positional Input = %q, want myfile.log (an env flag value leaked)", c.Undo.Input)
+		}
+		if c.Undo.Single != "sv" || len(c.Undo.List) != 2 || c.Undo.Conf != "filecontent" || !c.Undo.Force {
+			t.Errorf("env values not all resolved: Single=%q List=%v Conf=%q Force=%v",
+				c.Undo.Single, c.Undo.List, c.Undo.Conf, c.Undo.Force)
+		}
+	})
 }

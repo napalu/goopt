@@ -178,7 +178,7 @@ func (p *Parser) processFlagArg(state parse.State, argument *Argument, currentAr
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
-					if err := validator(boolVal); err != nil {
+					if err := validator.Validate(boolVal); err != nil {
 						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
@@ -218,7 +218,7 @@ func (p *Parser) processFlagArgWithValue(state parse.State, argument *Argument, 
 			// Run validators on standalone flag value
 			if len(argument.Validators) > 0 {
 				for _, validator := range argument.Validators {
-					if err := validator(boolVal); err != nil {
+					if err := validator.Validate(boolVal); err != nil {
 						p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(lookup)))
 						return
 					}
@@ -1405,7 +1405,7 @@ func (p *Parser) processValueFlag(currentArg string, next string, argument *Argu
 	// Also skip if validation already failed in processSingleValue
 	if len(argument.Validators) > 0 && argument.TypeOf != types.Chained && validationPassed {
 		for _, validator := range argument.Validators {
-			if err := validator(processed); err != nil {
+			if err := validator.Validate(processed); err != nil {
 				return errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(currentArg))
 			}
 		}
@@ -1462,7 +1462,7 @@ func (p *Parser) processSecureFlag(name string, config *types.Secure) {
 	if flagInfo, found := p.acceptedFlags.Get(name); found && flagInfo.Argument != nil {
 		if len(flagInfo.Argument.Validators) > 0 {
 			for _, validator := range flagInfo.Argument.Validators {
-				if err = validator(pass); err != nil {
+				if err = validator.Validate(pass); err != nil {
 					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(name)))
 					return
 				}
@@ -1566,7 +1566,7 @@ func (p *Parser) checkSingle(next, flag string, argument *Argument) (string, boo
 	// Run validators (if any) - this includes converted AcceptedValues
 	if len(argument.Validators) > 0 {
 		for _, validator := range argument.Validators {
-			if err := validator(value); err != nil {
+			if err := validator.Validate(value); err != nil {
 				p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 				return "", false
 			}
@@ -1622,7 +1622,7 @@ func (p *Parser) checkMultiple(next, flag string, argument *Argument) (string, b
 
 		if len(argument.Validators) > 0 {
 			for _, validator := range argument.Validators {
-				if err := validator(args[i]); err != nil {
+				if err := validator.Validate(args[i]); err != nil {
 					p.addError(errs.WrapOnce(err, errs.ErrProcessingFlag, p.formatFlagForError(flag)))
 					return "", false
 				}
@@ -2056,7 +2056,7 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 
 	// Convert AcceptedValues to validators for internal processing
 	// but still store them as AcceptedValues for backward compatibility (help text, etc.)
-	var acceptedValueValidators []validation.ValidatorFunc
+	var acceptedValueValidators []validation.Validator
 	if len(c.AcceptedValues) > 0 {
 		// Store AcceptedValues for help text and backward compatibility
 		configs = append(configs, WithAcceptedValues(c.AcceptedValues))
@@ -2070,7 +2070,7 @@ func toArgument(c *types.TagConfig) (*Argument, error) {
 	}
 
 	// Parse and add validators
-	var allValidators []validation.ValidatorFunc
+	var allValidators []validation.Validator
 
 	// First add validators from accepted values (if any)
 	if len(acceptedValueValidators) > 0 {

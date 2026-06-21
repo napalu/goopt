@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/napalu/goopt/v2/i18n"
 	"github.com/napalu/goopt/v2/types"
+	"github.com/napalu/goopt/v2/validation"
+	"golang.org/x/text/language"
 )
 
 // build a small tree: global --verbose(-v); server{--port} -> start{--timeout}
@@ -325,4 +328,62 @@ func TestCompletionSubcommandParity(t *testing.T) {
 	check(nil, "parent", "sibling") // root → top-level commands
 	check([]string{"parent"}, "child")
 	check([]string{"parent", "child"}, "grandchild")
+}
+
+func TestCompletionTranslatedForms(t *testing.T) {
+	p := NewParser()
+	b := i18n.NewEmptyBundle()
+	if err := b.AddLanguage(language.Spanish, map[string]string{
+		"cmd.start": "arrancar", "flag.port": "puerto",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetUserBundle(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetLanguage(language.Spanish); err != nil {
+		t.Fatal(err)
+	}
+	start := NewCommand(WithName("start"), WithCommandNameKey("cmd.start"))
+	server := NewCommand(WithName("server"), WithSubcommands(start))
+	if err := p.AddCommand(server); err != nil {
+		t.Fatal(err)
+	}
+	mustAddFlag(t, p, "port", NewArg(WithType(types.Single), WithNameKey("flag.port")), "server")
+
+	// flag-name completion under server offers BOTH localized and canonical.
+	flags := svals(p.Suggest(p.resolveCompletionContext([]string{"app", "server", "--"})))
+	if !slices.Contains(flags, "--puerto") || !slices.Contains(flags, "--port") {
+		t.Errorf("flag completion should offer both --puerto and --port; got %v", flags)
+	}
+	// subcommand completion under server offers BOTH localized and canonical child name.
+	subs := svals(p.Suggest(p.resolveCompletionContext([]string{"app", "server", ""})))
+	if !slices.Contains(subs, "arrancar") || !slices.Contains(subs, "start") {
+		t.Errorf("subcommand completion should offer both arrancar and start; got %v", subs)
+	}
+}
+
+func TestCompletionEnumerableValidator(t *testing.T) {
+	p := NewParser()
+	p.AddCommand(NewCommand(WithName("deploy")))
+	mustAddFlag(t, p, "env", NewArg(WithType(types.Single), WithValidators(validation.IsOneOf("prod", "staging", "dev"))), "deploy")
+
+	// completion: the set is offered (prefix-filtered).
+	g := svals(p.Suggest(p.resolveCompletionContext([]string{"app", "deploy", "--env", "st"})))
+	if len(g) != 1 || g[0] != "staging" {
+		t.Errorf("WithEnumValues should complete to the set (prefix 'st' → staging); got %v", g)
+	}
+	all := svals(p.Suggest(p.resolveCompletionContext([]string{"app", "deploy", "--env", ""})))
+	if len(all) != 3 {
+		t.Errorf("WithEnumValues should offer all 3 values; got %v", all)
+	}
+
+	// validation: an out-of-set value is rejected.
+	p2 := NewParser()
+	p2.AddCommand(NewCommand(WithName("deploy")))
+	mustAddFlag(t, p2, "env", NewArg(WithType(types.Single), WithValidators(validation.IsOneOf("prod", "staging", "dev"))), "deploy")
+	p2.Parse([]string{"app", "deploy", "--env", "bogus"})
+	if len(p2.GetErrors()) == 0 {
+		t.Errorf("WithEnumValues should reject a value outside the set")
+	}
 }
