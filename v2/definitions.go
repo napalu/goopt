@@ -265,6 +265,7 @@ type Renderer interface {
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
+	CommandListItem(name, description string) string
 }
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies

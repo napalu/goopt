@@ -163,7 +163,6 @@ func (r *DefaultRenderer) FlagUsageWithConfig(f *Argument, config HelpConfig) st
 // This method respects the HelpConfig settings and automatically handles RTL languages.
 func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Use the full command path for proper hierarchy display, or fall back to name
 	cmdName := c.path
@@ -171,25 +170,19 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 		cmdName = r.CommandName(c)
 	}
 
-	// Get positional arguments for this command
-	positionals := r.parser.getPositionalsForCommand(c.path)
-
 	// Build command usage with positionals
 	usageLine := cmdName
-	if len(positionals) > 0 {
-		for _, pos := range positionals {
-			// Extract just the flag name without the command path
-			flagName := pos.Value
-			if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
-				flagName = flagName[:idx]
-			}
-
-			// Format as <name> for required or [name] for optional
-			if pos.Argument.Required {
-				usageLine += " <" + flagName + ">"
-			} else {
-				usageLine += " [" + flagName + "]"
-			}
+	for _, pos := range r.parser.getPositionalsForCommand(c.path) {
+		// Extract just the flag name without the command path
+		flagName := pos.Value
+		if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+			flagName = flagName[:idx]
+		}
+		// Format as <name> for required or [name] for optional
+		if pos.Argument.Required {
+			usageLine += " <" + flagName + ">"
+		} else {
+			usageLine += " [" + flagName + "]"
 		}
 	}
 
@@ -197,9 +190,18 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	if config.ShowDescription {
 		description = r.CommandDescription(c)
 	}
-	rtl := r.rtlInvolved(isRTL, cmdName, description)
+	return r.CommandListItem(usageLine, description)
+}
 
-	fields := []string{usageLine}
+// CommandListItem renders a "<name> <description>" line with the same quoting and
+// bidi handling as CommandUsage, for an explicit display name. It is the single
+// command-line formatter shared by the command tree, command-scoped help and search
+// results — the hand-rolled "name - description" variants bypassed it (and its RTL
+// isolation), so command help scrambled in RTL and drifted in format.
+func (r *DefaultRenderer) CommandListItem(name, description string) string {
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	rtl := r.rtlInvolved(isRTL, name, description)
+	fields := []string{name}
 	if description != "" {
 		// Quotes on plain LTR; bidi mode relies on FSI isolation instead.
 		if rtl {

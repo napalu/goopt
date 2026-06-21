@@ -95,7 +95,7 @@ func (h *HelpParser) getWriter() io.Writer {
 // showVersionHeader shows the version header if configured
 func (h *HelpParser) showVersionHeader(writer io.Writer) {
 	if h.mainParser.showVersionInHelp && (h.mainParser.version != "" || h.mainParser.versionFunc != nil) {
-		fmt.Fprintf(writer, "%s %s\n\n", filepath.Base(os.Args[0]), h.mainParser.GetVersion())
+		_, _ = fmt.Fprintf(writer, "%s %s\n\n", filepath.Base(os.Args[0]), h.mainParser.GetVersion())
 	}
 }
 
@@ -162,7 +162,7 @@ func (h *HelpParser) Parse(args []string) error {
 	// If we're in error context (set by main parser), show errors first
 	if mode != HelpModeHelp && h.context == HelpContextError && h.mainParser.GetErrorCount() > 0 {
 		h.showErrors(writer)
-		fmt.Fprintln(writer) // Add blank line after error
+		_, _ = fmt.Fprintln(writer) // Add blank line after error
 	}
 
 	// Execute based on mode
@@ -312,7 +312,7 @@ func (h *HelpParser) isHelpArg(arg string) bool {
 func (h *HelpParser) showErrors(writer io.Writer) {
 	errors := h.mainParser.GetErrors()
 	for _, err := range errors {
-		fmt.Fprintf(writer, "%s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgErrorPrefixKey), err.Error())
+		_, _ = fmt.Fprintf(writer, "%s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgErrorPrefixKey), err.Error())
 	}
 }
 
@@ -323,7 +323,7 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 	// Find similar commands
 	suggestions, _ := h.findSimilarCommandsWithContext(invalidCmd)
 
-	fmt.Fprintf(writer, "%s: %s\n\n",
+	_, _ = fmt.Fprintf(writer, "%s: %s\n\n",
 		h.mainParser.layeredProvider.GetMessage(messages.MsgErrorPrefixKey),
 		h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUnknownCommandKey, invalidCmd))
 
@@ -349,18 +349,18 @@ func (h *HelpParser) handleInvalidCommand(invalidCmd string) error {
 			// Default format for help system
 			formatted = "\n  " + strings.Join(displaySuggestions, "\n  ")
 		}
-		fmt.Fprintf(writer, "%s %s\n\n",
+		_, _ = fmt.Fprintf(writer, "%s %s\n\n",
 			h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey),
 			formatted)
 	}
 
 	// Show available commands
-	fmt.Fprintf(writer, "%s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableCommandsKey))
+	_, _ = fmt.Fprintf(writer, "%s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableCommandsKey))
 	err := h.showCommandsOnly(writer)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(writer, "\n%s\n",
+	_, _ = fmt.Fprintf(writer, "\n%s\n",
 		h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUseHelpForInfoKey, os.Args[0]))
 
 	return errs.ErrCommandNotFound.WithArgs(invalidCmd)
@@ -396,7 +396,7 @@ func (h *HelpParser) handleInvalidSubcommand(commandPath, invalidSub string) err
 			// Default format for help system
 			formatted = "\n  " + strings.Join(suggestions, "\n  ")
 		}
-		fmt.Fprintf(writer, "%s %s\n",
+		_, _ = fmt.Fprintf(writer, "%s %s\n",
 			h.mainParser.layeredProvider.GetMessage(messages.MsgDidYouMeanKey),
 			formatted)
 		h.mainParser.addError(fmt.Errorf("%s %s",
@@ -404,7 +404,7 @@ func (h *HelpParser) handleInvalidSubcommand(commandPath, invalidSub string) err
 			formatted))
 	}
 
-	fmt.Fprintln(writer)
+	_, _ = fmt.Fprintln(writer)
 
 	// Show help for the parent command
 	return h.renderCommandHelp(writer, commandPath)
@@ -440,19 +440,19 @@ func (h *HelpParser) findSimilarCommandsWithContext(input string) ([]string, boo
 // showGlobalsOnly shows only global flags
 func (h *HelpParser) showGlobalsOnly(writer io.Writer) error {
 	h.showVersionHeader(writer)
-	fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsHeaderKey))
+	_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsHeaderKey))
 
 	globalFlags := h.mainParser.getGlobalFlags()
 	filtered := h.filterFlags(globalFlags)
 
 	if len(filtered) == 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoGlobalFlagsKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoGlobalFlagsKey))
 		return nil
 	}
 
 	cfg := h.effectiveConfig()
 	for _, flag := range filtered {
-		fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
+		_, _ = fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 	}
 
 	return nil
@@ -462,7 +462,7 @@ func (h *HelpParser) showGlobalsOnly(writer io.Writer) error {
 func (h *HelpParser) showCommandsOnly(writer io.Writer) error {
 	h.showVersionHeader(writer)
 	if h.mainParser.registeredCommands.Len() == 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoCommandsDefinedKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoCommandsDefinedKey))
 		return nil
 	}
 
@@ -476,23 +476,23 @@ func (h *HelpParser) showCommandsOnly(writer io.Writer) error {
 func (h *HelpParser) showFlagsOnly(writer io.Writer, commandPath string) error {
 	h.showVersionHeader(writer)
 	if commandPath != "" {
-		fmt.Fprintf(writer, "%s\n\n",
+		_, _ = fmt.Fprintf(writer, "%s\n\n",
 			h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgFlagsForCommandKey, commandPath))
 	} else {
-		fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAllFlagsKey))
+		_, _ = fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAllFlagsKey))
 	}
 
 	flags := h.collectFlags(commandPath)
 	filtered := h.filterFlags(flags)
 
 	if len(filtered) == 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoFlagsFoundKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoFlagsFoundKey))
 		return nil
 	}
 
 	cfg := h.effectiveConfig()
 	for _, flag := range filtered {
-		fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
+		_, _ = fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 	}
 
 	return nil
@@ -501,42 +501,42 @@ func (h *HelpParser) showFlagsOnly(writer io.Writer, commandPath string) error {
 // showExamples shows usage examples
 func (h *HelpParser) showExamples(writer io.Writer) error {
 	h.showVersionHeader(writer)
-	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
+	_, _ = fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
 
 	prog := os.Args[0]
 
 	// Basic examples
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowThisHelpKey))
-	fmt.Fprintf(writer, "%s --help\n\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowThisHelpKey))
+	_, _ = fmt.Fprintf(writer, "%s --help\n\n", prog)
 
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowOnlyGlobalFlagsKey))
-	fmt.Fprintf(writer, "%s --help globals\n\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowOnlyGlobalFlagsKey))
+	_, _ = fmt.Fprintf(writer, "%s --help globals\n\n", prog)
 
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowAllCommandsKey))
-	fmt.Fprintf(writer, "%s --help commands\n\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowAllCommandsKey))
+	_, _ = fmt.Fprintf(writer, "%s --help commands\n\n", prog)
 
 	if h.mainParser.registeredCommands.Count() > 0 {
 		// Command-specific examples
 		if first := h.mainParser.registeredCommands.Front(); first != nil {
-			fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpForCommandKey))
-			fmt.Fprintf(writer, "%s %s --help\n\n", prog, first.Value.Name)
+			_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpForCommandKey))
+			_, _ = fmt.Fprintf(writer, "%s %s --help\n\n", prog, first.Value.Name)
 
 			if len(first.Value.Subcommands) > 0 {
-				fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpForSubcommandKey))
-				fmt.Fprintf(writer, "%s %s %s --help\n\n", prog, first.Value.Name, first.Value.Subcommands[0].Name)
+				_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpForSubcommandKey))
+				_, _ = fmt.Fprintf(writer, "%s %s %s --help\n\n", prog, first.Value.Name, first.Value.Subcommands[0].Name)
 			}
 		}
 	}
 
 	// Advanced examples
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgSearchHelpContentKey))
-	fmt.Fprintf(writer, "%s --help --search \"database\"\n\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgSearchHelpContentKey))
+	_, _ = fmt.Fprintf(writer, "%s --help --search \"database\"\n\n", prog)
 
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpWithDetailsKey))
-	fmt.Fprintf(writer, "%s --help --show-defaults --show-types\n\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgShowHelpWithDetailsKey))
+	_, _ = fmt.Fprintf(writer, "%s --help --show-defaults --show-types\n\n", prog)
 
-	fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgFilterFlagsByPatternKey))
-	fmt.Fprintf(writer, "%s --help --filter \"core.*\"\n", prog)
+	_, _ = fmt.Fprintf(writer, "# %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgFilterFlagsByPatternKey))
+	_, _ = fmt.Fprintf(writer, "%s --help --filter \"core.*\"\n", prog)
 
 	return nil
 }
@@ -545,16 +545,16 @@ func (h *HelpParser) showExamples(writer io.Writer) error {
 func (h *HelpParser) showSearchResults(writer io.Writer, query string) error {
 	h.showVersionHeader(writer)
 	if query == "" {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgSearchQueryEmptyKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgSearchQueryEmptyKey))
 		return nil
 	}
 
-	fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgSearchResultsKey, query))
+	_, _ = fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgSearchResultsKey, query))
 
 	results := h.searchHelp(query)
 
 	if len(results) == 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoResultsFoundKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgNoResultsFoundKey))
 		return nil
 	}
 
@@ -570,27 +570,27 @@ func (h *HelpParser) showSearchResults(writer io.Writer, query string) error {
 
 	// Show command results
 	if len(cmdResults) > 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsHeaderKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsHeaderKey))
 		for _, r := range cmdResults {
-			fmt.Fprintf(writer, "  %s - %s\n", r.Name, r.Description)
+			_, _ = fmt.Fprintf(writer, "  %s\n", h.mainParser.renderer.CommandListItem(r.Name, r.Description))
 			if r.Context != "" {
-				fmt.Fprintf(writer, "    %s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgContextKey), r.Context)
+				_, _ = fmt.Fprintf(writer, "    %s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgContextKey), r.Context)
 			}
 		}
-		fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer)
 	}
 
 	// Show flag results
 	if len(flagResults) > 0 {
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgFlagsHeaderKey))
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetMessage(messages.MsgFlagsHeaderKey))
 		for _, r := range flagResults {
-			fmt.Fprintf(writer, "  --%s", r.Name)
+			_, _ = fmt.Fprintf(writer, "  --%s", r.Name)
 			if r.Short != "" {
-				fmt.Fprintf(writer, ", -%s", r.Short)
+				_, _ = fmt.Fprintf(writer, ", -%s", r.Short)
 			}
-			fmt.Fprintf(writer, " - %s\n", r.Description)
+			_, _ = fmt.Fprintf(writer, " - %s\n", r.Description)
 			if r.Context != "" {
-				fmt.Fprintf(writer, "    %s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey), r.Context)
+				_, _ = fmt.Fprintf(writer, "    %s: %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey), r.Context)
 			}
 		}
 	}
@@ -631,7 +631,7 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	h.showVersionHeader(writer)
 
 	// Show usage line
-	fmt.Fprintln(writer, h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
+	_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
 
 	// Show positional args if any
 	h.mainParser.PrintPositionalArgs(writer)
@@ -641,13 +641,13 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	if len(flags) > 0 {
 		cfg := h.effectiveConfig()
 		for _, flag := range flags {
-			fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
+			_, _ = fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 		}
 	}
 
 	// Show commands
 	if h.mainParser.registeredCommands.Len() > 0 {
-		fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey))
+		_, _ = fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey))
 		h.mainParser.PrintCommands(writer)
 	}
 
@@ -718,13 +718,13 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 	h.showVersionHeader(writer)
 
 	// Match the format from help_styles.go printHierarchicalHelp
-	fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageHierarchicalKey, os.Args[0]))
+	_, _ = fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageHierarchicalKey, os.Args[0]))
 
 	// Only essential global flags
 	globalFlags := h.mainParser.getGlobalFlags()
 	filtered := h.filterFlags(globalFlags)
 	if len(filtered) > 0 {
-		fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
+		_, _ = fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
 		shown := 0
 		for _, flag := range filtered {
 			// Only show help and essential flags
@@ -737,7 +737,7 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 			}
 		}
 		if len(filtered) > shown {
-			fmt.Fprintf(writer, "  ... %s %d %s\n",
+			_, _ = fmt.Fprintf(writer, "  ... %s %d %s\n",
 				h.mainParser.layeredProvider.GetMessage(messages.MsgAndKey),
 				len(filtered)-shown,
 				h.mainParser.layeredProvider.GetMessage(messages.MsgMoreKey))
@@ -747,7 +747,7 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 	// Shared flag groups summary
 	sharedGroups := h.mainParser.detectSharedFlagGroups()
 	if len(sharedGroups) > 0 {
-		fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgSharedFlagGroupsKey))
+		_, _ = fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgSharedFlagGroupsKey))
 
 		// Sort and display
 		type groupInfo struct {
@@ -765,7 +765,7 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 		})
 
 		for _, g := range groups {
-			fmt.Fprintf(writer, "  %-20s %s %d %s\n",
+			_, _ = fmt.Fprintf(writer, "  %-20s %s %d %s\n",
 				g.name+".*",
 				h.mainParser.layeredProvider.GetMessage(messages.MsgUsedByKey),
 				g.cmdCount,
@@ -775,21 +775,21 @@ func (h *HelpParser) showHierarchicalStyle(writer io.Writer) error {
 
 	// Command structure
 	if h.mainParser.registeredCommands.Count() > 0 {
-		fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandStructureKey))
+		_, _ = fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandStructureKey))
 		h.mainParser.printCommandTree(writer)
 	}
 
 	// Examples
-	fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
-	fmt.Fprintf(writer, "  %s --help                    # %s\n",
+	_, _ = fmt.Fprintf(writer, "\n%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help                    # %s\n",
 		os.Args[0], h.mainParser.layeredProvider.GetMessage(messages.MsgThisHelpKey))
 	if h.mainParser.registeredCommands.Count() > 0 {
 		// Show first command as example
 		if first := h.mainParser.registeredCommands.Front(); first != nil {
-			fmt.Fprintf(writer, "  %s %s --help              # %s\n",
+			_, _ = fmt.Fprintf(writer, "  %s %s --help              # %s\n",
 				os.Args[0], first.Value.Name, h.mainParser.layeredProvider.GetMessage(messages.MsgCommandHelpKey))
 			if len(first.Value.Subcommands) > 0 {
-				fmt.Fprintf(writer, "  %s %s %s --help       # %s\n",
+				_, _ = fmt.Fprintf(writer, "  %s %s %s --help       # %s\n",
 					os.Args[0], first.Value.Name, first.Value.Subcommands[0].Name,
 					h.mainParser.layeredProvider.GetMessage(messages.MsgSubcommandHelpKey))
 			}
@@ -805,8 +805,8 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 	var err error
 	if commandPath == "" {
 		// Show usage
-		fmt.Fprintln(writer, h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
-		fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer, h.mainParser.layeredProvider.GetFormattedMessage(messages.MsgUsageKey, os.Args[0]))
+		_, _ = fmt.Fprintln(writer)
 
 		// Show positional arguments
 		h.mainParser.PrintPositionalArgs(writer)
@@ -814,18 +814,18 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		// Show global flags
 		globalFlags := h.collectFlags("")
 		if len(globalFlags) > 0 {
-			fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
+			_, _ = fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
 			cfg := h.effectiveConfig()
 			for _, flag := range globalFlags {
-				fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
+				_, _ = fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 			}
-			fmt.Fprintln(writer)
+			_, _ = fmt.Fprintln(writer)
 		}
 
 		// Show all commands with their flags
-		fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey))
+		_, _ = fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey))
 		h.mainParser.printCommandTree(writer)
-		fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer)
 
 		// Show examples
 		err = h.showExamples(writer)
@@ -835,7 +835,7 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer)
 
 		// Show command-specific examples
 		err = h.showExamples(writer)
@@ -1009,7 +1009,7 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 	for i := range parts {
 		path := strings.Join(parts[:i+1], " ")
 		if c, ok := h.mainParser.getCommand(path); ok {
-			fmt.Fprintf(writer, "%s%s: %s\n",
+			_, _ = fmt.Fprintf(writer, "%s%s: %s\n",
 				strings.Repeat(pp.OuterLevelBindPrefix, i),
 				path,
 				h.mainParser.renderer.CommandDescription(c))
@@ -1018,7 +1018,7 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 
 	// Show inherited flags message
 	if len(parts) > 1 {
-		fmt.Fprintf(writer, "%s + %s\n",
+		_, _ = fmt.Fprintf(writer, "%s + %s\n",
 			strings.Repeat(pp.OuterLevelBindPrefix, len(parts)-1),
 			h.mainParser.layeredProvider.GetMessage(messages.MsgAllParentFlagsKey))
 	}
@@ -1028,7 +1028,7 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 
 	// Show subcommands if present
 	if len(cmd.Subcommands) > 0 && (h.options.Depth == -1 || h.options.Depth > 0) {
-		fmt.Fprintf(writer, "\n%s:\n",
+		_, _ = fmt.Fprintf(writer, "\n%s:\n",
 			h.mainParser.layeredProvider.GetMessage(messages.MsgCommandsKey))
 
 		mainPrefix := strings.TrimSpace(pp.DefaultPrefix)
@@ -1041,10 +1041,12 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 			}
 
 			subCmd := &cmd.Subcommands[i]
-			fmt.Fprintf(writer, " %s %s - %s\n",
-				prefix,
-				subCmd.Name,
-				h.mainParser.renderer.CommandDescription(subCmd))
+			// Shared renderer: short (translated) name + quoted desc, RTL-safe — same
+			// formatter as the main command tree, no hand-rolled "name - desc".
+			_, _ = fmt.Fprintf(writer, " %s %s\n", prefix,
+				h.mainParser.renderer.CommandListItem(
+					h.mainParser.renderer.CommandName(subCmd),
+					h.mainParser.renderer.CommandDescription(subCmd)))
 		}
 	}
 
@@ -1082,109 +1084,109 @@ func isHelpKeyword(s string) bool {
 func (h *HelpParser) showHelpForHelp(writer io.Writer) error {
 	h.showVersionHeader(writer)
 	// Title
-	fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpSystemKey))
+	_, _ = fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpSystemKey))
 
 	// Introduction
-	fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpSystemDescKey))
+	_, _ = fmt.Fprintf(writer, "%s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpSystemDescKey))
 
 	// Help modes section
-	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModesKey))
+	_, _ = fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModesKey))
 
 	// Default mode
-	fmt.Fprintf(writer, "  %s --help\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeDefaultDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeDefaultDescKey))
 
 	// Globals mode
-	fmt.Fprintf(writer, "  %s --help globals\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeGlobalsDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help globals\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeGlobalsDescKey))
 
 	// Commands mode
-	fmt.Fprintf(writer, "  %s --help commands\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeCommandsDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help commands\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeCommandsDescKey))
 
 	// Flags mode
-	fmt.Fprintf(writer, "  %s --help flags\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeFlagsDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help flags\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeFlagsDescKey))
 
 	// Examples mode
-	fmt.Fprintf(writer, "  %s --help examples\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeExamplesDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help examples\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeExamplesDescKey))
 
 	// All mode
-	fmt.Fprintf(writer, "  %s --help all\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeAllDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help all\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeAllDescKey))
 
 	// Command-specific help
-	fmt.Fprintf(writer, "  %s <command> --help\n", os.Args[0])
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeCommandSpecificDescKey))
+	_, _ = fmt.Fprintf(writer, "  %s <command> --help\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpModeCommandSpecificDescKey))
 
 	// Help options section
-	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionsKey))
+	_, _ = fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionsKey))
 
 	// Show descriptions option
-	fmt.Fprintf(writer, "  --show-descriptions, -d\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowDescriptionsKey))
+	_, _ = fmt.Fprintf(writer, "  --show-descriptions, -d\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowDescriptionsKey))
 
-	fmt.Fprintf(writer, "  --no-desc\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionNoDescriptionsKey))
+	_, _ = fmt.Fprintf(writer, "  --no-desc\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionNoDescriptionsKey))
 
 	// Show defaults option
-	fmt.Fprintf(writer, "  --show-defaults\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowDefaultsKey))
+	_, _ = fmt.Fprintf(writer, "  --show-defaults\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowDefaultsKey))
 
 	// Show types option
-	fmt.Fprintf(writer, "  --show-types\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowTypesKey))
+	_, _ = fmt.Fprintf(writer, "  --show-types\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowTypesKey))
 
 	// Show validators option
-	fmt.Fprintf(writer, "  --show-validators\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowValidatorsKey))
+	_, _ = fmt.Fprintf(writer, "  --show-validators\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionShowValidatorsKey))
 
 	// No short flags option
-	fmt.Fprintf(writer, "  --no-short\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionNoShortKey))
+	_, _ = fmt.Fprintf(writer, "  --no-short\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionNoShortKey))
 
 	// Filter option
-	fmt.Fprintf(writer, "  --filter <pattern>\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionFilterKey))
+	_, _ = fmt.Fprintf(writer, "  --filter <pattern>\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionFilterKey))
 
 	// Depth option
-	fmt.Fprintf(writer, "  --depth <number>\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionDepthKey))
+	_, _ = fmt.Fprintf(writer, "  --depth <number>\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionDepthKey))
 
 	// Search option
-	fmt.Fprintf(writer, "  --search <query>\n")
-	fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionSearchKey))
+	_, _ = fmt.Fprintf(writer, "  --search <query>\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionSearchKey))
 
 	// Style option
-	fmt.Fprintf(writer, "  --style <style>\n")
-	fmt.Fprintf(writer, "    %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionStyleKey))
-	fmt.Fprintf(writer, "    %s: flat, grouped, grouped-clean, compact, hierarchical, smart\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableStylesKey))
+	_, _ = fmt.Fprintf(writer, "  --style <style>\n")
+	_, _ = fmt.Fprintf(writer, "    %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgHelpOptionStyleKey))
+	_, _ = fmt.Fprintf(writer, "    %s: flat, grouped, grouped-clean, compact, hierarchical, smart\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgAvailableStylesKey))
 
 	// Examples section
-	fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
+	_, _ = fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExamplesKey))
 
 	// Example 1: Show help with all details
-	fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleShowAllDetailsKey))
-	fmt.Fprintf(writer, "  %s --help --show-defaults --show-types --show-validators\n\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleShowAllDetailsKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help --show-defaults --show-types --show-validators\n\n", os.Args[0])
 
 	// Example 2: Search for specific flags
-	fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleSearchFlagsKey))
-	fmt.Fprintf(writer, "  %s --help --search \"database\"\n\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleSearchFlagsKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help --search \"database\"\n\n", os.Args[0])
 
 	// Example 3: Filter flags by pattern
-	fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleFilterFlagsKey))
-	fmt.Fprintf(writer, "  %s --help --filter \"*.port\"\n\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleFilterFlagsKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help --filter \"*.port\"\n\n", os.Args[0])
 
 	// Example 4: Show command help with custom style
-	fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleCustomStyleKey))
-	fmt.Fprintf(writer, "  %s --help --style compact\n\n", os.Args[0])
+	_, _ = fmt.Fprintf(writer, "  # %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgExampleCustomStyleKey))
+	_, _ = fmt.Fprintf(writer, "  %s --help --style compact\n\n", os.Args[0])
 
 	// Tips section
-	fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipsKey))
-	fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipHelpHelpKey))
-	fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipSearchPatternKey))
-	fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipStyleAutoKey))
+	_, _ = fmt.Fprintf(writer, "%s:\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipsKey))
+	_, _ = fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipHelpHelpKey))
+	_, _ = fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipSearchPatternKey))
+	_, _ = fmt.Fprintf(writer, "- %s\n", h.mainParser.layeredProvider.GetMessage(messages.MsgTipStyleAutoKey))
 
 	return nil
 }

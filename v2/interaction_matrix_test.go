@@ -1886,3 +1886,60 @@ func TestInteractionMatrixDetailModesShared(t *testing.T) {
 		t.Errorf("--globals must honor ShowRequired (the old path only showed (required)): %q", out)
 	}
 }
+
+// TestInteractionMatrixCommandListShared locks command-scoped help (renderCommandHelp)
+// onto the shared CommandListItem renderer: subcommand listings use the same quoted
+// format as the main command tree (not the old hand-rolled "name - desc"), and they
+// are RTL-safe (the hand-formatted variant bypassed CommandUsage's bidi isolation, so
+// --help <command> scrambled in Arabic while main --help did not).
+func TestInteractionMatrixCommandListShared(t *testing.T) {
+	// (1) format matches the main tree (quotes, short name)
+	p := NewParser()
+	if err := p.AddCommand(&Command{Name: "cloud", Description: "cloud ops",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", Description: "compute services",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.renderCommandHelp(&b, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, `compute "compute services"`) {
+		t.Errorf("command help must use the shared quoted format, got %q", out)
+	}
+	if strings.Contains(out, "compute - compute services") {
+		t.Errorf("command help still using the old hand-rolled dash format: %q", out)
+	}
+
+	// (2) RTL-safe via the shared renderer's bidi isolation
+	pa := NewParser()
+	bn := i18n.NewEmptyBundle()
+	if err := bn.AddLanguage(language.Arabic, map[string]string{"c.cloud": "سحابة", "c.compute": "حوسبة"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetUserBundle(bn); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.AddCommand(&Command{Name: "cloud", NameKey: "c.cloud", Description: "عمليات",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", NameKey: "c.compute", Description: "خدمات",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	pa.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hpa := NewHelpParser(pa, pa.helpConfig)
+	var rtl bytes.Buffer
+	if err := hpa.renderCommandHelp(&rtl, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rtl.String(), "⁨") && !strings.Contains(rtl.String(), "⁧") {
+		t.Errorf("command help must be RTL-isolated in an RTL locale, got %q", rtl.String())
+	}
+}
