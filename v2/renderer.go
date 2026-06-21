@@ -26,7 +26,12 @@ func NewRenderer(parser *Parser) *DefaultRenderer {
 // If the long name contains a comand-path, it only returns the flag part of the path.
 func (r *DefaultRenderer) FlagName(f *Argument) string {
 	if f.NameKey != "" {
-		return r.parser.layeredProvider.GetMessage(f.NameKey)
+		// GetMessage returns the key unchanged on a miss; fall back to the canonical
+		// name rather than leak the raw key. WithStrictTranslations surfaces such
+		// misses as warnings via GetWarnings (opt-in developer signal).
+		if msg := r.parser.layeredProvider.GetMessage(f.NameKey); msg != f.NameKey {
+			return msg
+		}
 	}
 
 	longName := f.GetLongName(r.parser)
@@ -42,16 +47,19 @@ func (r *DefaultRenderer) FlagName(f *Argument) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the flag's Description field.
 func (r *DefaultRenderer) FlagDescription(f *Argument) string {
-	if f.DescriptionKey == "" {
-		return f.Description
+	if f.DescriptionKey != "" {
+		if msg := r.parser.layeredProvider.GetMessage(f.DescriptionKey); msg != f.DescriptionKey {
+			return msg
+		}
 	}
-
-	return r.parser.layeredProvider.GetMessage(f.DescriptionKey)
+	return f.Description
 }
 
 func (r *DefaultRenderer) CommandName(c *Command) string {
 	if c.NameKey != "" {
-		return r.parser.layeredProvider.GetMessage(c.NameKey)
+		if msg := r.parser.layeredProvider.GetMessage(c.NameKey); msg != c.NameKey {
+			return msg
+		}
 	}
 
 	return c.Name
@@ -62,32 +70,49 @@ func (r *DefaultRenderer) CommandName(c *Command) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the command's Description field.
 func (r *DefaultRenderer) CommandDescription(c *Command) string {
-	if c.DescriptionKey == "" {
-		return c.Description
+	if c.DescriptionKey != "" {
+		if msg := r.parser.layeredProvider.GetMessage(c.DescriptionKey); msg != c.DescriptionKey {
+			return msg
+		}
 	}
-
-	return r.parser.layeredProvider.GetMessage(c.DescriptionKey)
+	return c.Description
 }
 
-// FlagUsage generates a usage string for a given command-line argument.
-// The usage string includes the flag name, short name (if available), description,
-// default value (if any), and whether the flag is required, optional, or conditional.
-// This method respects the HelpConfig settings and automatically handles RTL languages.
+// FlagUsage generates a usage string for a given command-line argument using the
+// parser's current HelpConfig. The usage string includes the flag name, short name
+// (if available), description, default value (if any), and whether the flag is
+// required, optional, or conditional. This method respects the HelpConfig settings
+// and automatically handles RTL languages.
 func (r *DefaultRenderer) FlagUsage(f *Argument) string {
-	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	return r.FlagUsageWithConfig(f, r.parser.GetHelpConfig())
+}
+
+// FlagUsageWithConfig renders a flag line under an explicit HelpConfig. It is the
+// single flag-line renderer: PrintHelp/PrintUsage pass the parser config, and the
+// runtime help system (--help) passes a config derived from its runtime options.
+// Keeping both entry points here is what stops the flat --help path from drifting
+// back into a hand-rolled renderer that ignored ShowRequired and the bidi handling.
+func (r *DefaultRenderer) FlagUsageWithConfig(f *Argument, config HelpConfig) string {
+	isRTLLocale := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (potentially translated)
 	flagName := r.FlagName(f)
+	description := ""
+	if config.ShowDescription {
+		description = r.FlagDescription(f)
+	}
 
-	// Build the flag representation
+	// One direction decision drives the whole line (separator, quoting, assembly).
+	rtl := r.rtlInvolved(isRTLLocale, flagName, description, f.DefaultValue)
+
+	// Build the flag representation. When RTL is involved use a neutral "/"
+	// separator rather than the translated "or" word (which would itself need
+	// isolating); plain LTR keeps "or" for backward compatibility.
 	var flagPart string
 	if f.Short != "" && config.ShowShortFlags {
-		if isRTL || r.containsRTLRunes(flagName) {
-			// In RTL languages, use slash separator
+		if rtl {
 			flagPart = fmt.Sprintf("--%s / -%s", flagName, f.Short)
 		} else {
-			// In LTR languages, use "or" separator for backward compatibility
 			orMsg := r.parser.layeredProvider.GetMessage(messages.MsgOrKey)
 			flagPart = fmt.Sprintf("--%s %s -%s", flagName, orMsg, f.Short)
 		}
@@ -95,28 +120,38 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 		flagPart = "--" + flagName
 	}
 
-	// Build the description part
-	var parts []string
+	// Build fields in LOGICAL order — assembly handles direction.
+	fields := []string{flagPart}
 
-	if config.ShowDescription {
-		description := r.FlagDescription(f)
-		if description != "" {
-			// Keep quotes for backward compatibility in LTR
-			if isRTL {
-				parts = append(parts, description)
-			} else {
-				parts = append(parts, "\""+description+"\"")
-			}
+	if description != "" {
+		// Quotes only on the plain LTR path; in bidi mode FSI isolation, not
+		// quoting, keeps the description from reordering its neighbours.
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
 
+	if config.ShowTypes {
+		fields = append(fields, "("+strings.ToLower(f.TypeOf.String())+")")
+	}
+
 	if f.DefaultValue != "" && config.ShowDefaults {
-		// Format numeric default values according to locale
-		formattedDefault := r.formatDefaultValue(f)
-		defaultMsg := fmt.Sprintf("(%s: %s)",
+		// Show the literal default the user would type; locale-format only on opt-in
+		// (a port "8080" must not become "8,080").
+		formattedDefault := f.DefaultValue
+		if config.LocaleAwareDefaults {
+			formattedDefault = r.formatDefaultValue(f)
+		}
+		fields = append(fields, fmt.Sprintf("(%s: %s)",
 			r.parser.layeredProvider.GetMessage(messages.MsgDefaultsToKey),
-			formattedDefault)
-		parts = append(parts, defaultMsg)
+			formattedDefault))
+	}
+
+	if config.ShowValidators && len(f.Validators) > 0 {
+		fields = append(fields, fmt.Sprintf("[%s: %d]",
+			r.parser.layeredProvider.GetMessage(messages.MsgValidatorsKey), len(f.Validators)))
 	}
 
 	if config.ShowRequired {
@@ -126,23 +161,10 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 		} else if f.RequiredIf != nil {
 			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgConditionalKey)
 		}
-		parts = append(parts, "("+requiredOrOptional+")")
+		fields = append(fields, "("+requiredOrOptional+")")
 	}
 
-	// Format based on RTL/LTR
-	if isRTL {
-		// In RTL, description comes first, then the flag
-		if len(parts) > 0 {
-			return strings.Join(parts, " ") + " " + flagPart
-		}
-		return flagPart
-	} else {
-		// In LTR, flag comes first, then description
-		if len(parts) > 0 {
-			return flagPart + " " + strings.Join(parts, " ")
-		}
-		return flagPart
-	}
+	return r.bidiAssemble(fields, rtl, isRTLLocale)
 }
 
 // CommandUsage generates a usage string for a given command.
@@ -150,7 +172,6 @@ func (r *DefaultRenderer) FlagUsage(f *Argument) string {
 // This method respects the HelpConfig settings and automatically handles RTL languages.
 func (r *DefaultRenderer) CommandUsage(c *Command) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Use the full command path for proper hierarchy display, or fall back to name
 	cmdName := c.path
@@ -158,42 +179,65 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 		cmdName = r.CommandName(c)
 	}
 
-	// Get positional arguments for this command
-	positionals := r.parser.getPositionalsForCommand(c.path)
-
 	// Build command usage with positionals
 	usageLine := cmdName
-	if len(positionals) > 0 {
-		for _, pos := range positionals {
-			// Extract just the flag name without the command path
-			flagName := pos.Value
-			if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
-				flagName = flagName[:idx]
-			}
-
-			// Format as <name> for required or [name] for optional
-			if pos.Argument.Required {
-				usageLine += " <" + flagName + ">"
-			} else {
-				usageLine += " [" + flagName + "]"
-			}
+	for _, pos := range r.parser.getPositionalsForCommand(c.path) {
+		// Extract just the flag name without the command path
+		flagName := pos.Value
+		if idx := strings.LastIndex(flagName, "@"); idx >= 0 {
+			flagName = flagName[:idx]
+		}
+		// Format as <name> for required or [name] for optional
+		if pos.Argument.Required {
+			usageLine += " <" + flagName + ">"
+		} else {
+			usageLine += " [" + flagName + "]"
 		}
 	}
 
+	description := ""
 	if config.ShowDescription {
-		description := r.CommandDescription(c)
-		if description != "" {
-			if isRTL || r.containsRTLRunes(cmdName) || r.containsRTLRunes(description) {
-				// In RTL, description comes first
-				return description + " :" + usageLine
-			} else {
-				// In LTR, command comes first (keep original format with quotes)
-				return usageLine + " \"" + description + "\""
-			}
+		description = r.CommandDescription(c)
+	}
+	return r.CommandListItem(usageLine, description)
+}
+
+// CommandListItem renders a "<name> <description>" line with the same quoting and
+// bidi handling as CommandUsage, for an explicit display name. It is the single
+// command-line formatter shared by the command tree, command-scoped help and search
+// results — the hand-rolled "name - description" variants bypassed it (and its RTL
+// isolation), so command help scrambled in RTL and drifted in format.
+func (r *DefaultRenderer) CommandListItem(name, description string) string {
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	rtl := r.rtlInvolved(isRTL, name, description)
+	fields := []string{name}
+	if description != "" {
+		// Quotes on plain LTR; bidi mode relies on FSI isolation instead.
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
+	return r.bidiAssemble(fields, rtl, isRTL)
+}
 
-	return usageLine
+// CommandHeaderLine renders a "path: description" breadcrumb header. Plain LTR
+// content is returned unchanged (byte-identical to the historical format); when RTL
+// is involved it isolates the path and description so neither (nor the ":") can
+// reorder the other, and an RTL UI locale gets a right-to-left base direction. This
+// keeps the deliberately distinct ":" header format while closing the last
+// hand-formatted command line's bidi hole.
+func (r *DefaultRenderer) CommandHeaderLine(path, description string) string {
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	if !r.rtlInvolved(isRTL, path, description) {
+		return path + ": " + description
+	}
+	line := i18n.Isolate(path) + ": " + i18n.Isolate(description)
+	if isRTL {
+		line = i18n.IsolateRTL(line)
+	}
+	return line
 }
 
 // PositionalUsage generates a usage string for a positional argument.
@@ -201,7 +245,7 @@ func (r *DefaultRenderer) CommandUsage(c *Command) string {
 // name "description" (required/optional)
 func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 	config := r.parser.GetHelpConfig()
-	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	isRTLLocale := i18n.IsRTL(r.parser.GetLanguage())
 
 	// Get the flag name (positionals use flag storage internally)
 	flagName := r.FlagName(f)
@@ -214,18 +258,19 @@ func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 		flagName = "[" + flagName + "]"
 	}
 
-	// Build the description part
-	var parts []string
-
+	description := ""
 	if config.ShowDescription {
-		description := r.FlagDescription(f)
-		if description != "" {
-			// Keep quotes for backward compatibility in LTR
-			if isRTL {
-				parts = append(parts, description)
-			} else {
-				parts = append(parts, "\""+description+"\"")
-			}
+		description = r.FlagDescription(f)
+	}
+	rtl := r.rtlInvolved(isRTLLocale, flagName, description)
+
+	// Build fields in LOGICAL order — assembly handles direction.
+	fields := []string{flagName}
+	if description != "" {
+		if rtl {
+			fields = append(fields, description)
+		} else {
+			fields = append(fields, "\""+description+"\"")
 		}
 	}
 
@@ -234,23 +279,10 @@ func (r *DefaultRenderer) PositionalUsage(f *Argument, position int) string {
 		if f.Required {
 			requiredOrOptional = r.parser.layeredProvider.GetMessage(messages.MsgRequiredKey)
 		}
-		parts = append(parts, "("+requiredOrOptional+")")
+		fields = append(fields, "("+requiredOrOptional+")")
 	}
 
-	// Format based on RTL/LTR
-	if isRTL {
-		// In RTL, description comes first, then the name
-		if len(parts) > 0 {
-			return strings.Join(parts, " ") + " " + flagName
-		}
-		return flagName
-	} else {
-		// In LTR, name comes first, then description
-		if len(parts) > 0 {
-			return flagName + " " + strings.Join(parts, " ")
-		}
-		return flagName
-	}
+	return r.bidiAssemble(fields, rtl, isRTLLocale)
 }
 
 // formatDefaultValue formats a default value according to locale and type
@@ -274,6 +306,51 @@ func (r *DefaultRenderer) formatDefaultValue(f *Argument) string {
 	}
 	// Return as-is for non-numeric or other types
 	return f.DefaultValue
+}
+
+// rtlInvolved reports whether a help line must use the bidi-aware assembly path:
+// either the UI locale is RTL, or some piece of content carries RTL runes (e.g.
+// an Arabic description in an otherwise-English help screen). When it returns
+// false the line stays on the plain LTR path and is byte-identical to historical
+// output, so ordinary ASCII help never gains zero-width bidi controls.
+func (r *DefaultRenderer) rtlInvolved(isRTLLocale bool, texts ...string) bool {
+	if isRTLLocale {
+		return true
+	}
+	for _, t := range texts {
+		if r.containsRTLRunes(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// bidiAssemble joins help-line fields given in LOGICAL (reading) order. With no
+// RTL involved it is a plain space-join (the historical LTR output). Otherwise
+// every non-empty field is FSI-isolated — so an LTR run (a --flag, a path, a
+// number) cannot reorder an adjacent RTL run, or vice versa — and an RTL UI
+// locale wraps the whole line to assert a right-to-left base direction (help
+// lines start with a neutral "--", so first-strong detection would otherwise
+// frame the line LTR). This single assembly, shared by flags, commands and
+// positionals, replaces the per-element manual reordering that used to drift.
+func (r *DefaultRenderer) bidiAssemble(fields []string, needsBidi, baseRTL bool) string {
+	var nonEmpty []string
+	for _, f := range fields {
+		if f != "" {
+			nonEmpty = append(nonEmpty, f)
+		}
+	}
+	if !needsBidi {
+		return strings.Join(nonEmpty, " ")
+	}
+	for i, f := range nonEmpty {
+		nonEmpty[i] = i18n.Isolate(f)
+	}
+	line := strings.Join(nonEmpty, " ")
+	if baseRTL {
+		line = i18n.IsolateRTL(line)
+	}
+	return line
 }
 
 // containsRTLRunes checks if a string contains RTL characters

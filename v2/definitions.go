@@ -139,15 +139,21 @@ const (
 
 // HelpConfig allows customization of help output (applies to "raw" --help outpout)
 type HelpConfig struct {
-	Style            HelpStyle
-	ShowDefaults     bool
-	ShowShortFlags   bool
-	ShowRequired     bool
-	ShowDescription  bool
-	MaxGlobals       int
-	MaxWidth         int
-	GroupSharedFlags bool
-	CompactThreshold int // Number of flags before switching to compact mode
+	Style           HelpStyle
+	ShowDefaults    bool
+	ShowShortFlags  bool
+	ShowRequired    bool
+	ShowDescription bool
+	ShowTypes       bool // Show each flag's type, e.g. "(string)"
+	ShowValidators  bool // Show a flag's validator count, e.g. "[validators: 2]"
+	// LocaleAwareDefaults opts into locale-formatting numeric default values in help
+	// (e.g. "8080" -> "8,080"). Off by default: a shown default is the literal value
+	// the user would type, so a port stays "8080" rather than becoming misleading.
+	LocaleAwareDefaults bool
+	MaxGlobals          int
+	MaxWidth            int
+	GroupSharedFlags    bool
+	CompactThreshold    int // Number of flags before switching to compact mode
 }
 
 // DefaultHelpConfig provides sensible defaults
@@ -165,73 +171,75 @@ var DefaultHelpConfig = HelpConfig{
 
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
-	posixCompatible           bool
-	prefixes                  []rune
-	listFunc                  types.ListDelimiterFunc
-	acceptedFlags             *orderedmap.OrderedMap[string, *FlagInfo]
-	lookup                    map[string]string
-	options                   map[string]string
-	errors                    []error
-	bind                      map[string]any
-	customBind                map[string]ValueSetFunc
-	registeredCommands        *orderedmap.OrderedMap[string, *Command]
-	commandOptions            *orderedmap.OrderedMap[string, bool]
-	positionalArgs            []PositionalArgument
-	rawArgs                   map[string]string
-	repeatedFlags             map[string]bool
-	completionMode            bool   // when true, Parse resolves structure only: no binding, callbacks, secure prompts, errors-as-side-effects, version/help output, or post-parse validation
-	completionPath            string // deepest command path the loop resolved during a completion-mode parse (the cursor's command context, incl. intermediate/non-terminal)
-	callbackQueue             *queue.Q[*Command]
-	callbackResults           map[string]error
-	callbackOnParse           bool // *during* parse process
-	callbackOnParseComplete   bool // *after* parse process
-	secureArguments           *orderedmap.OrderedMap[string, *types.Secure]
-	envNameConverter          NameConversionFunc
-	commandNameConverter      NameConversionFunc
-	flagNameConverter         NameConversionFunc
-	terminalReader            input.TerminalReader
-	stderr                    io.Writer
-	stdout                    io.Writer
-	maxDependencyDepth        int
-	defaultBundle             *i18n.Bundle // Immutable default bundle
-	systemBundle              *i18n.Bundle // Parser-specific overrides
-	userI18n                  *i18n.Bundle // User-provided bundle
-	layeredProvider           *i18n.LayeredMessageProvider
-	renderer                  Renderer
-	structCtx                 any
-	contractGroupsChecked     bool
-	suggestionsFormatter      SuggestionsFormatter
-	helpConfig                HelpConfig
-	prettyPrintConfig         *PrettyPrintConfig
-	helpBehavior              HelpBehavior
-	autoHelp                  bool
-	helpFlags                 []string
-	helpExecuted              bool
-	helpEndFunc               EndShowHelpHookFunc
-	autoRegisteredHelp        map[string]bool
-	version                   string
-	versionFunc               func() string
-	versionFormatter          func(string) string
-	versionFlags              []string
-	autoVersion               bool
-	showVersionInHelp         bool
-	versionExecuted           bool
-	autoRegisteredVersion     map[string]bool
-	autoLanguage              bool
-	checkSystemLocale         bool
-	languageEnvVar            string
-	languageFlags             []string
-	autoRegisteredLanguage    map[string]bool
-	globalPreHooks            []PreHookFunc
-	globalPostHooks           []PostHookFunc
-	commandPreHooks           map[string][]PreHookFunc
-	commandPostHooks          map[string][]PostHookFunc
-	envResolver               env.Resolver
-	hookOrder                 HookOrder
-	validationHook            ValidationHookFunc
-	translationRegistry       *JITTranslationRegistry
-	flagSuggestionThreshold   int  // Maximum Levenshtein distance for flag suggestions (default: 2)
-	cmdSuggestionThreshold    int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	posixCompatible         bool
+	prefixes                []rune
+	listFunc                types.ListDelimiterFunc
+	acceptedFlags           *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup                  map[string]string
+	options                 map[string]string
+	errors                  []error
+	bind                    map[string]any
+	customBind              map[string]ValueSetFunc
+	registeredCommands      *orderedmap.OrderedMap[string, *Command]
+	commandOptions          *orderedmap.OrderedMap[string, bool]
+	positionalArgs          []PositionalArgument
+	rawArgs                 map[string]string
+	repeatedFlags           map[string]bool
+	completionMode          bool   // when true, Parse resolves structure only: no binding, callbacks, secure prompts, errors-as-side-effects, version/help output, or post-parse validation
+	completionPath          string // deepest command path the loop resolved during a completion-mode parse (the cursor's command context, incl. intermediate/non-terminal)
+	callbackQueue           *queue.Q[*Command]
+	callbackResults         map[string]error
+	callbackOnParse         bool // *during* parse process
+	callbackOnParseComplete bool // *after* parse process
+	secureArguments         *orderedmap.OrderedMap[string, *types.Secure]
+	envNameConverter        NameConversionFunc
+	commandNameConverter    NameConversionFunc
+	flagNameConverter       NameConversionFunc
+	terminalReader          input.TerminalReader
+	stderr                  io.Writer
+	stdout                  io.Writer
+	maxDependencyDepth      int
+	defaultBundle           *i18n.Bundle // Immutable default bundle
+	systemBundle            *i18n.Bundle // Parser-specific overrides
+	userI18n                *i18n.Bundle // User-provided bundle
+	layeredProvider         *i18n.LayeredMessageProvider
+	renderer                Renderer
+	structCtx               any
+	contractGroupsChecked   bool
+	suggestionsFormatter    SuggestionsFormatter
+	helpConfig              HelpConfig
+	prettyPrintConfig       *PrettyPrintConfig
+	helpBehavior            HelpBehavior
+	autoHelp                bool
+	helpFlags               []string
+	helpExecuted            bool
+	helpEndFunc             EndShowHelpHookFunc
+	autoRegisteredHelp      map[string]bool
+	version                 string
+	versionFunc             func() string
+	versionFormatter        func(string) string
+	versionFlags            []string
+	autoVersion             bool
+	showVersionInHelp       bool
+	versionExecuted         bool
+	autoRegisteredVersion   map[string]bool
+	autoLanguage            bool
+	checkSystemLocale       bool
+	languageEnvVar          string
+	languageFlags           []string
+	autoRegisteredLanguage  map[string]bool
+	globalPreHooks          []PreHookFunc
+	globalPostHooks         []PostHookFunc
+	commandPreHooks         map[string][]PreHookFunc
+	commandPostHooks        map[string][]PostHookFunc
+	envResolver             env.Resolver
+	hookOrder               HookOrder
+	validationHook          ValidationHookFunc
+	translationRegistry     *JITTranslationRegistry
+	flagSuggestionThreshold int  // Maximum Levenshtein distance for flag suggestions (default: 2)
+	cmdSuggestionThreshold  int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	errOnStrictTranslation  bool // If true, a declared nameKey/descKey with no translation accumulates an error
+
 	allowUnknownFlags         bool // If true, don't generate errors for unknown flags
 	treatUnknownAsPositionals bool // If true, treat unknown flags and their values as positionals
 	mu                        sync.Mutex
@@ -254,10 +262,13 @@ type Renderer interface {
 	FlagName(f *Argument) string
 	FlagDescription(f *Argument) string
 	FlagUsage(f *Argument) string
+	FlagUsageWithConfig(f *Argument, config HelpConfig) string
 	PositionalUsage(f *Argument, position int) string
 	CommandName(c *Command) string
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
+	CommandListItem(name, description string) string
+	CommandHeaderLine(path, description string) string
 }
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies

@@ -230,6 +230,8 @@ func TestHelpParser_RuntimeOptions(t *testing.T) {
 			name: "show defaults option",
 			args: []string{"--help", "--show-defaults"},
 			checkFunc: func(t *testing.T, output string) {
+				// Defaults render as the literal value by default (a port stays 8080,
+				// not "8,080") — locale formatting is opt-in via LocaleAwareDefaults.
 				assert.Contains(t, output, "(defaults to: 8080)")
 			},
 		},

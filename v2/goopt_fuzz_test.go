@@ -109,7 +109,10 @@ func FuzzPositionalArgs(f *testing.F) {
 		args := []string{arg1, arg2, "-v"}
 		ok := p.Parse(args)
 
-		if ok {
+		// The positional round-trip only holds when the inputs are genuine positionals.
+		// A flag-looking token is parsed as a flag, and a bare "--" is the end-of-options
+		// marker (consumed, shifting what lands in file1/file2) — so guard on isFlag.
+		if ok && !p.isFlag(arg1) && !p.isFlag(arg2) {
 			f1, _ := p.Get("file1")
 			f2, _ := p.Get("file2")
 			assert.Equal(t, arg1, f1)

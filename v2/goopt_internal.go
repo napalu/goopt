@@ -676,31 +676,16 @@ func (p *Parser) parseCommand(state parse.State, cmdQueue *queue.Q[*Command], co
 						// Very likely a typo - generate error with suggestions
 						p.addError(errs.ErrCommandNotFound.WithArgs(currentArg))
 
-						// Display each suggestion in the form that was closest to user input
-						displaySuggestions := make([]string, len(suggestions))
-						for i, suggestion := range suggestions {
-							// By default show canonical
-							displaySuggestions[i] = suggestion
-
-							// Check if we should show translated form
-							if p.translationRegistry != nil {
-								if cmd, found := p.registeredCommands.Get(suggestion); found && cmd.NameKey != "" {
-									if translated, found := p.translationRegistry.GetCommandTranslation(suggestion, p.GetLanguage()); found {
-										// Compare distances to determine which form to show
-										canonicalDist := util.DamerauLevenshteinDistance(currentArg, suggestion)
-										translatedDist := util.DamerauLevenshteinDistance(currentArg, translated)
-
-										// Show the form that's closer to what user typed
-										if translatedDist < canonicalDist {
-											displaySuggestions[i] = translated
-										} else if translatedDist == canonicalDist && translated != suggestion {
-											// If equal distance and different words, show both forms
-											displaySuggestions[i] = fmt.Sprintf("%s / %s", suggestion, translated)
-										}
-									}
-								}
+						// Render each suggestion in the form closest to user input.
+						displaySuggestions := p.localizeSuggestions(currentArg, suggestions, func(key string) (string, bool) {
+							if p.translationRegistry == nil {
+								return "", false
 							}
-						}
+							if cmd, found := p.registeredCommands.Get(key); found && cmd.NameKey != "" {
+								return p.translationRegistry.GetCommandTranslation(key, p.GetLanguage())
+							}
+							return "", false
+						})
 
 						// Format suggestions
 						var formatted string
@@ -835,389 +820,237 @@ func (p *Parser) flagValue(argument *Argument, next string, flag string) (arg st
 }
 
 // findSimilarSubcommandsWithContext finds subcommands similar to the input and detects if input is likely translated
-func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input string, parentPath string) ([]string, bool) {
-	type subcommandSuggestion struct {
-		canonicalName string
-		distance      int
-		isTranslated  bool
+// suggestionItem is one candidate for fuzzy "did you mean" matching: a key (the
+// value returned and deduped on — a command name, a full command path, or a flag
+// name) plus the texts to score the user's input against. names are canonical
+// score targets (the name itself, plus aliases such as a flag's short form); i18n
+// are translated score targets. Empty targets are ignored. This is the seam that
+// keeps each entity's gathering distinct while the ranking below stays shared.
+type suggestionItem struct {
+	key   string
+	names []string
+	i18n  []string
+}
+
+// rankSuggestions is the single ranking core shared by every "did you mean"
+// matcher — root commands, subcommands, the help command tree, and flags. For
+// each item it keeps the closest in-threshold distance, preferring a canonical
+// match over a translated one on a tie, then applies the shared filter: when any
+// distance-1 match exists show only those, otherwise widen to the threshold; dedup
+// by key, sort by ascending distance, cap at topN. threshold<=0 disables
+// suggestions. Returns the display keys and whether any surfaced match came from a
+// translated name (so callers can decide whether to render localized forms).
+//
+// The legitimate differences between flags and commands (separate thresholds,
+// short forms, translation API, display prefixes) all live in the per-entity
+// gatherers and callers — NOT here. Keep it that way: this is the one place the
+// scoring/filtering must not drift between subsystems.
+func (p *Parser) rankSuggestions(input string, items []suggestionItem, threshold, topN int) ([]string, bool) {
+	if threshold <= 0 {
+		return nil, false
 	}
 
-	var allSuggestions []subcommandSuggestion
-	threshold := p.cmdSuggestionThreshold
-	if threshold == 0 {
-		return nil, false // Suggestions disabled for commands
+	type scored struct {
+		key          string
+		distance     int
+		isTranslated bool
 	}
-	currentLang := p.GetLanguage()
-
-	// Check all subcommands - both canonical and translated names
-	for _, cmd := range subcommands {
-		// Check canonical name
-		distance := util.DamerauLevenshteinDistance(input, cmd.Name)
-		if distance > 0 && distance <= threshold {
-			allSuggestions = append(allSuggestions, subcommandSuggestion{
-				canonicalName: cmd.Name,
-				distance:      distance,
-				isTranslated:  false,
-			})
+	var all []scored
+	for _, it := range items {
+		best := -1
+		bestTranslated := false
+		consider := func(text string, translated bool) {
+			if text == "" {
+				return
+			}
+			d := util.DamerauLevenshteinDistance(input, text)
+			if d <= 0 || d > threshold {
+				return
+			}
+			// Strictly-closer wins; canonical wins ties (it is considered first).
+			if best == -1 || d < best {
+				best = d
+				bestTranslated = translated
+			}
 		}
+		for _, n := range it.names {
+			consider(n, false)
+		}
+		for _, t := range it.i18n {
+			consider(t, true)
+		}
+		if best != -1 {
+			all = append(all, scored{key: it.key, distance: best, isTranslated: bestTranslated})
+		}
+	}
+	if len(all) == 0 {
+		return nil, false
+	}
 
-		// Check translated name if available
+	// If any distance-1 match exists, show only those; otherwise widen to the
+	// configured threshold.
+	minDistance := 3
+	for _, s := range all {
+		if s.distance < minDistance {
+			minDistance = s.distance
+		}
+	}
+	finalThreshold := minDistance
+	if minDistance > 1 && threshold > 1 {
+		finalThreshold = threshold
+	}
+
+	seen := make(map[string]bool)
+	var result []string
+	hasTranslated := false
+	for _, s := range all {
+		if s.distance <= finalThreshold && !seen[s.key] {
+			seen[s.key] = true
+			result = append(result, s.key)
+			if s.isTranslated {
+				hasTranslated = true
+			}
+		}
+	}
+
+	slices.SortFunc(result, func(a, b string) int {
+		da, db := 3, 3
+		for _, s := range all {
+			if s.key == a {
+				da = s.distance
+			}
+			if s.key == b {
+				db = s.distance
+			}
+		}
+		return cmp.Compare(da, db)
+	})
+	if len(result) > topN {
+		result = result[:topN]
+	}
+	return result, hasTranslated
+}
+
+func (p *Parser) findSimilarSubcommandsWithContext(subcommands []Command, input string, parentPath string) ([]string, bool) {
+	currentLang := p.GetLanguage()
+	items := make([]suggestionItem, 0, len(subcommands))
+	for _, cmd := range subcommands {
+		it := suggestionItem{key: cmd.Name, names: []string{cmd.Name}}
 		if p.translationRegistry != nil && cmd.NameKey != "" {
-			// For subcommands, build the full path
 			fullPath := cmd.Name
 			if parentPath != "" {
 				fullPath = parentPath + " " + cmd.Name
 			}
-			if translatedName, found := p.translationRegistry.GetCommandTranslation(fullPath, currentLang); found {
-				translatedDistance := util.DamerauLevenshteinDistance(input, translatedName)
-				if translatedDistance > 0 && translatedDistance <= threshold {
-					// Check if we already have this command in suggestions
-					found := false
-					for i, s := range allSuggestions {
-						if s.canonicalName == cmd.Name {
-							// Update if translated is closer
-							if translatedDistance < s.distance {
-								allSuggestions[i].distance = translatedDistance
-								allSuggestions[i].isTranslated = true
-							}
-							found = true
-							break
-						}
-					}
-					if !found {
-						allSuggestions = append(allSuggestions, subcommandSuggestion{
-							canonicalName: cmd.Name,
-							distance:      translatedDistance,
-							isTranslated:  true,
-						})
-					}
+			if t, found := p.translationRegistry.GetCommandTranslation(fullPath, currentLang); found {
+				it.i18n = append(it.i18n, t)
+			}
+		}
+		items = append(items, it)
+	}
+	return p.rankSuggestions(input, items, p.cmdSuggestionThreshold, 3)
+}
+
+// localizeSuggestions renders ranked suggestion keys in the form closest to what the
+// user typed: the translated name when it is a nearer match, "canonical / translated"
+// on a tie, otherwise the canonical key. translate resolves a key's translated form
+// (and whether one exists) — the only per-entity difference (command name vs full
+// path vs flag API) lives in that closure. This is the display counterpart to
+// rankSuggestions: the single place the canonical/translated/both choice lives, so it
+// cannot drift between the flag, command and subcommand "did you mean" paths.
+func (p *Parser) localizeSuggestions(input string, keys []string, translate func(key string) (string, bool)) []string {
+	out := make([]string, len(keys))
+	for i, key := range keys {
+		out[i] = key
+		translated, ok := translate(key)
+		if !ok {
+			continue
+		}
+		canonicalDist := util.DamerauLevenshteinDistance(input, key)
+		translatedDist := util.DamerauLevenshteinDistance(input, translated)
+		if translatedDist < canonicalDist {
+			out[i] = translated
+		} else if translatedDist == canonicalDist && translated != key {
+			out[i] = key + " / " + translated
+		}
+	}
+	return out
+}
+
+// suggestSubcommands returns display-ready "did you mean" suggestions for an unknown
+// subcommand `input` under `parentPath`. It is the single source of truth shared by the
+// parse path and the help system: matching is i18n-aware (findSimilarSubcommandsWithContext)
+// and display is localized (localizeSuggestions). Returns an empty slice when nothing is
+// similar enough. Keeping both call sites on this helper is what prevents the help system
+// from drifting back to canonical-only suggestions.
+func (p *Parser) suggestSubcommands(subcommands []Command, input, parentPath string) []string {
+	suggestions, _ := p.findSimilarSubcommandsWithContext(subcommands, input, parentPath)
+	if len(suggestions) == 0 {
+		return nil
+	}
+	return p.localizeSuggestions(input, suggestions, func(key string) (string, bool) {
+		if p.translationRegistry == nil {
+			return "", false
+		}
+		for _, sub := range subcommands {
+			if sub.Name == key && sub.NameKey != "" {
+				fullPath := key
+				if parentPath != "" {
+					fullPath = parentPath + " " + key
 				}
+				return p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage())
 			}
 		}
-	}
-
-	// Find minimum distance
-	minDistance := 3
-	for _, s := range allSuggestions {
-		if s.distance < minDistance {
-			minDistance = s.distance
-		}
-	}
-
-	// If we have distance 1 matches, only show those
-	// Otherwise show all matches up to the configured threshold
-	finalThreshold := minDistance
-	if minDistance > 1 && p.cmdSuggestionThreshold > 1 {
-		finalThreshold = p.cmdSuggestionThreshold
-	}
-
-	// Filter and collect canonical names
-	var suggestions []string
-	hasTranslated := false
-
-	for _, s := range allSuggestions {
-		if s.distance <= finalThreshold {
-			suggestions = append(suggestions, s.canonicalName)
-			if s.isTranslated {
-				hasTranslated = true
-			}
-		}
-	}
-
-	// Remove duplicates
-	uniqueSuggestions := make(map[string]bool)
-	var result []string
-	for _, s := range suggestions {
-		if !uniqueSuggestions[s] {
-			uniqueSuggestions[s] = true
-			result = append(result, s)
-		}
-	}
-
-	// Sort by distance
-	slices.SortFunc(result, func(a, b string) int {
-		dist1, dist2 := 3, 3
-		for _, s := range allSuggestions {
-			if s.canonicalName == a {
-				dist1 = s.distance
-			}
-			if s.canonicalName == b {
-				dist2 = s.distance
-			}
-		}
-		return cmp.Compare(dist1, dist2)
+		return "", false
 	})
-
-	// Limit to top 3
-	if len(result) > 3 {
-		result = result[:3]
-	}
-
-	return result, hasTranslated
 }
 
 // findSimilarFlagsWithContext finds flags similar to the input and detects if input is likely translated
 func (p *Parser) findSimilarFlagsWithContext(input string, commandPath string) ([]string, bool) {
-	type flagSuggestion struct {
-		canonicalName string
-		distance      int
-		isTranslated  bool
-	}
-
-	var allSuggestions []flagSuggestion
-	threshold := p.flagSuggestionThreshold
-	if threshold == 0 {
-		return nil, false // Suggestions disabled for flags
-	}
-
-	// Remove prefix from input if present
 	cleanInput := strings.TrimLeftFunc(input, p.prefixFunc)
 	currentLang := p.GetLanguage()
 
-	// Check all flags - both canonical and translated names
+	// Gather one item per flag name; the short form and translated name become
+	// additional score targets. Flags sharing a name across command paths merge.
+	var items []suggestionItem
+	index := map[string]int{}
 	for flagKey, flagInfo := range p.acceptedFlags.All() {
-
 		// Skip flags not in the current command context
 		if commandPath != "" && flagInfo.CommandPath != commandPath && flagInfo.CommandPath != "" {
 			continue
 		}
-
-		// Extract flag name without command path
-		flagParts := splitPathFlag(flagKey)
-		flagName := flagParts[0]
-
-		// Check canonical name
-		distance := util.DamerauLevenshteinDistance(cleanInput, flagName)
-		if distance > 0 && distance <= threshold {
-			allSuggestions = append(allSuggestions, flagSuggestion{
-				canonicalName: flagName,
-				distance:      distance,
-				isTranslated:  false,
-			})
+		flagName := splitPathFlag(flagKey)[0]
+		i, ok := index[flagName]
+		if !ok {
+			i = len(items)
+			index[flagName] = i
+			items = append(items, suggestionItem{key: flagName, names: []string{flagName}})
 		}
-
-		// Check short form if available
 		if flagInfo.Argument.Short != "" {
-			shortDistance := util.DamerauLevenshteinDistance(cleanInput, flagInfo.Argument.Short)
-			if shortDistance > 0 && shortDistance <= threshold {
-				// Check if we already have this flag in suggestions
-				found := false
-				for i, s := range allSuggestions {
-					if s.canonicalName == flagName {
-						// Update if short form is closer
-						if shortDistance < s.distance {
-							allSuggestions[i].distance = shortDistance
-						}
-						found = true
-						break
-					}
-				}
-				if !found {
-					allSuggestions = append(allSuggestions, flagSuggestion{
-						canonicalName: flagName,
-						distance:      shortDistance,
-						isTranslated:  false,
-					})
-				}
-			}
+			items[i].names = append(items[i].names, flagInfo.Argument.Short)
 		}
-
-		// Check translated name if available
 		if p.translationRegistry != nil && flagInfo.Argument.NameKey != "" {
-			if translatedName, found := p.translationRegistry.GetFlagTranslation(flagName, currentLang); found {
-				translatedDistance := util.DamerauLevenshteinDistance(cleanInput, translatedName)
-				if translatedDistance > 0 && translatedDistance <= threshold {
-					// Check if we already have this flag in suggestions
-					found := false
-					for i, s := range allSuggestions {
-						if s.canonicalName == flagName {
-							// Update if translated is closer
-							if translatedDistance < s.distance {
-								allSuggestions[i].distance = translatedDistance
-								allSuggestions[i].isTranslated = true
-							}
-							found = true
-							break
-						}
-					}
-					if !found {
-						allSuggestions = append(allSuggestions, flagSuggestion{
-							canonicalName: flagName,
-							distance:      translatedDistance,
-							isTranslated:  true,
-						})
-					}
-				}
+			if t, found := p.translationRegistry.GetFlagTranslation(flagName, currentLang); found {
+				items[i].i18n = append(items[i].i18n, t)
 			}
 		}
 	}
-
-	// Find minimum distance
-	minDistance := 3
-	for _, s := range allSuggestions {
-		if s.distance < minDistance {
-			minDistance = s.distance
-		}
-	}
-
-	// If we have distance 1 matches, only show those
-	// Otherwise show all matches up to the configured threshold
-	finalThreshold := minDistance
-	if minDistance > 1 && p.flagSuggestionThreshold > 1 {
-		finalThreshold = p.flagSuggestionThreshold
-	}
-
-	// Filter and collect canonical names
-	var suggestions []string
-	hasTranslated := false
-
-	for _, s := range allSuggestions {
-		if s.distance <= finalThreshold {
-			suggestions = append(suggestions, s.canonicalName)
-			if s.isTranslated {
-				hasTranslated = true
-			}
-		}
-	}
-
-	// Remove duplicates
-	uniqueSuggestions := make(map[string]bool)
-	var result []string
-	for _, s := range suggestions {
-		if !uniqueSuggestions[s] {
-			uniqueSuggestions[s] = true
-			result = append(result, s)
-		}
-	}
-
-	// Sort by distance
-	slices.SortFunc(result, func(a, b string) int {
-		dist1, dist2 := 3, 3
-		for _, s := range allSuggestions {
-			if s.canonicalName == a {
-				dist1 = s.distance
-			}
-			if s.canonicalName == b {
-				dist2 = s.distance
-			}
-		}
-		return cmp.Compare(dist1, dist2)
-	})
-
-	// Limit to top 3
-	if len(result) > 3 {
-		result = result[:3]
-	}
-
-	return result, hasTranslated
+	return p.rankSuggestions(cleanInput, items, p.flagSuggestionThreshold, 3)
 }
 
 // findSimilarRootCommandsWithContext finds root commands similar to the input
 func (p *Parser) findSimilarRootCommandsWithContext(input string) ([]string, bool) {
-	type suggestion struct {
-		canonicalName string
-		distance      int
-		isTranslated  bool
-	}
-
-	var allSuggestions []suggestion
 	currentLang := p.GetLanguage()
-	threshold := p.cmdSuggestionThreshold
-	if threshold == 0 {
-		return nil, false // Suggestions disabled for commands
-	}
-
-	// Check all commands - both canonical and translated names
+	var items []suggestionItem
 	for cmdName, cmd := range p.registeredCommands.All() {
-
-		// Check canonical name
-		distance := util.DamerauLevenshteinDistance(input, cmdName)
-		if distance > 0 && distance <= threshold {
-			allSuggestions = append(allSuggestions, suggestion{
-				canonicalName: cmdName,
-				distance:      distance,
-				isTranslated:  false,
-			})
-		}
-
-		// Check translated name if available
+		it := suggestionItem{key: cmdName, names: []string{cmdName}}
 		if p.translationRegistry != nil && cmd.NameKey != "" {
-			if translated, found := p.translationRegistry.GetCommandTranslation(cmdName, currentLang); found {
-				translatedDistance := util.DamerauLevenshteinDistance(input, translated)
-				if translatedDistance > 0 && translatedDistance <= threshold {
-					// Check if we already have this command in suggestions
-					found := false
-					for i, s := range allSuggestions {
-						if s.canonicalName == cmdName {
-							// Update if translated is closer
-							if translatedDistance < s.distance {
-								allSuggestions[i].distance = translatedDistance
-								allSuggestions[i].isTranslated = true
-							}
-							found = true
-							break
-						}
-					}
-					if !found {
-						allSuggestions = append(allSuggestions, suggestion{
-							canonicalName: cmdName,
-							distance:      translatedDistance,
-							isTranslated:  true,
-						})
-					}
-				}
+			if t, found := p.translationRegistry.GetCommandTranslation(cmdName, currentLang); found {
+				it.i18n = append(it.i18n, t)
 			}
 		}
+		items = append(items, it)
 	}
-
-	// Find minimum distance
-	minDistance := 3
-	for _, s := range allSuggestions {
-		if s.distance < minDistance {
-			minDistance = s.distance
-		}
-	}
-
-	// If we have distance 1 matches, only show those
-	// Otherwise show all matches up to the configured threshold
-	finalThreshold := minDistance
-	if minDistance > 1 && p.cmdSuggestionThreshold > 1 {
-		finalThreshold = p.cmdSuggestionThreshold
-	}
-
-	// Filter and determine if we should show translated names
-	var finalSuggestions []string
-	hasTranslated := false
-
-	for _, s := range allSuggestions {
-		if s.distance <= finalThreshold {
-			finalSuggestions = append(finalSuggestions, s.canonicalName)
-			if s.isTranslated {
-				hasTranslated = true
-			}
-		}
-	}
-
-	// Sort by distance
-	slices.SortFunc(finalSuggestions, func(a, b string) int {
-		dist1, dist2 := 3, 3
-		for _, s := range allSuggestions {
-			if s.canonicalName == a {
-				dist1 = s.distance
-			}
-			if s.canonicalName == b {
-				dist2 = s.distance
-			}
-		}
-		return cmp.Compare(dist1, dist2)
-	})
-
-	// Limit to top 3
-	if len(finalSuggestions) > 3 {
-		finalSuggestions = finalSuggestions[:3]
-	}
-
-	return finalSuggestions, hasTranslated
+	return p.rankSuggestions(input, items, p.cmdSuggestionThreshold, 3)
 }
 
 // generateFlagError generates an error for an unknown flag with suggestions
@@ -1227,30 +1060,18 @@ func (p *Parser) generateFlagError(flagName string, commandPath string) {
 		// Format suggestions with proper prefixes
 		formattedSuggestions := make([]string, len(suggestions))
 
-		// Remove prefix from input for comparison
+		// Decide each display form (translated/canonical/both) closest to user input,
+		// then apply flag prefixes below.
 		cleanInput := strings.TrimLeftFunc(flagName, p.prefixFunc)
-
-		for i, s := range suggestions {
-			// Decide whether to show canonical or translated based on distances
-			displayName := s
-
-			if p.translationRegistry != nil {
-				// Check if there's a translation
-				if translated, found := p.translationRegistry.GetFlagTranslation(s, p.GetLanguage()); found {
-					// Compare distances to determine which form to show
-					canonicalDist := util.DamerauLevenshteinDistance(cleanInput, s)
-					translatedDist := util.DamerauLevenshteinDistance(cleanInput, translated)
-
-					// Show the form that's closer to what user typed
-					if translatedDist < canonicalDist {
-						displayName = translated
-					} else if translatedDist == canonicalDist && translated != s {
-						// If equal distance and different words, show both forms
-						displayName = s + " / " + translated
-					}
-				}
+		displayNames := p.localizeSuggestions(cleanInput, suggestions, func(key string) (string, bool) {
+			if p.translationRegistry == nil {
+				return "", false
 			}
+			return p.translationRegistry.GetFlagTranslation(key, p.GetLanguage())
+		})
 
+		for i, displayName := range displayNames {
+			s := suggestions[i]
 			if len(displayName) == 1 || (strings.Contains(displayName, " / ") && len(s) == 1) {
 				// Short flag
 				formattedSuggestions[i] = string(p.prefixes[0]) + displayName
@@ -1317,41 +1138,10 @@ func (p *Parser) checkSubCommands(cmdQueue *queue.Q[*Command], currentArg string
 		hasPositionals := len(p.getPositionalsForCommand(currentCmd.path)) > 0
 		if !hasPositionals && !p.isFlag(currentArg) {
 			// Find similar subcommands - pass the parent command's path
-			suggestions, _ := p.findSimilarSubcommandsWithContext(currentCmd.Subcommands, currentArg, currentCmd.path)
-			if len(suggestions) > 0 {
+			displaySuggestions := p.suggestSubcommands(currentCmd.Subcommands, currentArg, currentCmd.path)
+			if len(displaySuggestions) > 0 {
 				// Create a more helpful error message
 				p.addError(errs.ErrCommandNotFound.WithArgs(currentCmd.path + " " + currentArg))
-
-				// Decide whether to show canonical or translated based on distances
-				displaySuggestions := make([]string, len(suggestions))
-				for i, suggestion := range suggestions {
-					displaySuggestions[i] = suggestion
-
-					// Find the subcommand to check for translation
-					for _, sub := range currentCmd.Subcommands {
-						if sub.Name == suggestion && sub.NameKey != "" && p.translationRegistry != nil {
-							// Build the full path for the subcommand
-							fullPath := suggestion
-							if currentCmd.path != "" {
-								fullPath = currentCmd.path + " " + suggestion
-							}
-							if translated, found := p.translationRegistry.GetCommandTranslation(fullPath, p.GetLanguage()); found {
-								// Compare distances to determine which form to show
-								canonicalDist := util.DamerauLevenshteinDistance(currentArg, suggestion)
-								translatedDist := util.DamerauLevenshteinDistance(currentArg, translated)
-
-								// Show the form that's closer to what user typed
-								if translatedDist < canonicalDist {
-									displaySuggestions[i] = translated
-								} else if translatedDist == canonicalDist && translated != suggestion {
-									// If equal distance and different words, show both forms
-									displaySuggestions[i] = suggestion + " / " + translated
-								}
-							}
-							break
-						}
-					}
-				}
 
 				// Format suggestions using the formatter if available
 				var formatted string

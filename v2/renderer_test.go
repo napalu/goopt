@@ -54,8 +54,10 @@ func TestCommandName(t *testing.T) {
 
 		renderer := p.renderer
 		name := renderer.CommandName(cmd)
-		// When key is not found, i18n returns the key itself
-		assert.Equal(t, "nonexistent.key", name)
+		// When the nameKey has no translation, fall back to the canonical name
+		// rather than leak the raw key (WithErrOnStrictTranslation surfaces the miss
+		// to developers; users always see a real name).
+		assert.Equal(t, "test", name)
 	})
 }
 
@@ -218,7 +220,8 @@ func TestLocaleFormattedDefaults(t *testing.T) {
 			p := NewParser()
 			p.SetLanguage(tt.lang)
 			p.SetHelpConfig(HelpConfig{
-				ShowDefaults: true,
+				ShowDefaults:        true,
+				LocaleAwareDefaults: true, // opt into locale-formatting of numeric defaults
 			})
 			err := p.SetUserBundle(bundle)
 			assert.NoError(t, err)
@@ -264,8 +267,9 @@ func TestDefaultValueFormattingInHelp(t *testing.T) {
 	assert.NoError(t, err)
 	parser.SetLanguage(language.French)
 	parser.SetHelpConfig(HelpConfig{
-		ShowDefaults:    true,
-		ShowDescription: true,
+		ShowDefaults:        true,
+		ShowDescription:     true,
+		LocaleAwareDefaults: true, // opt into locale-formatting of numeric defaults
 	})
 
 	// Capture help output
@@ -457,8 +461,11 @@ func TestCommandUsageRTL(t *testing.T) {
 		}
 
 		usage := p.renderer.CommandUsage(cmd)
-		// In RTL, description comes first
-		assert.Equal(t, "بدء الخادم :ابدأ", usage)
+		// New bidi model: fields stay in LOGICAL order (command name, then
+		// description), each FSI-isolated, with the whole line RLI-wrapped to
+		// assert an RTL base direction. No manual desc-first reorder, no ":" hack.
+		expected := i18n.IsolateRTL(i18n.Isolate("ابدأ") + " " + i18n.Isolate("بدء الخادم"))
+		assert.Equal(t, expected, usage)
 	})
 
 	t.Run("English command usage", func(t *testing.T) {

@@ -119,6 +119,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_with_suggestions": "flag desconhecida: %[1]s. Você quis dizer: %[2]s?",
         "goopt.error.unmarshalling_tag": "erro ao deserializar tag %[1]s",
         "goopt.error.unsupported_shell": "shell não suportado %[1]q (suportados: bash, zsh, fish, powershell)",
+        "goopt.error.missing_translation": "tradução ausente para a chave %[1]q no idioma %[2]q",
         "goopt.error.unsupported_type": "conversão de tipo não suportada",
         "goopt.error.unsupported_type_conversion": "tipo de dado não suportado %[1]v para argumento %[2]s",
         "goopt.error.unwrapping_value": "erro ao descompactar valor: %[1]v",

@@ -240,11 +240,18 @@ func (p *LayeredMessageProvider) SetDefaultLanguage(lang language.Tag) {
 		return
 	}
 
-	// Second: Check if user bundle has a good match via language matching
+	// Second: Check if user bundle has a good match via language matching. Accept the
+	// match only if it GENUINELY relates to the request — same base language, e.g.
+	// en-GB -> en — rather than a pure fall-back to the bundle's default (e.g. en -> de
+	// for a German-only bundle). The previous guard used HasLanguage(matched), which is
+	// always true for the default, so a single-language user bundle hijacked every other
+	// language (English help rendered in German). The exact-language case is already
+	// handled by the First step above, so here matched==default means a fall-back.
 	if p.userBundle != nil {
 		matched := p.userBundle.MatchLanguage(lang)
-		// Accept the match if it's not just falling back to the bundle's default
-		if matched != p.userBundle.GetDefaultLanguage() || p.userBundle.HasLanguage(matched) {
+		expB, _ := lang.Base()
+		matB, _ := matched.Base()
+		if expB == matB {
 			p.currentLanguage = p.normalizeLanguageTag(matched)
 			p.updateFormatter()
 			return
@@ -260,13 +267,22 @@ func (p *LayeredMessageProvider) SetDefaultLanguage(lang language.Tag) {
 		}
 	}
 
-	// Fourth: Use language matching on system and default bundles
+	// Fourth: Use language matching on system and default bundles.
+	//
+	// NOTE: this guard looks like the user-bundle guard above but encodes the OPPOSITE
+	// intent — do NOT "unify" them. The user bundle's default is arbitrary (whatever
+	// single language the app shipped), so a fall-back to it is a hijack and the step
+	// above rejects it unless genuinely related. The system bundle's default is the
+	// canonical `en`, the legitimate ultimate fall-back: this step MUST keep resolving
+	// an unavailable language to `en`, because that is exactly what lets SetLanguage's
+	// base(expected) != base(provided) comparison detect unavailability (ja -> en ->
+	// bases differ -> ErrLanguageUnavailable). Make this reject-and-fall-through and an
+	// unavailable language would resolve to itself, and SetLanguage would falsely
+	// report success.
 	var bestMatch language.Tag
 	for _, bundle := range []*Bundle{p.systemBundle, p.defaultBundle} {
 		if bundle != nil && bundle.HasTranslations() {
 			matched := bundle.MatchLanguage(lang)
-			// DEBUG
-			// fmt.Printf("DEBUG: SetDefaultLanguage matching %v -> %v (bundle default: %v)\n", lang, matched, bundle.GetDefaultLanguage())
 			if matched != bundle.GetDefaultLanguage() || bundle.HasLanguage(matched) {
 				bestMatch = matched
 				break

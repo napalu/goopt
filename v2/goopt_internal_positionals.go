@@ -353,6 +353,12 @@ func (p *Parser) setPositionalArguments(state parse.State) {
 			continue
 		}
 
+		if arg == "--" {
+			// End-of-flags marker — consumed, not a flag and not a positional. (Only the
+			// marker reaches here; tokens after it are caught by the greedy check above.)
+			continue
+		}
+
 		if skipNext {
 			skipNext = false
 			continue

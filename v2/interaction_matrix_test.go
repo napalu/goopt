@@ -1,7 +1,9 @@
 package goopt
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1363,4 +1365,676 @@ func TestInteractionMatrixPositionalEnv(t *testing.T) {
 				c.Undo.Single, c.Undo.List, c.Undo.Conf, c.Undo.Force)
 		}
 	})
+}
+
+// TestInteractionMatrixInputSyntax charts the input-syntax seam: goopt has three parse
+// paths — parseFlag (`--f v`), processFlagWithValue (`--f=v`), and parsePosixFlag (`-f`,
+// clusters) — and "supply value V to flag F" must bind identically through all of them.
+// Divergence between the paths is the session's signature bug shape, one level down.
+func TestInteractionMatrixInputSyntax(t *testing.T) {
+	scopes := []struct {
+		name   string
+		path   []string
+		invoke []string
+	}{
+		{"global", nil, nil},
+		{"command", []string{"cmd"}, []string{"cmd"}},
+	}
+	// the four spellings supported in default (non-posix) mode
+	forms := func(long, short, v string) []struct {
+		label string
+		toks  []string
+	} {
+		return []struct {
+			label string
+			toks  []string
+		}{
+			{"--long value", []string{"--" + long, v}},
+			{"--long=value", []string{"--" + long + "=" + v}},
+			{"-short value", []string{"-" + short, v}},
+			{"-short=value", []string{"-" + short + "=" + v}},
+		}
+	}
+
+	t.Run("single binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("color", "c", "red") {
+				var got string
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "color", NewArg(WithType(types.Single), WithShortFlag("c")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) {
+					t.Errorf("[%s %s] parse failed: %v", sc.name, f.label, p.GetErrors())
+					continue
+				}
+				if got != "red" {
+					t.Errorf("[%s %s] color=%q, want red", sc.name, f.label, got)
+				}
+			}
+		}
+	})
+
+	t.Run("chained binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("tag", "t", "a,b") {
+				var got []string
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "tag", NewArg(WithType(types.Chained), WithShortFlag("t")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) || !slices.Equal(got, []string{"a", "b"}) {
+					t.Errorf("[%s %s] tag=%v errs=%v", sc.name, f.label, got, p.GetErrors())
+				}
+			}
+		}
+	})
+
+	t.Run("typed int binds identically across forms", func(t *testing.T) {
+		for _, sc := range scopes {
+			for _, f := range forms("port", "p", "8080") {
+				var got int
+				p := NewParser()
+				if len(sc.path) > 0 {
+					mustAddCmd(t, p, "cmd")
+				}
+				if err := p.BindFlag(&got, "port", NewArg(WithShortFlag("p")), sc.path...); err != nil {
+					t.Fatal(err)
+				}
+				if !p.Parse(matrixArgs(sc.invoke, f.toks)) || got != 8080 {
+					t.Errorf("[%s %s] port=%d errs=%v", sc.name, f.label, got, p.GetErrors())
+				}
+			}
+		}
+	})
+
+	t.Run("posix clustering binds the same value", func(t *testing.T) {
+		var got string
+		p := NewParser()
+		p.SetPosix(true)
+		if err := p.BindFlag(&got, "color", NewArg(WithType(types.Single), WithShortFlag("c"))); err != nil {
+			t.Fatal(err)
+		}
+		if !p.Parse([]string{os.Args[0], "-cred"}) || got != "red" {
+			t.Errorf("posix -cred -> %q; errs=%v", got, p.GetErrors())
+		}
+	})
+
+	t.Run("negative number is a value, not a flag", func(t *testing.T) {
+		for _, toks := range [][]string{{"--num", "-5"}, {"-n", "-5"}, {"--num=-5"}} {
+			var n int
+			p := NewParser()
+			if err := p.BindFlag(&n, "num", NewArg(WithShortFlag("n"))); err != nil {
+				t.Fatal(err)
+			}
+			if !p.Parse(matrixArgs(nil, toks)) || n != -5 {
+				t.Errorf("%v -> n=%d (want -5); errs=%v", toks, n, p.GetErrors())
+			}
+		}
+	})
+
+	t.Run("end-of-options marker -- sends the rest to positionals", func(t *testing.T) {
+		// `--` stops flag parsing: everything after is positional, even flag-looking
+		// tokens. Flags BEFORE it still parse. The marker itself is consumed.
+		for _, tc := range []struct {
+			args    []string
+			verbose bool
+			pos     []string
+		}{
+			{[]string{"--", "-x"}, false, []string{"-x"}},
+			{[]string{"--verbose", "--", "-x", "-y"}, true, []string{"-x", "-y"}},
+			{[]string{"--", "--weirdfile"}, false, []string{"--weirdfile"}},
+			{[]string{"--", "--"}, false, []string{"--"}}, // 2nd -- is a literal positional
+		} {
+			var verbose bool
+			p := NewParser()
+			if err := p.BindFlag(&verbose, "verbose", newStandalone(WithShortFlag("v"))); err != nil {
+				t.Fatal(err)
+			}
+			mustAddFlag(t, p, "p0", NewArg(WithType(types.Single), WithPosition(0)))
+			mustAddFlag(t, p, "p1", NewArg(WithType(types.Single), WithPosition(1)))
+			if !p.Parse(matrixArgs(nil, tc.args)) {
+				t.Errorf("%v: parse failed: %v", tc.args, p.GetErrors())
+				continue
+			}
+			if verbose != tc.verbose {
+				t.Errorf("%v: verbose=%v, want %v", tc.args, verbose, tc.verbose)
+			}
+			var pos []string
+			for _, pa := range p.GetPositionalArgs() {
+				pos = append(pos, pa.Value)
+			}
+			if !slices.Equal(pos, tc.pos) {
+				t.Errorf("%v: positionals=%v, want %v", tc.args, pos, tc.pos)
+			}
+			if p.HasFlag("x") || p.HasFlag("weirdfile") {
+				t.Errorf("%v: a token after -- must not be parsed as a flag", tc.args)
+			}
+		}
+	})
+
+	t.Run("greedy command passes trailing args through as positionals", func(t *testing.T) {
+		p := NewParser()
+		mustAddFlag(t, p, "verbose", newStandalone(WithShortFlag("v")))
+		if err := p.AddCommand(NewCommand(WithName("run"), WithGreedy(true))); err != nil {
+			t.Fatal(err)
+		}
+		if !p.Parse([]string{os.Args[0], "run", "--unknown", "x", "-z"}) {
+			t.Fatalf("greedy parse must not error on passthrough flag-looking tokens: %v", p.GetErrors())
+		}
+		var pos []string
+		for _, pa := range p.GetPositionalArgs() {
+			pos = append(pos, pa.Value)
+		}
+		for _, want := range []string{"--unknown", "x", "-z"} {
+			if !slices.Contains(pos, want) {
+				t.Errorf("greedy should capture %q as a passthrough positional; got %v", want, pos)
+			}
+		}
+		if p.HasFlag("unknown") {
+			t.Errorf("a flag-looking token after a greedy command must NOT be parsed as a flag")
+		}
+	})
+}
+
+// TestInteractionMatrixI18nLanguageResolution locks the help × i18n seam where a
+// single-language user bundle used to hijack every other language: requesting a
+// system-default language (en/fr) that the user bundle lacks must resolve to THAT
+// language (system messages + canonical names), not fall back to the bundle's only
+// language. Regression for "German-only bundle renders English help in German".
+func TestInteractionMatrixI18nLanguageResolution(t *testing.T) {
+	mk := func() *Parser {
+		p := NewParser()
+		b := i18n.NewEmptyBundle()
+		if err := b.AddLanguage(language.German, map[string]string{"flag.v": "ausführlich"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetUserBundle(b); err != nil {
+			t.Fatal(err)
+		}
+		mustAddFlag(t, p, "verbose", newStandalone(WithShortFlag("v"), WithNameKey("flag.v")))
+		return p
+	}
+	for _, tc := range []struct {
+		req  language.Tag
+		want language.Tag
+	}{
+		{language.English, language.English},        // system default, not in user bundle
+		{language.French, language.French},          // system default, not in user bundle
+		{language.German, language.German},          // the user bundle's own language still works
+		{language.BritishEnglish, language.English}, // en-GB genuinely relates to system en (not de)
+	} {
+		p := mk()
+		_ = p.SetLanguage(tc.req)
+		if got := p.GetLanguage(); got.String() != tc.want.String() {
+			t.Errorf("SetLanguage(%s) with a German-only user bundle resolved to %s, want %s (single-language bundle must not hijack)",
+				tc.req, got, tc.want)
+		}
+	}
+}
+
+// TestInteractionMatrixDidYouMeanI18n locks the did-you-mean × i18n × (parse vs help)
+// seam. A typo of a *localized* subcommand name must produce the same localized
+// "did you mean" suggestion whether the error surfaces during parsing or through the
+// help system. Regression: handleInvalidSubcommand used a canonical-only matcher, so a
+// German user who typo'd a German subcommand name got a suggestion from the parser but
+// NONE from --help. Both paths now share suggestSubcommands.
+func TestInteractionMatrixDidYouMeanI18n(t *testing.T) {
+	build := func(t *testing.T, lang language.Tag) (*Parser, *bytes.Buffer) {
+		p, _ := NewParserWith(WithAutoHelp(true))
+		p.helpEndFunc = func() error { return nil }
+		var stderr bytes.Buffer
+		p.SetStdout(&bytes.Buffer{})
+		p.SetStderr(&stderr)
+		b := i18n.NewEmptyBundle()
+		if err := b.AddLanguage(language.German, map[string]string{
+			"cmd.create": "erstellen", "cmd.user": "benutzer",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.SetUserBundle(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.AddCommand(&Command{Name: "create", NameKey: "cmd.create",
+			Callback: func(*Parser, *Command) error { return nil },
+			Subcommands: []Command{{Name: "user", NameKey: "cmd.user",
+				Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+			t.Fatal(err)
+		}
+		if lang != language.English {
+			if err := p.SetLanguage(lang); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return p, &stderr
+	}
+
+	cases := []struct {
+		name     string
+		lang     language.Tag
+		typo     string // typo of the subcommand under "create"
+		wantSugg string // form the suggestion must contain
+	}{
+		{"english canonical typo", language.English, "usr", "user"},
+		{"german translated typo", language.German, "benutze", "benutzer"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Parse path
+			pParse, _ := build(t, c.lang)
+			pParse.Parse([]string{"create", c.typo})
+			parseErrs := fmt.Sprintf("%v", pParse.GetErrors())
+			if !strings.Contains(parseErrs, c.wantSugg) {
+				t.Errorf("parse path: errors %q must suggest %q", parseErrs, c.wantSugg)
+			}
+
+			// Help path (same input + --help) must agree
+			pHelp, _ := build(t, c.lang)
+			pHelp.Parse([]string{"create", c.typo, "--help"})
+			helpErrs := fmt.Sprintf("%v", pHelp.GetErrors())
+			if !strings.Contains(helpErrs, c.wantSugg) {
+				t.Errorf("help path: errors %q must suggest %q (parse path agreed)", helpErrs, c.wantSugg)
+			}
+		})
+	}
+}
+
+// TestInteractionMatrixRTLConsistency locks the help × RTL convergence. Three
+// defects used to live here: (1) flag/command/positional each decided direction
+// with a DIFFERENT trigger, so the same content could point opposite ways on one
+// screen; (2) the help renderer never used the FSI/RLI bidi primitive the error
+// path did, so LTR runs scrambled; (3) plain LTR output risked gaining stray
+// controls. All three renderers now share one rtlInvolved trigger + bidiAssemble.
+func TestInteractionMatrixRTLConsistency(t *testing.T) {
+	const FSI, RLI = "⁨", "⁧" // U+2068 First Strong Isolate, U+2067 RTL Isolate
+	arDesc := "وصف عربي"
+
+	// (1) Plain LTR English stays byte-identical and free of bidi controls.
+	pEN := NewParser()
+	pEN.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	ltr := pEN.renderer.FlagUsage(&Argument{Description: "enable verbose output"})
+	if strings.ContainsAny(ltr, FSI+RLI) {
+		t.Errorf("plain LTR flag must carry no bidi controls, got %q", ltr)
+	}
+	if want := `-- "enable verbose output" (optional)`; ltr != want {
+		t.Errorf("plain LTR output drifted:\n got %q\nwant %q", ltr, want)
+	}
+
+	// (2) LTR locale + RTL content: flag, positional AND command must ALL take
+	// the bidi path (the original drift was only the command flipping).
+	p := NewParser()
+	p.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	mixed := map[string]string{
+		"flag":       p.renderer.FlagUsage(&Argument{Description: arDesc}),
+		"positional": p.renderer.PositionalUsage(&Argument{Description: arDesc}, 0),
+		"command":    p.renderer.CommandUsage(&Command{Name: "build", Description: arDesc}),
+	}
+	for kind, got := range mixed {
+		if !strings.Contains(got, FSI) {
+			t.Errorf("%s with RTL content must isolate (consistent trigger), got %q", kind, got)
+		}
+	}
+
+	// (3) RTL locale: every element asserts an RTL base direction via RLI wrap.
+	pAR := NewParser()
+	b := i18n.NewEmptyBundle()
+	if err := b.AddLanguage(language.Arabic, map[string]string{"_": "_"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pAR.SetUserBundle(b); err != nil {
+		t.Fatal(err)
+	}
+	pAR.SetHelpConfig(HelpConfig{ShowDescription: true, ShowRequired: true})
+	if err := pAR.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	rtl := map[string]string{
+		"flag":       pAR.renderer.FlagUsage(&Argument{Description: arDesc}),
+		"positional": pAR.renderer.PositionalUsage(&Argument{Description: arDesc}, 0),
+		"command":    pAR.renderer.CommandUsage(&Command{Name: "build", Description: arDesc}),
+	}
+	for kind, got := range rtl {
+		if !strings.HasPrefix(got, RLI) {
+			t.Errorf("%s in RTL locale must be RLI-wrapped for base direction, got %q", kind, got)
+		}
+	}
+}
+
+// TestInteractionMatrixSuggestionThreshold locks the did-you-mean × config seam:
+// WithSuggestionThreshold must affect the help system identically to the parser.
+// The help command matcher used to hardcode a distance of 2, ignoring the user's
+// setting (and 0=disabled), so suggestions drifted between parse and --help.
+func TestInteractionMatrixSuggestionThreshold(t *testing.T) {
+	mk := func(cmdThreshold int) (*Parser, *HelpParser) {
+		p, _ := NewParserWith(WithSuggestionThreshold(2, cmdThreshold))
+		if err := p.AddCommand(&Command{Name: "search",
+			Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+			t.Fatal(err)
+		}
+		return p, NewHelpParser(p, p.helpConfig)
+	}
+	// "srch" is Damerau-distance 2 from "search".
+	for _, threshold := range []int{0, 1, 2, 3} {
+		p, hp := mk(threshold)
+		parseSugg, _ := p.findSimilarRootCommandsWithContext("srch")
+		helpSugg, _ := hp.findSimilarCommandsWithContext("srch")
+		if len(parseSugg) != len(helpSugg) {
+			t.Errorf("threshold=%d: parse %v and help %v disagree (help must honor the configured threshold)",
+				threshold, parseSugg, helpSugg)
+		}
+		// threshold<2 must suppress a distance-2 match; >=2 must surface it.
+		wantSuggested := threshold >= 2
+		if got := len(helpSugg) > 0; got != wantSuggested {
+			t.Errorf("threshold=%d: help suggested=%v, want %v", threshold, got, wantSuggested)
+		}
+	}
+}
+
+// TestInteractionMatrixFlagSuggestionCore locks the flag matcher after it was folded
+// onto the shared rankSuggestions core: it must still honor flagSuggestionThreshold,
+// match via the translated flag name (surfacing the canonical key + hasTranslated),
+// and suppress beyond-threshold typos — the gatherer differs (short forms, flag
+// translation API) but the ranking is the same core the commands use.
+func TestInteractionMatrixFlagSuggestionCore(t *testing.T) {
+	p, _ := NewParserWith(WithSuggestionThreshold(1, 2)) // flag threshold = 1
+	b := i18n.NewEmptyBundle()
+	if err := b.AddLanguage(language.German, map[string]string{"flag.verbose": "ausfuehrlich"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetUserBundle(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddFlag("verbose", NewArg(WithShortFlag("v"), WithNameKey("flag.verbose"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetLanguage(language.German); err != nil {
+		t.Fatal(err)
+	}
+
+	// distance-1 typo of canonical name -> suggested
+	if got, _ := p.findSimilarFlagsWithContext("verbos", ""); !slices.Contains(got, "verbose") {
+		t.Errorf("canonical typo 'verbos' should suggest 'verbose', got %v", got)
+	}
+	// distance-1 typo of the TRANSLATED name -> surfaces canonical key, hasTranslated=true
+	if got, hasT := p.findSimilarFlagsWithContext("ausfuehrlic", ""); !slices.Contains(got, "verbose") || !hasT {
+		t.Errorf("translated typo should surface 'verbose' with hasTranslated=true, got %v hasTranslated=%v", got, hasT)
+	}
+	// distance-2 typo with flag threshold=1 -> suppressed
+	if got, _ := p.findSimilarFlagsWithContext("verboxx", ""); len(got) != 0 {
+		t.Errorf("flag threshold=1 must suppress a distance-2 typo, got %v", got)
+	}
+}
+
+// TestInteractionMatrixSuggestionDisplay locks the shared did-you-mean display core
+// (localizeSuggestions), onto which the flag, command and subcommand paths now all
+// delegate: translated form when nearer, "canonical / translated" on a tie, canonical
+// otherwise (and untouched when there is no translation).
+func TestInteractionMatrixSuggestionDisplay(t *testing.T) {
+	p := NewParser()
+	tr := func(canon, trans string) func(string) (string, bool) {
+		return func(key string) (string, bool) {
+			if key == canon {
+				return trans, true
+			}
+			return "", false
+		}
+	}
+	cases := []struct {
+		name  string
+		input string
+		keys  []string
+		fn    func(string) (string, bool)
+		want  string
+	}{
+		{"translated nearer", "ausfuhrlich", []string{"verbose"}, tr("verbose", "ausfuehrlich"), "ausfuehrlich"},
+		{"canonical nearer", "verbos", []string{"verbose"}, tr("verbose", "ausfuehrlich"), "verbose"},
+		{"equidistant shows both", "abx", []string{"abc"}, tr("abc", "abd"), "abc / abd"},
+		{"no translation", "verbos", []string{"verbose"}, func(string) (string, bool) { return "", false }, "verbose"},
+	}
+	for _, c := range cases {
+		if got := p.localizeSuggestions(c.input, c.keys, c.fn); got[0] != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got[0], c.want)
+		}
+	}
+}
+
+// TestInteractionMatrixHelpStyleDualPath locks the help-style seam: p.PrintHelp
+// (programmatic) and the --help runtime path must render identically for every style,
+// since they share renderers. Flat used to diverge — its own printFlatStyleFlag
+// ignored ShowRequired and bypassed the bidi work; it now delegates to the shared
+// FlagUsageWithConfig like grouped/compact/hierarchical already did.
+func TestInteractionMatrixHelpStyleDualPath(t *testing.T) {
+	styles := []struct {
+		name string
+		st   HelpStyle
+	}{
+		{"flat", HelpStyleFlat}, {"grouped", HelpStyleGrouped},
+		{"compact", HelpStyleCompact}, {"hierarchical", HelpStyleHierarchical},
+	}
+	for _, s := range styles {
+		for _, showReq := range []bool{false, true} {
+			p := NewParser()
+			mustAddFlag(t, p, "verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone), WithDescription("verbose output")))
+			mustAddFlag(t, p, "output", NewArg(WithShortFlag("o"), WithDescription("output file")))
+			if err := p.AddCommand(&Command{Name: "build", Description: "build the project",
+				Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+				t.Fatal(err)
+			}
+			p.SetHelpConfig(HelpConfig{Style: s.st, ShowDescription: true, ShowShortFlags: true, ShowRequired: showReq})
+
+			var a, b bytes.Buffer
+			p.PrintHelp(&a)
+			hp := NewHelpParser(p, p.helpConfig)
+			_ = hp.showDefault(&b)
+			if a.String() != b.String() {
+				t.Errorf("%s (ShowRequired=%v): PrintHelp vs --help diverge:\n--PrintHelp--\n%q\n--help--\n%q",
+					s.name, showReq, a.String(), b.String())
+			}
+		}
+	}
+}
+
+// TestInteractionMatrixDefaultValueLiteral locks that a shown default is the literal
+// value by default (a port stays "8080", not "8,080") and locale formatting is opt-in.
+func TestInteractionMatrixDefaultValueLiteral(t *testing.T) {
+	render := func(localeAware bool) string {
+		p := NewParser()
+		mustAddFlag(t, p, "port", NewArg(WithShortFlag("p"), WithType(types.Single),
+			WithDefaultValue("8080"), WithDescription("server port")))
+		p.SetHelpConfig(HelpConfig{Style: HelpStyleFlat, ShowDescription: true, ShowDefaults: true, LocaleAwareDefaults: localeAware})
+		var b bytes.Buffer
+		p.PrintHelp(&b)
+		return b.String()
+	}
+	if out := render(false); !strings.Contains(out, "8080") || strings.Contains(out, "8,080") {
+		t.Errorf("default (opt-out): want literal 8080, got %q", out)
+	}
+	if out := render(true); !strings.Contains(out, "8,080") {
+		t.Errorf("LocaleAwareDefaults: want 8,080, got %q", out)
+	}
+}
+
+// TestInteractionMatrixDetailModesShared locks that the detail modes (--globals,
+// --flags, --all) render flag lines through the SAME shared renderer as the rest of
+// help, not the old printDetailedFlag (which used a "--name, -s - desc" format and a
+// rogue "only (required)" marker rule). They must use the canonical "or" separator and
+// honor ShowRequired like everything else.
+func TestInteractionMatrixDetailModesShared(t *testing.T) {
+	p := NewParser()
+	mustAddFlag(t, p, "verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone), WithDescription("verbose output")))
+	p.SetHelpConfig(HelpConfig{ShowDescription: true, ShowShortFlags: true, ShowRequired: true})
+
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.showGlobalsOnly(&b); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "or -v") {
+		t.Errorf("--globals must use the shared 'or' separator, got %q", out)
+	}
+	if strings.Contains(out, ", -v") {
+		t.Errorf("--globals still using the old detailed comma format: %q", out)
+	}
+	if !strings.Contains(out, "(optional)") {
+		t.Errorf("--globals must honor ShowRequired (the old path only showed (required)): %q", out)
+	}
+}
+
+// TestInteractionMatrixCommandListShared locks command-scoped help (renderCommandHelp)
+// onto the shared CommandListItem renderer: subcommand listings use the same quoted
+// format as the main command tree (not the old hand-rolled "name - desc"), and they
+// are RTL-safe (the hand-formatted variant bypassed CommandUsage's bidi isolation, so
+// --help <command> scrambled in Arabic while main --help did not).
+func TestInteractionMatrixCommandListShared(t *testing.T) {
+	// (1) format matches the main tree (quotes, short name)
+	p := NewParser()
+	if err := p.AddCommand(&Command{Name: "cloud", Description: "cloud ops",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", Description: "compute services",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.renderCommandHelp(&b, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, `compute "compute services"`) {
+		t.Errorf("command help must use the shared quoted format, got %q", out)
+	}
+	if strings.Contains(out, "compute - compute services") {
+		t.Errorf("command help still using the old hand-rolled dash format: %q", out)
+	}
+
+	// (2) RTL-safe via the shared renderer's bidi isolation
+	pa := NewParser()
+	bn := i18n.NewEmptyBundle()
+	if err := bn.AddLanguage(language.Arabic, map[string]string{"c.cloud": "سحابة", "c.compute": "حوسبة"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetUserBundle(bn); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.AddCommand(&Command{Name: "cloud", NameKey: "c.cloud", Description: "عمليات",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", NameKey: "c.compute", Description: "خدمات",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	pa.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hpa := NewHelpParser(pa, pa.helpConfig)
+	var rtl bytes.Buffer
+	if err := hpa.renderCommandHelp(&rtl, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rtl.String(), "⁨") && !strings.Contains(rtl.String(), "⁧") {
+		t.Errorf("command help must be RTL-isolated in an RTL locale, got %q", rtl.String())
+	}
+}
+
+// TestInteractionMatrixTranslationKeyFallback locks the nameKey/descKey behavior:
+// by default an untranslated key falls back to the canonical name / literal
+// description (a user never sees a raw "f.name"), and the opt-in
+// WithErrOnStrictTranslation surfaces the unwired key as an accumulated error so a
+// disciplined developer is told once. Belt (fallback) + suspenders (opt-in error).
+func TestInteractionMatrixTranslationKeyFallback(t *testing.T) {
+	type cfg struct {
+		Verbose bool `goopt:"name:verbose;nameKey:f.name;desc:Enable verbose;descKey:f.desc"`
+	}
+
+	// (1) default: graceful fallback, no key leak, Parse succeeds
+	p, err := NewParserFromStruct(&cfg{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Parse([]string{}) {
+		t.Errorf("default parse should succeed, got errors %v", p.GetErrors())
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	var b bytes.Buffer
+	p.PrintHelp(&b)
+	if strings.Contains(b.String(), "f.name") || strings.Contains(b.String(), "f.desc") {
+		t.Errorf("raw translation key leaked into help: %q", b.String())
+	}
+	if !strings.Contains(b.String(), "--verbose") || !strings.Contains(b.String(), "Enable verbose") {
+		t.Errorf("expected canonical name + literal desc fallback, got %q", b.String())
+	}
+
+	// (2) opt-in strict: untranslated keys accumulate an error, Parse fails
+	p2, err := NewParserFromStruct(&cfg{}, WithErrOnStrictTranslation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Parse([]string{}) {
+		t.Errorf("strict parse should fail on untranslated keys")
+	}
+	es := fmt.Sprintf("%v", p2.GetErrors())
+	if !strings.Contains(es, "f.name") || !strings.Contains(es, "f.desc") {
+		t.Errorf("strict errors should name the unwired keys, got %q", es)
+	}
+}
+
+// TestInteractionMatrixCommandHeaderRTL locks the last hand-formatted command line:
+// the "path: description" breadcrumb header in command-scoped help. Plain LTR output
+// stays byte-identical; an RTL locale/content gets FSI/RLI isolation via the shared
+// renderer (CommandHeaderLine), so the path and description can't reorder each other.
+func TestInteractionMatrixCommandHeaderRTL(t *testing.T) {
+	// LTR: unchanged, no bidi controls
+	p := NewParser()
+	if err := p.AddCommand(&Command{Name: "cloud", Description: "cloud ops",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", Description: "compute services",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.renderCommandHelp(&b, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "cloud: cloud ops") {
+		t.Errorf("LTR breadcrumb header changed, got %q", b.String())
+	}
+	if strings.ContainsAny(b.String(), "⁨⁧") {
+		t.Errorf("LTR header must carry no bidi controls, got %q", b.String())
+	}
+
+	// RTL: header isolated
+	pa := NewParser()
+	bn := i18n.NewEmptyBundle()
+	if err := bn.AddLanguage(language.Arabic, map[string]string{"c": "سحابة"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetUserBundle(bn); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.AddCommand(&Command{Name: "cloud", NameKey: "c", Description: "عمليات",
+		Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	pa.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hpa := NewHelpParser(pa, pa.helpConfig)
+	var r bytes.Buffer
+	if err := hpa.renderCommandHelp(&r, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.ContainsAny(r.String(), "⁨⁧") {
+		t.Errorf("RTL breadcrumb header must be bidi-isolated, got %q", r.String())
+	}
 }

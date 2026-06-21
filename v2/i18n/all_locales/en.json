@@ -5,6 +5,7 @@
     "goopt.msg.quote_close": "'",
     "goopt.error.unsupported_type": "unsupported type conversion",
     "goopt.error.unsupported_shell": "unsupported shell %[1]q (supported: bash, zsh, fish, powershell)",
+    "goopt.error.missing_translation": "missing translation for key %[1]q in language %[2]q",
     "goopt.error.command_not_found": "command path %[1]s not found",
     "goopt.error.command_not_found_or_no_callback": "command %[1]s not found or has no associated callback",
     "goopt.error.flag_not_found": "flag %[1]s not found",

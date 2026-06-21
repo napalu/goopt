@@ -119,6 +119,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_with_suggestions": "未知标志: %[1]s。您是否想要其中之一？%[2]s",
         "goopt.error.unmarshalling_tag": "解组标签 %[1]s 时出错",
         "goopt.error.unsupported_shell": "不支持的 shell %[1]q（支持：bash、zsh、fish、powershell）",
+        "goopt.error.missing_translation": "缺少键 %[1]q 在语言 %[2]q 中的翻译",
         "goopt.error.unsupported_type": "不支持的类型转换",
         "goopt.error.unsupported_type_conversion": "参数 %[2]s 的数据类型 %[1]v 不支持",
         "goopt.error.unwrapping_value": "解包值时出错: %[1]v",

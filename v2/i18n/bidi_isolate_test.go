@@ -8,11 +8,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-const (
-	fsi = "\u2068" // First Strong Isolate
-	pdi = "\u2069" // Pop Directional Isolate
-)
-
 // newBidiProvider builds a provider whose default bundle carries the test keys
 // in both an LTR (English) and RTL (Arabic) language.
 func newBidiProvider() *LayeredMessageProvider {

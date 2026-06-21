@@ -12,6 +12,7 @@ import (
 var (
 	ErrUnsupportedType              = i18n.NewError(ErrUnsupportedTypeKey)
 	ErrUnsupportedShell             = i18n.NewError(ErrUnsupportedShellKey)
+	ErrMissingTranslation           = i18n.NewError(ErrMissingTranslationKey)
 	ErrCommandNotFound              = i18n.NewError(ErrCommandNotFoundKey)
 	ErrCommandNoCallback            = i18n.NewError(ErrCommandNoCallbackKey)
 	ErrFlagNotFound                 = i18n.NewError(ErrFlagNotFoundKey)

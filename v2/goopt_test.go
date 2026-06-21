@@ -14311,13 +14311,13 @@ func TestParser_CommandHierarchyDescriptions(t *testing.T) {
 	p.PrintHelp(&buf)
 	output := buf.String()
 
-	// Check that the command tree shows correct descriptions
-	// Note: Without translations set up, descriptionKeys are shown instead of descriptions.
-	// This is intentional - it helps catch regressions where descriptionKeys might be
-	// incorrectly propagated from child to parent commands.
-	// Descriptions now have quotes
-	if !strings.Contains(output, "\"middle.desc\"") || !strings.Contains(output, "middle") {
-		t.Errorf("Hierarchical help doesn't show correct description key for middle command.\nOutput:\n%s", output)
+	// Check that the command tree shows each command's own description. With no
+	// translations set up, an untranslated descKey now falls back to the literal
+	// description (rather than leaking the raw key). This still guards the original
+	// intent: a descriptionKey must not be propagated from child to parent commands —
+	// middle must show its OWN "middle level command", not a sibling's/ancestor's.
+	if !strings.Contains(output, "\"middle level command\"") || !strings.Contains(output, "middle") {
+		t.Errorf("Hierarchical help doesn't show correct description for middle command.\nOutput:\n%s", output)
 	}
 }
 
