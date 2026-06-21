@@ -26,7 +26,12 @@ func NewRenderer(parser *Parser) *DefaultRenderer {
 // If the long name contains a comand-path, it only returns the flag part of the path.
 func (r *DefaultRenderer) FlagName(f *Argument) string {
 	if f.NameKey != "" {
-		return r.parser.layeredProvider.GetMessage(f.NameKey)
+		// GetMessage returns the key unchanged on a miss; fall back to the canonical
+		// name rather than leak the raw key. WithStrictTranslations surfaces such
+		// misses as warnings via GetWarnings (opt-in developer signal).
+		if msg := r.parser.layeredProvider.GetMessage(f.NameKey); msg != f.NameKey {
+			return msg
+		}
 	}
 
 	longName := f.GetLongName(r.parser)
@@ -42,16 +47,19 @@ func (r *DefaultRenderer) FlagName(f *Argument) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the flag's Description field.
 func (r *DefaultRenderer) FlagDescription(f *Argument) string {
-	if f.DescriptionKey == "" {
-		return f.Description
+	if f.DescriptionKey != "" {
+		if msg := r.parser.layeredProvider.GetMessage(f.DescriptionKey); msg != f.DescriptionKey {
+			return msg
+		}
 	}
-
-	return r.parser.layeredProvider.GetMessage(f.DescriptionKey)
+	return f.Description
 }
 
 func (r *DefaultRenderer) CommandName(c *Command) string {
 	if c.NameKey != "" {
-		return r.parser.layeredProvider.GetMessage(c.NameKey)
+		if msg := r.parser.layeredProvider.GetMessage(c.NameKey); msg != c.NameKey {
+			return msg
+		}
 	}
 
 	return c.Name
@@ -62,11 +70,12 @@ func (r *DefaultRenderer) CommandName(c *Command) string {
 // function to translate the key into the appropriate description.
 // Otherwise, it returns the command's Description field.
 func (r *DefaultRenderer) CommandDescription(c *Command) string {
-	if c.DescriptionKey == "" {
-		return c.Description
+	if c.DescriptionKey != "" {
+		if msg := r.parser.layeredProvider.GetMessage(c.DescriptionKey); msg != c.DescriptionKey {
+			return msg
+		}
 	}
-
-	return r.parser.layeredProvider.GetMessage(c.DescriptionKey)
+	return c.Description
 }
 
 // FlagUsage generates a usage string for a given command-line argument using the
@@ -211,6 +220,24 @@ func (r *DefaultRenderer) CommandListItem(name, description string) string {
 		}
 	}
 	return r.bidiAssemble(fields, rtl, isRTL)
+}
+
+// CommandHeaderLine renders a "path: description" breadcrumb header. Plain LTR
+// content is returned unchanged (byte-identical to the historical format); when RTL
+// is involved it isolates the path and description so neither (nor the ":") can
+// reorder the other, and an RTL UI locale gets a right-to-left base direction. This
+// keeps the deliberately distinct ":" header format while closing the last
+// hand-formatted command line's bidi hole.
+func (r *DefaultRenderer) CommandHeaderLine(path, description string) string {
+	isRTL := i18n.IsRTL(r.parser.GetLanguage())
+	if !r.rtlInvolved(isRTL, path, description) {
+		return path + ": " + description
+	}
+	line := i18n.Isolate(path) + ": " + i18n.Isolate(description)
+	if isRTL {
+		line = i18n.IsolateRTL(line)
+	}
+	return line
 }
 
 // PositionalUsage generates a usage string for a positional argument.

@@ -364,6 +364,18 @@ func WithSuggestionThreshold(flagThreshold, commandThreshold int) ConfigureCmdLi
 	}
 }
 
+// WithErrOnStrictTranslation makes Parse accumulate an error for every declared
+// nameKey/descKey that has no translation in the active language. Opt-in (off by
+// default): the default behavior is the graceful render-time fallback to the
+// canonical name / literal description, so end users never see a raw key. This is
+// the developer "your intent isn't wired" signal — surfaced via GetErrors() in
+// goopt's usual accumulated-error model.
+func WithErrOnStrictTranslation() ConfigureCmdLineFunc {
+	return func(p *Parser, err *error) {
+		p.SetErrOnStrictTranslation(true)
+	}
+}
+
 // WithEnvResolver sets a custom environment resolver for a parser using the provided env.Resolver implementation.
 func WithEnvResolver(resolver env.Resolver) ConfigureCmdLineFunc {
 	return func(p *Parser, err *error) {

@@ -804,6 +804,16 @@ func (p *Parser) Parse(args []string, defaults ...string) bool {
 		}
 	}
 
+	// Strict translation check (opt-in): a declared nameKey/descKey with no
+	// translation in the active language accumulates an error.
+	if p.errOnStrictTranslation {
+		before := len(p.errors)
+		p.checkStrictTranslations()
+		if len(p.errors) > before {
+			success = false
+		}
+	}
+
 	return success
 }
 
@@ -2278,6 +2288,54 @@ func (p *Parser) SetSuggestionThreshold(flagThreshold, commandThreshold int) {
 	}
 	if commandThreshold >= 0 {
 		p.cmdSuggestionThreshold = commandThreshold
+	}
+}
+
+// SetErrOnStrictTranslation toggles strict translation checking (see
+// WithErrOnStrictTranslation). When on, Parse accumulates an ErrMissingTranslation
+// for any declared nameKey/descKey that resolves to itself in the active language.
+func (p *Parser) SetErrOnStrictTranslation(strict bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.errOnStrictTranslation = strict
+}
+
+// checkStrictTranslations accumulates an ErrMissingTranslation for every declared
+// nameKey/descKey that resolves to itself (no translation) in the active language.
+// No-op unless strict translation is enabled. It is the developer-facing counterpart
+// to the graceful render-time fallback: the user always sees the canonical name; a
+// strict developer is told, once, that a key was never wired.
+func (p *Parser) checkStrictTranslations() {
+	if !p.errOnStrictTranslation {
+		return
+	}
+	lang := p.GetLanguage().String()
+	seen := make(map[string]bool)
+	check := func(key string) {
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		if p.layeredProvider.GetMessage(key) == key {
+			p.addError(errs.ErrMissingTranslation.WithArgs(key, lang))
+		}
+	}
+	for _, fi := range p.acceptedFlags.All() {
+		check(fi.Argument.NameKey)
+		check(fi.Argument.DescriptionKey)
+	}
+	var walk func(cmds []Command)
+	walk = func(cmds []Command) {
+		for i := range cmds {
+			check(cmds[i].NameKey)
+			check(cmds[i].DescriptionKey)
+			walk(cmds[i].Subcommands)
+		}
+	}
+	for _, c := range p.registeredCommands.All() {
+		check(c.NameKey)
+		check(c.DescriptionKey)
+		walk(c.Subcommands)
 	}
 }
 

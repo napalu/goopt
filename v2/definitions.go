@@ -171,73 +171,75 @@ var DefaultHelpConfig = HelpConfig{
 
 // Parser opaque struct used in all Flag/Command manipulation
 type Parser struct {
-	posixCompatible           bool
-	prefixes                  []rune
-	listFunc                  types.ListDelimiterFunc
-	acceptedFlags             *orderedmap.OrderedMap[string, *FlagInfo]
-	lookup                    map[string]string
-	options                   map[string]string
-	errors                    []error
-	bind                      map[string]any
-	customBind                map[string]ValueSetFunc
-	registeredCommands        *orderedmap.OrderedMap[string, *Command]
-	commandOptions            *orderedmap.OrderedMap[string, bool]
-	positionalArgs            []PositionalArgument
-	rawArgs                   map[string]string
-	repeatedFlags             map[string]bool
-	completionMode            bool   // when true, Parse resolves structure only: no binding, callbacks, secure prompts, errors-as-side-effects, version/help output, or post-parse validation
-	completionPath            string // deepest command path the loop resolved during a completion-mode parse (the cursor's command context, incl. intermediate/non-terminal)
-	callbackQueue             *queue.Q[*Command]
-	callbackResults           map[string]error
-	callbackOnParse           bool // *during* parse process
-	callbackOnParseComplete   bool // *after* parse process
-	secureArguments           *orderedmap.OrderedMap[string, *types.Secure]
-	envNameConverter          NameConversionFunc
-	commandNameConverter      NameConversionFunc
-	flagNameConverter         NameConversionFunc
-	terminalReader            input.TerminalReader
-	stderr                    io.Writer
-	stdout                    io.Writer
-	maxDependencyDepth        int
-	defaultBundle             *i18n.Bundle // Immutable default bundle
-	systemBundle              *i18n.Bundle // Parser-specific overrides
-	userI18n                  *i18n.Bundle // User-provided bundle
-	layeredProvider           *i18n.LayeredMessageProvider
-	renderer                  Renderer
-	structCtx                 any
-	contractGroupsChecked     bool
-	suggestionsFormatter      SuggestionsFormatter
-	helpConfig                HelpConfig
-	prettyPrintConfig         *PrettyPrintConfig
-	helpBehavior              HelpBehavior
-	autoHelp                  bool
-	helpFlags                 []string
-	helpExecuted              bool
-	helpEndFunc               EndShowHelpHookFunc
-	autoRegisteredHelp        map[string]bool
-	version                   string
-	versionFunc               func() string
-	versionFormatter          func(string) string
-	versionFlags              []string
-	autoVersion               bool
-	showVersionInHelp         bool
-	versionExecuted           bool
-	autoRegisteredVersion     map[string]bool
-	autoLanguage              bool
-	checkSystemLocale         bool
-	languageEnvVar            string
-	languageFlags             []string
-	autoRegisteredLanguage    map[string]bool
-	globalPreHooks            []PreHookFunc
-	globalPostHooks           []PostHookFunc
-	commandPreHooks           map[string][]PreHookFunc
-	commandPostHooks          map[string][]PostHookFunc
-	envResolver               env.Resolver
-	hookOrder                 HookOrder
-	validationHook            ValidationHookFunc
-	translationRegistry       *JITTranslationRegistry
-	flagSuggestionThreshold   int  // Maximum Levenshtein distance for flag suggestions (default: 2)
-	cmdSuggestionThreshold    int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	posixCompatible         bool
+	prefixes                []rune
+	listFunc                types.ListDelimiterFunc
+	acceptedFlags           *orderedmap.OrderedMap[string, *FlagInfo]
+	lookup                  map[string]string
+	options                 map[string]string
+	errors                  []error
+	bind                    map[string]any
+	customBind              map[string]ValueSetFunc
+	registeredCommands      *orderedmap.OrderedMap[string, *Command]
+	commandOptions          *orderedmap.OrderedMap[string, bool]
+	positionalArgs          []PositionalArgument
+	rawArgs                 map[string]string
+	repeatedFlags           map[string]bool
+	completionMode          bool   // when true, Parse resolves structure only: no binding, callbacks, secure prompts, errors-as-side-effects, version/help output, or post-parse validation
+	completionPath          string // deepest command path the loop resolved during a completion-mode parse (the cursor's command context, incl. intermediate/non-terminal)
+	callbackQueue           *queue.Q[*Command]
+	callbackResults         map[string]error
+	callbackOnParse         bool // *during* parse process
+	callbackOnParseComplete bool // *after* parse process
+	secureArguments         *orderedmap.OrderedMap[string, *types.Secure]
+	envNameConverter        NameConversionFunc
+	commandNameConverter    NameConversionFunc
+	flagNameConverter       NameConversionFunc
+	terminalReader          input.TerminalReader
+	stderr                  io.Writer
+	stdout                  io.Writer
+	maxDependencyDepth      int
+	defaultBundle           *i18n.Bundle // Immutable default bundle
+	systemBundle            *i18n.Bundle // Parser-specific overrides
+	userI18n                *i18n.Bundle // User-provided bundle
+	layeredProvider         *i18n.LayeredMessageProvider
+	renderer                Renderer
+	structCtx               any
+	contractGroupsChecked   bool
+	suggestionsFormatter    SuggestionsFormatter
+	helpConfig              HelpConfig
+	prettyPrintConfig       *PrettyPrintConfig
+	helpBehavior            HelpBehavior
+	autoHelp                bool
+	helpFlags               []string
+	helpExecuted            bool
+	helpEndFunc             EndShowHelpHookFunc
+	autoRegisteredHelp      map[string]bool
+	version                 string
+	versionFunc             func() string
+	versionFormatter        func(string) string
+	versionFlags            []string
+	autoVersion             bool
+	showVersionInHelp       bool
+	versionExecuted         bool
+	autoRegisteredVersion   map[string]bool
+	autoLanguage            bool
+	checkSystemLocale       bool
+	languageEnvVar          string
+	languageFlags           []string
+	autoRegisteredLanguage  map[string]bool
+	globalPreHooks          []PreHookFunc
+	globalPostHooks         []PostHookFunc
+	commandPreHooks         map[string][]PreHookFunc
+	commandPostHooks        map[string][]PostHookFunc
+	envResolver             env.Resolver
+	hookOrder               HookOrder
+	validationHook          ValidationHookFunc
+	translationRegistry     *JITTranslationRegistry
+	flagSuggestionThreshold int  // Maximum Levenshtein distance for flag suggestions (default: 2)
+	cmdSuggestionThreshold  int  // Maximum Levenshtein distance for command suggestions (default: 2)
+	errOnStrictTranslation  bool // If true, a declared nameKey/descKey with no translation accumulates an error
+
 	allowUnknownFlags         bool // If true, don't generate errors for unknown flags
 	treatUnknownAsPositionals bool // If true, treat unknown flags and their values as positionals
 	mu                        sync.Mutex
@@ -266,6 +268,7 @@ type Renderer interface {
 	CommandDescription(c *Command) string
 	CommandUsage(c *Command) string
 	CommandListItem(name, description string) string
+	CommandHeaderLine(path, description string) string
 }
 
 // DefaultMaxDependencyDepth is the default maximum depth for flag dependencies

@@ -112,6 +112,7 @@
   "goopt.error.unmarshalling_tag": "error al deserializar la etiqueta %[1]s",
   "goopt.error.unsupported_type": "conversión de tipo no soportada",
   "goopt.error.unsupported_shell": "shell no compatible %[1]q (compatibles: bash, zsh, fish, powershell)",
+  "goopt.error.missing_translation": "falta la traducción de la clave %[1]q en el idioma %[2]q",
   "goopt.error.unsupported_type_conversion": "tipo de datos %[1]v no soportado para el argumento %[2]s",
   "goopt.error.unwrapping_value": "error al desenvolver el valor: %[1]v",
   "goopt.error.validation.combined_failed": "ningún validador fue válido: %[1]s",

@@ -1943,3 +1943,45 @@ func TestInteractionMatrixCommandListShared(t *testing.T) {
 		t.Errorf("command help must be RTL-isolated in an RTL locale, got %q", rtl.String())
 	}
 }
+
+// TestInteractionMatrixTranslationKeyFallback locks the nameKey/descKey behavior:
+// by default an untranslated key falls back to the canonical name / literal
+// description (a user never sees a raw "f.name"), and the opt-in
+// WithErrOnStrictTranslation surfaces the unwired key as an accumulated error so a
+// disciplined developer is told once. Belt (fallback) + suspenders (opt-in error).
+func TestInteractionMatrixTranslationKeyFallback(t *testing.T) {
+	type cfg struct {
+		Verbose bool `goopt:"name:verbose;nameKey:f.name;desc:Enable verbose;descKey:f.desc"`
+	}
+
+	// (1) default: graceful fallback, no key leak, Parse succeeds
+	p, err := NewParserFromStruct(&cfg{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Parse([]string{}) {
+		t.Errorf("default parse should succeed, got errors %v", p.GetErrors())
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	var b bytes.Buffer
+	p.PrintHelp(&b)
+	if strings.Contains(b.String(), "f.name") || strings.Contains(b.String(), "f.desc") {
+		t.Errorf("raw translation key leaked into help: %q", b.String())
+	}
+	if !strings.Contains(b.String(), "--verbose") || !strings.Contains(b.String(), "Enable verbose") {
+		t.Errorf("expected canonical name + literal desc fallback, got %q", b.String())
+	}
+
+	// (2) opt-in strict: untranslated keys accumulate an error, Parse fails
+	p2, err := NewParserFromStruct(&cfg{}, WithErrOnStrictTranslation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Parse([]string{}) {
+		t.Errorf("strict parse should fail on untranslated keys")
+	}
+	es := fmt.Sprintf("%v", p2.GetErrors())
+	if !strings.Contains(es, "f.name") || !strings.Contains(es, "f.desc") {
+		t.Errorf("strict errors should name the unwired keys, got %q", es)
+	}
+}

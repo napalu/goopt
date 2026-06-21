@@ -119,6 +119,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_with_suggestions": "علامة غير معروفة: %[1]s. هل تقصد أحد هذه؟ %[2]s",
         "goopt.error.unmarshalling_tag": "خطأ في فك ترميز العلامة %[1]s",
         "goopt.error.unsupported_shell": "صدفة غير مدعومة %[1]q (المدعومة: bash، zsh، fish، powershell)",
+        "goopt.error.missing_translation": "ترجمة مفقودة للمفتاح %[1]q في اللغة %[2]q",
         "goopt.error.unsupported_type": "تحويل نوع غير مدعوم",
         "goopt.error.unsupported_type_conversion": "نوع بيانات غير مدعوم %[1]v للوسيطة %[2]s",
         "goopt.error.unwrapping_value": "خطأ في فك تغليف القيمة: %[1]v",

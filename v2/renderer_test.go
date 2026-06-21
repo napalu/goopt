@@ -54,8 +54,10 @@ func TestCommandName(t *testing.T) {
 
 		renderer := p.renderer
 		name := renderer.CommandName(cmd)
-		// When key is not found, i18n returns the key itself
-		assert.Equal(t, "nonexistent.key", name)
+		// When the nameKey has no translation, fall back to the canonical name
+		// rather than leak the raw key (WithErrOnStrictTranslation surfaces the miss
+		// to developers; users always see a real name).
+		assert.Equal(t, "test", name)
 	})
 }
 

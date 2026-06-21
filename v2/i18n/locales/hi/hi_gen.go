@@ -119,6 +119,7 @@ const SystemTranslations = `{
         "goopt.error.unknown_flag_with_suggestions": "अज्ञात फ्लैग: %[1]s। क्या आपका मतलब इनमें से एक था? %[2]s",
         "goopt.error.unmarshalling_tag": "टैग %[1]s को अनमार्शल करने में त्रुटि",
         "goopt.error.unsupported_shell": "असमर्थित शेल %[1]q (समर्थित: bash, zsh, fish, powershell)",
+        "goopt.error.missing_translation": "भाषा %[2]q में कुंजी %[1]q के लिए अनुवाद अनुपलब्ध है",
         "goopt.error.unsupported_type": "असमर्थित प्रकार रूपांतरण",
         "goopt.error.unsupported_type_conversion": "तर्क %[2]s के लिए असमर्थित डेटा प्रकार %[1]v",
         "goopt.error.unwrapping_value": "मान को अनरैप करने में त्रुटि: %[1]v",
