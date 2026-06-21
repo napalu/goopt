@@ -1009,10 +1009,9 @@ func (h *HelpParser) renderCommandHelp(writer io.Writer, commandPath string) err
 	for i := range parts {
 		path := strings.Join(parts[:i+1], " ")
 		if c, ok := h.mainParser.getCommand(path); ok {
-			_, _ = fmt.Fprintf(writer, "%s%s: %s\n",
+			_, _ = fmt.Fprintf(writer, "%s%s\n",
 				strings.Repeat(pp.OuterLevelBindPrefix, i),
-				path,
-				h.mainParser.renderer.CommandDescription(c))
+				h.mainParser.renderer.CommandHeaderLine(path, h.mainParser.renderer.CommandDescription(c)))
 		}
 	}
 

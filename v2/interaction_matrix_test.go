@@ -1985,3 +1985,56 @@ func TestInteractionMatrixTranslationKeyFallback(t *testing.T) {
 		t.Errorf("strict errors should name the unwired keys, got %q", es)
 	}
 }
+
+// TestInteractionMatrixCommandHeaderRTL locks the last hand-formatted command line:
+// the "path: description" breadcrumb header in command-scoped help. Plain LTR output
+// stays byte-identical; an RTL locale/content gets FSI/RLI isolation via the shared
+// renderer (CommandHeaderLine), so the path and description can't reorder each other.
+func TestInteractionMatrixCommandHeaderRTL(t *testing.T) {
+	// LTR: unchanged, no bidi controls
+	p := NewParser()
+	if err := p.AddCommand(&Command{Name: "cloud", Description: "cloud ops",
+		Callback: func(*Parser, *Command) error { return nil },
+		Subcommands: []Command{{Name: "compute", Description: "compute services",
+			Callback: func(*Parser, *Command) error { return nil }}}}); err != nil {
+		t.Fatal(err)
+	}
+	p.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.renderCommandHelp(&b, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "cloud: cloud ops") {
+		t.Errorf("LTR breadcrumb header changed, got %q", b.String())
+	}
+	if strings.ContainsAny(b.String(), "⁨⁧") {
+		t.Errorf("LTR header must carry no bidi controls, got %q", b.String())
+	}
+
+	// RTL: header isolated
+	pa := NewParser()
+	bn := i18n.NewEmptyBundle()
+	if err := bn.AddLanguage(language.Arabic, map[string]string{"c": "سحابة"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetUserBundle(bn); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.AddCommand(&Command{Name: "cloud", NameKey: "c", Description: "عمليات",
+		Callback: func(*Parser, *Command) error { return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pa.SetLanguage(language.Arabic); err != nil {
+		t.Fatal(err)
+	}
+	pa.SetHelpConfig(HelpConfig{ShowDescription: true})
+	hpa := NewHelpParser(pa, pa.helpConfig)
+	var r bytes.Buffer
+	if err := hpa.renderCommandHelp(&r, "cloud"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.ContainsAny(r.String(), "⁨⁧") {
+		t.Errorf("RTL breadcrumb header must be bidi-isolated, got %q", r.String())
+	}
+}
