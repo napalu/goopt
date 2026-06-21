@@ -450,8 +450,9 @@ func (h *HelpParser) showGlobalsOnly(writer io.Writer) error {
 		return nil
 	}
 
+	cfg := h.effectiveConfig()
 	for _, flag := range filtered {
-		h.printDetailedFlag(writer, flag)
+		fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 	}
 
 	return nil
@@ -489,8 +490,9 @@ func (h *HelpParser) showFlagsOnly(writer io.Writer, commandPath string) error {
 		return nil
 	}
 
+	cfg := h.effectiveConfig()
 	for _, flag := range filtered {
-		h.printDetailedFlag(writer, flag)
+		fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 	}
 
 	return nil
@@ -624,7 +626,7 @@ func (h *HelpParser) showDefault(writer io.Writer) error {
 // showFlatStyle shows traditional flat help. It renders each flag through the SAME
 // shared renderer as p.PrintHelp (DefaultRenderer.FlagUsageWithConfig) so the two
 // entry points cannot drift — the runtime --help options are folded into a HelpConfig
-// (effectiveFlatConfig) and passed in, rather than re-implementing the flag line.
+// (effectiveConfig) and passed in, rather than re-implementing the flag line.
 func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	h.showVersionHeader(writer)
 
@@ -637,7 +639,7 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	// Show flags via the shared renderer, honoring runtime --help options.
 	flags := h.filterFlags(h.collectFlags(""))
 	if len(flags) > 0 {
-		cfg := h.effectiveFlatConfig()
+		cfg := h.effectiveConfig()
 		for _, flag := range flags {
 			fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 		}
@@ -652,11 +654,12 @@ func (h *HelpParser) showFlatStyle(writer io.Writer) error {
 	return nil
 }
 
-// effectiveFlatConfig folds the runtime --help options onto the parser's HelpConfig
-// so the shared renderer reflects them. Runtime flags are applied as DELTAS on top of
-// the configured base (which carries ShowRequired etc.), keeping --help aligned with
-// p.PrintHelp by construction while still honoring --no-desc / --show-types / etc.
-func (h *HelpParser) effectiveFlatConfig() HelpConfig {
+// effectiveConfig folds the runtime --help options onto the parser's HelpConfig so the
+// shared renderer reflects them. Runtime flags are applied as DELTAS on top of the
+// configured base (which carries ShowRequired etc.), keeping --help aligned with
+// p.PrintHelp by construction while still honoring --no-desc / --show-types / etc. It
+// drives flag rendering for every --help mode (flat, --globals, --flags, --all).
+func (h *HelpParser) effectiveConfig() HelpConfig {
 	cfg := h.config
 	if h.options.NoDescriptions {
 		cfg.ShowDescription = false
@@ -812,8 +815,9 @@ func (h *HelpParser) showAll(writer io.Writer, commandPath string) error {
 		globalFlags := h.collectFlags("")
 		if len(globalFlags) > 0 {
 			fmt.Fprintf(writer, "%s:\n\n", h.mainParser.layeredProvider.GetMessage(messages.MsgGlobalFlagsKey))
+			cfg := h.effectiveConfig()
 			for _, flag := range globalFlags {
-				h.printDetailedFlag(writer, flag)
+				fmt.Fprintf(writer, " %s\n", h.mainParser.renderer.FlagUsageWithConfig(flag, cfg))
 			}
 			fmt.Fprintln(writer)
 		}
@@ -875,40 +879,6 @@ func (h *HelpParser) collectFlags(commandPath string) []*Argument {
 	}
 
 	return flags
-}
-
-// printDetailedFlag prints a flag with options-controlled detail
-func (h *HelpParser) printDetailedFlag(writer io.Writer, arg *Argument) {
-	name := h.mainParser.renderer.FlagName(arg)
-
-	// Base format
-	fmt.Fprintf(writer, "  --%s", name)
-
-	if h.options.ShowShortFlags && arg.Short != "" {
-		fmt.Fprintf(writer, ", -%s", arg.Short)
-	}
-
-	if h.options.ShowTypes {
-		fmt.Fprintf(writer, " (%s)", arg.TypeOf)
-	}
-
-	if h.options.ShowDescriptions && arg.Description != "" {
-		fmt.Fprintf(writer, " - %s", h.mainParser.renderer.FlagDescription(arg))
-	}
-
-	if h.options.ShowDefaults && arg.DefaultValue != "" {
-		fmt.Fprintf(writer, " (%s: %s)", h.mainParser.layeredProvider.GetMessage(messages.MsgDefaultsToKey), arg.DefaultValue)
-	}
-
-	if h.options.ShowValidators && len(arg.Validators) > 0 {
-		fmt.Fprintf(writer, " [%s: %d]", h.mainParser.layeredProvider.GetMessage(messages.MsgValidatorsKey), len(arg.Validators))
-	}
-
-	if arg.Required {
-		fmt.Fprintf(writer, " (%s)", h.mainParser.layeredProvider.GetMessage(messages.MsgRequiredKey))
-	}
-
-	fmt.Fprintln(writer)
 }
 
 // searchResult represents a search result

@@ -1859,3 +1859,30 @@ func TestInteractionMatrixDefaultValueLiteral(t *testing.T) {
 		t.Errorf("LocaleAwareDefaults: want 8,080, got %q", out)
 	}
 }
+
+// TestInteractionMatrixDetailModesShared locks that the detail modes (--globals,
+// --flags, --all) render flag lines through the SAME shared renderer as the rest of
+// help, not the old printDetailedFlag (which used a "--name, -s - desc" format and a
+// rogue "only (required)" marker rule). They must use the canonical "or" separator and
+// honor ShowRequired like everything else.
+func TestInteractionMatrixDetailModesShared(t *testing.T) {
+	p := NewParser()
+	mustAddFlag(t, p, "verbose", NewArg(WithShortFlag("v"), WithType(types.Standalone), WithDescription("verbose output")))
+	p.SetHelpConfig(HelpConfig{ShowDescription: true, ShowShortFlags: true, ShowRequired: true})
+
+	hp := NewHelpParser(p, p.helpConfig)
+	var b bytes.Buffer
+	if err := hp.showGlobalsOnly(&b); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "or -v") {
+		t.Errorf("--globals must use the shared 'or' separator, got %q", out)
+	}
+	if strings.Contains(out, ", -v") {
+		t.Errorf("--globals still using the old detailed comma format: %q", out)
+	}
+	if !strings.Contains(out, "(optional)") {
+		t.Errorf("--globals must honor ShowRequired (the old path only showed (required)): %q", out)
+	}
+}
