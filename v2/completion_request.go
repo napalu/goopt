@@ -150,7 +150,7 @@ _{{PROG}}_complete() {
     local -a lines comps
     lines=("${(@f)$(${words[1]} __complete zsh "${words[@]:0:$CURRENT}" 2>/dev/null)}")
     directive="${lines[-1]}"
-    lines=("${lines[1,-2]}")
+    lines=("${(@)lines[1,-2]}")
     if [[ "$directive" == ":1" ]]; then
         _files
         return
